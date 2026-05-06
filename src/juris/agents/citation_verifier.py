@@ -1,0 +1,138 @@
+"""Marker-based citation verifier for draft petitions."""
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
+
+from juris.core.observability import get_logger
+from juris.repertory.citation_lookup import resolve_source_id
+from juris.repertory.retrieval.service import RepertoryService
+
+logger = get_logger(__name__)
+
+# Pattern for [CITE:source_id] markers
+_CITE_PATTERN = re.compile(r"\[CITE:([\w\-]+)\]")
+
+# Academic citation pattern for DOUTRINA_PD sources
+_ACADEMIC_CITE_PATTERN = re.compile(
+    r"[Cc]onforme (?:leciona|ensina|destaca|observa|aponta)\s+[\w\s]+,\s+"
+    r"[\w\s]+,\s+\d{4}"
+)
+
+# Patterns for raw case references in prose (not anchored to [CITE:])
+_RAW_CASE_PATTERNS = [
+    re.compile(r"\bREsp\s+[\d\.]+", re.IGNORECASE),
+    re.compile(r"\bRE\s+[\d\.]+", re.IGNORECASE),
+    re.compile(r"\bHC\s+[\d\.]+", re.IGNORECASE),
+    re.compile(r"\bMS\s+[\d\.]+", re.IGNORECASE),
+    re.compile(r"\bRHC\s+[\d\.]+", re.IGNORECASE),
+    re.compile(r"\bS[uú]mula\s+\d+", re.IGNORECASE),
+    re.compile(r"\bTema\s+\d+", re.IGNORECASE),
+]
+
+
+@dataclass(frozen=True, slots=True)
+class CitationCheck:
+    """Result of checking a single [CITE:] marker."""
+
+    raw_marker: str
+    source_id: str
+    resolved: bool
+    available_excerpt: str | None
+    span_in_draft: tuple[int, int]
+
+
+@dataclass(frozen=True, slots=True)
+class VerificationResult:
+    """Result of verifying all citations in a draft."""
+
+    all_passed: bool
+    checks: list[CitationCheck] = field(default_factory=list)
+    failed: list[CitationCheck] = field(default_factory=list)
+    spurious_citations: list[str] = field(default_factory=list)
+
+
+class MarkerCitationVerifier:
+    """Verifies [CITE:source_id] markers in draft petitions.
+
+    Deterministic, no LLM required. Sub-100ms for typical drafts.
+    """
+
+    def __init__(self, repertory: RepertoryService) -> None:
+        self._repertory = repertory
+
+    def verify(
+        self,
+        draft: str,
+        allowed_source_ids: set[str] | None = None,
+    ) -> VerificationResult:
+        """Verify all [CITE:] markers and detect spurious prose citations.
+
+        Args:
+            draft: The draft petition text.
+            allowed_source_ids: If provided, only these source_ids are valid.
+
+        Returns:
+            VerificationResult with all checks and spurious citations.
+        """
+        if not draft:
+            return VerificationResult(all_passed=True)
+
+        checks: list[CitationCheck] = []
+        failed: list[CitationCheck] = []
+
+        # 1. Find and verify all [CITE:] markers
+        for match in _CITE_PATTERN.finditer(draft):
+            source_id = match.group(1)
+            raw_marker = match.group(0)
+            span = match.span()
+
+            if allowed_source_ids is not None:
+                resolved = source_id in allowed_source_ids
+                excerpt = None
+            else:
+                resolved, excerpt = resolve_source_id(source_id, self._repertory)
+
+            check = CitationCheck(
+                raw_marker=raw_marker,
+                source_id=source_id,
+                resolved=resolved,
+                available_excerpt=excerpt,
+                span_in_draft=span,
+            )
+            checks.append(check)
+            if not resolved:
+                failed.append(check)
+
+        # 2. Detect spurious prose citations not anchored to [CITE:]
+        spurious = self._find_spurious_citations(draft)
+
+        all_passed = len(failed) == 0 and len(spurious) == 0
+
+        return VerificationResult(
+            all_passed=all_passed,
+            checks=checks,
+            failed=failed,
+            spurious_citations=spurious,
+        )
+
+    def _find_spurious_citations(self, draft: str) -> list[str]:
+        """Find raw case references in prose not anchored to [CITE:] markers."""
+        spurious: list[str] = []
+
+        for pattern in _RAW_CASE_PATTERNS:
+            for match in pattern.finditer(draft):
+                # Check if this match is inside a [CITE:] marker
+                start = match.start()
+                # Look backward for "[CITE:" within 50 chars
+                context_before = draft[max(0, start - 50) : start]
+                if "[CITE:" not in context_before:
+                    # Skip academic-style citations (from doutrina sources)
+                    context_around = draft[max(0, start - 100) : start]
+                    if re.search(r"[Cc]onforme (?:leciona|ensina|destaca)", context_around):
+                        continue
+                    raw_text = match.group(0).strip()
+                    if raw_text not in spurious:
+                        spurious.append(raw_text)
+
+        return spurious
