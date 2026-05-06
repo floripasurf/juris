@@ -1,0 +1,50 @@
+# Environment
+.env
+.env.*
+!.env.example
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Certificates — NEVER commit
+*.pfx
+*.p12
+*.pem
+*.key
+
+# Data files (large, local)
+/data/
+!/data/corpus/
+!/data/corpus-sources.md
+!/data/*_index.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker volumes
+pgdata/
+qdrant_data/
+redis_data/
+
+# Quarantine
+Quarantine/
+
+# Private plan docs (not for GitHub)
+docs/plans/

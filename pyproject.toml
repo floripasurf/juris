@@ -1,0 +1,136 @@
+[project]
+name = "juris"
+version = "0.1.0"
+description = "Brazilian Legal AI for law firms — MNI integration, prazo engine, petition drafting"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Proprietary" }
+authors = [{ name = "Raphael Lages" }]
+
+dependencies = [
+    # SOAP / MNI
+    "zeep>=4.2.1",
+    "requests-pkcs12>=1.16",
+    "signxml>=3.2.0",
+    "lxml>=5.1.0",
+    # HTTP
+    "httpx>=0.27.0",
+    # API
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "websockets>=13.0",
+    # Database
+    "sqlalchemy[asyncio]>=2.0.35",
+    "asyncpg>=0.30.0",
+    "psycopg[binary]>=3.2.0",
+    "alembic>=1.14.0",
+    # Vector DB
+    "qdrant-client>=1.12.0",
+    # Embeddings & Reranker
+    "sentence-transformers>=3.3.0",
+    # LLM
+    "anthropic>=0.40.0",
+    # PDF
+    "pyhanko>=0.25.0",
+    "pymupdf>=1.25.0",
+    "pdfplumber>=0.11.0",
+    "weasyprint>=61.0",
+    "markdown>=3.6",
+    # Config & validation
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.6.0",
+    # Queue
+    "arq>=0.26.0",
+    "redis>=5.2.0",
+    # CLI
+    "typer>=0.14.0",
+    "rich>=13.9.0",
+    # Logging
+    "structlog>=24.4.0",
+    # Retry
+    "tenacity>=9.0.0",
+    # Object storage
+    "boto3>=1.35.0",
+    # Misc
+    "python-dotenv>=1.0.0",
+    "python-pkcs11>=0.9.4",
+    "python-docx>=1.2.0",
+    "feedparser>=6.0.12",
+]
+
+[project.scripts]
+juris = "juris.cli.main:app"
+
+[project.optional-dependencies]
+scraping = ["beautifulsoup4>=4.12.0", "lxml>=5.0.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/juris"]
+
+# --- Ruff ---
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "B", "UP", "S", "A", "C4", "RET", "SIM"]
+ignore = ["S101"]  # allow assert in tests
+
+[tool.ruff.lint.isort]
+known-first-party = ["juris"]
+
+# --- Mypy ---
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+mypy_path = "src"
+
+[[tool.mypy.overrides]]
+module = [
+    "zeep.*",
+    "requests_pkcs12.*",
+    "signxml.*",
+    "pyhanko.*",
+    "pymupdf.*",
+    "pdfplumber.*",
+    "arq.*",
+    "boto3.*",
+    "botocore.*",
+    "weasyprint.*",
+    "markdown.*",
+]
+ignore_missing_imports = true
+
+# --- Pytest ---
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "live: marks tests that hit real tribunal endpoints (deselect with '-m \"not live\"')",
+    "slow: marks tests that take >10s",
+    "integration: marks integration tests that require full corpus ingestion",
+]
+addopts = "--strict-markers -v"
+
+# --- Coverage ---
+[tool.coverage.run]
+source = ["juris"]
+omit = ["*/migrations/*"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.3.0",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.15.12",
+]
