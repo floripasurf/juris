@@ -2145,5 +2145,10 @@ def file_petition(
         raise typer.Exit(code=1)
 
 
+from juris.cli.search_cli import search_app
+
+app.add_typer(search_app, name="search")
+
+
 if __name__ == "__main__":
     app()
