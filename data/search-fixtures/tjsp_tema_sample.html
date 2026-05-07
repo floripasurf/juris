@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>CJSG - Consulta de Julgados do Segundo Grau - TJSP</title>
+  <link rel="stylesheet" href="/cjsg/css/cjsg.css" />
+</head>
+<body>
+  <form id="form1" name="form1" method="post" action="/cjsg/resultadoCompleta.do">
+    <input type="hidden" name="javax.faces.ViewState"
+           value="j_id1:j_id2:j_id3:j_id4:j_id5:j_id6" />
+    <input type="hidden" name="conversationId" value="r1" />
+
+    <div id="divHeader">
+      <h1>Tribunal de Justiça do Estado de São Paulo</h1>
+      <h2>Consulta de Julgados do Segundo Grau</h2>
+    </div>
+
+    <div id="divResultado">
+      <div id="divInformacoesResultado">
+        <span id="totalResultado">2</span> decisões encontradas para
+        <strong>improbidade administrativa</strong>
+      </div>
+
+      <table id="tabelaResultados" class="tabela-dados">
+        <thead>
+          <tr class="cabecalho">
+            <th>Processo</th>
+            <th>Relator</th>
+            <th>Órgão</th>
+            <th>Data</th>
+            <th>Ementa</th>
+          </tr>
+        </thead>
+        <tbody>
+
+          <!-- Resultado 1 -->
+          <tr class="fundocinza1">
+            <td>
+              <a href="/cjsg/getArquivo.do?cdAcordao=17452198&amp;cdForo=0"
+                 class="esajLinkGridDownload" target="_blank"
+                 title="Visualizar acórdão">
+                1023456-78.2020.8.26.0053
+              </a>
+              <br />
+              <span class="classeTipoDocumento">Apelação Cível</span>
+            </td>
+            <td>Des. Urbano Ruiz</td>
+            <td>8ª Câmara de Direito Público</td>
+            <td>08/04/2024</td>
+            <td class="ementaAcordao">
+              IMPROBIDADE ADMINISTRATIVA - Prefeito municipal - Contratação
+              irregular de servidores sem concurso público e sem necessidade
+              comprovada - Dano ao erário e enriquecimento ilícito configurados
+              - Dolo específico demonstrado - Aplicação da Lei n. 14.230/2021
+              - Retroatividade das normas mais benéficas - Manutenção da
+              condenação ao ressarcimento do dano e à multa civil proporcional
+              - Afastamento da proibição de contratar com o Poder Público por
+              ausência de previsão na nova lei para o tipo de ato praticado -
+              Recurso parcialmente provido - Sentença reformada em parte.
+              <br />
+              <a href="/cjsg/getArquivo.do?cdAcordao=17452198&amp;cdForo=0"
+                 class="esajLinkGridDownload" target="_blank">
+                Acórdão completo
+              </a>
+            </td>
+          </tr>
+
+          <!-- Resultado 2 -->
+          <tr class="fundocinza2">
+            <td>
+              <a href="/cjsg/getArquivo.do?cdAcordao=17318765&amp;cdForo=0"
+                 class="esajLinkGridDownload" target="_blank"
+                 title="Visualizar acórdão">
+                2048901-33.2019.8.26.0114
+              </a>
+              <br />
+              <span class="classeTipoDocumento">Apelação Cível</span>
+            </td>
+            <td>Des. Osvaldo Magalhães Pinto</td>
+            <td>13ª Câmara de Direito Público</td>
+            <td>18/01/2024</td>
+            <td class="ementaAcordao">
+              IMPROBIDADE ADMINISTRATIVA - Secretário municipal de saúde -
+              Superfaturamento em compras de materiais hospitalares durante
+              período de pandemia - Dano ao erário de elevada monta -
+              Enriquecimento ilícito do agente - Elemento subjetivo doloso
+              cabalmente demonstrado por prova documental e testemunhal -
+              Inaplicabilidade da retroatividade da Lei n. 14.230/2021 na
+              vertente mais benéfica quando o dolo específico já restava
+              configurado na moldura fática - Condenação mantida integralmente
+              - Ressarcimento ao erário, multa civil equivalente ao triplo do
+              dano, suspensão dos direitos políticos pelo prazo máximo e
+              proibição de contratar com a Administração Pública pelo prazo de
+              10 (dez) anos - Apelação não provida.
+              <br />
+              <a href="/cjsg/getArquivo.do?cdAcordao=17318765&amp;cdForo=0"
+                 class="esajLinkGridDownload" target="_blank">
+                Acórdão completo
+              </a>
+            </td>
+          </tr>
+
+        </tbody>
+      </table>
+
+      <div id="paginacaoAnterior">
+        <span id="textoAnterior">Anterior</span>
+      </div>
+      <div id="paginacaoProximo">
+        <span id="textoProximo">Próximo</span>
+      </div>
+
+    </div><!-- #divResultado -->
+  </form>
+</body>
+</html>

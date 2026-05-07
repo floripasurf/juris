@@ -1,0 +1,29 @@
+{
+  "items": [
+    {
+      "id": "TST-RR-10014-28.2019.5.03.0097",
+      "numeroProcesso": "RR-10014-28.2019.5.03.0097",
+      "relator": "Min. Mauricio Godinho Delgado",
+      "dataJulgamento": "22/05/2024",
+      "orgaoJulgador": "3ª Turma",
+      "ementa": "IMPROBIDADE ADMINISTRATIVA. AGENTE PÚBLICO. VÍNCULO EMPREGATÍCIO. COMPETÊNCIA DA JUSTIÇA DO TRABALHO. ILÍCITO TRABALHISTA DISTINTO DO ILÍCITO ADMINISTRATIVO. APLICAÇÃO CONCOMITANTE DA LIA E DA CLT. POSSIBILIDADE. A Lei n. 8.429/1992, com a redação dada pela Lei n. 14.230/2021, não afasta a competência da Justiça do Trabalho para processar e julgar ações decorrentes da relação de emprego, ainda que o fato gerador configure, em tese, ato de improbidade administrativa. A responsabilização trabalhista e a responsabilização por ato de improbidade administrativa são institutos juridicamente distintos, com fundamentos, pressupostos e sanções próprias, podendo coexistir sem que haja bis in idem. Recurso de revista conhecido e provido.",
+      "url": "https://jurisprudencia.tst.jus.br/processos/detalhe/TST-RR-10014-28.2019.5.03.0097",
+      "publicacao": "DEJT 31/05/2024",
+      "decisao": "Recurso de revista conhecido e provido"
+    },
+    {
+      "id": "TST-AIRR-20082-55.2021.5.04.0121",
+      "numeroProcesso": "AIRR-20082-55.2021.5.04.0121",
+      "relator": "Min. Alexandre Luiz Ramos",
+      "dataJulgamento": "14/02/2024",
+      "orgaoJulgador": "4ª Turma",
+      "ementa": "AGRAVO DE INSTRUMENTO. RECURSO DE REVISTA. SERVIDOR PÚBLICO. IMPROBIDADE ADMINISTRATIVA. DANO AO ERÁRIO. DOLO ESPECÍFICO. PROVA. ÔNUS. NOVA LEI DE IMPROBIDADE ADMINISTRATIVA (LEI N. 14.230/2021). RETROATIVIDADE. APLICABILIDADE. A teor do decidido pelo Supremo Tribunal Federal nas ADIs 6.029, 7.042 e 7.043, a exigência de dolo específico para configuração do ato de improbidade administrativa, introduzida pela Lei n. 14.230/2021, tem caráter retroativo, beneficiando os réus em ações em curso. O ônus da prova do elemento subjetivo doloso incumbe ao autor da ação. Agravo de instrumento desprovido.",
+      "url": "https://jurisprudencia.tst.jus.br/processos/detalhe/TST-AIRR-20082-55.2021.5.04.0121",
+      "publicacao": "DEJT 22/02/2024",
+      "decisao": "Agravo de instrumento desprovido"
+    }
+  ],
+  "total": 2,
+  "page": 1,
+  "pageSize": 10
+}

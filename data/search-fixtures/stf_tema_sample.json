@@ -1,0 +1,29 @@
+{
+  "result": [
+    {
+      "id": "12345",
+      "title": "RE 852475",
+      "classeNumero": "RE 852475",
+      "relator": "Min. Alexandre de Moraes",
+      "dataJulgamento": "15/06/2024",
+      "description": "RECURSO EXTRAORDINÁRIO. DIREITO ADMINISTRATIVO. IMPROBIDADE ADMINISTRATIVA. PRESCRIÇÃO. RESSARCIMENTO AO ERÁRIO. AÇÃO DE IMPROBIDADE ADMINISTRATIVA. DANO AO ERÁRIO DECORRENTE DE ATO DOLOSO DE IMPROBIDADE. IMPRESCRITIBILIDADE. RECURSO EXTRAORDINÁRIO PROVIDO.",
+      "url": "/processos/detalhe.asp?incidente=12345",
+      "orgaoJulgador": "Tribunal Pleno",
+      "publicacao": "DJe-123 de 20/06/2024"
+    },
+    {
+      "id": "67890",
+      "title": "ADI 7042",
+      "classeNumero": "ADI 7042",
+      "relator": "Min. Luís Roberto Barroso",
+      "dataJulgamento": "10/03/2024",
+      "description": "AÇÃO DIRETA DE INCONSTITUCIONALIDADE. LEGITIMIDADE DO MINISTÉRIO PÚBLICO ESTADUAL. AÇÃO DE IMPROBIDADE ADMINISTRATIVA. LEI 14.230/2021. ALTERAÇÕES NA LEI DE IMPROBIDADE ADMINISTRATIVA. CONSTITUCIONALIDADE PARCIAL.",
+      "url": "/processos/detalhe.asp?incidente=67890",
+      "orgaoJulgador": "Tribunal Pleno",
+      "publicacao": "DJe-045 de 15/03/2024"
+    }
+  ],
+  "totalCount": 2,
+  "page": 1,
+  "pageSize": 10
+}
