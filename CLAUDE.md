@@ -75,7 +75,7 @@ juris/
 │       │   └── parsers/
 │       ├── prazo/                   # deterministic deadline engine
 │       ├── repertory/               # three-tier corpus + retrieval
-│       ├── agents/                  # AI agents (analyzer, drafter, etc.)
+│       ├── agents/                  # AI agents (analyzer, reviewer, researcher, drafter)
 │       ├── signing/                 # PAdES + WS-Security
 │       ├── persistence/             # SQLAlchemy models + repositories
 │       ├── api/                     # FastAPI (orchestrator + local agent)
@@ -153,6 +153,8 @@ uv run mypy src/juris
 # CLI
 uv run juris consulta <numero_cnj>
 uv run juris tribunais
+uv run juris draft <numero_cnj> contestacao
+uv run juris draft <numero_cnj> inicial --cloud --thesis "..."
 
 # Database
 uv run alembic upgrade head

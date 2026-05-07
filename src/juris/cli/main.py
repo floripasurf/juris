@@ -2041,6 +2041,9 @@ def file_petition(
 
     # 3. Resolve senha
     resolved_senha = _get_senha(tribunal, cpf, senha)
+    from juris.mni.auth import AuthStrategy, PasswordAuth
+
+    mni_auth = PasswordAuth(cpf=cpf, senha=resolved_senha)
 
     # 4. Setup components
     juris_dir = FilePath.home() / ".juris"
@@ -2048,10 +2051,10 @@ def file_petition(
     receipt_store = FilingReceiptStore(juris_dir / "filings", audit)
 
     # 5. MNI client factory
-    def mni_client_factory(tribunal_id: str) -> object:
+    def mni_client_factory(tribunal_id: str, auth: AuthStrategy) -> object:
         from juris.mni.client import get_mni_client
 
-        return get_mni_client(tribunal_id)
+        return get_mni_client(tribunal_id, auth)
 
     # 6. Build filing request
     filing_request = FilingRequest(
@@ -2084,6 +2087,7 @@ def file_petition(
                 audit=audit,
                 receipt_store=receipt_store,
                 mni_client_factory=mni_client_factory,
+                mni_auth=mni_auth,
             )
             result = asyncio.run(orchestrator.file(filing_request))
         else:
@@ -2093,6 +2097,7 @@ def file_petition(
                     audit=audit,
                     receipt_store=receipt_store,
                     mni_client_factory=mni_client_factory,
+                    mni_auth=mni_auth,
                 )
                 result = asyncio.run(orchestrator.file(filing_request))
     except Exception as exc:

@@ -57,10 +57,18 @@ class LocalFileStorage(StorageBackend):
     def _path(self, key: str) -> Path:
         # Sanitize key to prevent directory traversal
         safe_key = Path(key)
+        if safe_key.is_absolute():
+            msg = f"Invalid key (absolute path): {key}"
+            raise ValueError(msg)
         if ".." in safe_key.parts:
             msg = f"Invalid key (directory traversal): {key}"
             raise ValueError(msg)
-        return self._root / safe_key
+        root_resolved = self._root.resolve()
+        resolved = (self._root / safe_key).resolve()
+        if not resolved.is_relative_to(root_resolved):
+            msg = f"Invalid key (escapes root): {key}"
+            raise ValueError(msg)
+        return resolved
 
     async def put(self, key: str, data: bytes, content_type: str = "application/octet-stream") -> StoredObject:
         path = self._path(key)

@@ -105,6 +105,78 @@ class Parte(Base):
     processo: Mapped[Processo] = relationship(back_populates="partes")
 
 
+class PrazoComputed(Base):
+    """Computed deadlines for a processo movement."""
+
+    __tablename__ = "prazos_computed"
+    __table_args__ = (
+        Index("ix_prazos_processo_status", "processo_id", "status"),
+        Index("ix_prazos_data_limite", "data_limite"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    processo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("processos.id"))
+    movimento_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("movimentos.id"))
+    numero_cnj: Mapped[str] = mapped_column(String(25), index=True)
+    rule_nome: Mapped[str] = mapped_column(String(200))
+    rule_base_legal: Mapped[str] = mapped_column(String(200))
+    tipo_acao: Mapped[str] = mapped_column(String(50))
+    categoria: Mapped[str] = mapped_column(String(50))
+    data_inicio: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    data_limite: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    dias_uteis_total: Mapped[int]
+    status: Mapped[str] = mapped_column(String(20), default="aberto")  # aberto, proximo, urgente, vencido, cumprido
+    urgencia: Mapped[str] = mapped_column(String(20))
+    cumprido_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cumprido_por: Mapped[str | None] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    processo: Mapped[Processo] = relationship()
+
+
+class SyncLog(Base):
+    """Log of sync operations (overnight, pull-updates, etc.)."""
+
+    __tablename__ = "sync_logs"
+    __table_args__ = (
+        Index("ix_sync_logs_processo", "numero_cnj", "started_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    numero_cnj: Mapped[str] = mapped_column(String(25))
+    tribunal_id: Mapped[str] = mapped_column(String(20))
+    source: Mapped[str] = mapped_column(String(20))  # mni, datajud
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    success: Mapped[bool] = mapped_column(default=False)
+    had_changes: Mapped[bool] = mapped_column(default=False)
+    new_movimentos: Mapped[int] = mapped_column(default=0)
+    new_documentos: Mapped[int] = mapped_column(default=0)
+    error: Mapped[str | None] = mapped_column(Text)
+    details: Mapped[dict | None] = mapped_column(JSONB)
+
+
+class JurisprudenciaRecord(Base):
+    """Jurisprudence records for the corpus hierarchy."""
+
+    __tablename__ = "jurisprudencia"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tipo: Mapped[str] = mapped_column(String(50))
+    numero: Mapped[str] = mapped_column(String(50))
+    tribunal: Mapped[str] = mapped_column(String(20))
+    ementa: Mapped[str] = mapped_column(Text)
+    texto_integral: Mapped[str | None] = mapped_column(Text)
+    hierarquia: Mapped[int]
+    temas: Mapped[list | None] = mapped_column(JSONB)
+    base_legal: Mapped[list | None] = mapped_column(JSONB)
+    situacao: Mapped[str] = mapped_column(String(20), default="vigente")
+    relator: Mapped[str | None] = mapped_column(String(200))
+    data_julgamento: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class AdvogadoCadastrado(Base):
     """Lawyers registered in the system (for multi-tenant)."""
 

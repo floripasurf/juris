@@ -25,6 +25,7 @@ class TribunalConfig:
     requires_envelope_signing: bool = False
     certificate_auth_supported: bool = True
     password_auth_supported: bool = True
+    service_url_override: str | None = None  # Override SOAP endpoint (e.g. TJMG consulta-publica)
 
 
 # Initial registry — expand as tribunals are tested
@@ -70,6 +71,45 @@ TRIBUNAL_REGISTRY: dict[str, TribunalConfig] = {
         nome="TJRJ - Rio de Janeiro",
         sistema=SistemaProcessual.PJE,
         wsdl_url="https://pje.tjrj.jus.br/pje/intercomunicacao?wsdl",
+    ),
+    "tjmg": TribunalConfig(
+        id="tjmg",
+        nome="TJMG - Minas Gerais",
+        sistema=SistemaProcessual.PJE,
+        wsdl_url="https://pje-consulta-publica.tjmg.jus.br/pje/intercomunicacao?wsdl",
+        mni_version="2.2.3",
+        service_url_override="https://pje-consulta-publica.tjmg.jus.br/pje/intercomunicacao",
+    ),
+    # --- Confirmed working (WSDL accessible, no mTLS required) ---
+    "tjes": TribunalConfig(
+        id="tjes",
+        nome="TJES - Espirito Santo",
+        sistema=SistemaProcessual.PJE,
+        wsdl_url="https://pje.tjes.jus.br/pje/intercomunicacao?wsdl",
+    ),
+    "tjmt": TribunalConfig(
+        id="tjmt",
+        nome="TJMT - Mato Grosso",
+        sistema=SistemaProcessual.PJE,
+        wsdl_url="https://pje.tjmt.jus.br/pje/intercomunicacao?wsdl",
+    ),
+    "tjpa": TribunalConfig(
+        id="tjpa",
+        nome="TJPA - Para",
+        sistema=SistemaProcessual.PJE,
+        wsdl_url="https://pje.tjpa.jus.br/pje/intercomunicacao?wsdl",
+    ),
+    "tjpe": TribunalConfig(
+        id="tjpe",
+        nome="TJPE - Pernambuco",
+        sistema=SistemaProcessual.PJE,
+        wsdl_url="https://pje.tjpe.jus.br/pje/intercomunicacao?wsdl",
+    ),
+    "trf5": TribunalConfig(
+        id="trf5",
+        nome="TRF 5a Regiao - PE/AL/SE/RN/PB/CE",
+        sistema=SistemaProcessual.PJE,
+        wsdl_url="https://pje.trf5.jus.br/pje/intercomunicacao?wsdl",
     ),
 }
 

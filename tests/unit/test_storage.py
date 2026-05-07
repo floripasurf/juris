@@ -1,12 +1,14 @@
 """Tests for storage backend."""
 
+from pathlib import Path
+
 import pytest
 
 from juris.core.storage import LocalFileStorage
 
 
 @pytest.fixture
-def storage(tmp_path):
+def storage(tmp_path: Path) -> LocalFileStorage:
     return LocalFileStorage(tmp_path / "test_storage")
 
 
@@ -40,3 +42,24 @@ class TestLocalFileStorage:
     async def test_directory_traversal_blocked(self, storage: LocalFileStorage) -> None:
         with pytest.raises(ValueError, match="directory traversal"):
             await storage.put("../../etc/passwd", b"bad")
+
+    @pytest.mark.asyncio
+    async def test_absolute_path_blocked(self, storage: LocalFileStorage) -> None:
+        with pytest.raises(ValueError, match="absolute path"):
+            await storage.put("/etc/passwd", b"bad")
+
+    @pytest.mark.asyncio
+    async def test_symlink_escape_blocked(self, storage: LocalFileStorage, tmp_path: Path) -> None:
+        outside_dir = tmp_path / "outside"
+        outside_dir.mkdir()
+        link_path = storage._root / "linked"
+        link_path.symlink_to(outside_dir, target_is_directory=True)
+
+        with pytest.raises(ValueError, match="escapes root"):
+            await storage.put("linked/escape.txt", b"bad")
+
+    @pytest.mark.asyncio
+    async def test_resolved_path_stays_under_root(self, storage: LocalFileStorage) -> None:
+        path = storage._path("docs/test.pdf")
+
+        assert path.is_relative_to(storage._root.resolve())

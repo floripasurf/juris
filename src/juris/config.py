@@ -45,11 +45,23 @@ class Settings(BaseSettings):
     s3_secret_key: SecretStr | None = None
     s3_bucket: str = "juris"
 
+    # --- Embeddings ---
+    embedding_model: str = "BAAI/bge-m3"
+    embedding_device: str = "cpu"
+
     # --- LLM Cloud ---
     anthropic_api_key: SecretStr | None = None
 
     # --- LLM Local ---
     ollama_url: str = "http://localhost:11434"
+
+    # --- Alerts ---
+    alert_smtp_host: str = ""
+    alert_smtp_port: int = 587
+    alert_smtp_user: str = ""
+    alert_smtp_password: SecretStr | None = None
+    alert_from_address: str = ""
+    alert_to_addresses: str = ""  # comma-separated
 
     # --- ICP-Brasil Certificate ---
     cert_path: str | None = None

@@ -48,3 +48,11 @@ Quarantine/
 
 # Private plan docs (not for GitHub)
 docs/plans/
+
+# Large corpus PDFs (local only)
+Decisoes/
+Petiçoes/
+STF_Casos_Relevantes/
+
+# Archives
+*.zip

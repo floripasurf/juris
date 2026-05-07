@@ -22,18 +22,22 @@ class NumeroCNJ:
 
     @property
     def justica(self) -> str:
-        """Extract justice branch code (position 14)."""
-        return self.value[14]
+        """Extract justice branch code. Format: NNNNNNN-DD.AAAA.J.TR.OOOO"""
+        # Split on dots: ['NNNNNNN-DD', 'AAAA', 'J', 'TR', 'OOOO']
+        parts = self.value.split(".")
+        return parts[2]
 
     @property
     def tribunal(self) -> str:
-        """Extract tribunal code (positions 16-17)."""
-        return self.value[16:18]
+        """Extract tribunal code."""
+        parts = self.value.split(".")
+        return parts[3]
 
     @property
     def origem(self) -> str:
-        """Extract origin code (positions 19-22)."""
-        return self.value[19:23]
+        """Extract origin code."""
+        parts = self.value.split(".")
+        return parts[4]
 
     def __str__(self) -> str:
         return self.value
