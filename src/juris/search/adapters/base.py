@@ -1,4 +1,5 @@
 """Base class for court search adapters."""
+
 from __future__ import annotations
 
 import time
@@ -45,9 +46,7 @@ class SearchAdapter(ABC):
     portal_url: ClassVar[str]
     rate_limit_seconds: ClassVar[float] = 2.0
     supported_query_types: ClassVar[set[QueryType]]
-    user_agent: ClassVar[str] = (
-        "Juris/1.0 (legal research tool; contact@example.com)"
-    )
+    user_agent: ClassVar[str] = "Juris/1.0 (legal research tool; contact@example.com)"
 
     @abstractmethod
     async def search(self, query: SearchQuery) -> list[SearchResult]:

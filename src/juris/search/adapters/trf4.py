@@ -1,4 +1,5 @@
 """TRF4 (Tribunal Regional Federal da 4ª Região) search adapter."""
+
 from __future__ import annotations
 
 import logging
@@ -17,9 +18,7 @@ logger = logging.getLogger(__name__)
 _PORTAL_URL = "https://jurisprudencia.trf4.jus.br/pesquisa/resultado_pesquisa.php"
 _URL_PREFIX = "https://jurisprudencia.trf4.jus.br"
 
-_CNJ_PATTERN_RE = __import__("re").compile(
-    r"\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}"
-)
+_CNJ_PATTERN_RE = __import__("re").compile(r"\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}")
 
 
 @register_adapter
@@ -88,11 +87,7 @@ class TRF4Adapter(SearchAdapter):
                     case_number = cnj_match.group(0) if cnj_match else cell_text[:60]
 
                     href = link["href"] if link and link.get("href") else ""
-                    url = (
-                        _URL_PREFIX + href
-                        if href.startswith("/")
-                        else href or self.portal_url
-                    )
+                    url = _URL_PREFIX + href if href.startswith("/") else href or self.portal_url
 
                     date_text = cells[1].get_text(strip=True) if len(cells) > 1 else None
                     relator = cells[2].get_text(strip=True) if len(cells) > 2 else None

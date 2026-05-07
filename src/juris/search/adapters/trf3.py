@@ -1,4 +1,5 @@
 """TRF3 (Tribunal Regional Federal da 3ª Região) search adapter."""
+
 from __future__ import annotations
 
 import logging
@@ -17,9 +18,7 @@ logger = logging.getLogger(__name__)
 _PORTAL_URL = "https://web.trf3.jus.br/base-textual/Home/ListaResumida"
 _URL_PREFIX = "https://web.trf3.jus.br"
 
-_CNJ_PATTERN_RE = __import__("re").compile(
-    r"\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}"
-)
+_CNJ_PATTERN_RE = __import__("re").compile(r"\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}")
 _RELATOR_PREFIX = "Des. Fed. "
 
 
@@ -53,9 +52,7 @@ class TRF3Adapter(SearchAdapter):
                 timeout=30.0,
                 follow_redirects=True,
             ) as client:
-                resp = await client.get(
-                    self.portal_url, params={"strPesq": query.value}
-                )
+                resp = await client.get(self.portal_url, params={"strPesq": query.value})
                 resp.raise_for_status()
             return self._parse(resp.text, query)
         except Exception:
@@ -103,17 +100,11 @@ class TRF3Adapter(SearchAdapter):
                 # CNJ number is the second line of text inside the <a> tag
                 link_text = link.get_text("\n", strip=True)
                 lines = [ln.strip() for ln in link_text.splitlines() if ln.strip()]
-                cnj_line = next(
-                    (ln for ln in lines if _CNJ_PATTERN_RE.search(ln)), None
-                )
+                cnj_line = next((ln for ln in lines if _CNJ_PATTERN_RE.search(ln)), None)
                 case_number = cnj_line if cnj_line else (lines[-1] if lines else "")
 
                 href = link.get("href", "")
-                url = (
-                    _URL_PREFIX + href
-                    if href.startswith("/")
-                    else href or self.portal_url
-                )
+                url = _URL_PREFIX + href if href.startswith("/") else href or self.portal_url
 
                 date_text = col_data.get_text(strip=True) if col_data else None
 
@@ -121,14 +112,10 @@ class TRF3Adapter(SearchAdapter):
                 relator: str | None = None
                 if relator_raw:
                     relator = (
-                        relator_raw[len(_RELATOR_PREFIX):]
-                        if relator_raw.startswith(_RELATOR_PREFIX)
-                        else relator_raw
+                        relator_raw[len(_RELATOR_PREFIX) :] if relator_raw.startswith(_RELATOR_PREFIX) else relator_raw
                     )
 
-                ementa_text = (
-                    col_ementa.get_text(" ", strip=True) if col_ementa else ""
-                )
+                ementa_text = col_ementa.get_text(" ", strip=True) if col_ementa else ""
 
                 results.append(
                     SearchResult(

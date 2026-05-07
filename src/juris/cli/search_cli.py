@@ -1,4 +1,5 @@
 """CLI subcommand for unified multi-court jurisprudence search."""
+
 from __future__ import annotations
 
 import asyncio
@@ -78,6 +79,7 @@ def search_command(
     date_range = None
     if date_from or date_to:
         from juris.search.utils import parse_br_date
+
         d_from = parse_br_date(date_from) if date_from else None
         d_to = parse_br_date(date_to) if date_to else None
         if d_from and d_to:

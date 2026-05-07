@@ -5,6 +5,7 @@ automatically when :func:`get_all_adapters` is first called. Each module
 must call :func:`register_adapter` (typically via the ``@register_adapter``
 decorator) to register its class.
 """
+
 from __future__ import annotations
 
 import importlib

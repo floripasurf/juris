@@ -1,9 +1,9 @@
 """STF (Supremo Tribunal Federal) search adapter."""
+
 from __future__ import annotations
 
 import logging
 from datetime import datetime
-from urllib.parse import urlencode
 
 import httpx
 

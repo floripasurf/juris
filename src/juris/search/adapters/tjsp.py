@@ -4,6 +4,7 @@ Uses the ESAJ CJSG portal with a 2-step ViewState flow:
 1. GET ``/cjsg/consultaCompleta.do`` to obtain the ViewState token + cookies.
 2. POST ``/cjsg/resultadoCompleta.do`` with the ViewState and query.
 """
+
 from __future__ import annotations
 
 import logging
@@ -129,11 +130,7 @@ class TJSPAdapter(SearchAdapter):
 
                 case_number = link.get_text(strip=True) if link else ""
                 href = link.get("href", "") if link else ""
-                url = (
-                    _PORTAL_BASE + href
-                    if href.startswith("/")
-                    else href or self.portal_url
-                )
+                url = _PORTAL_BASE + href if href.startswith("/") else href or self.portal_url
 
                 classe_tag = first_cell.find("span", class_="classeTipoDocumento")
                 classe = classe_tag.get_text(strip=True) if classe_tag else None

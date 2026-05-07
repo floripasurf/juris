@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from datetime import date, datetime
+from datetime import date
 
 from juris.core.types import CNJ_NUMERO_PATTERN
 
@@ -12,9 +12,33 @@ _CNJ_DIGITS_PATTERN = re.compile(r"^\d{20}$")
 
 # Brazilian state abbreviations for OAB parsing
 _BR_STATES = {
-    "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS",
-    "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC",
-    "SP", "SE", "TO",
+    "AC",
+    "AL",
+    "AP",
+    "AM",
+    "BA",
+    "CE",
+    "DF",
+    "ES",
+    "GO",
+    "MA",
+    "MT",
+    "MS",
+    "MG",
+    "PA",
+    "PB",
+    "PR",
+    "PE",
+    "PI",
+    "RJ",
+    "RN",
+    "RS",
+    "RO",
+    "RR",
+    "SC",
+    "SP",
+    "SE",
+    "TO",
 }
 
 # Common boilerplate header patterns to strip from ementas

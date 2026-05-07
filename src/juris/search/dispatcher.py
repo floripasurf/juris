@@ -1,4 +1,5 @@
 """Search dispatcher — parallel fanout, dedup, ranking."""
+
 from __future__ import annotations
 
 import asyncio

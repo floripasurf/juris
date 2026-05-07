@@ -1,4 +1,5 @@
 """TST (Tribunal Superior do Trabalho) search adapter."""
+
 from __future__ import annotations
 
 import logging

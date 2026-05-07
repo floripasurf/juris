@@ -1,4 +1,5 @@
 """STJ (Superior Tribunal de Justiça) search adapter."""
+
 from __future__ import annotations
 
 import logging
@@ -31,7 +32,7 @@ def _strip_relator_prefix(text: str) -> str:
     stripped = text.strip()
     for prefix in _RELATOR_PREFIXES:
         if stripped.upper().startswith(prefix.upper()):
-            return stripped[len(prefix):].strip()
+            return stripped[len(prefix) :].strip()
     return stripped
 
 
@@ -90,11 +91,7 @@ class STJAdapter(SearchAdapter):
                 process_link = div.select_one("td.dadoPesquisa > a")
                 case_number = process_link.get_text(strip=True) if process_link else ""
                 raw_href = process_link.get("href", "") if process_link else ""
-                url = (
-                    _URL_PREFIX + raw_href
-                    if raw_href.startswith("/")
-                    else raw_href
-                )
+                url = _URL_PREFIX + raw_href if raw_href.startswith("/") else raw_href
 
                 # All data rows
                 rows = div.select("tr")
