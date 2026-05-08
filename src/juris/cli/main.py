@@ -2186,13 +2186,24 @@ def demo(
     import asyncio
     from pathlib import Path as FilePath
 
+    from juris.core.types import NumeroCNJ
     from juris.demo import DemoRequest, SourceMode, run_demo
     from juris.demo.artifacts import write_artifacts
     from juris.demo.disclaimer import output_dir_name
     from juris.demo.orchestrator import derive_demo_mode, load_processo
     from juris.repertory.peticoes.models import TipoPeticao
 
-    # Validate inputs
+    # Validate inputs. CNJ format check runs first so a typo never creates
+    # an output directory that would carry the bad string into artifacts.
+    try:
+        NumeroCNJ(numero_cnj)
+    except ValueError as exc:
+        console.print(
+            f"[red]Número CNJ inválido: '{numero_cnj}'. "
+            f"Formato esperado: NNNNNNN-DD.AAAA.J.TT.OOOO[/red]"
+        )
+        raise typer.Exit(code=1) from exc
+
     try:
         tipo_peticao = TipoPeticao(tipo)
     except ValueError as exc:

@@ -273,6 +273,31 @@ class TestDemoInputValidation:
         assert result.exit_code != 0
         assert "--source inválido" in result.output
 
+    def test_invalid_cnj_format_rejected_before_pipeline(
+        self, tmp_path: Path
+    ) -> None:
+        """A malformed CNJ must be rejected before any artifacts are written.
+
+        Without this guard, a lawyer mistyping a CNJ would silently get demo
+        output with their typo baked into the directory name and artifacts.
+        """
+        result = runner.invoke(
+            app,
+            [
+                "demo",
+                "INVALID-CNJ",
+                "contestacao",
+                "--source",
+                "fixture",
+                "--out",
+                str(tmp_path),
+            ],
+        )
+        assert result.exit_code != 0
+        assert "Número CNJ inválido" in result.output
+        # No output dir should have been created — fail-fast before mkdir.
+        assert list(tmp_path.iterdir()) == []
+
 
 # ---------------------------------------------------------------------------
 # Helper: nested patch context manager (so the test body stays readable).
