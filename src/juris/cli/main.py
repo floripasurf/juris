@@ -2155,5 +2155,233 @@ from juris.cli.search_cli import search_app
 app.add_typer(search_app, name="search")
 
 
+# ---------------------------------------------------------------------------
+# demo — end-to-end pilot pipeline (sprint 15)
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def demo(
+    numero_cnj: str = typer.Argument(..., help="Número CNJ do processo"),
+    tipo: str = typer.Argument(..., help="Tipo de petição (contestacao, inicial, apelacao, ...)"),
+    tribunal: str = typer.Option("tjmg", "--tribunal", "-t", help="ID do tribunal"),
+    cpf: str | None = typer.Option(None, "--cpf", help="CPF do advogado (futuro: MNI)"),
+    source: str = typer.Option(
+        "datajud", "--source", help="Origem do processo: datajud | mni | fixture"
+    ),
+    out_root: str = typer.Option(
+        "juris-out", "--out", "-o", help="Diretório raiz para artefatos"
+    ),
+    thesis: str | None = typer.Option(None, "--thesis", "-T", help="Tese explícita"),
+    instructions: str = typer.Option("", "--instructions", "-i", help="Instruções extras"),
+    cloud: bool = typer.Option(False, "--cloud", help="Usar Claude (cloud) em vez de Ollama"),
+    skip_review: bool = typer.Option(False, "--skip-review", help="Pular revisão pós-draft"),
+) -> None:
+    """Pipeline ponta-a-ponta para demonstração com advogado(a) parceiro(a).
+
+    Lê o processo (DataJud/MNI/fixture), analisa movimentos, calcula prazos,
+    gera petição com revisão e exporta todos os artefatos + audit chain para
+    `<out>/<cnj>/`. Modo fixture força DEMO MODE (banner + prefixo `DEMO-`).
+    """
+    import asyncio
+    from pathlib import Path as FilePath
+
+    from juris.demo import DemoRequest, SourceMode, run_demo
+    from juris.demo.artifacts import write_artifacts
+    from juris.demo.disclaimer import output_dir_name
+    from juris.demo.orchestrator import derive_demo_mode, load_processo
+    from juris.repertory.peticoes.models import TipoPeticao
+
+    # Validate inputs
+    try:
+        tipo_peticao = TipoPeticao(tipo)
+    except ValueError as exc:
+        valid = ", ".join(t.value for t in TipoPeticao)
+        console.print(f"[red]Tipo inválido: '{tipo}'. Opções: {valid}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    try:
+        source_mode = SourceMode(source)
+    except ValueError as exc:
+        console.print(
+            f"[red]--source inválido: '{source}'. Opções: datajud, mni, fixture.[/red]"
+        )
+        raise typer.Exit(code=1) from exc
+
+    is_demo_mode = derive_demo_mode(source_mode)
+
+    # Resolve output paths
+    out_root_path = FilePath(out_root)
+    case_dir = out_root_path / output_dir_name(numero_cnj, demo_mode=is_demo_mode)
+    case_dir.mkdir(parents=True, exist_ok=True)
+    audit_path = case_dir / "audit.jsonl"
+
+    # Banner — print loud if demo mode
+    if is_demo_mode:
+        console.print(
+            "[yellow bold]MODO DEMONSTRAÇÃO ATIVO[/yellow bold] "
+            "[yellow](source=fixture). Saída não pode ser usada processualmente.[/yellow]"
+        )
+
+    # Set up LLM (mirrors `draft` command)
+    if cloud:
+        console.print(
+            "[yellow]AVISO PII:[/yellow] --cloud envia dados do processo "
+            "para API externa. Use apenas se o caso não contiver dados sensíveis."
+        )
+        try:
+            from juris.config import get_settings
+            from juris.llm.claude import ClaudeLLM
+
+            settings = get_settings()
+            if not settings.anthropic_api_key:
+                console.print(
+                    "[red]ANTHROPIC_API_KEY não configurada (.env ou ambiente).[/red]"
+                )
+                raise typer.Exit(code=1)
+            llm = ClaudeLLM(api_key=settings.anthropic_api_key.get_secret_value())
+            console.print("[dim]LLM: Claude (cloud)[/dim]")
+        except typer.Exit:
+            raise
+        except Exception as exc:
+            console.print(f"[red]Claude indisponível: {exc}[/red]")
+            raise typer.Exit(code=1) from exc
+    else:
+        try:
+            from juris.llm.ollama import OllamaLLM
+
+            llm = OllamaLLM()
+            console.print("[dim]LLM: Ollama (local)[/dim]")
+        except Exception as exc:
+            console.print(
+                "[red]Ollama indisponível. Servidor Ollama está rodando?[/red]"
+            )
+            raise typer.Exit(code=1) from exc
+
+    # Set up retrieval
+    try:
+        from juris.repertory.embeddings import LegalEmbedder
+        from juris.repertory.retrieval.hybrid import HybridRetriever
+        from juris.repertory.retrieval.reranker import CrossEncoderReranker
+        from juris.repertory.retrieval.service import RepertoryService
+        from juris.repertory.vector_store import LocalFTSStore
+
+        embedder = LegalEmbedder()
+        fts_store = LocalFTSStore(FilePath("data/repertory.db"))
+        reranker = CrossEncoderReranker()
+        retriever = HybridRetriever(
+            dense_store=fts_store,
+            sparse_store=fts_store,
+            embedder=embedder,
+            reranker=reranker,
+        )
+        repertory = RepertoryService(retriever)
+    except Exception as exc:
+        console.print(f"[red]Falha ao inicializar retrieval: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    # Load processo
+    try:
+        processo = load_processo(numero_cnj, tribunal, source_mode)
+    except (LookupError, NotImplementedError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    # Build request
+    request = DemoRequest(
+        numero_cnj=numero_cnj,
+        tipo_peticao=tipo_peticao,
+        tribunal=tribunal,
+        cpf=cpf,
+        source=source_mode,
+        out_root=out_root_path,
+        thesis=thesis,
+        instructions=instructions,
+        use_cloud_llm=cloud,
+        skip_review=skip_review,
+    )
+
+    console.print(
+        f"[bold]Demo:[/bold] {numero_cnj} ({tribunal}) — tipo={tipo_peticao.value}, "
+        f"source={source_mode.value}"
+    )
+    console.print(f"[dim]Saída: {case_dir}[/dim]")
+
+    try:
+        result = asyncio.run(
+            run_demo(
+                request,
+                llm=llm,
+                repertory=repertory,
+                out_dir=case_dir,
+                audit_path=audit_path,
+                is_demo_mode=is_demo_mode,
+                processo=processo,
+            )
+        )
+    except Exception as exc:
+        console.print(f"[red]Falha no pipeline demo: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    artifacts = write_artifacts(result)
+
+    # Print summary
+    console.print()
+    if result.succeeded:
+        console.print(f"[green]Concluído em {result.duration_seconds:.1f}s.[/green]")
+    else:
+        console.print(
+            f"[red]Falhou após {result.duration_seconds:.1f}s "
+            f"(artefatos parciais gravados).[/red]"
+        )
+    if result.errors:
+        for e in result.errors:
+            console.print(f"[yellow]- {e}[/yellow]")
+    console.print(f"[bold]Artefatos ({len(artifacts)}):[/bold]")
+    for name in sorted(artifacts):
+        console.print(f"  - {case_dir / name}")
+    if is_demo_mode:
+        console.print(
+            "[yellow bold]Lembrete:[/yellow bold] "
+            "[yellow]Saída em modo DEMO. Não pode ser protocolada.[/yellow]"
+        )
+
+    if not result.succeeded:
+        # Lawyer-facing demo must surface failure in the exit code so callers
+        # (CI, smoke-test runbook, partner walkthrough) can't mistake a partial
+        # run for a successful one.
+        raise typer.Exit(code=2)
+
+
+# ---------------------------------------------------------------------------
+# audit — chain integrity verification
+# ---------------------------------------------------------------------------
+
+
+audit_app = typer.Typer(name="audit", help="Comandos de auditoria.")
+app.add_typer(audit_app)
+
+
+@audit_app.command("verify")
+def audit_verify(
+    path: str = typer.Argument(..., help="Caminho do audit.jsonl a verificar"),
+) -> None:
+    """Verifica a integridade da cadeia de hashes em um arquivo audit.jsonl."""
+    from pathlib import Path as FilePath
+
+    from juris.demo.audit_verify import verify_audit_file
+
+    audit_path = FilePath(path)
+    try:
+        report = verify_audit_file(audit_path)
+    except FileNotFoundError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    console.print(report.to_text())
+    if not report.is_intact:
+        raise typer.Exit(code=2)
+
+
 if __name__ == "__main__":
     app()
