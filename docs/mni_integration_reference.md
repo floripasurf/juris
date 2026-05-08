@@ -4,6 +4,20 @@ A practical architecture guide for building an AI-driven law-firm system that re
 
 ---
 
+## Table of contents
+
+1. [SOAP Client Structure](#1-soap-client-structure) — zeep client, auth strategies, TPU semantic mapping, differential reads
+2. [Certificate-based Signing Flow for Peticionamento](#2-certificate-based-signing-flow-for-peticionamento) — split-trust architecture, PAdES + WS-Security, regulatory mapping
+3. [Per-Tribunal Coverage Matrix](#3-per-tribunal-coverage-matrix) — PJe, eSAJ, eProc, Projudi, superior courts, ancillary systems
+4. [Practical Considerations](#4-practical-considerations) — rate limits, LGPD posture, audit trail, 90-day shipping plan
+5. [Repertory Architecture](#5-repertory-architecture) — three-tier corpus, structural extraction, hybrid retrieval, citation verification, tenant isolation, petition history with style memory and onboarding
+6. [V1 Critical Features](#6-v1-critical-features) — prazo engine, second-opinion mode, contradictory-jurisprudence flag
+7. [Roadmap: Phase 2 and Beyond](#7-roadmap-phase-2-and-beyond) — case timeline, WhatsApp client, document understanding, adversário/judge intelligence, research mode, what-if scenarios, doutrina partnerships, ethics check
+8. [Privacy-Preserving Learning Architecture](#8-privacy-preserving-learning-architecture) — three-layer model (tenant-private, platform abstractions, federated learning), case memory, reflection module, marketing narrative, sprint phasing
+9. [Appendix: Quick-reference SOAP envelope examples](#appendix-quick-reference-soap-envelope-examples) — consultarProcesso, entregarManifestacaoProcessual
+
+---
+
 ## 1. SOAP Client Structure
 
 ### 1.1 Tech stack (Python)
@@ -1631,6 +1645,344 @@ A small dedicated agent that runs before any filing and flags:
 **Implementation:** small classifier model + rules engine, ~100 lines of Python plus prompt. Cheap to run, catches issues that create real problems for the lawyer down the line. Fold it into the citation_verifier as an additional check, or run as a sibling agent immediately before the lawyer's review.
 
 **Why V1.5 rather than V1:** it's optional polish for the v1 launch, but worth adding within the first few months once the core flow is validated. The cost of *not* having it is real (lawyers have already been fined for AI-induced má-fé citations in Brazilian courts) but it's a defense rather than an offense.
+
+---
+
+## 8. Privacy-Preserving Learning Architecture
+
+The product vision is a persistent legal agent that improves with every case, every edit, every outcome — accumulating intelligence the way a senior associate does over decades. The architectural challenge is doing this without ever compromising the privacy guarantees that make sophisticated firms willing to trust the system with sensitive client matters.
+
+This section defines the architecture that resolves the central tension: **per-tenant learning is unbounded; cross-tenant data sharing is structurally impossible; cross-tenant platform improvement happens only through content-free abstractions.**
+
+### 8.1 The fundamental tension
+
+Two product requirements that are in direct conflict if not carefully separated:
+
+1. **Each tenant's data stays absolutely private.** Cases, strategies, edits, notes, outcomes, client information — none of it leaks across tenant boundaries, ever. This is required by sigilo profissional (OAB Code of Ethics art. 25-27), LGPD (purpose limitation, base legal), and customer trust. There is no exception worth making.
+2. **The system gets smarter from collective use.** Otherwise the platform is just N independent instances and competitors with more compute can catch up. Compounding intelligence is the moat.
+
+The naive resolution — share data across tenants, train shared models on aggregate edits, surface "what other lawyers did" — breaks the first requirement catastrophically. Anonymization is insufficient at scale: with enough edit data, sophisticated counterparties can fingerprint a competitor's litigation patterns even without explicit identifiers.
+
+The sophisticated resolution distinguishes between **content** (which stays per-tenant) and **abstractions** (which can compound platform-wide without exposing content).
+
+### 8.2 The three-layer learning architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  LAYER 3 — Federated Platform Learning (Phase 4+)              │
+│  Differential-privacy aggregations, opt-in rule contribution,   │
+│  opt-in benchmark contribution                                  │
+│  Cross-tenant signals, mathematically content-free             │
+└─────────────────────────────────────────────────────────────────┘
+                              ▲
+                              │ aggregate signals (no content)
+┌─────────────────────────────────────────────────────────────────┐
+│  LAYER 2 — Platform Abstractions (Phase 3, ~now)               │
+│  Public corpora, generic templates, mechanical validators,      │
+│  prompt templates, anonymous telemetry                          │
+│  Shared by design, no tenant data ever                          │
+└─────────────────────────────────────────────────────────────────┘
+                              ▲
+                              │ telemetry, no content
+┌─────────────────────────────────────────────────────────────────┐
+│  LAYER 1 — Tenant-Private Data + Learning                       │
+│  Per-case memory, edit history, reflection module,              │
+│  firm style memory, client notes, case strategy                 │
+│  Encrypted, isolated, never shared, deletable on request        │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+Each layer has different privacy properties, different learning mechanisms, and different timing in the roadmap.
+
+### 8.3 Layer 1 — Tenant-private learning (Phase 2-3)
+
+This is where the deepest, most product-differentiating learning happens. Everything is scoped by `tenant_id`; nothing crosses boundaries.
+
+#### 8.3.1 Per-case persistent memory
+
+A processo can last years. Every relevant event needs to be persistently remembered: documents filed, decisions issued, deadlines, drafts produced, lawyer edits, client notes, outcomes. This is what lets the Researcher answer questions like "what did we argue last time this judge faced this thesis?" or "what's the firm's track record on prescrição arguments in TRT-2?"
+
+**Schema (per tenant):**
+
+```sql
+CREATE TABLE case_event (
+    id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL,
+    numero_cnj TEXT NOT NULL,
+    event_type TEXT NOT NULL,        -- movimento, juntada, draft, edit, decisao, etc.
+    actor TEXT NOT NULL,             -- system, lawyer_id, juiz, parte_adversa
+    timestamp TIMESTAMP NOT NULL,
+    content_hash TEXT NOT NULL,      -- sha256 of the structured payload
+    payload JSONB NOT NULL,          -- structured event details
+    embedding VECTOR(1024),          -- for semantic retrieval
+    INDEX (tenant_id, numero_cnj, timestamp)
+);
+
+CREATE TABLE case_strategy_note (
+    id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL,
+    numero_cnj TEXT NOT NULL,
+    author UUID NOT NULL,            -- lawyer who wrote the note
+    timestamp TIMESTAMP NOT NULL,
+    content TEXT NOT NULL,           -- free-text strategy note
+    embedding VECTOR(1024),
+    confidentiality TEXT NOT NULL DEFAULT 'tenant_only'
+);
+```
+
+Embeddings live in a per-tenant Qdrant collection: `tenant_<uuid>_case_memory`. Never queried across tenants.
+
+**Researcher integration:** the Researcher (Sprint 10) gains a new retrieval source `case_history` that searches the tenant's case memory before searching the public corpus. Retrieval is ordered by:
+
+1. Same-case prior events (most relevant context)
+2. Same-juiz prior decisions across the tenant's caseload
+3. Similar-thesis past petitions in the tenant's caseload
+4. Public jurisprudence (Sprint 5 corpus)
+5. Public doutrina (Sprint 6, where licensed)
+
+This produces drafts that aren't just legally grounded — they're grounded in the firm's specific trajectory on this case and similar matters. No competitor with generic AI can replicate this.
+
+#### 8.3.2 The reflection module
+
+When a lawyer edits a generated draft, the diff is signal. The reflection module captures it, analyzes it, and extracts firm-specific rules.
+
+**Flow:**
+
+```
+1. Drafter produces draft v1
+2. Lawyer reviews, edits, produces draft v2
+3. Reflection module captures (v1, v2, diff, case_context, timestamp)
+4. Diff classifier categorizes the edit:
+   - Stylistic (changed wording, kept meaning)
+   - Tactical (added/removed argument, changed thesis emphasis)
+   - Citation (replaced source, added citation, removed citation)
+   - Structural (reordered sections, merged paragraphs)
+   - Substantive (changed legal position)
+5. For tactical/citation/substantive edits: extract candidate rule via LLM call
+   "Reading this diff, what general pattern does it suggest the firm prefers?
+   Express as a rule applicable to future similar drafts."
+6. Rule goes to firm_rules table marked status='proposed'
+7. Periodically (weekly), surface proposed rules to a partner for confirmation:
+   "Adopt this rule? [Y/N/Edit]"
+8. Confirmed rules feed into future drafter prompts as firm preferences
+```
+
+**Schema:**
+
+```sql
+CREATE TABLE firm_rule (
+    id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL,
+    rule_text TEXT NOT NULL,          -- "For trabalhista in TRT-2, lead with prescrição argument before damages"
+    derived_from UUID[],              -- audit trail: which edits produced this rule
+    status TEXT NOT NULL,             -- proposed | confirmed | deprecated
+    confidence FLOAT NOT NULL,        -- how often is this pattern observed
+    created_at TIMESTAMP NOT NULL,
+    confirmed_by UUID,
+    confirmed_at TIMESTAMP,
+    embedding VECTOR(1024)            -- so drafter can retrieve relevant rules per case
+);
+
+CREATE TABLE edit_event (
+    id UUID PRIMARY KEY,
+    tenant_id UUID NOT NULL,
+    draft_id UUID NOT NULL,
+    lawyer_id UUID NOT NULL,
+    diff JSONB NOT NULL,
+    diff_classification TEXT NOT NULL,
+    extracted_rule_id UUID,
+    timestamp TIMESTAMP NOT NULL
+);
+```
+
+**Drafter integration:** before generating a draft, the drafter retrieves the top 5-10 relevant `firm_rule` entries (semantic match on case context) and includes them in the prompt as "Firm preferences (to apply where applicable):". After 3-6 months of regular use, the drafter writes in the firm's voice without explicit configuration.
+
+This is the layer that creates real switching costs. A firm that's used Juris for a year has accumulated hundreds of confirmed rules encoding their tactical preferences, judicial knowledge, and writing style. Migrating to a competitor means losing all of that. Customers stay because *their* AI is genuinely smarter than anyone else's AI.
+
+#### 8.3.3 Privacy guarantees for Layer 1
+
+Hard requirements that must be enforceable in code, not just policy:
+
+- **Encryption at rest** with per-tenant keys derived from a tenant-specific HKDF. If the tenant key is destroyed, the data is mathematically unrecoverable.
+- **Tenant ID on every query** at the repository layer. Static analysis or runtime guards reject queries without tenant scoping.
+- **Per-tenant Qdrant collections** (not shared collections with metadata filters). Provider-level isolation, not application-level.
+- **Per-tenant SQLite/Postgres schemas** for sparse search indexes if used.
+- **No use of tenant data for shared model training**, ever. Document this in the ToS as a contractual commitment.
+- **Right-to-erasure flow** that deletes all tenant data including embeddings, audit log entries, edit history, and rules. Implementable as a single command; tested in CI.
+- **Audit trail of access** — every read of tenant data emits an audit entry, even by system components. Detect anomalous access patterns.
+
+These are non-negotiable. The product's commercial viability depends on lawyers trusting them absolutely.
+
+### 8.4 Layer 2 — Platform abstractions (Phase 3, partially built)
+
+Content that's shared by design because it has no tenant-confidential information in the first place.
+
+#### 8.4.1 What lives here
+
+**Public corpora** (Sprint 10.5 work):
+- STF Súmulas Vinculantes, Súmulas, Temas RG (with tese firmada)
+- STJ Súmulas, Recursos Repetitivos
+- TST Súmulas, OJs, Precedentes Normativos
+- Códigos and Constitution
+- Court bulletins (STF Notícias, STJ Notícias, TST Notícias)
+
+**Generic templates:**
+- CPC-standard petition structures (contestação, recurso ordinário, agravo de instrumento, embargos de declaração)
+- Built from public-domain sources: CNJ standards, OAB model petitions, court guidance documents
+- Tenants extend or override with firm-specific versions in `repertory.peticoes`
+
+**Mechanical validators:**
+- CPC art. 319 formal requirements (qualificação, fatos, fundamentos, pedidos, valor da causa)
+- Citation format checks
+- Mandatory clause checks per petition type
+- Page count and structural sanity
+
+**Platform prompts:**
+- Drafter system prompt and templates
+- Reviewer dimensions and prompts
+- Researcher antithesis prompt
+- HyDE expansion prompt
+
+These are the system's "code" — improving them improves every tenant simultaneously. They contain no tenant data; they're authored by the platform team.
+
+**Anonymous telemetry:**
+- Per prompt template: aggregate edit rate, average revision count, average time-to-fileable
+- Per retrieval strategy: aggregate recall@3, citation-failure rate
+- Per validator rule: aggregate trigger rate
+- Per LLM model: aggregate cost, latency, citation accuracy
+
+Telemetry contains no tenant identifiers and no content. It's signal about *which patterns work* across the platform.
+
+#### 8.4.2 What does NOT live here
+
+- Any tenant petition text, case data, edits, or strategy notes
+- Any tenant-specific firm rules
+- Any data that could fingerprint a tenant's litigation patterns
+
+These remain strictly Layer 1.
+
+#### 8.4.3 Platform improvement loop
+
+```
+1. Telemetry shows: drafter prompt v3 produces 1.4 average revisions
+   on contestação trabalhista; v4 produces 0.8 on the same population
+2. Platform team rolls out v4 as the default for that petition type
+3. All tenants benefit immediately, no tenant data examined
+4. Telemetry continues; if v4 underperforms over time, iterate to v5
+```
+
+This is how the platform improves at a meta level. The signal is statistical, never individual.
+
+### 8.5 Layer 3 — Federated learning (Phase 4+)
+
+The frontier. Real cross-tenant learning that mathematically guarantees no tenant data exposure. Three legitimate techniques, each requiring serious engineering and ongoing operational care.
+
+#### 8.5.1 Differential-privacy aggregations
+
+For platform-level analytics that need to draw on edit signals across tenants without revealing any single tenant's signal:
+
+```python
+# Conceptual: how many drafts were edited in the "fatos" section
+# this month, across all tenants?
+
+def count_with_dp(query, epsilon=1.0):
+    true_count = run_query_per_tenant_then_sum(query)
+    noise = laplace_noise(scale=1/epsilon)
+    return true_count + noise
+```
+
+The Laplace mechanism provides ε-differential privacy: any single tenant's contribution to the result is bounded such that an attacker cannot determine whether a specific tenant participated. Useful for "what prompt patterns produce fewer revisions" type questions where the platform team wants aggregate signal.
+
+**Implementation cost:** ~2-3 weeks for the DP infrastructure plus integration into the telemetry pipeline. Not trivial but well-understood.
+
+#### 8.5.2 Opt-in rule contribution
+
+Tenants' reflection modules continuously generate firm-specific rules (Layer 1). Some rules are firm-specific and should never leave; others are *generic* — patterns that any litigation firm in the same jurisdiction would benefit from.
+
+Example of generic rule: "In TRT-2 contestações, leading with prescrição before damages discussion produces better outcomes."
+Example of firm-specific rule: "For Cliente X, always request audiência inaugural separately from instrução."
+
+The flow:
+
+```
+1. Tenant's reflection module proposes a rule (Layer 1 internal)
+2. Periodically, surface proposed rules to a tenant admin with the option:
+   "Contribute this generic rule to the platform library? It will be
+    reviewed for any confidential content before submission."
+3. Admin reviews the rule text. If they approve sharing:
+   a. Platform team reviews for confidential content one more time
+   b. Rule joins the platform_rules library (Layer 2)
+   c. Other tenants benefit
+4. The contributing tenant retains attribution but no other tenant
+   sees who contributed
+5. Tenant-specific rules are NEVER shown as candidates for sharing
+```
+
+The lawyer is in the loop on what gets shared. Conservative defaults (don't share unless explicitly approved). Audit trail of every contribution.
+
+#### 8.5.3 Anonymous benchmark contribution
+
+Building on Sprint 10's curated benchmark dataset: tenants opt in to contribute *benchmark pairs* (query, expected_source_id) to a platform benchmark. The pairs are reviewed by the contributing lawyer for any confidential content before submission.
+
+Result: the platform benchmark grows from real lawyer judgment without exposing tenant data. Every retrieval improvement is validated against an increasingly rich, lawyer-curated test set.
+
+#### 8.5.4 What requires real engineering
+
+Layer 3 sounds elegant but requires:
+
+- DP libraries (Google's `differential-privacy`, OpenDP, or a managed service)
+- Per-tenant privacy budget tracking (each query costs ε; tenants have caps)
+- Legal review of the privacy guarantees and the consent flow
+- Operational care to detect and prevent reconstruction attacks
+- Ongoing benchmark validation that the noise levels are correctly calibrated
+
+This is months of work, not weeks. It pays off when the platform has enough tenants for the federated signal to be strong (~50+ tenants). For a solo developer pre-launch, this is far-future territory.
+
+### 8.6 Phasing the architecture
+
+When does each layer get built? Sequenced by what's defensible at each stage and what produces the most value soonest:
+
+| Phase | Sprint range | Layer focus | Deliverable |
+|---|---|---|---|
+| 1 | Sprints 1-11 (current) | Foundation only | MNI, drafter, signing — no learning yet |
+| 2 | Sprints 12-13 | Layer 1 partial | Case memory: per-case event log, Researcher integration |
+| 3 | Sprints 14-15 | Layer 1 full | Reflection module, firm rules, drafter learns firm voice |
+| 4 | Sprints 16-17 | Layer 2 telemetry | Anonymous platform telemetry, prompt improvement loop |
+| 5 | 18-24 months out | Layer 3 federation | DP aggregations, opt-in rule contribution, benchmark contribution |
+
+The reasoning behind the sequence:
+
+- Layer 1 first because it produces immediate per-tenant value with no privacy complexity.
+- Layer 2 telemetry next because it's how the platform improves at the meta level, and it requires no tenant consent (no content involved).
+- Layer 3 last because it requires multiple paying tenants for the federated signal to be strong, plus serious engineering investment, plus legal review.
+
+A specific note on Sprint 12's case memory layer: it's the highest-leverage single addition to the post-Sprint-11 architecture because it transforms the Researcher from "good at finding public authority" to "good at finding *what your firm has done* on similar matters." That's the qualitative jump from "AI assistant" to "digital associate who knows your practice." Plan it as Sprint 12's primary deliverable alongside whatever else is in scope.
+
+### 8.7 The marketing story this enables
+
+The architecture above produces a defensible, differentiated commercial narrative:
+
+**Phase 1-3 (Layer 1 only, immediate):** "Your data trains *your* AI, never anyone else's. The longer you use Juris, the more it writes like your firm — and that intelligence is yours, structurally separated from every other customer."
+
+**Phase 4 (Layer 2 telemetry):** "We improve the platform from aggregate patterns of which prompts work better — never from your content. Your edits help your AI learn your voice; the platform learns from how often things work, not what was said."
+
+**Phase 5 (Layer 3 federation, opt-in):** "When you choose to contribute a generic rule or benchmark to the platform, it's reviewed for confidentiality, anonymized, and helps other firms — and you can revoke contributions any time. Your case data never moves."
+
+This narrative is: (a) true, (b) technically defensible to a sophisticated CTO or compliance officer, (c) regulatorily aligned (LGPD, sigilo profissional, CNJ 615/2025), and (d) genuinely different from competitors who'll either avoid learning entirely or do it in ways that mix tenant data without rigor.
+
+### 8.8 What this changes in the immediate roadmap
+
+Practically, integrating this architecture into the existing plan:
+
+**Sprint 11 (PAdES + filing):** unchanged. Stay focused on closing the file loop.
+
+**Sprint 12:** add Pillar A foundation as a primary deliverable. Per-case event log schema, Researcher integration with `case_history` retrieval source. Roughly a week of work; significant immediate quality gain on drafter outputs.
+
+**Sprint 13-14:** build Pillar B's deterministic validator pipeline (extends citation_verifier into a richer rule-based validator covering CPC formal requirements). Two weeks; meaningful reliability improvement.
+
+**Sprint 15+:** Pillar C reflection module per tenant. Edit logging, diff analysis, rule extraction, firm-style memory. This is where the product becomes genuinely sticky.
+
+Cross-tenant federated learning waits until sprint 18+ minimum, and only when there are 20+ paying tenants to make the federated signal worth the engineering investment.
 
 ---
 
