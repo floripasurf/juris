@@ -24,6 +24,7 @@ from juris.datajud.safety import (
     RateLimiter,
     audit_datajud_call,
     default_audit_path,
+    ensure_batch_allowed,
     query_hash,
 )
 from juris.persistence.audit import AuditLog
@@ -417,6 +418,7 @@ def buscar_parte_todos_tribunais(
     audit_path: Path | None = None,
     use_cache: bool = True,
     rate_limiter: RateLimiter | None = None,
+    confirm_batch: bool = False,
 ) -> list[dict[str, Any]]:
     """Search multiple tribunals for processos by party name and/or CPF.
 
@@ -434,6 +436,13 @@ def buscar_parte_todos_tribunais(
     """
     if tribunais is None:
         tribunais = list(_TRIBUNAL_INDEX.keys())
+
+    ensure_batch_allowed(
+        cnj_count=len(tribunais),
+        confirm_batch=confirm_batch,
+        calls_per_cnj=1,
+        item_label="tribunais DataJud",
+    )
 
     all_results: list[dict[str, Any]] = []
 

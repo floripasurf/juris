@@ -67,8 +67,24 @@ conforme o Termo de Uso.
   `JURIS_DATAJUD_RATE_LIMIT_PER_SECOND`.
 - **Cache local:** respostas ficam em `~/.juris/cache/datajud/` ou no caminho
   definido por `JURIS_DATAJUD_CACHE_DIR`.
-- **TTL default:** 24h para respostas com movimentações; 7 dias pode ser usado
-  apenas para metadados estáticos.
+- **TTL default:** 24h para todas as respostas DataJud em cache. O projeto
+  ainda não diferencia endpoints estáticos em produção; manter um TTL único
+  evita retenção local mais longa de metadados processuais sem necessidade.
 - **Purge:** operador pode limpar o cache com `juris cache purge --datajud`.
 - **Auditoria:** cada chamada DataJud deve registrar `datajud.request` com CNJ,
   tribunal, endpoint, cache hit/miss, status HTTP, duração e contagem de hits.
+
+## LGPD e cache local
+
+Respostas DataJud podem conter nomes de partes, advogados, valores e
+movimentações processuais. Mesmo sendo consulta pública, esses dados devem ser
+tratados como dados pessoais sob a LGPD no piloto.
+
+- **Retenção curta:** o cache local expira em 24h por padrão.
+- **Máquina compartilhada:** não manter cache DataJud em máquinas compartilhadas
+  ou sem controle de acesso do operador.
+- **Sem cache quando necessário:** usar `--no-cache` se o operador não puder
+  armazenar metadados processuais localmente.
+- **Purge obrigatório após sessões sensíveis:** rodar
+  `juris cache purge --datajud` ao final da sessão quando houver dúvida sobre
+  autorização de retenção local.

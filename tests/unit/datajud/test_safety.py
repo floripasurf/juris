@@ -70,16 +70,6 @@ class TestDataJudCache:
 
         assert later.get(meta, ttl=timedelta(hours=24)) is None
 
-    def test_static_metadata_can_use_seven_day_ttl(self, tmp_path: Path) -> None:
-        now = datetime(2026, 5, 9, 12, 0, tzinfo=UTC)
-        cache = DataJudCache(tmp_path, now=lambda: now)
-        meta = _meta(endpoint="/metadata")
-        cache.set(meta, {"ok": True})
-
-        later = DataJudCache(tmp_path, now=lambda: now + timedelta(days=6))
-
-        assert later.get(meta, ttl=timedelta(days=7)) == {"ok": True}
-
     def test_purge_removes_cached_files(self, tmp_path: Path) -> None:
         cache = DataJudCache(tmp_path)
         cache.set(_meta(query_hash="one"), {"ok": 1})

@@ -7,8 +7,10 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import httpx
+import pytest
 
-from juris.datajud.client import consultar_processo
+from juris.datajud.client import buscar_parte_todos_tribunais, consultar_processo
+from juris.datajud.safety import BatchGuardError
 
 
 def _response(payload: dict) -> httpx.Response:
@@ -100,3 +102,27 @@ def test_consultar_processo_waits_on_rate_limiter(tmp_path: Path, monkeypatch) -
     )
 
     limiter.wait.assert_called_once_with()
+
+
+def test_buscar_parte_todos_tribunais_requires_confirmation_for_large_fanout(monkeypatch) -> None:
+    client = MagicMock()
+    monkeypatch.setattr("httpx.Client", client)
+
+    with pytest.raises(BatchGuardError):
+        buscar_parte_todos_tribunais(
+            nome="Maria Silva",
+            tribunais=[
+                "tjmg",
+                "tjsp",
+                "tjrj",
+                "tjrs",
+                "tjpr",
+                "tjsc",
+                "tjba",
+                "tjgo",
+                "tjpe",
+                "tjce",
+            ],
+        )
+
+    client.assert_not_called()
