@@ -23,11 +23,12 @@ from typing import Any
 
 from juris.agents.analyzer import ProcessoAnalysis, analyze_processo
 from juris.agents.citation_verifier import MarkerCitationVerifier
-from juris.agents.drafter import DraftRequest, DraftResult, DrafterAgent
+from juris.agents.drafter import DrafterAgent, DraftRequest, DraftResult
 from juris.agents.researcher import Researcher
 from juris.core.observability import get_logger
 from juris.defesas.analyzer import DefesaAnalyzer
 from juris.defesas.context import ProcessoContext
+from juris.demo.output_mode import OutputMode
 from juris.llm.base import AbstractLLM
 from juris.mni.parsers.processo import ProcessoDomain
 from juris.persistence.audit import AuditLog
@@ -43,7 +44,7 @@ class SourceMode(str, Enum):
     """Source of processo data for the demo run."""
 
     DATAJUD = "datajud"
-    MNI = "mni"          # not implemented — requires A3 token + tribunal creds
+    MNI = "mni"  # not implemented — requires A3 token + tribunal creds
     FIXTURE = "fixture"  # in-memory fixture; forces DEMO mode
 
 
@@ -62,6 +63,7 @@ class DemoRequest:
     use_cloud_llm: bool = False
     skip_review: bool = False
     use_llm_for_analysis: bool = False
+    output_mode: OutputMode = OutputMode.MINUTA_SUGERIDA
 
 
 @dataclass(slots=True)
@@ -145,6 +147,7 @@ class DemoOrchestrator:
                 "tribunal": request.tribunal,
                 "source": request.source.value,
                 "demo_mode": is_demo_mode,
+                "output_mode": request.output_mode.value,
                 "out_dir": str(out_dir),
             },
         )
@@ -191,11 +194,10 @@ class DemoOrchestrator:
                 "duration_seconds": result.duration_seconds,
                 "succeeded": result.succeeded,
                 "errors": result.errors,
+                "output_mode": request.output_mode.value,
                 "draft_revisions": result.draft.revisions if result.draft else None,
                 "prazos_count": len(result.prazo_report.prazos) if result.prazo_report else 0,
-                "actionable_count": (
-                    len(result.analysis.actionable) if result.analysis else 0
-                ),
+                "actionable_count": (len(result.analysis.actionable) if result.analysis else 0),
             },
         )
         return result
@@ -206,16 +208,12 @@ class DemoOrchestrator:
         processo: ProcessoDomain,
     ) -> DraftResult:
         """Wire and run the DrafterAgent against the resolved processo."""
-        researcher = Researcher(
-            repertory=self._repertory, llm=self._llm, audit=self._audit
-        )
+        researcher = Researcher(repertory=self._repertory, llm=self._llm, audit=self._audit)
         verifier = MarkerCitationVerifier(repertory=self._repertory)
         defesa_analyzer = DefesaAnalyzer(llm=self._llm)
         reviewer: ReviewerAgent | None = None
         if not request.skip_review:
-            reviewer = ReviewerAgent(
-                llm=self._llm, retriever=self._repertory, audit_log=self._audit
-            )
+            reviewer = ReviewerAgent(llm=self._llm, retriever=self._repertory, audit_log=self._audit)
 
         agent = DrafterAgent(
             llm=self._llm,
@@ -276,8 +274,7 @@ def load_processo(
 
     if source is SourceMode.MNI:
         msg = (
-            "Source 'mni' ainda não implementado para o demo. "
-            "Use 'datajud' (default) ou 'fixture' para teste offline."
+            "Source 'mni' ainda não implementado para o demo. Use 'datajud' (default) ou 'fixture' para teste offline."
         )
         raise NotImplementedError(msg)
 
@@ -371,9 +368,7 @@ def serialize_processo_summary(processo: ProcessoDomain) -> dict[str, Any]:
         "tribunal": processo.tribunal,
         "orgao_julgador": processo.orgao_julgador,
         "grau": processo.grau,
-        "data_ajuizamento": (
-            processo.data_ajuizamento.isoformat() if processo.data_ajuizamento else None
-        ),
+        "data_ajuizamento": (processo.data_ajuizamento.isoformat() if processo.data_ajuizamento else None),
         "ultimo_movimento": (
             {
                 "data_hora": processo.ultimo_movimento.data_hora.isoformat(),

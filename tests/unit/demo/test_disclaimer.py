@@ -52,3 +52,40 @@ def test_output_dir_name_strips_unsafe_chars() -> None:
     name = output_dir_name("foo/bar baz", demo_mode=False)
     assert "/" not in name
     assert " " not in name
+
+
+# ---------------------------------------------------------------------------
+# Sprint 17: mode_banner support in wrap_document
+# ---------------------------------------------------------------------------
+
+
+def test_wrap_document_with_mode_banner_real_mode() -> None:
+    body = "# Petição\n\nCorpo."
+    mode_banner = "> 📝 **MINUTA SUGERIDA — REVISÃO OBRIGATÓRIA**\n>\n> texto.\n"
+    wrapped = wrap_document(body, demo_mode=False, mode_banner=mode_banner)
+    assert DEMO_BANNER not in wrapped
+    assert mode_banner in wrapped
+    # Mode banner appears before the body, footer at the end.
+    assert wrapped.index(mode_banner) < wrapped.index("# Petição")
+    assert wrapped.index("# Petição") < wrapped.index(DISCLAIMER_FOOTER)
+
+
+def test_wrap_document_with_mode_banner_demo_mode_demo_first() -> None:
+    body = "# Petição\n\nCorpo."
+    mode_banner = "> 🔍 **RASCUNHO DE PESQUISA**\n>\n> texto.\n"
+    wrapped = wrap_document(body, demo_mode=True, mode_banner=mode_banner)
+    # In demo mode both banners must appear; DEMO banner takes precedence
+    # (top of document) followed by the mode banner.
+    assert DEMO_BANNER in wrapped
+    assert mode_banner in wrapped
+    assert wrapped.index(DEMO_BANNER) < wrapped.index(mode_banner)
+    assert wrapped.index(mode_banner) < wrapped.index("# Petição")
+
+
+def test_wrap_document_no_mode_banner_unchanged() -> None:
+    """``mode_banner=None`` must preserve the pre-Sprint-17 wrapping."""
+    body = "Body."
+    wrapped = wrap_document(body, demo_mode=False, mode_banner=None)
+    # No extra surface introduced when mode_banner is omitted.
+    assert wrapped.startswith("Body.")
+    assert DISCLAIMER_FOOTER in wrapped

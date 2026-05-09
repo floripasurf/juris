@@ -6,13 +6,16 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-import pytest
-
 from juris.agents.analyzer import AnalysisResult, ProcessoAnalysis
 from juris.agents.drafter import DraftResult
 from juris.demo.artifacts import write_artifacts
 from juris.demo.disclaimer import DEMO_BANNER, DISCLAIMER_FOOTER
 from juris.demo.orchestrator import DemoRequest, DemoResult, SourceMode
+from juris.demo.output_mode import (
+    MINUTA_SUGERIDA_BANNER,
+    RASCUNHO_PESQUISA_BANNER,
+    OutputMode,
+)
 from juris.mni.parsers.processo import Movimento, Parte, ProcessoDomain
 from juris.mni.tpu import CategoriaSemantica, Urgencia
 from juris.persistence.audit import AuditLog
@@ -53,13 +56,19 @@ def _build_processo(cnj: str = "0001234-56.2026.8.13.0001") -> ProcessoDomain:
     )
 
 
-def _build_request(cnj: str, *, source: SourceMode = SourceMode.FIXTURE) -> DemoRequest:
+def _build_request(
+    cnj: str,
+    *,
+    source: SourceMode = SourceMode.FIXTURE,
+    output_mode: OutputMode = OutputMode.MINUTA_SUGERIDA,
+) -> DemoRequest:
     return DemoRequest(
         numero_cnj=cnj,
         tipo_peticao=TipoPeticao.CONTESTACAO,
         tribunal="tjmg",
         source=source,
         out_root=Path("juris-out"),
+        output_mode=output_mode,
     )
 
 
@@ -165,6 +174,7 @@ def _build_result(
     include_review: bool = True,
     include_prazos: bool = True,
     errors: list[str] | None = None,
+    output_mode: OutputMode = OutputMode.MINUTA_SUGERIDA,
 ) -> DemoResult:
     out_dir = tmp_path / ("DEMO-" + cnj.replace("/", "_") if is_demo_mode else cnj)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -185,7 +195,7 @@ def _build_result(
 
     started = datetime.now(UTC)
     return DemoResult(
-        request=_build_request(cnj),
+        request=_build_request(cnj, output_mode=output_mode),
         processo=_build_processo(cnj),
         out_dir=out_dir,
         is_demo_mode=is_demo_mode,
@@ -256,9 +266,7 @@ class TestDemoModeGuards:
         assert DISCLAIMER_FOOTER in body
         assert DEMO_BANNER not in body
 
-    def test_demo_banner_applied_to_every_lawyer_facing_doc(
-        self, tmp_path: Path
-    ) -> None:
+    def test_demo_banner_applied_to_every_lawyer_facing_doc(self, tmp_path: Path) -> None:
         result = _build_result(tmp_path, is_demo_mode=True)
         write_artifacts(result)
         for name in (
@@ -280,9 +288,7 @@ class TestDemoModeGuards:
 
 
 class TestPartialResults:
-    def test_no_draft_skips_draft_artifacts_but_writes_summary(
-        self, tmp_path: Path
-    ) -> None:
+    def test_no_draft_skips_draft_artifacts_but_writes_summary(self, tmp_path: Path) -> None:
         result = _build_result(tmp_path, include_draft=False, errors=["draft: boom"])
         artifacts = write_artifacts(result)
         assert "draft.md" not in artifacts
@@ -306,6 +312,81 @@ class TestPartialResults:
         result = _build_result(tmp_path, include_review=False)
         artifacts = write_artifacts(result)
         assert "reviewer-report.md" not in artifacts
+
+
+class TestOutputModeArtifacts:
+    """Sprint 17: artifact differences between MINUTA and RASCUNHO modes."""
+
+    def test_minuta_mode_writes_draft_md(self, tmp_path: Path) -> None:
+        result = _build_result(tmp_path, output_mode=OutputMode.MINUTA_SUGERIDA)
+        artifacts = write_artifacts(result)
+        assert "draft.md" in artifacts
+        assert "rascunho-pesquisa.md" not in artifacts
+
+    def test_rascunho_mode_writes_memo_not_draft(self, tmp_path: Path) -> None:
+        result = _build_result(tmp_path, output_mode=OutputMode.RASCUNHO_PESQUISA)
+        artifacts = write_artifacts(result)
+        # Codex constraint: RASCUNHO must NEVER produce draft.md, so the
+        # filesystem cannot suggest a fileable petition exists.
+        assert "rascunho-pesquisa.md" in artifacts
+        assert "draft.md" not in artifacts
+        assert "draft.contraponto.md" not in artifacts
+
+    def test_minuta_mode_banner_in_draft(self, tmp_path: Path) -> None:
+        result = _build_result(
+            tmp_path,
+            is_demo_mode=False,
+            output_mode=OutputMode.MINUTA_SUGERIDA,
+        )
+        write_artifacts(result)
+        body = (result.out_dir / "draft.md").read_text()
+        assert MINUTA_SUGERIDA_BANNER in body
+        assert RASCUNHO_PESQUISA_BANNER not in body
+        assert DISCLAIMER_FOOTER in body
+
+    def test_rascunho_mode_banner_in_memo(self, tmp_path: Path) -> None:
+        result = _build_result(
+            tmp_path,
+            is_demo_mode=False,
+            output_mode=OutputMode.RASCUNHO_PESQUISA,
+        )
+        write_artifacts(result)
+        body = (result.out_dir / "rascunho-pesquisa.md").read_text()
+        assert RASCUNHO_PESQUISA_BANNER in body
+        assert MINUTA_SUGERIDA_BANNER not in body
+        assert DISCLAIMER_FOOTER in body
+
+    def test_demo_mode_stacks_demo_and_mode_banners(self, tmp_path: Path) -> None:
+        result = _build_result(
+            tmp_path,
+            is_demo_mode=True,
+            output_mode=OutputMode.RASCUNHO_PESQUISA,
+        )
+        write_artifacts(result)
+        body = (result.out_dir / "rascunho-pesquisa.md").read_text()
+        # Both banners present; DEMO banner first, then mode banner.
+        assert DEMO_BANNER in body
+        assert RASCUNHO_PESQUISA_BANNER in body
+        assert body.index(DEMO_BANNER) < body.index(RASCUNHO_PESQUISA_BANNER)
+
+    def test_manifest_records_minuta_mode(self, tmp_path: Path) -> None:
+        result = _build_result(tmp_path, output_mode=OutputMode.MINUTA_SUGERIDA)
+        write_artifacts(result)
+        manifest = json.loads((result.out_dir / "run-manifest.json").read_text())
+        assert manifest["output_mode"] == "minuta-sugerida"
+        assert manifest["output_mode_label"] == "MINUTA SUGERIDA"
+        assert manifest["request"]["output_mode"] == "minuta-sugerida"
+
+    def test_manifest_records_rascunho_mode(self, tmp_path: Path) -> None:
+        result = _build_result(tmp_path, output_mode=OutputMode.RASCUNHO_PESQUISA)
+        write_artifacts(result)
+        manifest = json.loads((result.out_dir / "run-manifest.json").read_text())
+        assert manifest["output_mode"] == "rascunho-pesquisa"
+        assert manifest["output_mode_label"] == "RASCUNHO DE PESQUISA"
+        # Manifest's artifact list reflects the mode-specific filename.
+        names = {a["name"] for a in manifest["artifacts"]}
+        assert "rascunho-pesquisa.md" in names
+        assert "draft.md" not in names
 
 
 class TestAuditCopying:

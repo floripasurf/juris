@@ -2273,7 +2273,7 @@ def file_petition(
         return
 
     if result.success:
-        console.print(f"\n[bold green]Petição protocolada com sucesso![/bold green]")
+        console.print("\n[bold green]Petição protocolada com sucesso![/bold green]")
         if result.receipt:
             console.print(f"  Protocolo: [bold]{result.receipt.protocolo}[/bold]")
             console.print(f"  Mensagem: {result.receipt.mensagem}")
@@ -2285,7 +2285,7 @@ def file_petition(
             console.print(f"  [dim]Signed hash: {result.chain_of_custody.signed_pdf_hash[:16]}...[/dim]")
         console.print(f"  Audit entries: {len(result.audit_entry_ids)}")
     else:
-        console.print(f"\n[bold red]Falha no protocolo.[/bold red]")
+        console.print("\n[bold red]Falha no protocolo.[/bold red]")
         console.print(f"  Erro: {result.error}")
         if result.audit_entry_ids:
             console.print(f"  [dim]Audit entries: {len(result.audit_entry_ids)}[/dim]")
@@ -2314,6 +2314,11 @@ def demo(
     instructions: str = typer.Option("", "--instructions", "-i", help="Instruções extras"),
     cloud: bool = typer.Option(False, "--cloud", help="Usar Claude (cloud) em vez de Ollama"),
     skip_review: bool = typer.Option(False, "--skip-review", help="Pular revisão pós-draft"),
+    modo: str = typer.Option(
+        "minuta-sugerida",
+        "--modo",
+        help="Modo de saída: minuta-sugerida (default) | rascunho-pesquisa",
+    ),
 ) -> None:
     """Pipeline ponta-a-ponta para demonstração com advogado(a) parceiro(a).
 
@@ -2325,10 +2330,11 @@ def demo(
     from pathlib import Path as FilePath
 
     from juris.core.types import NumeroCNJ
-    from juris.demo import DemoRequest, SourceMode, run_demo
+    from juris.demo import DemoRequest, OutputMode, SourceMode, run_demo
     from juris.demo.artifacts import write_artifacts
     from juris.demo.disclaimer import output_dir_name
     from juris.demo.orchestrator import derive_demo_mode, load_processo
+    from juris.demo.output_mode import label_for as output_mode_label
     from juris.repertory.peticoes.models import TipoPeticao
 
     # Validate inputs. CNJ format check runs first so a typo never creates
@@ -2350,6 +2356,13 @@ def demo(
         source_mode = SourceMode(source)
     except ValueError as exc:
         console.print(f"[red]--source inválido: '{source}'. Opções: datajud, mni, fixture.[/red]")
+        raise typer.Exit(code=1) from exc
+
+    try:
+        output_mode = OutputMode(modo)
+    except ValueError as exc:
+        valid_modes = ", ".join(m.value for m in OutputMode)
+        console.print(f"[red]--modo inválido: '{modo}'. Opções: {valid_modes}.[/red]")
         raise typer.Exit(code=1) from exc
 
     is_demo_mode = derive_demo_mode(source_mode)
@@ -2478,11 +2491,13 @@ def demo(
         instructions=instructions,
         use_cloud_llm=cloud,
         skip_review=skip_review,
+        output_mode=output_mode,
     )
 
     console.print(
         f"[bold]Demo:[/bold] {numero_cnj} ({tribunal}) — tipo={tipo_peticao.value}, source={source_mode.value}"
     )
+    console.print(f"[bold]Modo:[/bold] {output_mode_label(output_mode)} ({output_mode.value})")
     console.print(f"[dim]Saída: {case_dir}[/dim]")
 
     try:

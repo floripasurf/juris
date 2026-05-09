@@ -39,20 +39,32 @@ DEMO_DIR_PREFIX: str = "DEMO-"
 DEMO_MODE_FLAG: str = "demo_mode_fixture"
 
 
-def wrap_document(body: str, *, demo_mode: bool) -> str:
-    """Apply DEMO banner (if applicable) + disclaimer footer to a document.
+def wrap_document(
+    body: str,
+    *,
+    demo_mode: bool,
+    mode_banner: str | None = None,
+) -> str:
+    """Apply DEMO banner, mode banner, and disclaimer footer to a document.
 
     Args:
         body: The document body (typically markdown).
-        demo_mode: If True, prepend the DEMO_BANNER to the document.
+        demo_mode: If True, prepend :data:`DEMO_BANNER` (loud, fixture-only).
+        mode_banner: Optional mode-specific banner (e.g.
+            ``MINUTA_SUGERIDA_BANNER`` or ``RASCUNHO_PESQUISA_BANNER``)
+            inserted between the DEMO banner and the body. Sprint 17.
 
     Returns:
-        The body with banner (if demo_mode) and DISCLAIMER_FOOTER applied.
+        The body with both banners (where applicable) and
+        :data:`DISCLAIMER_FOOTER` applied.
     """
     parts: list[str] = []
     if demo_mode:
         parts.append(DEMO_BANNER)
-        parts.append("")  # blank line after banner
+        parts.append("")  # blank line after DEMO banner
+    if mode_banner:
+        parts.append(mode_banner)
+        parts.append("")  # blank line after mode banner
     parts.append(body.rstrip())
     parts.append("")  # blank line before footer
     parts.append(DISCLAIMER_FOOTER)

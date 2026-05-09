@@ -101,10 +101,42 @@ em `--json` para automação.
 | 0:00–0:03 | Boas-vindas, recapitular limites do piloto §2 | `pilot-terms-pt.md` |
 | 0:03–0:08 | Demo em **modo fixture** (offline, dados sintéticos) | ver §2 |
 | 0:08–0:12 | Mostrar artefatos gerados em modo DEMO | `juris-out/DEMO-*/` |
-| 0:12–0:35 | Demo em **modo real** sobre o caso escolhido | ver §3 |
+| 0:12–0:15 | Decidir o **modo de saída** para o caso real | ver §1.1 |
+| 0:15–0:35 | Demo em **modo real** sobre o caso escolhido | ver §3 |
 | 0:35–0:50 | Leitura conjunta dos artefatos | §4 + `[NOTAS]` |
 | 0:50–0:55 | Verificação da auditoria | `juris audit verify` |
 | 0:55–1:00 | Decisão: seguir, pausar, ajustar escopo | `[NOTAS] §10` |
+
+---
+
+## 1.1. Escolha do modo de saída (`--modo`)
+
+A partir do Sprint 17 o `juris demo` aceita dois modos de saída,
+**escolhidos manualmente pelo operador antes da execução**. O modo afeta o
+artefato principal entregue ao(à) advogado(a) — todos os demais artefatos
+(prazos, reviewer report, audit, manifest) são produzidos igualmente.
+
+| Modo | Flag | Artefato principal | Quando usar |
+| --- | --- | --- | --- |
+| **MINUTA SUGERIDA** (default) | `--modo minuta-sugerida` (ou omitir) | `draft.md` — minuta de petição com banner de revisão obrigatória | Caso de área/peça em que o repertório tem cobertura razoável e o(a) advogado(a) confia que conseguirá revisar e adaptar a peça |
+| **RASCUNHO DE PESQUISA** | `--modo rascunho-pesquisa` | `rascunho-pesquisa.md` — memorando estruturado (análise + argumentos + riscos + esqueleto), **sem prosa de petição** | Caso atípico, área pouco coberta no repertório, ou quando o(a) advogado(a) prefere começar a redação manualmente com um memorando de apoio |
+
+**Regra prática para a primeira sessão:**
+
+> Pergunte ao(à) advogado(a): _"se eu te mostrar uma minuta agora, você
+> conseguiria revisá-la com confiança em 15 minutos?"_ Se a resposta for
+> hesitante, comece em `--modo rascunho-pesquisa`. Não use o modo MINUTA
+> SUGERIDA como prova de capacidade do produto — use-o como ferramenta
+> útil quando faz sentido.
+
+**Por que dois modos:** quando o suporte do corpus e dos templates é
+fraco, uma minuta com aviso ainda **parece** uma peça pronta. O
+`RASCUNHO DE PESQUISA` codifica a limitação no próprio artefato (nome de
+arquivo distinto, banner explícito, sem prosa de petição) — o(a)
+advogado(a) **não** corre o risco de tratar o memorando como peça
+fileável. Codex Sprint 17 ruling: nenhuma pontuação numérica de
+"prontidão" automatizada nesta versão; a calibração começa pelos dados
+da primeira sessão real.
 
 ---
 
@@ -132,15 +164,25 @@ Mostre rapidamente abrindo `case-summary.md` e `audit-summary.md` no editor.
 
 ## 3. Demo em modo real (20–25 min)
 
-Objetivo: produzir uma minuta navegável a partir de um caso real do(a)
-parceiro(a). **Esta é a hora da verdade do produto.**
+Objetivo: produzir o artefato escolhido em §1.1 (minuta ou memorando) a
+partir de um caso real do(a) parceiro(a). **Esta é a hora da verdade do
+produto.**
 
 ```bash
+# Modo MINUTA SUGERIDA (default) — produz draft.md
 uv run juris demo \
   <NUMERO_CNJ_REAL> contestacao \
   --tribunal tjmg \
   --thesis "<tese sugerida pelo(a) advogado(a) ou deixe em branco>" \
   --cloud
+
+# Modo RASCUNHO DE PESQUISA — produz rascunho-pesquisa.md (memo)
+uv run juris demo \
+  <NUMERO_CNJ_REAL> contestacao \
+  --tribunal tjmg \
+  --thesis "<tese sugerida pelo(a) advogado(a) ou deixe em branco>" \
+  --cloud \
+  --modo rascunho-pesquisa
 ```
 
 **Recomendações:**
@@ -150,6 +192,9 @@ uv run juris demo \
   use Ollama local.
 - Defina `--thesis` **somente** se o(a) advogado(a) quiser fixar a tese.
   Sem `--thesis`, o drafter infere via LLM.
+- `--modo` deve corresponder à decisão tomada em §1.1. O CLI confirma o
+  modo escolhido em uma linha logo após o `Demo:` inicial — **conferir
+  antes de aguardar o pipeline**.
 - O comando leva **2–6 minutos**. Aproveite para discutir o caso,
   recapitular o objetivo da sessão, etc.
 
@@ -180,19 +225,31 @@ Abrir lado a lado, na ordem:
 2. **`prazos.md`** — prazos pendentes, base legal, dias úteis vs.
    corridos. **Pergunta para o(a) advogado(a):** algum prazo crítico
    ausente ou divergente?
-3. **`draft.md`** — minuta principal. Leia em silêncio durante 5 min,
-   depois discuta:
-   - Estrutura está aceitável?
-   - Citações estão verificadas (ver `reviewer-report.md`)?
-   - Tese é adequada ao caso?
-   - O que o(a) advogado(a) reescreveria? **Capturar como fricções.**
-4. **`draft.contraponto.md`** (se gerado) — argumentos contrários
-   previstos. Útil ou ruído?
+3. **Artefato principal — depende do modo escolhido em §1.1:**
+   - **MINUTA SUGERIDA → `draft.md`** — minuta principal. Leia em
+     silêncio durante 5 min, depois discuta:
+     - Estrutura está aceitável?
+     - Citações estão verificadas (ver `reviewer-report.md`)?
+     - Tese é adequada ao caso?
+     - O que o(a) advogado(a) reescreveria? **Capturar como fricções.**
+   - **RASCUNHO DE PESQUISA → `rascunho-pesquisa.md`** — memorando.
+     Não pergunte _"você assinaria essa minuta após editar?"_ — esse não
+     é o teste correto para este modo. Em vez disso:
+     - A análise jurídica acerta o foco do caso?
+     - Os argumentos sugeridos (com `[CITE:...]`) são úteis como ponto
+       de partida?
+     - Os riscos/contraponto antecipam o que a parte adversa
+       argumentaria?
+     - O esqueleto sugerido reflete a estrutura que o(a) advogado(a)
+       usaria? **Capturar fricções específicas do memorando, não da
+       prosa.**
+4. **`draft.contraponto.md`** (apenas em modo MINUTA, quando gerado) —
+   argumentos contrários previstos. Útil ou ruído?
 5. **`reviewer-report.md`** — severidade dos achados do revisor. Falsos
    positivos? Pontos legítimos perdidos pelo drafter?
 
-**Não tente "polir" a minuta na sessão.** O ciclo é: gerar → ler →
-listar fricções → ajustar prompts/templates fora da sessão.
+**Não tente "polir" a minuta/memorando na sessão.** O ciclo é: gerar →
+ler → listar fricções → ajustar prompts/templates fora da sessão.
 
 ---
 

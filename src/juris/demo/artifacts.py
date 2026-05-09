@@ -1,18 +1,21 @@
 """Persist artifacts produced by a demo run.
 
 All lawyer-visible markdown is wrapped via `juris.demo.disclaimer.wrap_document`
-so DEMO mode banner + disclaimer footer cannot be forgotten.
+so the DEMO banner (fixture only), the mode banner, and the disclaimer
+footer cannot be forgotten.
 
-Artifacts written under the run's `out_dir`:
+Artifacts written under the run's ``out_dir``:
 
-    draft.md              # generated petition (DEMO banner if fixture)
-    reviewer-report.md    # ReviewerAgent findings
-    prazos.md             # deadline table
-    case-summary.md       # processo metadata + analysis summary
-    run-manifest.json     # run metadata + sha256 of each artifact
-    audit.jsonl           # per-case audit chain (copied from log)
-    audit-summary.md      # human-readable audit recap
-    draft.contraponto.md  # optional, only if drafter produced one
+    draft.md               # MINUTA SUGERIDA: petition draft (default mode)
+    rascunho-pesquisa.md   # RASCUNHO DE PESQUISA: research memo (--modo flag)
+    reviewer-report.md     # ReviewerAgent findings
+    prazos.md              # deadline table
+    case-summary.md        # processo metadata + analysis summary
+    run-manifest.json      # run metadata + sha256 of each artifact
+    audit.jsonl            # per-case audit chain (copied from log)
+    audit-summary.md       # human-readable audit recap
+    draft.contraponto.md   # MINUTA mode only — RASCUNHO folds contraponto
+                           # into the memo's "Riscos / contraponto" section.
 """
 
 from __future__ import annotations
@@ -28,6 +31,13 @@ from juris.agents.drafter import DraftResult
 from juris.core.observability import get_logger
 from juris.demo.disclaimer import wrap_document
 from juris.demo.orchestrator import DemoResult, serialize_processo_summary
+from juris.demo.output_mode import (
+    OutputMode,
+    banner_for,
+    draft_filename,
+    label_for,
+)
+from juris.demo.rascunho import build_rascunho_markdown
 from juris.persistence.audit import AuditLog
 from juris.prazo.engine import PrazoReport, StatusPrazo
 
@@ -42,25 +52,28 @@ def write_artifacts(result: DemoResult) -> dict[str, str]:
     out = result.out_dir
     out.mkdir(parents=True, exist_ok=True)
     demo_mode = result.is_demo_mode
+    output_mode = result.request.output_mode
     artifacts: dict[str, str] = {}
 
-    # 1. Draft
+    # 1. Draft (MINUTA SUGERIDA) or Rascunho (RASCUNHO DE PESQUISA)
     if result.draft is not None:
-        artifacts.update(_write_draft(out, result.draft, demo_mode=demo_mode))
-
-    # 2. Reviewer report
-    if result.draft and result.draft.reviewer_report is not None:
         artifacts.update(
-            _write_reviewer_report(
-                out, result.draft.reviewer_report, demo_mode=demo_mode
+            _write_primary_output(
+                out,
+                result.draft,
+                analysis=result.analysis,
+                demo_mode=demo_mode,
+                output_mode=output_mode,
             )
         )
 
+    # 2. Reviewer report
+    if result.draft and result.draft.reviewer_report is not None:
+        artifacts.update(_write_reviewer_report(out, result.draft.reviewer_report, demo_mode=demo_mode))
+
     # 3. Prazos
     if result.prazo_report is not None:
-        artifacts.update(
-            _write_prazos(out, result.prazo_report, demo_mode=demo_mode)
-        )
+        artifacts.update(_write_prazos(out, result.prazo_report, demo_mode=demo_mode))
 
     # 4. Case summary
     artifacts.update(_write_case_summary(out, result, demo_mode=demo_mode))
@@ -81,28 +94,79 @@ def write_artifacts(result: DemoResult) -> dict[str, str]:
 
 
 # ---------------------------------------------------------------------------
-# Draft + contraponto
+# Primary output: MINUTA SUGERIDA (draft) or RASCUNHO DE PESQUISA (memo)
 # ---------------------------------------------------------------------------
 
 
-def _write_draft(
-    out: Path, draft: DraftResult, *, demo_mode: bool
+def _write_primary_output(
+    out: Path,
+    draft: DraftResult,
+    *,
+    analysis: ProcessoAnalysis | None,
+    demo_mode: bool,
+    output_mode: OutputMode,
 ) -> dict[str, str]:
+    """Persist the run's primary lawyer-facing artifact.
+
+    MINUTA mode writes the petition draft to ``draft.md`` (and the
+    contraponto to a sibling file when present). RASCUNHO mode writes the
+    research memo to ``rascunho-pesquisa.md`` instead — the contraponto is
+    folded into the memo's "Riscos / contraponto" section.
+    """
+    if output_mode is OutputMode.RASCUNHO_PESQUISA:
+        return _write_rascunho(out, draft, analysis=analysis, demo_mode=demo_mode)
+    return _write_minuta(out, draft, demo_mode=demo_mode)
+
+
+def _write_minuta(out: Path, draft: DraftResult, *, demo_mode: bool) -> dict[str, str]:
+    """Write MINUTA SUGERIDA artifacts (draft.md + optional contraponto)."""
     files: dict[str, str] = {}
-    draft_path = out / "draft.md"
+    minuta_banner = banner_for(OutputMode.MINUTA_SUGERIDA)
+
+    draft_path = out / draft_filename(OutputMode.MINUTA_SUGERIDA)
     draft_path.write_text(
-        wrap_document(draft.draft_markdown, demo_mode=demo_mode), encoding="utf-8"
+        wrap_document(
+            draft.draft_markdown,
+            demo_mode=demo_mode,
+            mode_banner=minuta_banner,
+        ),
+        encoding="utf-8",
     )
-    files["draft.md"] = _sha256(draft_path)
+    files[draft_path.name] = _sha256(draft_path)
 
     if draft.contraponto_section:
         contra_path = out / "draft.contraponto.md"
         contra_path.write_text(
-            wrap_document(draft.contraponto_section, demo_mode=demo_mode),
+            wrap_document(
+                draft.contraponto_section,
+                demo_mode=demo_mode,
+                mode_banner=minuta_banner,
+            ),
             encoding="utf-8",
         )
-        files["draft.contraponto.md"] = _sha256(contra_path)
+        files[contra_path.name] = _sha256(contra_path)
     return files
+
+
+def _write_rascunho(
+    out: Path,
+    draft: DraftResult,
+    *,
+    analysis: ProcessoAnalysis | None,
+    demo_mode: bool,
+) -> dict[str, str]:
+    """Write the RASCUNHO DE PESQUISA research memo (no draft.md)."""
+    body = build_rascunho_markdown(draft=draft, analysis=analysis)
+    rascunho_path = out / draft_filename(OutputMode.RASCUNHO_PESQUISA)
+    rascunho_path.write_text(
+        wrap_document(
+            body,
+            demo_mode=demo_mode,
+            mode_banner=banner_for(OutputMode.RASCUNHO_PESQUISA),
+        ),
+        encoding="utf-8",
+    )
+    return {rascunho_path.name: _sha256(rascunho_path)}
 
 
 # ---------------------------------------------------------------------------
@@ -110,9 +174,7 @@ def _write_draft(
 # ---------------------------------------------------------------------------
 
 
-def _write_reviewer_report(
-    out: Path, report: Any, *, demo_mode: bool
-) -> dict[str, str]:
+def _write_reviewer_report(out: Path, report: Any, *, demo_mode: bool) -> dict[str, str]:
     """Use ReviewReport.to_markdown() (already implemented) and wrap it."""
     body = report.to_markdown()
     path = out / "reviewer-report.md"
@@ -125,19 +187,13 @@ def _write_reviewer_report(
 # ---------------------------------------------------------------------------
 
 
-def _write_prazos(
-    out: Path, report: PrazoReport, *, demo_mode: bool
-) -> dict[str, str]:
+def _write_prazos(out: Path, report: PrazoReport, *, demo_mode: bool) -> dict[str, str]:
     lines: list[str] = ["# Prazos", "", f"_{report.summary}_", ""]
     if not report.prazos:
         lines.append("Nenhum prazo pendente.")
     else:
-        lines.append(
-            "| Status | Vencimento | Dias Úteis | Prazo | Base Legal | Ação |"
-        )
-        lines.append(
-            "| --- | --- | ---: | --- | --- | --- |"
-        )
+        lines.append("| Status | Vencimento | Dias Úteis | Prazo | Base Legal | Ação |")
+        lines.append("| --- | --- | ---: | --- | --- | --- |")
         for p in report.prazos:
             status = _status_label(p.status)
             lines.append(
@@ -148,9 +204,7 @@ def _write_prazos(
                 f"| {p.rule.tipo_acao.value} |"
             )
     path = out / "prazos.md"
-    path.write_text(
-        wrap_document("\n".join(lines), demo_mode=demo_mode), encoding="utf-8"
-    )
+    path.write_text(wrap_document("\n".join(lines), demo_mode=demo_mode), encoding="utf-8")
     return {"prazos.md": _sha256(path)}
 
 
@@ -169,9 +223,7 @@ def _status_label(status: StatusPrazo) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _write_case_summary(
-    out: Path, result: DemoResult, *, demo_mode: bool
-) -> dict[str, str]:
+def _write_case_summary(out: Path, result: DemoResult, *, demo_mode: bool) -> dict[str, str]:
     summary = serialize_processo_summary(result.processo)
     lines: list[str] = ["# Resumo do Caso", ""]
     lines.append(f"- **Número CNJ:** {summary['numero_cnj']}")
@@ -181,9 +233,7 @@ def _write_case_summary(
     if summary["assunto"]:
         lines.append(f"- **Assunto:** {summary['assunto']}")
     if summary["valor_causa"] is not None:
-        lines.append(
-            f"- **Valor da causa:** R$ {summary['valor_causa']:,.2f}"
-        )
+        lines.append(f"- **Valor da causa:** R$ {summary['valor_causa']:,.2f}")
     if summary["orgao_julgador"]:
         lines.append(f"- **Órgão julgador:** {summary['orgao_julgador']}")
     if summary["data_ajuizamento"]:
@@ -191,9 +241,7 @@ def _write_case_summary(
     lines.append(f"- **Movimentos:** {summary['movimentos_count']}")
     if summary["ultimo_movimento"]:
         um = summary["ultimo_movimento"]
-        lines.append(
-            f"- **Último movimento:** {um['data_hora']} — {um['descricao']}"
-        )
+        lines.append(f"- **Último movimento:** {um['data_hora']} — {um['descricao']}")
 
     if result.analysis is not None:
         lines.append("")
@@ -204,9 +252,7 @@ def _write_case_summary(
             lines.append("")
             lines.append("**Ações pendentes:**")
             for a in result.analysis.actionable[:10]:
-                lines.append(
-                    f"- [{a.urgencia.value}] {a.categoria.value}: {a.recomendacao}"
-                )
+                lines.append(f"- [{a.urgencia.value}] {a.categoria.value}: {a.recomendacao}")
 
     if result.errors:
         lines.append("")
@@ -216,9 +262,7 @@ def _write_case_summary(
             lines.append(f"- {e}")
 
     path = out / "case-summary.md"
-    path.write_text(
-        wrap_document("\n".join(lines), demo_mode=demo_mode), encoding="utf-8"
-    )
+    path.write_text(wrap_document("\n".join(lines), demo_mode=demo_mode), encoding="utf-8")
     return {"case-summary.md": _sha256(path)}
 
 
@@ -247,9 +291,7 @@ def _write_audit(out: Path, result: DemoResult) -> dict[str, str]:
     files["audit.jsonl"] = _sha256(dst)
 
     summary_path = out / "audit-summary.md"
-    summary_path.write_text(
-        _build_audit_summary(dst, result), encoding="utf-8"
-    )
+    summary_path.write_text(_build_audit_summary(dst, result), encoding="utf-8")
     files["audit-summary.md"] = _sha256(summary_path)
     return files
 
@@ -262,10 +304,7 @@ def _build_audit_summary(audit_path: Path, result: DemoResult) -> str:
     lines: list[str] = ["# Audit — Resumo", ""]
     lines.append(f"- Arquivo: `{audit_path.name}`")
     lines.append(f"- Total de eventos: **{len(entries)}**")
-    lines.append(
-        f"- Integridade da cadeia: "
-        f"**{'OK' if not corrupted else f'{len(corrupted)} entradas corrompidas'}**"
-    )
+    lines.append(f"- Integridade da cadeia: **{'OK' if not corrupted else f'{len(corrupted)} entradas corrompidas'}**")
     if entries:
         lines.append(f"- Primeiro evento: {entries[0].timestamp.isoformat()}")
         lines.append(f"- Último evento: {entries[-1].timestamp.isoformat()}")
@@ -284,10 +323,7 @@ def _build_audit_summary(audit_path: Path, result: DemoResult) -> str:
         lines.append("_Nenhum evento atrelado a este processo._")
     else:
         for e in case_events:
-            lines.append(
-                f"- `{e.timestamp.isoformat()}` "
-                f"**{e.event_type}** _(actor: {e.actor})_"
-            )
+            lines.append(f"- `{e.timestamp.isoformat()}` **{e.event_type}** _(actor: {e.actor})_")
     return "\n".join(lines) + "\n"
 
 
@@ -296,14 +332,15 @@ def _build_audit_summary(audit_path: Path, result: DemoResult) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _build_manifest(
-    result: DemoResult, artifacts: dict[str, str]
-) -> dict[str, Any]:
+def _build_manifest(result: DemoResult, artifacts: dict[str, str]) -> dict[str, Any]:
     draft = result.draft
     review = draft.reviewer_report if draft else None
+    output_mode = result.request.output_mode
     return {
         "version": 1,
         "demo_mode": result.is_demo_mode,
+        "output_mode": output_mode.value,
+        "output_mode_label": label_for(output_mode),
         "started_at": result.started_at.isoformat(),
         "finished_at": result.finished_at.isoformat(),
         "duration_seconds": result.duration_seconds,
@@ -317,12 +354,11 @@ def _build_manifest(
             "use_cloud_llm": result.request.use_cloud_llm,
             "skip_review": result.request.skip_review,
             "thesis_explicit": result.request.thesis is not None,
+            "output_mode": output_mode.value,
         },
         "llm_model": result.llm_model_used,
         "case_summary": serialize_processo_summary(result.processo),
-        "analysis": (
-            _analysis_payload(result.analysis) if result.analysis else None
-        ),
+        "analysis": (_analysis_payload(result.analysis) if result.analysis else None),
         "draft": (
             {
                 "revisions": draft.revisions,
@@ -344,9 +380,7 @@ def _build_manifest(
         ),
         "audit_log": str(result.audit_log_path),
         "out_dir": str(result.out_dir),
-        "artifacts": [
-            {"name": name, "sha256": digest} for name, digest in sorted(artifacts.items())
-        ],
+        "artifacts": [{"name": name, "sha256": digest} for name, digest in sorted(artifacts.items())],
     }
 
 
