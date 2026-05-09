@@ -19,32 +19,37 @@ Este documento serve dois propósitos:
 Não pular esta seção. Cada item abaixo afeta a confiabilidade da minuta
 para o(a) parceiro(a) advogado(a) e tem ação explícita do operador.
 
-### L1 · Corpus jurisprudencial: `data/repertory.db` deve estar populado
+### L1 · Corpus jurisprudencial precisa estar populado
 
-Se `data/repertory.db` não existir, o sistema cria um banco **vazio em
-silêncio**. A recuperação de citações então retorna lista vazia — a
-minuta sai sem citações verificáveis e sem aviso na saída do CLI. É
-o pior modo de falha em uma demonstração para advogado(a): parece
-funcionar, mas o produto perdeu o que mais importa.
+Sem corpus, a recuperação de citações retorna lista vazia e a minuta
+sai sem citações verificáveis. Para fechar este modo de falha o
+`juris demo` em `--source datajud|mni` agora bloqueia a execução
+quando o corpus não atinge os limiares mínimos (Sprint 16). Em modo
+`--source fixture` a saída roda mas o banner DEMO deixa explícito que
+não é protocolável.
 
 **Ação obrigatória do operador antes de uma sessão com caso real:**
 
 ```bash
-# 1. Confirmar que o arquivo existe e não é zero bytes
-ls -la data/repertory.db
+# Inspecionar corpus (saída humana ou --json)
+uv run juris repertory status
 
-# 2. Confirmar que tem documentos ingeridos
-sqlite3 data/repertory.db 'SELECT COUNT(*) FROM documents;'
+# Saída esperada:
+#   Pronto para uso real: sim
+#   Total de chunks ≥ 100, Tipos de fonte distintos ≥ 2
 ```
 
-Esperar contagem ≥ alguns milhares. Se o resultado for `0` ou o arquivo
-não existir, **abortar a sessão** e rodar a ingestão (`scripts/ingest_*`)
-ou apontar `JURIS_REPERTORY_PATH` para um DB válido. Não rodar `juris
-demo` em modo real com corpus vazio.
+Se aparecer `Pronto para uso real: não`, **abortar a sessão** e rodar
+a ingestão (`uv run juris repertory ingest`) ou apontar
+`JURIS_REPERTORY_PATH` para um DB populado. Tudo isso já está coberto
+pelo `juris pilot preflight` na §0 — esta seção é a explicação do
+"porquê", o pré-flight é a checagem operacional.
 
-Em modo `--source fixture` o problema também afeta a qualidade da
-minuta de exemplo, mas o banner DEMO deixa explícito que a saída não
-é protocolável.
+Caminho canônico do corpus: `~/.juris/repertory.db`. Override via
+`JURIS_REPERTORY_PATH=/caminho/custom`. Limiares default
+(`min_chunks=100`, `min_source_types=2`) podem ser ajustados via
+`JURIS_MIN_REPERTORY_CHUNKS` / `JURIS_MIN_REPERTORY_SOURCE_TYPES` ou
+flags `--min-chunks`/`--min-source-types` em `juris repertory status`.
 
 ### L2 · MNI ainda não implementado
 
@@ -63,21 +68,28 @@ pré-flight: limpar `juris-out/<numero_cnj>` antes da sessão.
 
 ## 0. Pré-flight (10 min antes da sessão)
 
-Já tudo do `onboarding.md` está pronto. Esta lista cobre só o que é
-delicado nos minutos imediatamente antes:
+Já tudo do `onboarding.md` está pronto. Esta lista cobre o que é
+delicado nos minutos imediatamente antes da sessão.
 
-- [ ] **Repertório indexado** (ver §L1 acima): `data/repertory.db`
-      existe **e** `sqlite3 data/repertory.db 'SELECT COUNT(*) FROM documents;'`
-      retorna ≥ alguns milhares. Sem isso, **abortar** — minuta sairia
-      sem citações verificáveis.
-- [ ] Modelo de embeddings em cache local (`~/.cache/huggingface/`).
-      Sem isso, há download silencioso de ~400MB no primeiro `juris demo`.
-- [ ] Ollama servindo (`ollama serve`) **OU** `ANTHROPIC_API_KEY` carregada
-      via `.env` para uso com `--cloud`.
+**Único comando obrigatório:**
+
+```bash
+uv run juris pilot preflight --out juris-out
+```
+
+Tudo verde (`Preflight OK`) → seguir. Qualquer `FAIL` → abortar e
+remediar. Itens com `WARN` são informativos (ex.: só Ollama OU só
+Anthropic configurado, mas a sessão pode rodar com qualquer um deles).
+
+Checks cobertos automaticamente: corpus pronto (§L1), modelo de
+embeddings em cache, ao menos um provedor de LLM disponível,
+diretório de saída sem runs anteriores (§L3), espaço em disco. Saída
+em `--json` para automação.
+
+**Itens manuais que o pré-flight não cobre** (físicos / em papel):
+
 - [ ] Token A3 conectado e PIN testado num site qualquer da Receita.
 - [ ] CNJ do caso real anotado **com pontuação** (`NNNNNNN-DD.AAAA.J.TT.OOOO`).
-- [ ] Diretório de saída limpo: `rm -rf juris-out/<numero_cnj>` para a
-      sessão começar do zero (ver §"Conhecidos" abaixo).
 - [ ] Termos do piloto assinados (PDF arquivado).
 
 ---
