@@ -225,9 +225,13 @@ descobrir do zero.
   ou cloud) está indisponível, antes da mensagem amigável de erro. É
   ruidoso mas não é um falha funcional — o `errors[]` do manifest captura
   corretamente.
-- **`data/repertory.db` ausente é criado vazio em silêncio.** Recuperação
-  retorna lista vazia → minuta sem citações verificáveis. Validar no
-  pré-flight que o DB está populado.
+- **Corpus ausente/vazio (Sprint 16, mitigado).** Caminho canônico é
+  agora `~/.juris/repertory.db` (ou `JURIS_REPERTORY_PATH`). Em
+  `--source datajud|mni`, `juris demo` aborta antes de gerar artefatos
+  se o corpus não atinge `min_chunks`/`min_source_types`. Em
+  `--source fixture` a saída roda normalmente, marcada DEMO. Validar
+  com `juris repertory status` ou `juris pilot preflight` antes de
+  qualquer sessão com caso real — ver §L1.
 - **Modelo de embeddings baixa de HuggingFace na 1ª execução** (~400MB,
   warning sobre `HF_TOKEN` aparece). Pré-cachear antes da sessão.
 - **`run-manifest.json` não inclui a si mesmo na lista de `artifacts`.**

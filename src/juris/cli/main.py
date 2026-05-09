@@ -1274,7 +1274,9 @@ def repertory_ingest(
         console.print(f"Available: {', '.join(REGISTRY)}")
         raise typer.Exit(code=1)
 
-    fts_path = Path.home() / ".juris" / "repertory.db"
+    from juris.repertory.readiness import resolve_repertory_path
+
+    fts_path = resolve_repertory_path()
     fts_path.parent.mkdir(parents=True, exist_ok=True)
     store = LocalFTSStore(db_path=fts_path)
 
@@ -1354,11 +1356,10 @@ def repertory_sources(
 @repertory_app.command("verify")
 def repertory_verify() -> None:
     """Run diagnostic verification queries against the ingested corpus."""
-    from pathlib import Path
-
+    from juris.repertory.readiness import resolve_repertory_path
     from juris.repertory.vector_store import LocalFTSStore
 
-    fts_path = Path.home() / ".juris" / "repertory.db"
+    fts_path = resolve_repertory_path()
     if not fts_path.exists():
         console.print("[yellow]No corpus ingested yet. Run 'juris repertory ingest' first.[/yellow]")
         raise typer.Exit(code=1)
@@ -1396,13 +1397,12 @@ def repertory_search(
     top_k: int = typer.Option(10, "--top-k", "-k", help="Number of results"),
 ) -> None:
     """Search the jurisprudence corpus."""
-    from pathlib import Path
-
     from rich.table import Table as RichTable
 
+    from juris.repertory.readiness import resolve_repertory_path
     from juris.repertory.vector_store import LocalFTSStore
 
-    fts_path = Path.home() / ".juris" / "repertory.db"
+    fts_path = resolve_repertory_path()
     if not fts_path.exists():
         console.print("[yellow]No corpus ingested yet. Run 'juris repertory ingest' first.[/yellow]")
         raise typer.Exit(code=1)
@@ -1648,11 +1648,12 @@ def review(
 
     # Set up retriever
     from juris.repertory.embeddings import LegalEmbedder
+    from juris.repertory.readiness import resolve_repertory_path
     from juris.repertory.retrieval.hybrid import HybridRetriever
     from juris.repertory.retrieval.service import RepertoryService
     from juris.repertory.vector_store import LocalFTSStore
 
-    fts_path = Path.home() / ".juris" / "repertory.db"
+    fts_path = resolve_repertory_path()
     if not fts_path.exists():
         console.print("[yellow]No corpus ingested. Run 'juris repertory ingest' first.[/yellow]")
         console.print("[dim]Proceeding without retrieval context...[/dim]")
@@ -1803,12 +1804,13 @@ def draft(
     # Set up retrieval infrastructure
     try:
         from juris.repertory.embeddings import LegalEmbedder
+        from juris.repertory.readiness import resolve_repertory_path
         from juris.repertory.retrieval.hybrid import HybridRetriever
         from juris.repertory.retrieval.reranker import CrossEncoderReranker
         from juris.repertory.vector_store import LocalFTSStore
 
         embedder = LegalEmbedder()
-        fts_store = LocalFTSStore(Path("data/repertory.db"))
+        fts_store = LocalFTSStore(resolve_repertory_path())
         reranker = CrossEncoderReranker()
         retriever = HybridRetriever(
             dense_store=fts_store,
@@ -2071,11 +2073,12 @@ def benchmark_run(
     # Set up retrieval
     try:
         from juris.repertory.embeddings import LegalEmbedder
+        from juris.repertory.readiness import resolve_repertory_path
         from juris.repertory.retrieval.hybrid import HybridRetriever
         from juris.repertory.retrieval.service import RepertoryService
         from juris.repertory.vector_store import LocalFTSStore
 
-        fts_path = Path.home() / ".juris" / "repertory.db"
+        fts_path = resolve_repertory_path()
         store = LocalFTSStore(db_path=fts_path)
         embedder = LegalEmbedder()
         retriever = HybridRetriever(dense_store=store, sparse_store=store, embedder=embedder)

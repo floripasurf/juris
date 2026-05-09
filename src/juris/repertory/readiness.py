@@ -28,6 +28,15 @@ import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
 
+UNKNOWN_SOURCE_TYPE: str = "(unknown)"
+"""Sentinel for chunks whose ``source_type`` column is NULL.
+
+We surface it in ``source_type_breakdown`` so operators can spot bad
+ingestion metadata, but we exclude it from ``source_type_count`` — a
+real corpus must show real diversity for the readiness gate to flip
+to ready.
+"""
+
 CANONICAL_REPERTORY_PATH: Path = Path.home() / ".juris" / "repertory.db"
 """Single canonical location for the repertory DB.
 
@@ -81,8 +90,19 @@ class RepertoryStatus:
 
     @property
     def source_type_count(self) -> int:
-        """Number of distinct `source_type` values present in chunks."""
-        return len(self.source_type_breakdown)
+        """Distinct *real* `source_type` values present in chunks.
+
+        Excludes the `(unknown)` sentinel for NULL columns so a corpus
+        of "one real tier + a pile of NULL rows" cannot satisfy the
+        diversity threshold. The sentinel stays visible in
+        `source_type_breakdown` so operators can diagnose bad
+        ingestion metadata.
+        """
+        return sum(
+            1
+            for name in self.source_type_breakdown
+            if name != UNKNOWN_SOURCE_TYPE
+        )
 
     @property
     def is_ready(self) -> bool:
@@ -211,7 +231,10 @@ def read_status(
 
     # Open read-only via URI to guarantee we never create the file or its
     # tables on inspection — a critical safety property of this gate.
-    uri = f"file:{db_path}?mode=ro"
+    # Use ``Path.as_uri()`` so paths containing ``?`` / ``#`` / spaces are
+    # percent-encoded; raw f-string interpolation breaks URI parsing on
+    # those characters and silently misreports counts as zero.
+    uri = db_path.resolve().as_uri() + "?mode=ro"
     conn = sqlite3.connect(uri, uri=True)
     try:
         cursor = conn.cursor()
