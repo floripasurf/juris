@@ -323,7 +323,8 @@ def _export_token_cert(cert_path: str, chain_path: str, pin: str) -> None:
     # Export all certs from token
     result = subprocess.run(
         [
-            "p11tool", f"--provider={pkcs11_module}",
+            "p11tool",
+            f"--provider={pkcs11_module}",
             "--list-all-certs",
             "pkcs11:token=TOKEN%20CERTDATA",
             "--outder",
@@ -350,8 +351,10 @@ def _export_token_cert(cert_path: str, chain_path: str, pin: str) -> None:
     # Export CA chain (all certs except user cert)
     result = subprocess.run(
         [
-            "p11tool", f"--provider={pkcs11_module}",
-            "--export-chain", user_cert_uri,
+            "p11tool",
+            f"--provider={pkcs11_module}",
+            "--export-chain",
+            user_cert_uri,
         ],
         capture_output=True,
         env={**__import__("os").environ, "GNUTLS_PIN": pin},
@@ -463,12 +466,14 @@ def pull_updates(
         if proc:
             known_keys = db.get_known_movimento_keys(proc.id)
 
-        processos.append({
-            "numero_cnj": cnj,
-            "tribunal_id": tribunal_id,
-            "last_sync_at": last_sync,
-            "known_movimento_keys": known_keys,
-        })
+        processos.append(
+            {
+                "numero_cnj": cnj,
+                "tribunal_id": tribunal_id,
+                "last_sync_at": last_sync,
+                "known_movimento_keys": known_keys,
+            }
+        )
 
     # Resolve credentials
     resolved_cpf = cpf or ""
@@ -480,14 +485,18 @@ def pull_updates(
     differential_count = sum(1 for p in processos if p["last_sync_at"] is not None)
     console.print(f"[bold]Syncing {len(processos)} processos...[/bold]")
     if differential_count:
-        console.print(f"[dim]{differential_count} with prior sync (differential), {len(processos) - differential_count} full sync[/dim]")
+        console.print(
+            f"[dim]{differential_count} with prior sync (differential), {len(processos) - differential_count} full sync[/dim]"
+        )
     console.print()
 
-    summary = asyncio.run(run_overnight_sync(
-        processos=processos,
-        cpf=resolved_cpf,
-        senha=resolved_senha,
-    ))
+    summary = asyncio.run(
+        run_overnight_sync(
+            processos=processos,
+            cpf=resolved_cpf,
+            senha=resolved_senha,
+        )
+    )
 
     # Persist results to LocalDB
     for result in summary.results:
@@ -514,13 +523,20 @@ def pull_updates(
             new_count = db.insert_movimentos(proc_id, mov_dicts)
 
             db.log_sync(
-                result.numero_cnj, result.tribunal_id, "mni",
-                success=True, had_changes=True, new_movimentos=new_count,
+                result.numero_cnj,
+                result.tribunal_id,
+                "mni",
+                success=True,
+                had_changes=True,
+                new_movimentos=new_count,
             )
         elif not result.error:
             db.log_sync(
-                result.numero_cnj, result.tribunal_id, "mni",
-                success=True, had_changes=False,
+                result.numero_cnj,
+                result.tribunal_id,
+                "mni",
+                success=True,
+                had_changes=False,
             )
 
     # Print results
@@ -528,10 +544,7 @@ def pull_updates(
         if result.error:
             console.print(f"  [red]FAIL[/red] {result.numero_cnj}: {result.error}")
         elif result.had_changes:
-            console.print(
-                f"  [green]UPDATED[/green] {result.numero_cnj}: "
-                f"{len(result.new_movimentos)} new movements"
-            )
+            console.print(f"  [green]UPDATED[/green] {result.numero_cnj}: {len(result.new_movimentos)} new movements")
         else:
             console.print(f"  [dim]OK[/dim] {result.numero_cnj}: no changes")
 
@@ -593,17 +606,20 @@ def analyze(
     if use_llm:
         try:
             from juris.llm.ollama import OllamaLLM
+
             llm = OllamaLLM()
             console.print("[dim]LLM: Ollama (local) for ambiguous movements[/dim]")
         except Exception:
             console.print("[yellow]Ollama not available, using rules only.[/yellow]")
 
-    analysis = asyncio.run(analyze_processo(
-        numero_cnj=processo.numero_cnj,
-        tribunal=tribunal,
-        movimentos=processo.movimentos,
-        llm=llm,
-    ))
+    analysis = asyncio.run(
+        analyze_processo(
+            numero_cnj=processo.numero_cnj,
+            tribunal=tribunal,
+            movimentos=processo.movimentos,
+            llm=llm,
+        )
+    )
 
     # Print results
     console.print(f"\n[bold green]{analysis.summary}[/bold green]\n")
@@ -639,7 +655,9 @@ def analyze(
         )
     console.print(table)
 
-    console.print(f"\n[dim]Rule: {analysis.rule_classified} | LLM: {analysis.llm_calls} | Total: {analysis.total_movimentos}[/dim]")
+    console.print(
+        f"\n[dim]Rule: {analysis.rule_classified} | LLM: {analysis.llm_calls} | Total: {analysis.total_movimentos}[/dim]"
+    )
 
 
 @app.command()
@@ -671,11 +689,13 @@ def prazos(
         return
 
     # Analyze
-    analysis = asyncio.run(analyze_processo(
-        numero_cnj=processo.numero_cnj,
-        tribunal=tribunal,
-        movimentos=processo.movimentos,
-    ))
+    analysis = asyncio.run(
+        analyze_processo(
+            numero_cnj=processo.numero_cnj,
+            tribunal=tribunal,
+            movimentos=processo.movimentos,
+        )
+    )
 
     # Compute prazos
     report = compute_prazos(
@@ -708,7 +728,11 @@ def prazos(
     table.add_column("Base Legal", width=25)
     table.add_column("Ação")
 
-    display_prazos = report.prazos if show_all else [p for p in report.prazos if p.status != StatusPrazo.ABERTO or p.dias_uteis_restantes <= 10]
+    display_prazos = (
+        report.prazos
+        if show_all
+        else [p for p in report.prazos if p.status != StatusPrazo.ABERTO or p.dias_uteis_restantes <= 10]
+    )
     for p in display_prazos:
         style = status_colors.get(p.status, "")
         dias_str = f"{p.dias_uteis_restantes}d" if p.dias_uteis_restantes >= 0 else f"{p.dias_uteis_restantes}d"
@@ -748,10 +772,7 @@ def sync(
     if tribunal:
         tracked_list = [p for p in tracked_list if p.get("tribunal") == tribunal]
 
-    processos = [
-        {"numero_cnj": p["numero_cnj"], "tribunal": p.get("tribunal", "tjmg")}
-        for p in tracked_list
-    ]
+    processos = [{"numero_cnj": p["numero_cnj"], "tribunal": p.get("tribunal", "tjmg")} for p in tracked_list]
 
     db = LocalDB()
     console.print(f"[bold]Syncing {len(processos)} processos (full pipeline)...[/bold]")
@@ -775,6 +796,7 @@ def sync(
             # Show critical alerts inline
             if r.alert_batch and r.alert_batch.has_critical:
                 from juris.alerts.deadline_alerts import AlertLevel
+
                 for a in r.alert_batch.alerts:
                     if a.level == AlertLevel.CRITICAL:
                         console.print(f"    [red]{a.short_message}[/red]")
@@ -811,10 +833,7 @@ def overnight(
     if tribunal:
         tracked_list = [p for p in tracked_list if p.get("tribunal") == tribunal]
 
-    processos = [
-        {"numero_cnj": p["numero_cnj"], "tribunal": p.get("tribunal", "tjmg")}
-        for p in tracked_list
-    ]
+    processos = [{"numero_cnj": p["numero_cnj"], "tribunal": p.get("tribunal", "tjmg")} for p in tracked_list]
 
     db = LocalDB()
     resolved_cpf = cpf or ""
@@ -823,13 +842,15 @@ def overnight(
     console.print(f"[bold]Nightly pipeline: {len(processos)} processos[/bold]")
     console.print(f"[dim]DB: {db.path} | Concurrent: {max_concurrent} | Analyze: {analyze}[/dim]\n")
 
-    summary = asyncio.run(run_nightly(
-        processos=processos,
-        db=db,
-        cpf=resolved_cpf,
-        senha=resolved_senha,
-        max_concurrent=max_concurrent,
-    ))
+    summary = asyncio.run(
+        run_nightly(
+            processos=processos,
+            db=db,
+            cpf=resolved_cpf,
+            senha=resolved_senha,
+            max_concurrent=max_concurrent,
+        )
+    )
 
     # Print results
     for r in summary.results:
@@ -850,6 +871,7 @@ def overnight(
             # Show critical alerts inline
             if r.alert_batch and r.alert_batch.has_critical:
                 from juris.alerts.deadline_alerts import AlertLevel
+
                 for a in r.alert_batch.alerts:
                     if a.level == AlertLevel.CRITICAL:
                         console.print(f"    [red]{a.short_message}[/red]")
@@ -975,13 +997,9 @@ def defesas(
 
     # Build ProcessoContext from ProcessoDomain
     movimentos_raw = [
-        {"codigo": m.codigo_nacional, "data": m.data_hora.strftime("%Y-%m-%d")}
-        for m in (processo.movimentos or [])
+        {"codigo": m.codigo_nacional, "data": m.data_hora.strftime("%Y-%m-%d")} for m in (processo.movimentos or [])
     ]
-    partes_raw = [
-        {"nome": p.nome, "tipo": p.tipo}
-        for p in (processo.partes or [])
-    ]
+    partes_raw = [{"nome": p.nome, "tipo": p.tipo} for p in (processo.partes or [])]
 
     context = ProcessoContext(
         numero_cnj=processo.numero_cnj,
@@ -1029,7 +1047,9 @@ def busca_parte(
     cpf: str = typer.Option(None, "--cpf", "-c", help="CPF da parte (e.g., '123.456.789-00')"),
     oab: str = typer.Option(None, "--oab", "-o", help="OAB do advogado (e.g., 'SP123456')"),
     tribunal: str = typer.Option(None, "--tribunal", "-t", help="Tribunal específico (omita para buscar todos)"),
-    justica: str = typer.Option(None, "--justica", "-j", help="Filtrar por ramo: estadual, trabalho, federal, superior"),
+    justica: str = typer.Option(
+        None, "--justica", "-j", help="Filtrar por ramo: estadual, trabalho, federal, superior"
+    ),
     max_results: int = typer.Option(10, "--max", "-m", help="Máximo de resultados por tribunal"),
     enrich: bool = typer.Option(True, "--enrich/--no-enrich", help="Enriquecer via DataJud"),
     use_cache: bool = typer.Option(True, "--cache/--no-cache", help="Usar cache de resultados"),
@@ -1079,7 +1099,9 @@ def busca_parte(
     console.print(f"[bold]Busca por parte:[/bold] {' | '.join(search_parts)}")
 
     target_count = len(tribunais_busca) if tribunais_busca else len(all_tribunais)
-    console.print(f"[dim]Buscando em {target_count} tribunais via 5 canais (ESAJ, eProc, EJEF, PROJUDI, DataJud)...[/dim]")
+    console.print(
+        f"[dim]Buscando em {target_count} tribunais via 5 canais (ESAJ, eProc, EJEF, PROJUDI, DataJud)...[/dim]"
+    )
 
     request = BuscaRequest(
         nome=nome,
@@ -1232,7 +1254,9 @@ app.add_typer(repertory_app)
 
 @repertory_app.command("ingest")
 def repertory_ingest(
-    source: str = typer.Option(None, "--source", "-s", help="Source key (omit for all). Use 'juris repertory sources' to list."),
+    source: str = typer.Option(
+        None, "--source", "-s", help="Source key (omit for all). Use 'juris repertory sources' to list."
+    ),
     corpus_dir: str = typer.Option(None, "--corpus-dir", help="Path to corpus JSON directory"),
     include_superseded: bool = typer.Option(False, "--include-superseded", help="Include cancelada/superada entries"),
     limit: int = typer.Option(None, "--limit", "-l", help="Max items to ingest (class-based ingesters only)"),
@@ -1357,7 +1381,7 @@ def repertory_verify() -> None:
         status = "[green]PASS[/green]" if len(results) >= min_results else "[red]FAIL[/red]"
         if len(results) < min_results:
             all_passed = False
-        console.print(f"  {status} \"{query}\" — {len(results)} results (min: {min_results})")
+        console.print(f'  {status} "{query}" — {len(results)} results (min: {min_results})')
 
     if all_passed:
         console.print("\n[green bold]All verification queries passed.[/green bold]")
@@ -1410,6 +1434,112 @@ def repertory_search(
 def repertory_poll_noticias() -> None:
     """Poll court RSS feeds for new noticias (placeholder — wired in Phase 6)."""
     console.print("[yellow]poll-noticias not yet implemented. Will be wired in Phase 6.[/yellow]")
+
+
+@repertory_app.command("status")
+def repertory_status(
+    path: str | None = typer.Option(
+        None,
+        "--path",
+        "-p",
+        help="Caminho do repertory.db (default: ~/.juris/repertory.db ou JURIS_REPERTORY_PATH).",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Saída em JSON, sem cores ou tabela."),
+    min_chunks: int | None = typer.Option(
+        None,
+        "--min-chunks",
+        help="Limiar mínimo de chunks (default: 100 ou JURIS_MIN_REPERTORY_CHUNKS).",
+    ),
+    min_source_types: int | None = typer.Option(
+        None,
+        "--min-source-types",
+        help="Limiar mínimo de tipos de fonte (default: 2 ou JURIS_MIN_REPERTORY_SOURCE_TYPES).",
+    ),
+) -> None:
+    """Inspeciona o estado do corpus jurisprudencial e diz se está pronto.
+
+    Este comando substitui as conferências manuais via `sqlite3` que o runbook
+    de smoke-test usava. Ele nunca cria nem move o banco — só lê. Saída sai
+    em texto pretty-printed por padrão; use `--json` para automação.
+    """
+    import json as _json
+    from pathlib import Path as FilePath
+
+    from rich.table import Table as RichTable
+
+    from juris.repertory.readiness import (
+        detect_legacy_path,
+        read_status,
+        resolve_repertory_path,
+    )
+
+    explicit = FilePath(path).expanduser() if path else None
+    db_path = resolve_repertory_path(explicit)
+    status = read_status(
+        db_path,
+        min_chunks=min_chunks,
+        min_source_types=min_source_types,
+    )
+    legacy = detect_legacy_path(canonical=db_path)
+
+    if json_output:
+        payload: dict[str, object] = status.to_dict()
+        if legacy is not None:
+            payload["legacy_db_detected"] = str(legacy)
+        console.print_json(_json.dumps(payload, ensure_ascii=False))
+        if not status.is_ready:
+            raise typer.Exit(code=1)
+        return
+
+    color = "green" if status.is_ready else "red"
+    console.print(f"[bold]Repertory:[/bold] {status.db_path}")
+    console.print(f"[bold]Pronto para uso real:[/bold] [{color}]{'sim' if status.is_ready else 'não'}[/{color}]")
+    if not status.is_ready and status.not_ready_reason:
+        console.print(f"[red]Motivo:[/red] {status.not_ready_reason}")
+
+    table = RichTable(title="Resumo do corpus")
+    table.add_column("Métrica", style="cyan", width=24)
+    table.add_column("Valor", justify="right", width=14)
+    table.add_column("Limiar", justify="right", width=10)
+    table.add_row("Existe em disco", "sim" if status.exists else "não", "—")
+    table.add_row(
+        "Total de chunks",
+        str(status.chunk_count),
+        f"≥ {status.min_chunks}",
+    )
+    table.add_row(
+        "Documentos (source_id)",
+        str(status.source_count),
+        "—",
+    )
+    table.add_row(
+        "Tipos de fonte distintos",
+        str(status.source_type_count),
+        f"≥ {status.min_source_types}",
+    )
+    console.print(table)
+
+    if status.source_type_breakdown:
+        breakdown = RichTable(title="Chunks por tipo de fonte")
+        breakdown.add_column("source_type", style="cyan")
+        breakdown.add_column("chunks", justify="right")
+        for tipo, count in sorted(
+            status.source_type_breakdown.items(),
+            key=lambda kv: kv[1],
+            reverse=True,
+        ):
+            breakdown.add_row(tipo, str(count))
+        console.print(breakdown)
+
+    if legacy is not None:
+        console.print(
+            f"[yellow]Aviso: banco legado encontrado em {legacy}.[/yellow] "
+            "[yellow]Mova o conteúdo manualmente para o caminho canônico ou "
+            "defina JURIS_REPERTORY_PATH para usar este DB.[/yellow]"
+        )
+
+    if not status.is_ready:
+        raise typer.Exit(code=1)
 
 
 @repertory_app.command("ingest-peticoes")
@@ -1494,6 +1624,7 @@ def review(
         try:
             from juris.config import get_settings
             from juris.llm.claude import ClaudeLLM
+
             settings = get_settings()
             if not settings.anthropic_api_key:
                 console.print("[red]ANTHROPIC_API_KEY not configured. Set it in .env or environment.[/red]")
@@ -1508,6 +1639,7 @@ def review(
     else:
         try:
             from juris.llm.ollama import OllamaLLM
+
             llm = OllamaLLM()
             console.print("[dim]LLM: Ollama (local)[/dim]")
         except Exception:
@@ -1573,7 +1705,9 @@ def review(
 
     # Print summary
     console.print(f"\n[bold green]Review complete[/bold green] ({report.duration_seconds:.1f}s)")
-    console.print(f"  Critical: {report.critical_count} | Important: {report.important_count} | Suggestions: {report.suggestion_count}")
+    console.print(
+        f"  Critical: {report.critical_count} | Important: {report.important_count} | Suggestions: {report.suggestion_count}"
+    )
     console.print(f"  Citations: {len(report.citations_found)} | LLM calls: {report.llm_calls}")
 
     # Print issues
@@ -1644,6 +1778,7 @@ def draft(
         try:
             from juris.config import get_settings
             from juris.llm.claude import ClaudeLLM
+
             settings = get_settings()
             if not settings.anthropic_api_key:
                 console.print("[red]ANTHROPIC_API_KEY not configured. Set it in .env or environment.[/red]")
@@ -1658,6 +1793,7 @@ def draft(
     else:
         try:
             from juris.llm.ollama import OllamaLLM
+
             llm = OllamaLLM()
             console.print("[dim]LLM: Ollama (local)[/dim]")
         except Exception as exc:
@@ -1696,6 +1832,7 @@ def draft(
     reviewer = None
     if not skip_review:
         from juris.review.reviewer import ReviewerAgent
+
         reviewer = ReviewerAgent(llm=llm, retriever=repertory, audit_log=audit)
 
     agent = DrafterAgent(
@@ -1738,11 +1875,13 @@ def draft(
 
     if result.contraponto_section:
         console.print()
-        console.print(Panel(
-            result.contraponto_section,
-            title="[bold yellow]CONTRAPONTO PREVISTO[/bold yellow]",
-            border_style="yellow",
-        ))
+        console.print(
+            Panel(
+                result.contraponto_section,
+                title="[bold yellow]CONTRAPONTO PREVISTO[/bold yellow]",
+                border_style="yellow",
+            )
+        )
 
     # Summary footer
     console.print()
@@ -1754,9 +1893,7 @@ def draft(
     if result.reviewer_report:
         rr = result.reviewer_report
         console.print(
-            f"Revisor: {rr.critical_count} criticos, "
-            f"{rr.important_count} importantes, "
-            f"{rr.suggestion_count} sugestoes"
+            f"Revisor: {rr.critical_count} criticos, {rr.important_count} importantes, {rr.suggestion_count} sugestoes"
         )
 
     # Save to file if requested
@@ -1828,11 +1965,13 @@ def alerts_send() -> None:
         for pr in pending:
             if pr.status in ("vencido", "urgente", "proximo"):
                 level = AlertLevel.CRITICAL if pr.status in ("vencido", "urgente") else AlertLevel.WARNING
-                alerts_list.append(DeadlineAlert(
-                    prazo=pr,
-                    level=level,
-                    message=f"{pr.rule_nome}: {pr.status}",
-                ))
+                alerts_list.append(
+                    DeadlineAlert(
+                        prazo=pr,
+                        level=level,
+                        message=f"{pr.rule_nome}: {pr.status}",
+                    )
+                )
 
         if not alerts_list:
             continue
@@ -2166,12 +2305,8 @@ def demo(
     tipo: str = typer.Argument(..., help="Tipo de petição (contestacao, inicial, apelacao, ...)"),
     tribunal: str = typer.Option("tjmg", "--tribunal", "-t", help="ID do tribunal"),
     cpf: str | None = typer.Option(None, "--cpf", help="CPF do advogado (futuro: MNI)"),
-    source: str = typer.Option(
-        "datajud", "--source", help="Origem do processo: datajud | mni | fixture"
-    ),
-    out_root: str = typer.Option(
-        "juris-out", "--out", "-o", help="Diretório raiz para artefatos"
-    ),
+    source: str = typer.Option("datajud", "--source", help="Origem do processo: datajud | mni | fixture"),
+    out_root: str = typer.Option("juris-out", "--out", "-o", help="Diretório raiz para artefatos"),
     thesis: str | None = typer.Option(None, "--thesis", "-T", help="Tese explícita"),
     instructions: str = typer.Option("", "--instructions", "-i", help="Instruções extras"),
     cloud: bool = typer.Option(False, "--cloud", help="Usar Claude (cloud) em vez de Ollama"),
@@ -2198,10 +2333,7 @@ def demo(
     try:
         NumeroCNJ(numero_cnj)
     except ValueError as exc:
-        console.print(
-            f"[red]Número CNJ inválido: '{numero_cnj}'. "
-            f"Formato esperado: NNNNNNN-DD.AAAA.J.TT.OOOO[/red]"
-        )
+        console.print(f"[red]Número CNJ inválido: '{numero_cnj}'. Formato esperado: NNNNNNN-DD.AAAA.J.TT.OOOO[/red]")
         raise typer.Exit(code=1) from exc
 
     try:
@@ -2214,12 +2346,47 @@ def demo(
     try:
         source_mode = SourceMode(source)
     except ValueError as exc:
-        console.print(
-            f"[red]--source inválido: '{source}'. Opções: datajud, mni, fixture.[/red]"
-        )
+        console.print(f"[red]--source inválido: '{source}'. Opções: datajud, mni, fixture.[/red]")
         raise typer.Exit(code=1) from exc
 
     is_demo_mode = derive_demo_mode(source_mode)
+
+    # Real-source safety gate: refuse to run against a missing/empty corpus
+    # when the source is datajud or mni. Fixture mode is allowed through
+    # because its output is loud-banner DEMO and not lawyer-fileable.
+    # Without this gate, a real run would silently fall back to empty
+    # retrieval and produce a "draft" with no verifiable citations — the
+    # worst failure mode in a lawyer-facing demo (Sprint 16, Codex review).
+    from juris.repertory.readiness import (
+        detect_legacy_path,
+        read_status,
+        resolve_repertory_path,
+    )
+
+    repertory_path = resolve_repertory_path()
+    legacy_db = detect_legacy_path(canonical=repertory_path)
+    if legacy_db is not None:
+        console.print(
+            f"[yellow]Aviso: banco legado encontrado em {legacy_db}.[/yellow] "
+            "[yellow]O demo usa o caminho canônico. Defina JURIS_REPERTORY_PATH "
+            "para usar o banco legado.[/yellow]"
+        )
+
+    if not is_demo_mode:
+        status = read_status(repertory_path)
+        if not status.is_ready:
+            console.print(f"[red]Corpus não está pronto para uso real ({status.not_ready_reason}).[/red]")
+            console.print(
+                "[red]Demo abortado: rodar contra source='datajud' ou 'mni' sem "
+                "corpus suficiente produziria minuta sem citações verificáveis.[/red]"
+            )
+            console.print("[yellow]Diagnóstico:[/yellow] [bold]juris repertory status[/bold]")
+            console.print(
+                "[yellow]Re-ingestão:[/yellow] "
+                "[bold]juris repertory ingest[/bold] (ou aponte JURIS_REPERTORY_PATH "
+                "para um banco populado)."
+            )
+            raise typer.Exit(code=1)
 
     # Resolve output paths
     out_root_path = FilePath(out_root)
@@ -2246,9 +2413,7 @@ def demo(
 
             settings = get_settings()
             if not settings.anthropic_api_key:
-                console.print(
-                    "[red]ANTHROPIC_API_KEY não configurada (.env ou ambiente).[/red]"
-                )
+                console.print("[red]ANTHROPIC_API_KEY não configurada (.env ou ambiente).[/red]")
                 raise typer.Exit(code=1)
             llm = ClaudeLLM(api_key=settings.anthropic_api_key.get_secret_value())
             console.print("[dim]LLM: Claude (cloud)[/dim]")
@@ -2264,9 +2429,7 @@ def demo(
             llm = OllamaLLM()
             console.print("[dim]LLM: Ollama (local)[/dim]")
         except Exception as exc:
-            console.print(
-                "[red]Ollama indisponível. Servidor Ollama está rodando?[/red]"
-            )
+            console.print("[red]Ollama indisponível. Servidor Ollama está rodando?[/red]")
             raise typer.Exit(code=1) from exc
 
     # Set up retrieval
@@ -2278,7 +2441,9 @@ def demo(
         from juris.repertory.vector_store import LocalFTSStore
 
         embedder = LegalEmbedder()
-        fts_store = LocalFTSStore(FilePath("data/repertory.db"))
+        # Use the canonical (or env-overridden) repertory path so this run
+        # reads from the same DB the safety gate validated above.
+        fts_store = LocalFTSStore(repertory_path)
         reranker = CrossEncoderReranker()
         retriever = HybridRetriever(
             dense_store=fts_store,
@@ -2313,8 +2478,7 @@ def demo(
     )
 
     console.print(
-        f"[bold]Demo:[/bold] {numero_cnj} ({tribunal}) — tipo={tipo_peticao.value}, "
-        f"source={source_mode.value}"
+        f"[bold]Demo:[/bold] {numero_cnj} ({tribunal}) — tipo={tipo_peticao.value}, source={source_mode.value}"
     )
     console.print(f"[dim]Saída: {case_dir}[/dim]")
 
@@ -2341,10 +2505,7 @@ def demo(
     if result.succeeded:
         console.print(f"[green]Concluído em {result.duration_seconds:.1f}s.[/green]")
     else:
-        console.print(
-            f"[red]Falhou após {result.duration_seconds:.1f}s "
-            f"(artefatos parciais gravados).[/red]"
-        )
+        console.print(f"[red]Falhou após {result.duration_seconds:.1f}s (artefatos parciais gravados).[/red]")
     if result.errors:
         for e in result.errors:
             console.print(f"[yellow]- {e}[/yellow]")
@@ -2353,8 +2514,7 @@ def demo(
         console.print(f"  - {case_dir / name}")
     if is_demo_mode:
         console.print(
-            "[yellow bold]Lembrete:[/yellow bold] "
-            "[yellow]Saída em modo DEMO. Não pode ser protocolada.[/yellow]"
+            "[yellow bold]Lembrete:[/yellow bold] [yellow]Saída em modo DEMO. Não pode ser protocolada.[/yellow]"
         )
 
     if not result.succeeded:
