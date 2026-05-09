@@ -2554,5 +2554,101 @@ def audit_verify(
         raise typer.Exit(code=2)
 
 
+# ---------------------------------------------------------------------------
+# pilot — operator preflight before a lawyer-facing demo session
+# ---------------------------------------------------------------------------
+
+
+pilot_app = typer.Typer(name="pilot", help="Ferramentas para sessões com advogado(a) parceiro(a).")
+app.add_typer(pilot_app)
+
+
+_PREFLIGHT_STATUS_STYLE = {
+    "pass": "green",
+    "warn": "yellow",
+    "fail": "red",
+    "skip": "dim",
+}
+
+
+@pilot_app.command("preflight")
+def pilot_preflight(
+    out_root: str | None = typer.Option(
+        None,
+        "--out",
+        "-o",
+        help="Diretório de saída do `juris demo` para validar contra runs anteriores.",
+    ),
+    fixture_only: bool = typer.Option(
+        False,
+        "--fixture-only",
+        help="Aceita corpus vazio (modo fixture). Por padrão exige corpus pronto.",
+    ),
+    embedding_model: str = typer.Option(
+        "BAAI/bge-m3",
+        "--embedding-model",
+        help="Modelo de embeddings a verificar no cache HF.",
+    ),
+    skip_ollama_probe: bool = typer.Option(
+        False,
+        "--skip-ollama-probe",
+        help="Não tenta conectar ao Ollama (útil em CI/offline).",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Saída em JSON, sem cores ou tabela."),
+) -> None:
+    """Roda checks de readiness antes de uma sessão real com advogado(a).
+
+    Substitui o checklist manual em ``docs/pilot/smoke-test-notes.md`` §0.
+    Sai com código 0 quando todos os checks passam (PASS/WARN). Qualquer FAIL
+    aborta com código 1 — operador deve remediar antes de rodar `juris demo`
+    contra um caso real.
+    """
+    import json as _json
+    from pathlib import Path as FilePath
+
+    from rich.table import Table as RichTable
+
+    from juris.pilot.preflight import run_preflight
+
+    out_path = FilePath(out_root).expanduser() if out_root else None
+    report = run_preflight(
+        out_root=out_path,
+        real_source_required=not fixture_only,
+        embedding_model=embedding_model,
+        probe_ollama=not skip_ollama_probe,
+    )
+
+    if json_output:
+        console.print_json(_json.dumps(report.to_dict(), ensure_ascii=False))
+        if not report.is_ready:
+            raise typer.Exit(code=1)
+        return
+
+    table = RichTable(title="Pilot preflight")
+    table.add_column("Check", style="cyan", width=22)
+    table.add_column("Status", width=8)
+    table.add_column("Mensagem", overflow="fold")
+    for check in report.checks:
+        style = _PREFLIGHT_STATUS_STYLE.get(check.status.value, "white")
+        table.add_row(
+            check.name,
+            f"[{style}]{check.status.value.upper()}[/{style}]",
+            check.message,
+        )
+    console.print(table)
+
+    for check in report.checks:
+        if check.remediation:
+            console.print(f"[yellow]→ {check.name}:[/yellow] {check.remediation}")
+
+    if report.is_ready:
+        flavor = " (com avisos)" if report.has_warnings else ""
+        console.print(f"[green]Preflight OK{flavor}.[/green]")
+        return
+
+    console.print("[red]Preflight falhou. Não rode `juris demo` em modo real até remediar os checks com FAIL.[/red]")
+    raise typer.Exit(code=1)
+
+
 if __name__ == "__main__":
     app()
