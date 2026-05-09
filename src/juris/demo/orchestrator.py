@@ -252,6 +252,9 @@ def load_processo(
     numero_cnj: str,
     tribunal: str,
     source: SourceMode,
+    *,
+    use_cache: bool = True,
+    audit_path: Path | None = None,
 ) -> ProcessoDomain:
     """Resolve a ProcessoDomain from the configured source.
 
@@ -263,7 +266,7 @@ def load_processo(
         from juris.datajud.client import consultar_processo as datajud_consulta
         from juris.datajud.parser import parse_datajud_processo
 
-        raw = datajud_consulta(numero_cnj, tribunal)
+        raw = datajud_consulta(numero_cnj, tribunal, use_cache=use_cache, audit_path=audit_path)
         if raw is None:
             msg = f"Processo {numero_cnj} não encontrado no DataJud ({tribunal})."
             raise LookupError(msg)

@@ -167,6 +167,7 @@ def _print_processo(processo) -> None:
 def datajud(
     numero_cnj: str = typer.Argument(..., help="Case number in CNJ format"),
     tribunal: str = typer.Option("tjmg", "--tribunal", "-t", help="Tribunal ID"),
+    use_cache: bool = typer.Option(True, "--cache/--no-cache", help="Usar cache local DataJud"),
 ) -> None:
     """Fetch a case from DataJud (CNJ public API). Works for all tribunals."""
     from juris.datajud.client import consultar_processo
@@ -175,7 +176,7 @@ def datajud(
     console.print(f"[bold]Fetching from DataJud:[/bold] {numero_cnj} ({tribunal})")
 
     try:
-        source = consultar_processo(numero_cnj, tribunal)
+        source = consultar_processo(numero_cnj, tribunal, use_cache=use_cache)
     except Exception as e:
         console.print(f"[red]DataJud Error:[/red] {type(e).__name__}: {e}")
         raise typer.Exit(code=1) from e
@@ -186,6 +187,26 @@ def datajud(
 
     processo = parse_datajud_processo(source)
     _print_processo(processo)
+
+
+cache_app = typer.Typer(name="cache", help="Local cache management.")
+app.add_typer(cache_app)
+
+
+@cache_app.command("purge")
+def cache_purge(
+    datajud: bool = typer.Option(False, "--datajud", help="Remove cache local da API Pública DataJud"),
+) -> None:
+    """Purge local caches."""
+    if not datajud:
+        console.print("[yellow]Nada para limpar. Use --datajud.[/yellow]")
+        raise typer.Exit(code=1)
+
+    from juris.datajud.safety import DataJudCache
+
+    removed = DataJudCache().purge()
+    suffix = "arquivo" if removed == 1 else "arquivos"
+    console.print(f"[green]Cache DataJud limpo:[/green] {removed} {suffix} removido(s).")
 
 
 @app.command()
@@ -1053,6 +1074,11 @@ def busca_parte(
     max_results: int = typer.Option(10, "--max", "-m", help="Máximo de resultados por tribunal"),
     enrich: bool = typer.Option(True, "--enrich/--no-enrich", help="Enriquecer via DataJud"),
     use_cache: bool = typer.Option(True, "--cache/--no-cache", help="Usar cache de resultados"),
+    confirm_datajud_batch: bool = typer.Option(
+        False,
+        "--confirm-datajud-batch",
+        help="Autoriza consultas DataJud em lote (>=10 itens) com rate limit e auditoria.",
+    ),
 ) -> None:
     """Search for processos by party name, CPF, or OAB across all channels.
 
@@ -1116,6 +1142,7 @@ def busca_parte(
         registry=registry,
         cache=cache,
         enrich=enrich,
+        confirm_datajud_batch=confirm_datajud_batch,
     )
 
     with console.status("[bold]Consultando canais..."):
@@ -2314,6 +2341,7 @@ def demo(
     instructions: str = typer.Option("", "--instructions", "-i", help="Instruções extras"),
     cloud: bool = typer.Option(False, "--cloud", help="Usar Claude (cloud) em vez de Ollama"),
     skip_review: bool = typer.Option(False, "--skip-review", help="Pular revisão pós-draft"),
+    use_cache: bool = typer.Option(True, "--cache/--no-cache", help="Usar cache local DataJud"),
     modo: str = typer.Option(
         "minuta-sugerida",
         "--modo",
@@ -2474,7 +2502,7 @@ def demo(
 
     # Load processo
     try:
-        processo = load_processo(numero_cnj, tribunal, source_mode)
+        processo = load_processo(numero_cnj, tribunal, source_mode, use_cache=use_cache, audit_path=audit_path)
     except (LookupError, NotImplementedError) as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1) from exc

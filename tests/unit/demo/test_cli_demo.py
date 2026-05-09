@@ -239,6 +239,56 @@ class TestDemoOutputNaming:
         assert "Não pode ser protocolada" in result.output
 
 
+class TestDemoDataJudSafetyOptions:
+    def test_datajud_source_passes_no_cache_to_loader(self, tmp_path: Path, monkeypatch):
+        cnj = "0001234-56.2026.8.13.0001"
+        captured: dict[str, object] = {}
+
+        def fake_load(numero_cnj, tribunal, source, **kwargs):
+            captured.update(kwargs)
+            return _processo(cnj)
+
+        def fake_status(_path):
+            return MagicMock(is_ready=True, not_ready_reason=None)
+
+        async def fake_run_demo(request, **kwargs):
+            return _success_result(
+                cnj=request.numero_cnj,
+                out_dir=kwargs["out_dir"],
+                audit_path=kwargs["audit_path"],
+                is_demo_mode=kwargs["is_demo_mode"],
+            )
+
+        with (
+            patch("juris.repertory.readiness.read_status", side_effect=fake_status),
+            patch("juris.llm.ollama.OllamaLLM", MagicMock()),
+            patch("juris.repertory.embeddings.LegalEmbedder", MagicMock()),
+            patch("juris.repertory.vector_store.LocalFTSStore", MagicMock()),
+            patch("juris.repertory.retrieval.reranker.CrossEncoderReranker", MagicMock()),
+            patch("juris.repertory.retrieval.hybrid.HybridRetriever", MagicMock()),
+            patch("juris.repertory.retrieval.service.RepertoryService", MagicMock()),
+            patch("juris.demo.orchestrator.load_processo", side_effect=fake_load),
+            patch("juris.demo.run_demo", side_effect=fake_run_demo),
+            patch("juris.demo.artifacts.write_artifacts", return_value={"draft.md": "x"}),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "demo",
+                    cnj,
+                    "contestacao",
+                    "--source",
+                    "datajud",
+                    "--no-cache",
+                    "--out",
+                    str(tmp_path),
+                ],
+            )
+
+        assert result.exit_code == 0, result.output
+        assert captured["use_cache"] is False
+
+
 class TestDemoInputValidation:
     def test_invalid_tipo_exits_nonzero(self, tmp_path: Path) -> None:
         """A bad petition type must exit with code 1, not 0."""
@@ -311,7 +361,7 @@ class _ExitStack:
         self._patches = list(patches)
         self._entered: list = []
 
-    def __enter__(self) -> "_ExitStack":
+    def __enter__(self) -> _ExitStack:
         for p in self._patches:
             self._entered.append(p.__enter__())
         return self

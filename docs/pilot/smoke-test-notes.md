@@ -64,6 +64,27 @@ Rodar `juris demo` várias vezes para o mesmo CNJ no mesmo diretório de
 saída faz todos os eventos cairem no mesmo `audit.jsonl`. Mitigação no
 pré-flight: limpar `juris-out/<numero_cnj>` antes da sessão.
 
+### L4 · DataJud é read-only, mas batch precisa de guarda operacional
+
+`--source datajud` consulta a API Pública do CNJ. Para a smoke test com
+**um único CNJ**, isso é apropriado: read-only, sem token A3, sem assinatura
+e sem protocolo. Para qualquer telemetria com listas de CNJs, o Juris deve
+respeitar a política em `docs/compliance/datajud-terms-snapshot-2026-05-09.md`:
+rate limit default de `1 req/sec`, cache local, auditoria de cada chamada e
+confirmação explícita para batches com `>=10` CNJs.
+
+**Ação obrigatória do operador antes de batch DataJud:**
+
+- Revalidar o snapshot de termos se a sessão não for no mesmo dia.
+- Confirmar que `JURIS_DATAJUD_RATE_LIMIT_PER_SECOND` não está acima do
+  limite operacional aprovado.
+- Confirmar que o cache pode armazenar metadados processuais localmente sob
+  LGPD; se não puder, rodar com `--no-cache` e purgar qualquer resíduo com:
+
+```bash
+uv run juris cache purge --datajud
+```
+
 ---
 
 ## 0. Pré-flight (10 min antes da sessão)
@@ -187,6 +208,9 @@ uv run juris demo \
 
 **Recomendações:**
 
+- Use `--source datajud` para o primeiro caso real. Isso faz consulta pública
+  read-only ao CNJ. Use `--no-cache` se o operador não puder manter resposta
+  DataJud em disco local; por padrão o cache evita chamadas repetidas ao CNJ.
 - Use `--cloud` se o caso **não** tiver dados sensíveis (PII de cliente,
   dados médicos, segredo de justiça). Caso contrário, omita `--cloud` e
   use Ollama local.
@@ -296,6 +320,10 @@ descobrir do zero.
 - **`MNI source ainda não implementado.`** Use `datajud` (pública) ou
   `fixture` (offline). Quando o token A3 entrar em rotação, o source
   `mni` será habilitado.
+- **DataJud batch não é parte desta smoke test.** Um CNJ real via
+  `--source datajud` é consulta pública read-only. Listas de CNJs entram em
+  Sprint posterior e exigem confirmação explícita, rate limit, cache/auditoria
+  e leitura do snapshot em `docs/compliance/datajud-terms-snapshot-2026-05-09.md`.
 
 ---
 
