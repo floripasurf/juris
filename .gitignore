@@ -56,3 +56,54 @@ STF_Casos_Relevantes/
 
 # Archives
 *.zip
+
+# ============================================
+# PROPRIETARY ENGINE — DO NOT PUBLISH
+# ============================================
+
+# Embedding & retrieval engines
+src/juris/repertory/embeddings.py
+src/juris/repertory/vector_store.py
+src/juris/repertory/retrieval/
+
+# Prompt templates (proprietary AI instructions)
+src/juris/prompts/
+
+# Core NLP analysis agents
+src/juris/agents/analyzer.py
+src/juris/agents/drafter.py
+src/juris/agents/researcher.py
+src/juris/agents/citation_verifier.py
+
+# Defense analysis & legal rules
+src/juris/defesas/
+src/juris/prazo/
+
+# Corpus & ingestion (training data)
+src/juris/repertory/ingestion/
+src/juris/repertory/chunking.py
+src/juris/repertory/peticoes/
+src/juris/repertory/corpus/
+src/juris/repertory/citation_lookup.py
+
+# Review & verification
+src/juris/review/
+
+# LLM routing & integration
+src/juris/llm/
+src/juris/core/llm_router.py
+
+# Tests for engine
+tests/unit/test_analyzer.py
+tests/unit/test_defesa_analyzer.py
+tests/unit/test_embeddings.py
+tests/unit/test_chunking.py
+tests/unit/test_hybrid_retrieval.py
+tests/unit/test_llm.py
+tests/unit/test_preliminary*.py
+tests/unit/agents/
+tests/unit/repertory/
+tests/unit/review/
+tests/unit/test_peticao_*.py
+tests/unit/test_defesa_*.py
+tests/unit/benchmark/
