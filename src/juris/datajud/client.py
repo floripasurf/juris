@@ -9,6 +9,7 @@ Docs: https://datajud-wiki.cnj.jus.br/
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import httpx
@@ -18,7 +19,7 @@ from juris.core.observability import get_logger
 logger = get_logger(__name__)
 
 _BASE_URL = "https://api-publica.datajud.cnj.jus.br"
-_API_KEY = "cDZHYzlZa0JadVREZDJCendQbXY6SkJlTzNjLV9TRENyQk1RdnFKZGRQdw=="
+_API_KEY = os.environ.get("DATAJUD_API_KEY", "")
 _TIMEOUT = 30
 
 # Mapping tribunal_id → DataJud index name
