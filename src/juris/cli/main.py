@@ -2357,6 +2357,11 @@ def demo(
     thesis: str | None = typer.Option(None, "--thesis", "-T", help="Tese explícita"),
     instructions: str = typer.Option("", "--instructions", "-i", help="Instruções extras"),
     cloud: bool = typer.Option(False, "--cloud", help="Usar Claude (cloud) em vez de Ollama"),
+    cli_cloud: str | None = typer.Option(
+        None,
+        "--cli-cloud",
+        help="Usar assinatura via CLI cloud para rascunho-pesquisa fictício: claude | codex",
+    ),
     skip_review: bool = typer.Option(False, "--skip-review", help="Pular revisão pós-draft"),
     use_cache: bool = typer.Option(True, "--cache/--no-cache", help="Usar cache local DataJud"),
     modo: str = typer.Option(
@@ -2412,6 +2417,20 @@ def demo(
 
     is_demo_mode = derive_demo_mode(source_mode)
 
+    if cli_cloud is not None:
+        if cli_cloud not in {"claude", "codex"}:
+            console.print("[red]--cli-cloud inválido. Opções: claude, codex.[/red]")
+            raise typer.Exit(code=1)
+        if cloud:
+            console.print("[red]Use apenas um backend cloud: --cloud ou --cli-cloud.[/red]")
+            raise typer.Exit(code=1)
+        if output_mode is not OutputMode.RASCUNHO_PESQUISA:
+            console.print("[red]--cli-cloud exige --modo rascunho-pesquisa.[/red]")
+            raise typer.Exit(code=1)
+        if not is_demo_mode:
+            console.print("[red]--cli-cloud só aceita source=fixture para evitar envio de PII.[/red]")
+            raise typer.Exit(code=1)
+
     # Real-source safety gate: refuse to run against a missing/empty corpus
     # when the source is datajud or mni. Fixture mode is allowed through
     # because its output is loud-banner DEMO and not lawyer-fileable.
@@ -2463,7 +2482,12 @@ def demo(
         )
 
     # Set up LLM (mirrors `draft` command)
-    if cloud:
+    if cli_cloud is not None:
+        from juris.llm.local_cli import LocalCliLLM
+
+        llm = LocalCliLLM(provider=cli_cloud)
+        console.print(f"[dim]LLM: {llm.model_name} (cloud via CLI; sem PII)[/dim]")
+    elif cloud:
         console.print(
             "[yellow]AVISO PII:[/yellow] --cloud envia dados do processo "
             "para API externa. Use apenas se o caso não contiver dados sensíveis."
@@ -2534,7 +2558,7 @@ def demo(
         out_root=out_root_path,
         thesis=thesis,
         instructions=instructions,
-        use_cloud_llm=cloud,
+        use_cloud_llm=cloud or cli_cloud is not None,
         skip_review=skip_review,
         output_mode=output_mode,
     )
