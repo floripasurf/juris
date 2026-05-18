@@ -9,7 +9,9 @@ replacement and refuses explicit PII-marked calls.
 from __future__ import annotations
 
 import asyncio
+import json
 import tempfile
+from contextlib import suppress
 from pathlib import Path
 from typing import Any, Literal
 
@@ -66,18 +68,24 @@ class LocalCliLLM(AbstractLLM):
         if contains_pii:
             msg = "LocalCliLLM is cloud-only and cannot handle PII-marked prompts."
             raise ValueError(msg)
-        if schema:
-            msg = "LocalCliLLM does not support structured schema output."
-            raise ValueError(msg)
-
         command, stdin = self._command_and_stdin(
             prompt=prompt,
             system=system,
+            schema=schema,
             max_tokens=max_tokens,
             temperature=temperature,
         )
         output = await self._run(command, stdin=stdin)
-        return LLMResponse(content=output, model=self.model_name, usage={})
+        structured = None
+        if schema and output:
+            with suppress(json.JSONDecodeError):
+                structured = json.loads(output)
+        return LLMResponse(
+            content=output,
+            model=self.model_name,
+            usage={},
+            structured=structured,
+        )
 
     @property
     def model_name(self) -> str:
@@ -92,10 +100,11 @@ class LocalCliLLM(AbstractLLM):
         *,
         prompt: str,
         system: str | None,
+        schema: dict[str, Any] | None,
         max_tokens: int,
         temperature: float,
     ) -> tuple[list[str], str | None]:
-        full_prompt = _compose_prompt(prompt=prompt, system=system)
+        full_prompt = _compose_prompt(prompt=prompt, system=system, schema=schema)
         if self._provider == "claude":
             command = [
                 "claude",
@@ -164,10 +173,23 @@ class LocalCliLLM(AbstractLLM):
         return text
 
 
-def _compose_prompt(*, prompt: str, system: str | None) -> str:
-    if not system:
-        return prompt
-    return f"{system.strip()}\n\n{prompt.strip()}"
+def _compose_prompt(
+    *,
+    prompt: str,
+    system: str | None,
+    schema: dict[str, Any] | None,
+) -> str:
+    parts: list[str] = []
+    if system:
+        parts.append(system.strip())
+    parts.append(prompt.strip())
+    if schema:
+        parts.append(
+            "Responda somente com JSON valido que siga este JSON Schema. "
+            "Nao inclua markdown, comentarios ou texto fora do JSON.\n"
+            f"{json.dumps(schema, ensure_ascii=False, sort_keys=True)}"
+        )
+    return "\n\n".join(parts)
 
 
 __all__ = ["CliCloudProvider", "LocalCliLLM"]

@@ -252,7 +252,7 @@ class DrafterAgent:
                 )
 
         # Step 8: Pre-show review (optional)
-        if self._reviewer and verification and verification.all_passed:
+        if self._reviewer and draft_text:
             try:
                 from juris.review.models import ReviewRequest
 

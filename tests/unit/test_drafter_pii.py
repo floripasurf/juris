@@ -6,11 +6,13 @@ from typing import Any
 
 import pytest
 
+from juris.agents.citation_verifier import VerificationResult
 from juris.agents.drafter import DrafterAgent, DraftRequest
 from juris.agents.researcher import ResearchResult
 from juris.defesas.context import ProcessoContext
 from juris.llm.base import AbstractLLM, LLMResponse
 from juris.repertory.peticoes.models import TipoPeticao
+from juris.review.models import ReviewReport, ReviewRequest
 
 
 class RecordingLLM(AbstractLLM):
@@ -35,6 +37,29 @@ class RecordingLLM(AbstractLLM):
     @property
     def model_name(self) -> str:
         return "recording-llm"
+
+
+class StaticResearcher:
+    async def research(self, query: object) -> ResearchResult:
+        return ResearchResult(thesis="tese ficticia")
+
+
+class FailingVerifier:
+    def verify(
+        self,
+        draft: str,
+        allowed_source_ids: set[str] | None = None,
+    ) -> VerificationResult:
+        return VerificationResult(all_passed=False, spurious_citations=["REsp 123"])
+
+
+class RecordingReviewer:
+    def __init__(self) -> None:
+        self.requests: list[ReviewRequest] = []
+
+    async def review(self, request: ReviewRequest) -> ReviewReport:
+        self.requests.append(request)
+        return ReviewReport(request=request, model_used="reviewer", prompt_version="test")
 
 
 @pytest.mark.asyncio
@@ -117,3 +142,35 @@ async def test_thesis_inference_marks_case_context_prompt_as_pii() -> None:
     )
 
     assert llm.contains_pii_values == [True]
+
+
+@pytest.mark.asyncio
+async def test_draft_runs_reviewer_even_when_citation_verification_fails() -> None:
+    llm = RecordingLLM()
+    reviewer = RecordingReviewer()
+    agent = DrafterAgent(
+        llm=llm,
+        repertory=None,  # type: ignore[arg-type]
+        researcher=StaticResearcher(),  # type: ignore[arg-type]
+        verifier=FailingVerifier(),  # type: ignore[arg-type]
+        reviewer=reviewer,
+    )
+
+    result = await agent.draft(
+        DraftRequest(
+            numero_cnj="DEMO-0000000-00.0000.0.00.0000",
+            tribunal="TJMG",
+            tipo_peticao=TipoPeticao.CONTESTACAO,
+            thesis="tese ficticia",
+            contains_pii=False,
+            max_revision_rounds=0,
+        ),
+        ProcessoContext(
+            numero_cnj="DEMO-0000000-00.0000.0.00.0000",
+            tribunal="TJMG",
+            classe="Procedimento Comum Civel",
+        ),
+    )
+
+    assert result.reviewer_report is not None
+    assert len(reviewer.requests) == 1

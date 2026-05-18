@@ -15,11 +15,11 @@ ou backend local mais forte.
 
 ## Antes da sessão
 
-- [ ] Confirmar branch atualizado: `git status -sb`.
-- [ ] Confirmar CLI cloud autenticado: `claude --version`.
-- [ ] Não inserir CNJ real, nomes, CPFs, documentos ou fatos sensíveis no LLM.
-- [ ] Usar somente `--source fixture` nesta sessão.
-- [ ] Remover run anterior da mesma sessão, se existir:
+- [x] Confirmar branch atualizado: `git status -sb`.
+- [x] Confirmar CLI cloud autenticado: `claude --version`.
+- [x] Não inserir CNJ real, nomes, CPFs, documentos ou fatos sensíveis no LLM.
+- [x] Usar somente `--source fixture` nesta sessão.
+- [x] Remover run anterior da mesma sessão, se existir:
   `rm -rf juris-out-smoke-2026-05-18`.
 - [ ] Manter PR #2 em draft até Raphael aprovar o smoke.
 
@@ -71,15 +71,15 @@ Critério: saída com integridade OK e código de saída 0.
 
 ## Critérios de piloto OK
 
-- [ ] Preflight termina sem `FAIL`.
-- [ ] Demo termina com código 0.
-- [ ] Todos os artefatos esperados existem.
-- [ ] `rascunho-pesquisa.md` está marcado como demonstração e não parece peça protocolável.
-- [ ] `reviewer-report.md` aponta riscos de forma útil.
-- [ ] `prazos.md` é legível e fácil de revisar.
-- [ ] Auditoria passa em `juris audit verify`.
+- [x] Preflight termina sem `FAIL`.
+- [x] Demo termina com código 0.
+- [x] Todos os artefatos esperados existem.
+- [x] `rascunho-pesquisa.md` está marcado como demonstração e não parece peça protocolável.
+- [x] `reviewer-report.md` aponta riscos de forma útil.
+- [x] `prazos.md` é legível e fácil de revisar.
+- [x] Auditoria passa em `juris audit verify`.
 - [ ] Raphael consegue explicar em 2 minutos o que usaria e o que descartaria.
-- [ ] Fricções ficam registradas abaixo antes de decidir merge/next sprint.
+- [x] Fricções ficam registradas abaixo antes de decidir merge/next sprint.
 
 ## Bloqueios explícitos
 
@@ -92,28 +92,28 @@ Critério: saída com integridade OK e código de saída 0.
 
 ### Ambiente
 
-- Commit testado:
-- Hora de início:
-- Hora de fim:
-- CLI cloud:
+- Commit testado: base `19130bf` com correção local do adapter CLI/schema.
+- Hora de início: 2026-05-18 16:15:01 PDT
+- Hora de fim: 2026-05-18 16:23:25 PDT
+- CLI cloud: `claude` 2.1.143 (Claude Code)
 
 ### Resultado dos comandos
 
 | Comando | Resultado | Observação |
 | --- | --- | --- |
-| `juris pilot preflight` |  |  |
-| `juris demo` |  |  |
-| `juris audit verify` |  |  |
+| `juris pilot preflight` | PASS com avisos | `Preflight OK (com avisos)`; CLI cloud `claude` disponível; Ollama indisponível esperado nesta rota; banco legado detectado. |
+| `juris demo` | PASS | Código 0 em 504.6s; 7 artefatos gerados em `juris-out-smoke-2026-05-18/DEMO-0000000-00.0000.0.00.0000/`. |
+| `juris audit verify` | PASS | `Total entries: 10`; `Chain integrity: OK`. |
 
 ### Fricções
 
-1.
-2.
-3.
+1. O smoke anterior expôs bug real: `LocalCliLLM` não aceitava `schema` estruturado, o que deixava o reviewer vazio. A correção local fez o reviewer rodar e produzir riscos úteis.
+2. `reviewer-report.md` agora é útil e severo: `4 problemas criticos`, `18 problemas importantes`, `15 sugestoes`.
+3. `uv run pytest -q` não ficou verde por falhas fora deste smoke: `10 failed, 1020 passed, 1 skipped`; corpus local incompleto (`stf-sv: 0`, total ativo `685 < 800`) e testes live de tribunais com SSL/403/timeout/HTML não JSON. Testes focados da correção passaram: `8 passed`.
 
 ### Decisão
 
 - [ ] PR #2 pode sair de draft depois de revisão final.
 - [ ] Ajustar docs/comandos antes de novo smoke.
-- [ ] Implementar correção antes de qualquer merge.
+- [x] Implementar correção antes de qualquer merge.
 - [ ] Planejar sessão com caso real anonimizado/sem PII.
