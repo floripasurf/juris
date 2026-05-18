@@ -25,6 +25,7 @@ from juris.demo.orchestrator import (
     DemoRequest,
     DemoResult,
     SourceMode,
+    _can_degrade_to_deterministic_rascunho,
     derive_demo_mode,
 )
 from juris.demo.output_mode import OutputMode
@@ -302,6 +303,15 @@ class TestOrchestratorErrorPaths:
         assert result.degradation_reason == ""
         assert any(e.startswith("draft:") for e in result.errors)
         assert result.succeeded is False
+
+    def test_rascunho_mode_does_not_degrade_on_ollama_read_timeout(self) -> None:
+        request = replace(_request(), output_mode=OutputMode.RASCUNHO_PESQUISA)
+        timeout_error = httpx.ReadTimeout(
+            "generation timed out",
+            request=httpx.Request("POST", "http://localhost:11434/api/chat"),
+        )
+
+        assert _can_degrade_to_deterministic_rascunho(request, timeout_error) is False
 
     def test_minuta_mode_does_not_hide_local_llm_failure(self, tmp_path: Path) -> None:
         skeleton, audit_path = _result_skeleton(tmp_path, is_demo_mode=False)

@@ -17,7 +17,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -42,7 +42,7 @@ from juris.review.reviewer import ReviewerAgent
 logger = get_logger(__name__)
 
 
-class SourceMode(str, Enum):
+class SourceMode(StrEnum):
     """Source of processo data for the demo run."""
 
     DATAJUD = "datajud"
@@ -289,7 +289,7 @@ def _can_degrade_to_deterministic_rascunho(request: DemoRequest, exc: Exception)
 
 def _is_local_ollama_connection_error(exc: Exception) -> bool:
     """Return True only for connection failures from the local Ollama call."""
-    if not isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout, httpx.TimeoutException)):
+    if not isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout)):
         return False
     request = getattr(exc, "request", None)
     if request is None:
