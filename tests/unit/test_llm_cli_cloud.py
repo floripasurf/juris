@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+from pathlib import Path
+
 import pytest
 
 from juris.llm.local_cli import LocalCliLLM
@@ -50,6 +53,80 @@ async def test_cli_cloud_adapter_accepts_structured_schema(monkeypatch: pytest.M
     assert captured["stdin"] is None
     assert "Responda somente com JSON valido" in command[-1]
     assert '"issues"' in command[-1]
+
+
+@pytest.mark.asyncio
+async def test_cli_cloud_adapter_marks_invalid_structured_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    llm = LocalCliLLM(provider="claude")
+
+    async def fake_run(command: list[str], *, stdin: str | None) -> str:
+        return "not json"
+
+    monkeypatch.setattr(llm, "_run", fake_run)
+
+    response = await llm.complete("analise", schema={"type": "object"})
+
+    assert response.content == "not json"
+    assert response.structured is None
+    assert response.usage == {"structured_parse_failed": 1}
+
+
+@pytest.mark.asyncio
+async def test_codex_output_file_is_read_and_cleaned_up(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_path = tmp_path / "codex-output.txt"
+    output_path.write_text("final answer\n", encoding="utf-8")
+    llm = LocalCliLLM(provider="codex")
+
+    class FakeProcess:
+        returncode = 0
+
+        async def communicate(self, stdin: bytes | None) -> tuple[bytes, bytes]:
+            return b"stdout fallback", b""
+
+    async def fake_create_subprocess_exec(*command: str, **kwargs: object) -> FakeProcess:
+        return FakeProcess()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+
+    result = await llm._run(
+        ["codex", "exec", "--output-last-message", str(output_path), "-"],
+        stdin="prompt",
+    )
+
+    assert result == "final answer"
+    assert not output_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_codex_output_file_is_cleaned_up_on_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_path = tmp_path / "codex-output.txt"
+    output_path.write_text("partial answer\n", encoding="utf-8")
+    llm = LocalCliLLM(provider="codex")
+
+    class FakeProcess:
+        returncode = 2
+
+        async def communicate(self, stdin: bytes | None) -> tuple[bytes, bytes]:
+            return b"", b"boom"
+
+    async def fake_create_subprocess_exec(*command: str, **kwargs: object) -> FakeProcess:
+        return FakeProcess()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await llm._run(
+            ["codex", "exec", "--output-last-message", str(output_path), "-"],
+            stdin="prompt",
+        )
+
+    assert not output_path.exists()
 
 
 def test_cli_cloud_adapter_rejects_unknown_provider() -> None:

@@ -11,7 +11,6 @@ from __future__ import annotations
 import asyncio
 import json
 import tempfile
-from contextlib import suppress
 from pathlib import Path
 from typing import Any, Literal
 
@@ -23,6 +22,8 @@ _PROVIDER_MODEL_NAMES: dict[CliCloudProvider, str] = {
     "claude": "claude_cli_subscription",
     "codex": "codex_cli_subscription",
 }
+
+_CODEX_OUTPUT_FLAG = "--output-last-message"
 
 
 class LocalCliLLM(AbstractLLM):
@@ -77,13 +78,16 @@ class LocalCliLLM(AbstractLLM):
         )
         output = await self._run(command, stdin=stdin)
         structured = None
+        usage: dict[str, int] = {}
         if schema and output:
-            with suppress(json.JSONDecodeError):
+            try:
                 structured = json.loads(output)
+            except json.JSONDecodeError:
+                usage["structured_parse_failed"] = 1
         return LLMResponse(
             content=output,
             model=self.model_name,
-            usage={},
+            usage=usage,
             structured=structured,
         )
 
@@ -131,7 +135,7 @@ class LocalCliLLM(AbstractLLM):
             "never",
             "--skip-git-repo-check",
             "--ephemeral",
-            "--output-last-message",
+            _CODEX_OUTPUT_FLAG,
             output_path,
             "-",
         ]
@@ -141,36 +145,37 @@ class LocalCliLLM(AbstractLLM):
         return command, full_prompt
 
     async def _run(self, command: list[str], *, stdin: str | None) -> str:
-        process = await asyncio.create_subprocess_exec(
-            *command,
-            cwd=str(self._cwd) if self._cwd else None,
-            stdin=asyncio.subprocess.PIPE if stdin is not None else None,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+        output_file = _codex_output_file(command) if self._provider == "codex" else None
         try:
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(stdin.encode("utf-8") if stdin is not None else None),
-                timeout=self._timeout_seconds,
+            process = await asyncio.create_subprocess_exec(
+                *command,
+                cwd=str(self._cwd) if self._cwd else None,
+                stdin=asyncio.subprocess.PIPE if stdin is not None else None,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
-        except TimeoutError as exc:
-            process.kill()
-            await process.wait()
-            msg = f"{self.model_name} timed out after {self._timeout_seconds:.0f}s"
-            raise TimeoutError(msg) from exc
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    process.communicate(stdin.encode("utf-8") if stdin is not None else None),
+                    timeout=self._timeout_seconds,
+                )
+            except TimeoutError as exc:
+                process.kill()
+                await process.wait()
+                msg = f"{self.model_name} timed out after {self._timeout_seconds:.0f}s"
+                raise TimeoutError(msg) from exc
 
-        if process.returncode != 0:
-            err = stderr.decode("utf-8", errors="replace").strip()
-            msg = f"{self.model_name} failed with exit code {process.returncode}: {err}"
-            raise RuntimeError(msg)
+            if process.returncode != 0:
+                err = stderr.decode("utf-8", errors="replace").strip()
+                msg = f"{self.model_name} failed with exit code {process.returncode}: {err}"
+                raise RuntimeError(msg)
 
-        text = stdout.decode("utf-8", errors="replace").strip()
-        if self._provider == "codex":
-            output_file = Path(command[-2])
-            if output_file.exists():
-                text = output_file.read_text(encoding="utf-8").strip()
+            if output_file is not None and output_file.exists():
+                return output_file.read_text(encoding="utf-8").strip()
+            return stdout.decode("utf-8", errors="replace").strip()
+        finally:
+            if output_file is not None:
                 output_file.unlink(missing_ok=True)
-        return text
 
 
 def _compose_prompt(
@@ -190,6 +195,16 @@ def _compose_prompt(
             f"{json.dumps(schema, ensure_ascii=False, sort_keys=True)}"
         )
     return "\n\n".join(parts)
+
+
+def _codex_output_file(command: list[str]) -> Path:
+    try:
+        flag_index = command.index(_CODEX_OUTPUT_FLAG)
+        output_path = command[flag_index + 1]
+    except (ValueError, IndexError) as exc:
+        msg = f"Codex command missing {_CODEX_OUTPUT_FLAG} output path."
+        raise RuntimeError(msg) from exc
+    return Path(output_path)
 
 
 __all__ = ["CliCloudProvider", "LocalCliLLM"]
