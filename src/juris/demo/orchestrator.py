@@ -21,6 +21,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 from juris.agents.analyzer import ProcessoAnalysis, analyze_processo
 from juris.agents.citation_verifier import MarkerCitationVerifier
 from juris.agents.drafter import DrafterAgent, DraftRequest, DraftResult
@@ -88,6 +90,8 @@ class DemoResult:
     draft: DraftResult | None = None
     errors: list[str] = field(default_factory=list)
     llm_model_used: str = ""
+    degraded: bool = False
+    degradation_reason: str = ""
 
     @property
     def succeeded(self) -> bool:
@@ -187,6 +191,8 @@ class DemoOrchestrator:
                     processo=processo,
                     analysis=result.analysis,
                 )
+                result.degraded = True
+                result.degradation_reason = str(exc)
                 self._audit.log(
                     event_type="demo.rascunho_deterministic_fallback",
                     actor="system",
@@ -210,6 +216,8 @@ class DemoOrchestrator:
             details={
                 "duration_seconds": result.duration_seconds,
                 "succeeded": result.succeeded,
+                "degraded": result.degraded,
+                "degradation_reason": result.degradation_reason,
                 "errors": result.errors,
                 "output_mode": request.output_mode.value,
                 "draft_revisions": result.draft.revisions if result.draft else None,
@@ -274,11 +282,23 @@ def _can_degrade_to_deterministic_rascunho(request: DemoRequest, exc: Exception)
     """
     if request.output_mode is not OutputMode.RASCUNHO_PESQUISA:
         return False
-    message = str(exc).lower()
+    if request.use_cloud_llm:
+        return False
+    return _is_local_ollama_connection_error(exc)
+
+
+def _is_local_ollama_connection_error(exc: Exception) -> bool:
+    """Return True only for connection failures from the local Ollama call."""
+    if not isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout, httpx.TimeoutException)):
+        return False
+    request = getattr(exc, "request", None)
+    if request is None:
+        return False
+    url = request.url
     return (
-        "all connection attempts failed" in message
-        or "connection refused" in message
-        or "connecterror" in exc.__class__.__name__.lower()
+        request.method.upper() == "POST"
+        and url.host in {"localhost", "127.0.0.1", "::1"}
+        and url.path == "/api/chat"
     )
 
 

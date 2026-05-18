@@ -1,8 +1,11 @@
 """Build the RASCUNHO DE PESQUISA artifact from existing drafter output.
 
-When the operator selects ``--modo rascunho-pesquisa``, the demo run still
+When the operator selects ``--modo rascunho-pesquisa``, a normal demo run still
 exercises the full pipeline (analyze → prazos → draft → reviewer), but the
-primary artifact is a **research memo** rather than a petition draft.
+primary artifact is a **research memo** rather than a petition draft. If the
+local Ollama call is unavailable, the orchestrator may supply a deterministic
+``DraftResult`` skeleton instead; that degraded run is marked on
+``DemoResult.degraded`` and in ``run-manifest.json``.
 
 The memo is composed deterministically from existing ``DraftResult`` fields
 plus the run's :class:`ProcessoAnalysis`. **No additional LLM calls are

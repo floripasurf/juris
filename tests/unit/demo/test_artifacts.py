@@ -388,6 +388,15 @@ class TestOutputModeArtifacts:
         assert "rascunho-pesquisa.md" in names
         assert "draft.md" not in names
 
+    def test_manifest_records_degraded_run(self, tmp_path: Path) -> None:
+        result = _build_result(tmp_path, output_mode=OutputMode.RASCUNHO_PESQUISA)
+        result.degraded = True
+        result.degradation_reason = "All connection attempts failed"
+        write_artifacts(result)
+        manifest = json.loads((result.out_dir / "run-manifest.json").read_text())
+        assert manifest["degraded"] is True
+        assert manifest["degradation_reason"] == "All connection attempts failed"
+
 
 class TestAuditCopying:
     def test_audit_jsonl_is_present_in_out_dir(self, tmp_path: Path) -> None:

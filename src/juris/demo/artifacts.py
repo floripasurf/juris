@@ -345,6 +345,8 @@ def _build_manifest(result: DemoResult, artifacts: dict[str, str]) -> dict[str, 
         "finished_at": result.finished_at.isoformat(),
         "duration_seconds": result.duration_seconds,
         "succeeded": result.succeeded,
+        "degraded": result.degraded,
+        "degradation_reason": result.degradation_reason,
         "errors": result.errors,
         "request": {
             "numero_cnj": result.request.numero_cnj,

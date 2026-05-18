@@ -18,6 +18,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
+
 from juris.demo.orchestrator import (
     DemoOrchestrator,
     DemoRequest,
@@ -218,8 +220,12 @@ class TestOrchestratorErrorPaths:
         )
         orch, audit = self._build(audit_path)
 
+        request_error = httpx.ConnectError(
+            "All connection attempts failed",
+            request=httpx.Request("POST", "http://localhost:11434/api/chat"),
+        )
         orch._run_drafter = AsyncMock(  # type: ignore[method-assign]
-            side_effect=RuntimeError("All connection attempts failed")
+            side_effect=request_error
         )
 
         fake_analysis = MagicMock(
@@ -251,10 +257,51 @@ class TestOrchestratorErrorPaths:
         assert result.draft is not None
         assert "modo determinístico sem LLM" in result.draft.research_summary
         assert result.succeeded is True
+        assert result.degraded is True
+        assert "All connection attempts failed" in result.degradation_reason
         assert any(
             e.event_type == "demo.rascunho_deterministic_fallback"
             for e in audit.read_all()
         )
+
+    def test_rascunho_mode_does_not_hide_non_llm_connection_failure(self, tmp_path: Path) -> None:
+        skeleton, audit_path = _result_skeleton(tmp_path, is_demo_mode=False)
+        request = replace(
+            skeleton.request,
+            source=SourceMode.DATAJUD,
+            output_mode=OutputMode.RASCUNHO_PESQUISA,
+        )
+        orch, _ = self._build(audit_path)
+
+        qdrant_error = httpx.ConnectError(
+            "All connection attempts failed",
+            request=httpx.Request("GET", "http://localhost:6333/collections"),
+        )
+        orch._run_drafter = AsyncMock(side_effect=qdrant_error)  # type: ignore[method-assign]
+
+        fake_analysis = MagicMock(analyzed=[], actionable=[], summary="ok")
+        with (
+            patch(
+                "juris.demo.orchestrator.analyze_processo",
+                AsyncMock(return_value=fake_analysis),
+            ),
+            patch("juris.demo.orchestrator.compute_prazos") as mock_prazos,
+        ):
+            mock_prazos.return_value = MagicMock(prazos=[], summary="ok")
+            result = asyncio.run(
+                orch.run(
+                    request,
+                    processo=skeleton.processo,
+                    out_dir=skeleton.out_dir,
+                    is_demo_mode=False,
+                )
+            )
+
+        assert result.draft is None
+        assert result.degraded is False
+        assert result.degradation_reason == ""
+        assert any(e.startswith("draft:") for e in result.errors)
+        assert result.succeeded is False
 
     def test_minuta_mode_does_not_hide_local_llm_failure(self, tmp_path: Path) -> None:
         skeleton, audit_path = _result_skeleton(tmp_path, is_demo_mode=False)

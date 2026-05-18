@@ -2552,6 +2552,8 @@ def demo(
         console.print(f"[green]Concluído em {result.duration_seconds:.1f}s.[/green]")
     else:
         console.print(f"[red]Falhou após {result.duration_seconds:.1f}s (artefatos parciais gravados).[/red]")
+    if result.degraded:
+        console.print(f"[yellow]Execução degradada: {result.degradation_reason}[/yellow]")
     if result.errors:
         for e in result.errors:
             console.print(f"[yellow]- {e}[/yellow]")
