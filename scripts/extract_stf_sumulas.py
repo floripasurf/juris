@@ -1697,7 +1697,7 @@ def main() -> None:
     sumulas = deduplicate(sumulas)
     sumulas.sort(key=lambda s: int(s["numero"]))
 
-    output_path = Path("/Users/raphaellages/Desktop/juris/data/corpus/sumulas_stf.json")
+    output_path = Path(__file__).resolve().parents[1] / "data" / "corpus" / "sumulas_stf.json"
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     with open(output_path, "w", encoding="utf-8") as f:

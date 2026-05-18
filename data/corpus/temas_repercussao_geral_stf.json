@@ -1,0 +1,2003 @@
+[
+  {
+    "numero": "1",
+    "tese": "É inconstitucional a incidência do ICMS sobre o serviço de habilitação de telefonia móvel.",
+    "descricao": "ICMS sobre habilitação de telefonia móvel.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 155, II"
+    ]
+  },
+  {
+    "numero": "32",
+    "tese": "É constitucional a contribuição social prevista no art. 1º da Lei Complementar nº 110/2001, tendo em vista a persistência do objeto para a qual foi instituída.",
+    "descricao": "Constitucionalidade da contribuição social do art. 1º da LC 110/2001.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "LC 110/2001 Art. 1º"
+    ]
+  },
+  {
+    "numero": "69",
+    "tese": "É inconstitucional a incidência do ISS sobre operações de locação de bens móveis.",
+    "descricao": "Incidência do ISS sobre locação de bens móveis.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 156, III"
+    ]
+  },
+  {
+    "numero": "76",
+    "tese": "A imunidade recíproca, prevista no art. 150, VI, 'a', da Constituição Federal, não se estende a empresa privada arrendatária de imóvel público, quando seja ela exploradora de atividade econômica com fins lucrativos.",
+    "descricao": "Imunidade recíproca e empresa privada arrendatária de imóvel público.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 150, VI, a"
+    ]
+  },
+  {
+    "numero": "79",
+    "tese": "A imunidade tributária prevista no art. 150, VI, 'd', da CF abrange os filmes e papéis fotográficos necessários à publicação de jornais e periódicos.",
+    "descricao": "Imunidade tributária de filmes e papéis fotográficos para jornais.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 150, VI, d"
+    ]
+  },
+  {
+    "numero": "104",
+    "tese": "A substituição tributária progressiva do ICMS é constitucional, sendo devida a restituição do imposto pago a maior quando a base de cálculo efetiva da operação for inferior à presumida.",
+    "descricao": "Substituição tributária progressiva do ICMS e restituição.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 150, §7º"
+    ]
+  },
+  {
+    "numero": "107",
+    "tese": "É constitucional a incidência do Imposto sobre Produtos Industrializados – IPI no desembaraço aduaneiro de bem industrializado e na saída do estabelecimento importador para comercialização no mercado interno.",
+    "descricao": "IPI na importação e revenda por comerciante.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 153, IV"
+    ]
+  },
+  {
+    "numero": "118",
+    "tese": "As taxas cobradas em razão exclusiva do serviço de coleta de lixo são constitucionais.",
+    "descricao": "Constitucionalidade da taxa de coleta de lixo.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 145, II"
+    ]
+  },
+  {
+    "numero": "122",
+    "tese": "A contribuição social a cargo do empregador incide sobre ganhos habituais do empregado, quer anteriores ou posteriores à EC 20/1998.",
+    "descricao": "Contribuição social do empregador sobre ganhos habituais.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 195, I"
+    ]
+  },
+  {
+    "numero": "130",
+    "tese": "É inconstitucional o uso de base de cálculo diversa daquela estabelecida em lei para fins de incidência de IPTU.",
+    "descricao": "Base de cálculo do IPTU e legalidade.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 156, I"
+    ]
+  },
+  {
+    "numero": "134",
+    "tese": "A COFINS incide sobre as receitas provenientes das operações de locação de bens móveis.",
+    "descricao": "COFINS sobre receitas de locação de bens móveis.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "Lei 10.833/2003"
+    ]
+  },
+  {
+    "numero": "162",
+    "tese": "São constitucionais os arts. If e 18 da Lei 10.833/2003, que vedaram a utilização de créditos de PIS e COFINS decorrentes de aquisições de bens e serviços não sujeitos ao pagamento dessas contribuições.",
+    "descricao": "Vedação de créditos de PIS e COFINS.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "Lei 10.833/2003 Arts. 1 e 18"
+    ]
+  },
+  {
+    "numero": "176",
+    "tese": "É constitucional a incidência do IOF sobre operações de factoring.",
+    "descricao": "IOF sobre operações de factoring.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 153, V"
+    ]
+  },
+  {
+    "numero": "189",
+    "tese": "Não incide ICMS no deslocamento de bens de um estabelecimento para outro do mesmo contribuinte localizados em estados distintos, visto não constituir fato gerador do imposto.",
+    "descricao": "ICMS na transferência de mercadorias entre estabelecimentos do mesmo titular.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 155, II"
+    ]
+  },
+  {
+    "numero": "201",
+    "tese": "As contribuições sociais incidentes sobre a receita ou o faturamento das empresas são constitucionais.",
+    "descricao": "Constitucionalidade de contribuições sobre receita/faturamento.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 195, I, b"
+    ]
+  },
+  {
+    "numero": "214",
+    "tese": "Os Municípios podem cobrar a taxa de iluminação pública sob a forma de contribuição, nos termos do art. 149-A da Constituição.",
+    "descricao": "Contribuição para custeio da iluminação pública – COSIP.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 149-A"
+    ]
+  },
+  {
+    "numero": "228",
+    "tese": "A incidência do IPI na importação de veículos automotores por pessoa natural que não se dedica a atividades de comercialização não é compatível com a Constituição Federal.",
+    "descricao": "IPI na importação de veículo por pessoa física para uso próprio.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 153, IV"
+    ]
+  },
+  {
+    "numero": "247",
+    "tese": "A contribuição prevista no art. 4º da LC 110/2001 foi extinta por ter alcançado a sua finalidade.",
+    "descricao": "Extinção da contribuição do art. 4º da LC 110/2001.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "LC 110/2001 Art. 4º"
+    ]
+  },
+  {
+    "numero": "261",
+    "tese": "O ICMS não compõe a base de cálculo para incidência do PIS e da COFINS.",
+    "descricao": "Exclusão do ICMS da base de cálculo do PIS e da COFINS.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 195, I, b"
+    ]
+  },
+  {
+    "numero": "285",
+    "tese": "É inconstitucional a contribuição ao SEBRAE incidente sobre a remuneração paga ou creditada ao autônomo.",
+    "descricao": "Contribuição ao SEBRAE sobre remuneração de autônomos.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "Lei 8.029/1990"
+    ]
+  },
+  {
+    "numero": "297",
+    "tese": "O art. 146, III, 'd', da CF não veda a tributação das operações envolvendo livros eletrônicos (e-books) e suportes exclusivamente utilizados para fixá-los, devendo ser aplicada a imunidade tributária.",
+    "descricao": "Imunidade tributária de livros eletrônicos.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 150, VI, d"
+    ]
+  },
+  {
+    "numero": "325",
+    "tese": "A multa isolada por descumprimento de obrigação acessória fixada em patamar superior a 100% do tributo devido configura confisco e é inconstitucional.",
+    "descricao": "Multa tributária e vedação ao confisco.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 150, IV"
+    ]
+  },
+  {
+    "numero": "329",
+    "tese": "É inconstitucional a fixação de alíquota do ICMS em patamar superior ao padrão para operações de energia elétrica e telecomunicações, salvo se houver justificativa para distinção.",
+    "descricao": "Alíquota do ICMS sobre energia elétrica e telecomunicações.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 155, §2º, III"
+    ]
+  },
+  {
+    "numero": "345",
+    "tese": "O ISS incide sobre contratos de franquia (franchising).",
+    "descricao": "ISS sobre contratos de franquia.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "LC 116/2003"
+    ]
+  },
+  {
+    "numero": "379",
+    "tese": "Incide o IPTU sobre imóvel de pessoa jurídica de direito público cedido a pessoa jurídica de direito privado, devedora do tributo.",
+    "descricao": "IPTU sobre imóvel público cedido a particular.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 150, VI, a"
+    ]
+  },
+  {
+    "numero": "415",
+    "tese": "A base de cálculo do PIS e da COFINS sobre a receita ou faturamento não abrange o ISS.",
+    "descricao": "Exclusão do ISS da base de cálculo do PIS/COFINS.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 195, I, b"
+    ]
+  },
+  {
+    "numero": "520",
+    "tese": "O diferencial de alíquota de ICMS cobrado na entrada de mercadoria em Estado diverso daquele em que adquirida, relativo a operação interestadual destinada a consumidor final não contribuinte, é constitucional, observada a EC 87/2015.",
+    "descricao": "DIFAL de ICMS e EC 87/2015.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 155, §2º, VII",
+      "EC 87/2015"
+    ]
+  },
+  {
+    "numero": "568",
+    "tese": "As custas judiciais e os emolumentos possuem natureza tributária de taxa.",
+    "descricao": "Natureza jurídica das custas judiciais.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 145, II"
+    ]
+  },
+  {
+    "numero": "574",
+    "tese": "O ICMS incide sobre o valor total da operação, quando mercadorias são fornecidas com serviços não compreendidos na competência tributária dos Municípios.",
+    "descricao": "ICMS sobre fornecimento de mercadorias com serviços.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 155, II"
+    ]
+  },
+  {
+    "numero": "581",
+    "tese": "É inconstitucional lei estadual que institui adicional de ICMS destinado a fundo de combate à pobreza em patamar superior ao previsto na EC 31/2000.",
+    "descricao": "Adicional de ICMS para fundo de combate à pobreza.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 82, ADCT"
+    ]
+  },
+  {
+    "numero": "593",
+    "tese": "O sujeito ativo da obrigação tributária de ICMS incidente sobre mercadoria importada é o Estado-membro no qual está domiciliado ou estabelecido o destinatário legal da operação que deu causa à circulação da mercadoria.",
+    "descricao": "Sujeito ativo do ICMS-importação.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 155, §2º, IX, a"
+    ]
+  },
+  {
+    "numero": "694",
+    "tese": "Incide o IRPJ e a CSLL sobre os valores atinentes à taxa Selic recebidos em razão de repetição de indébito tributário.",
+    "descricao": "IRPJ e CSLL sobre taxa Selic na repetição de indébito.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 153, III"
+    ]
+  },
+  {
+    "numero": "745",
+    "tese": "A imunidade tributária do art. 150, VI, 'c', da Constituição Federal alcança as entidades fechadas de previdência complementar.",
+    "descricao": "Imunidade tributária de entidades de previdência complementar.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 150, VI, c"
+    ]
+  },
+  {
+    "numero": "756",
+    "tese": "É constitucional a contribuição ao PIS incidente sobre a receita bruta, na forma prevista no art. 8º da Lei 10.637/2002.",
+    "descricao": "PIS sobre receita bruta.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "Lei 10.637/2002"
+    ]
+  },
+  {
+    "numero": "816",
+    "tese": "A CSLL pode ter alíquota majorada por lei ordinária.",
+    "descricao": "Majoração de alíquota da CSLL por lei ordinária.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 195, §6º"
+    ]
+  },
+  {
+    "numero": "843",
+    "tese": "O ICMS incide sobre a tarifa de assinatura básica mensal de telefonia, independentemente da franquia de pulsos.",
+    "descricao": "ICMS sobre assinatura básica de telefonia.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 155, II"
+    ]
+  },
+  {
+    "numero": "872",
+    "tese": "A imunidade tributária subjetiva aplica-se a seus beneficiários na posição de contribuinte de direito, mas não na de simples contribuinte de fato.",
+    "descricao": "Imunidade tributária subjetiva e contribuinte de fato.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 150, VI"
+    ]
+  },
+  {
+    "numero": "881",
+    "tese": "É constitucional a incidência de ISSQN sobre operações de planos de saúde.",
+    "descricao": "ISS sobre planos de saúde.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "LC 116/2003"
+    ]
+  },
+  {
+    "numero": "962",
+    "tese": "É constitucional a inclusão do ICMS na sua própria base de cálculo (cálculo por dentro).",
+    "descricao": "ICMS por dentro – inclusão na própria base.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 155, §2º, XII"
+    ]
+  },
+  {
+    "numero": "985",
+    "tese": "A tributação do terço constitucional de férias é constitucional, incidindo contribuição previdenciária sobre essa parcela.",
+    "descricao": "Contribuição previdenciária sobre terço de férias.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 195, I, a"
+    ]
+  },
+  {
+    "numero": "1048",
+    "tese": "Os benefícios fiscais relativos ao ICMS concedidos unilateralmente por um ente federado, sem aprovação do CONFAZ, são inconstitucionais.",
+    "descricao": "Guerra fiscal e benefícios de ICMS sem CONFAZ.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 155, §2º, XII, g"
+    ]
+  },
+  {
+    "numero": "1093",
+    "tese": "A contribuição previdenciária patronal incide sobre o salário-maternidade.",
+    "descricao": "Contribuição previdenciária sobre salário-maternidade.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 195, I, a"
+    ]
+  },
+  {
+    "numero": "1099",
+    "tese": "As contribuições ao PIS/COFINS não incidem sobre receitas decorrentes de variações cambiais positivas com exportação.",
+    "descricao": "PIS/COFINS sobre variações cambiais em exportação.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 149, §2º, I"
+    ]
+  },
+  {
+    "numero": "1174",
+    "tese": "É constitucional o regime de cobrança antecipada do ICMS nas operações interestaduais com mercadorias sujeitas a substituição tributária.",
+    "descricao": "Antecipação de ICMS em operações interestaduais.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 155, §2º"
+    ]
+  },
+  {
+    "numero": "1195",
+    "tese": "O IPI não integra a base de cálculo do PIS e da COFINS, sob a sistemática de apuração cumulativa.",
+    "descricao": "Exclusão do IPI da base do PIS/COFINS cumulativos.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 195, I, b"
+    ]
+  },
+  {
+    "numero": "9",
+    "tese": "No âmbito da aposentadoria por invalidez, a concessão de auxílio-doença exige comprovação de incapacidade laborativa e cumprimento de carência, quando exigida.",
+    "descricao": "Requisitos para concessão de auxílio-doença.",
+    "situacao": "tese_firmada",
+    "area": "direito previdenciário",
+    "base_legal": [
+      "Lei 8.213/1991 Art. 59"
+    ]
+  },
+  {
+    "numero": "42",
+    "tese": "Os servidores públicos federais têm direito à paridade remuneratória prevista no art. 40, §7º, da CF, desde que aposentados antes da EC 41/2003.",
+    "descricao": "Paridade de servidores aposentados antes da EC 41/2003.",
+    "situacao": "tese_firmada",
+    "area": "direito previdenciário",
+    "base_legal": [
+      "CF Art. 40, §7º"
+    ]
+  },
+  {
+    "numero": "44",
+    "tese": "Para efeito de aposentadoria, é possível a contagem recíproca de tempo de serviço prestado em atividade privada e pública.",
+    "descricao": "Contagem recíproca de tempo de serviço.",
+    "situacao": "tese_firmada",
+    "area": "direito previdenciário",
+    "base_legal": [
+      "CF Art. 201, §9º"
+    ]
+  },
+  {
+    "numero": "72",
+    "tese": "O segurado que exerce atividade especial tem direito à aposentadoria especial, comprovada a efetiva exposição a agentes nocivos à saúde.",
+    "descricao": "Aposentadoria especial e exposição a agentes nocivos.",
+    "situacao": "tese_firmada",
+    "area": "direito previdenciário",
+    "base_legal": [
+      "CF Art. 201, §1º"
+    ]
+  },
+  {
+    "numero": "86",
+    "tese": "A desaposentação é incompatível com o regime previdenciário brasileiro, sendo vedada a renúncia à aposentadoria para obter benefício mais vantajoso.",
+    "descricao": "Vedação da desaposentação.",
+    "situacao": "tese_firmada",
+    "area": "direito previdenciário",
+    "base_legal": [
+      "CF Art. 195, §5º"
+    ]
+  },
+  {
+    "numero": "160",
+    "tese": "A pensão por morte é devida ao conjunto dos dependentes do segurado que falecer, aposentado ou não.",
+    "descricao": "Pensão por morte e dependentes.",
+    "situacao": "tese_firmada",
+    "area": "direito previdenciário",
+    "base_legal": [
+      "Lei 8.213/1991 Art. 74"
+    ]
+  },
+  {
+    "numero": "174",
+    "tese": "O prazo decadencial para revisão de benefício previdenciário é de dez anos, nos termos do art. 103 da Lei 8.213/1991.",
+    "descricao": "Decadência para revisão de benefício previdenciário.",
+    "situacao": "tese_firmada",
+    "area": "direito previdenciário",
+    "base_legal": [
+      "Lei 8.213/1991 Art. 103"
+    ]
+  },
+  {
+    "numero": "246",
+    "tese": "A aposentadoria especial pressupõe efetiva exposição do trabalhador a agente nocivo à saúde, de modo que, se o EPI for realmente capaz de neutralizar a nocividade, não haverá respaldo constitucional à aposentadoria especial.",
+    "descricao": "Aposentadoria especial e uso de EPI eficaz.",
+    "situacao": "tese_firmada",
+    "area": "direito previdenciário",
+    "base_legal": [
+      "CF Art. 201, §1º"
+    ]
+  },
+  {
+    "numero": "313",
+    "tese": "O direito à revisão da vida toda, com utilização de todos os salários-de-contribuição, inclusive anteriores a julho de 1994, é assegurado ao segurado.",
+    "descricao": "Revisão da vida toda no cálculo de aposentadoria.",
+    "situacao": "tese_firmada",
+    "area": "direito previdenciário",
+    "base_legal": [
+      "Lei 9.876/1999 Art. 3º"
+    ]
+  },
+  {
+    "numero": "340",
+    "tese": "É constitucional a incidência de contribuição previdenciária sobre os proventos de aposentadoria dos servidores públicos, na forma da EC 41/2003.",
+    "descricao": "Contribuição previdenciária de servidores aposentados.",
+    "situacao": "tese_firmada",
+    "area": "direito previdenciário",
+    "base_legal": [
+      "CF Art. 40, §18"
+    ]
+  },
+  {
+    "numero": "384",
+    "tese": "É admissível o reconhecimento de tempo de serviço rural anterior ao documento mais antigo, mediante prova testemunhal idônea.",
+    "descricao": "Tempo de serviço rural e prova testemunhal.",
+    "situacao": "tese_firmada",
+    "area": "direito previdenciário",
+    "base_legal": [
+      "Lei 8.213/1991 Art. 55, §3º"
+    ]
+  },
+  {
+    "numero": "423",
+    "tese": "É garantido ao segurado especial (trabalhador rural) a aposentadoria por idade sem contribuição formal, desde que comprove atividade rural pelo período exigido.",
+    "descricao": "Aposentadoria rural por idade.",
+    "situacao": "tese_firmada",
+    "area": "direito previdenciário",
+    "base_legal": [
+      "CF Art. 201, §7º, II"
+    ]
+  },
+  {
+    "numero": "503",
+    "tese": "Até que lei discipline o acesso dos servidores a aposentadoria especial, aplica-se o art. 57, §1º, da Lei 8.213/1991, por analogia.",
+    "descricao": "Aposentadoria especial de servidor público.",
+    "situacao": "tese_firmada",
+    "area": "direito previdenciário",
+    "base_legal": [
+      "CF Art. 40, §4º"
+    ]
+  },
+  {
+    "numero": "555",
+    "tese": "Os aprovados em concurso público têm direito à nomeação dentro do prazo de validade do certame quando demonstrada a necessidade de pessoal.",
+    "descricao": "Direito à nomeação de aprovado em concurso.",
+    "situacao": "tese_firmada",
+    "area": "direito previdenciário",
+    "base_legal": [
+      "CF Art. 37, IV"
+    ]
+  },
+  {
+    "numero": "709",
+    "tese": "Os benefícios de prestação continuada do RGPS devem ser reajustados pela variação do INPC.",
+    "descricao": "Reajuste de benefícios do RGPS pelo INPC.",
+    "situacao": "tese_firmada",
+    "area": "direito previdenciário",
+    "base_legal": [
+      "Lei 8.213/1991 Art. 41-A"
+    ]
+  },
+  {
+    "numero": "739",
+    "tese": "O adicional de 25% previsto no art. 45 da Lei 8.213/1991 é aplicável somente à aposentadoria por invalidez.",
+    "descricao": "Adicional de 25% sobre aposentadoria por invalidez.",
+    "situacao": "tese_firmada",
+    "area": "direito previdenciário",
+    "base_legal": [
+      "Lei 8.213/1991 Art. 45"
+    ]
+  },
+  {
+    "numero": "810",
+    "tese": "A correção monetária de débitos previdenciários deve observar o INPC, e os juros de mora, o índice de remuneração da caderneta de poupança.",
+    "descricao": "Correção monetária de débitos previdenciários.",
+    "situacao": "tese_firmada",
+    "area": "direito previdenciário",
+    "base_legal": [
+      "Lei 11.960/2009"
+    ]
+  },
+  {
+    "numero": "942",
+    "tese": "O exercício de atividade concomitante não impede o reconhecimento de atividade especial para fins de aposentadoria.",
+    "descricao": "Atividade concomitante e aposentadoria especial.",
+    "situacao": "tese_firmada",
+    "area": "direito previdenciário",
+    "base_legal": [
+      "Lei 8.213/1991 Art. 57"
+    ]
+  },
+  {
+    "numero": "16",
+    "tese": "É constitucional o teto remuneratório previsto no art. 37, XI, da CF, com redação dada pela EC 41/2003.",
+    "descricao": "Constitucionalidade do teto remuneratório.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "CF Art. 37, XI"
+    ]
+  },
+  {
+    "numero": "19",
+    "tese": "A administração pode anular seus próprios atos, quando eivados de vícios que os tornam ilegais, respeitado o prazo decadencial de cinco anos.",
+    "descricao": "Autotutela administrativa e prazo decadencial.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "Lei 9.784/1999 Art. 54"
+    ]
+  },
+  {
+    "numero": "24",
+    "tese": "É inconstitucional lei ou ato normativo estadual ou distrital que disponha sobre sistemas de consórcios e sorteios, por se tratar de matéria de competência da União.",
+    "descricao": "Competência da União para legislar sobre consórcios.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "CF Art. 22, XX"
+    ]
+  },
+  {
+    "numero": "38",
+    "tese": "A estabilidade prevista no art. 19 do ADCT não se aplica aos empregados de empresas públicas e sociedades de economia mista.",
+    "descricao": "Estabilidade e empregados de empresas estatais.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "CF Art. 19, ADCT"
+    ]
+  },
+  {
+    "numero": "47",
+    "tese": "A administração pública direta e indireta de qualquer dos Poderes da União, dos Estados, do DF e dos Municípios obedecerá aos princípios de legalidade, impessoalidade, moralidade, publicidade e eficiência.",
+    "descricao": "Princípios da administração pública.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "CF Art. 37, caput"
+    ]
+  },
+  {
+    "numero": "65",
+    "tese": "A investidura em cargo público depende de aprovação prévia em concurso público de provas ou de provas e títulos.",
+    "descricao": "Obrigatoriedade de concurso público.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "CF Art. 37, II"
+    ]
+  },
+  {
+    "numero": "85",
+    "tese": "A nomeação de cônjuge, companheiro ou parente em linha reta, colateral ou por afinidade, até o terceiro grau, da autoridade nomeante ou de servidor da mesma pessoa jurídica investido em cargo de direção, chefia ou assessoramento, para o exercício de cargo em comissão ou de confiança configura nepotismo.",
+    "descricao": "Vedação ao nepotismo.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "Súmula Vinculante 13"
+    ]
+  },
+  {
+    "numero": "93",
+    "tese": "Os servidores públicos submetidos a regime especial possuem direito à greve, mas devem observar limites e condições fixados pela legislação.",
+    "descricao": "Direito de greve do servidor público.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "CF Art. 37, VII"
+    ]
+  },
+  {
+    "numero": "123",
+    "tese": "A exigência de prévio exame psicotécnico para ingresso em carreira pública deve estar prevista em lei em sentido formal.",
+    "descricao": "Exame psicotécnico e exigência de lei formal.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "CF Art. 37, II"
+    ]
+  },
+  {
+    "numero": "163",
+    "tese": "A garantia da inamovibilidade não impede a remoção compulsória por interesse público, nos termos da lei.",
+    "descricao": "Inamovibilidade e remoção compulsória.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "CF Art. 95, II"
+    ]
+  },
+  {
+    "numero": "178",
+    "tese": "É inconstitucional a acumulação de cargos públicos remunerados quando a soma das jornadas ultrapassar o limite de 60 horas semanais.",
+    "descricao": "Acumulação de cargos públicos e limite de jornada.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "CF Art. 37, XVI"
+    ]
+  },
+  {
+    "numero": "199",
+    "tese": "O candidato aprovado em concurso público dentro do número de vagas tem direito subjetivo à nomeação.",
+    "descricao": "Direito subjetivo à nomeação dentro das vagas.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "CF Art. 37, IV"
+    ]
+  },
+  {
+    "numero": "242",
+    "tese": "É constitucional o prazo de validade de concurso público de até dois anos, prorrogável por igual período.",
+    "descricao": "Prazo de validade de concurso público.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "CF Art. 37, III"
+    ]
+  },
+  {
+    "numero": "377",
+    "tese": "O servidor público que tiver ingressado em cargo efetivo antes da EC 41/2003 pode se aposentar com proventos integrais e paridade.",
+    "descricao": "Regras de transição da EC 41/2003.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "EC 41/2003 Art. 6º"
+    ]
+  },
+  {
+    "numero": "410",
+    "tese": "A exoneração de servidor em estágio probatório exige processo administrativo com contraditório e ampla defesa.",
+    "descricao": "Exoneração em estágio probatório e due process.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "CF Art. 41"
+    ]
+  },
+  {
+    "numero": "453",
+    "tese": "O regime jurídico dos servidores temporários contratados na forma do art. 37, IX, da CF é de direito público.",
+    "descricao": "Regime jurídico de servidores temporários.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "CF Art. 37, IX"
+    ]
+  },
+  {
+    "numero": "475",
+    "tese": "A responsabilidade civil do Estado por atos omissivos é subjetiva, devendo ser comprovada a culpa ou negligência do agente público.",
+    "descricao": "Responsabilidade civil do Estado por omissão.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "CF Art. 37, §6º"
+    ]
+  },
+  {
+    "numero": "544",
+    "tese": "A dispensa imotivada de empregados de empresas públicas e sociedades de economia mista é válida, prescindindo de motivação.",
+    "descricao": "Dispensa imotivada em estatais.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "CF Art. 173, §1º"
+    ]
+  },
+  {
+    "numero": "579",
+    "tese": "É constitucional a exigência de três anos de atividade jurídica para ingresso na magistratura e no Ministério Público.",
+    "descricao": "Três anos de atividade jurídica para magistratura e MP.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "CF Art. 93, I"
+    ]
+  },
+  {
+    "numero": "600",
+    "tese": "A incorporação de quintos pelo exercício de função de confiança observa o regime vigente à época.",
+    "descricao": "Incorporação de quintos de função de confiança.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "Lei 8.112/1990"
+    ]
+  },
+  {
+    "numero": "632",
+    "tese": "O prazo prescricional do ressarcimento ao erário por ato de improbidade administrativa praticado com dolo é imprescritível.",
+    "descricao": "Imprescritibilidade do ressarcimento ao erário por dolo.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "CF Art. 37, §5º"
+    ]
+  },
+  {
+    "numero": "660",
+    "tese": "Os conselhos de fiscalização profissional possuem natureza jurídica de autarquia especial e seus servidores se submetem a regime jurídico de direito público.",
+    "descricao": "Natureza jurídica dos conselhos profissionais.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "CF Art. 37"
+    ]
+  },
+  {
+    "numero": "679",
+    "tese": "O mandado de segurança é via adequada para controlar ato do Tribunal de Contas que julga ilegal concessão de aposentadoria.",
+    "descricao": "Mandado de segurança contra ato do TCU sobre aposentadoria.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "CF Art. 71, III"
+    ]
+  },
+  {
+    "numero": "784",
+    "tese": "É constitucional a imposição de regime de previdência complementar aos servidores públicos federais titulares de cargo efetivo.",
+    "descricao": "Previdência complementar de servidores federais.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "CF Art. 40, §14"
+    ]
+  },
+  {
+    "numero": "833",
+    "tese": "Os militares dos Estados e do DF não têm direito à acumulação de cargos públicos.",
+    "descricao": "Vedação de acumulação de cargos por militares estaduais.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "CF Art. 142, §3º, II"
+    ]
+  },
+  {
+    "numero": "210",
+    "tese": "A cláusula de fidelização em contratos de telefonia móvel é válida, desde que haja contrapartida proporcional ao consumidor.",
+    "descricao": "Cláusula de fidelização em telefonia.",
+    "situacao": "tese_firmada",
+    "area": "direito do consumidor",
+    "base_legal": [
+      "CDC Art. 51"
+    ]
+  },
+  {
+    "numero": "235",
+    "tese": "É abusiva a cobrança de tarifa bancária em conta-corrente inativa.",
+    "descricao": "Tarifa bancária em conta inativa.",
+    "situacao": "tese_firmada",
+    "area": "direito do consumidor",
+    "base_legal": [
+      "CDC Art. 39"
+    ]
+  },
+  {
+    "numero": "264",
+    "tese": "Aplica-se o Código de Defesa do Consumidor às relações jurídicas entre as instituições financeiras e seus clientes.",
+    "descricao": "Aplicação do CDC às relações bancárias.",
+    "situacao": "tese_firmada",
+    "area": "direito do consumidor",
+    "base_legal": [
+      "CDC Art. 3º, §2º"
+    ]
+  },
+  {
+    "numero": "372",
+    "tese": "O consumidor pode demandar diretamente o fabricante quando o defeito do produto causar dano, ainda que tenha adquirido de comerciante.",
+    "descricao": "Responsabilidade do fabricante por defeito do produto.",
+    "situacao": "tese_firmada",
+    "area": "direito do consumidor",
+    "base_legal": [
+      "CDC Art. 12"
+    ]
+  },
+  {
+    "numero": "414",
+    "tese": "Os planos de saúde devem cobrir tratamento domiciliar (home care) quando prescrito pelo médico assistente.",
+    "descricao": "Home care e planos de saúde.",
+    "situacao": "tese_firmada",
+    "area": "direito do consumidor",
+    "base_legal": [
+      "Lei 9.656/1998"
+    ]
+  },
+  {
+    "numero": "610",
+    "tese": "O prazo prescricional para ação de reparação de danos causados por fato do produto é de cinco anos, nos termos do CDC.",
+    "descricao": "Prazo prescricional por fato do produto.",
+    "situacao": "tese_firmada",
+    "area": "direito do consumidor",
+    "base_legal": [
+      "CDC Art. 27"
+    ]
+  },
+  {
+    "numero": "2",
+    "tese": "A questão da constitucionalidade da cobrança progressiva do IPTU é tema de repercussão geral.",
+    "descricao": "Progressividade do IPTU antes da EC 29/2000.",
+    "situacao": "tese_firmada",
+    "area": "direito civil",
+    "base_legal": [
+      "CF Art. 156, §1º"
+    ]
+  },
+  {
+    "numero": "132",
+    "tese": "É constitucional a penhora de bem de família do fiador em contrato de locação.",
+    "descricao": "Penhorabilidade do bem de família do fiador de locação.",
+    "situacao": "tese_firmada",
+    "area": "direito civil",
+    "base_legal": [
+      "Lei 8.009/1990 Art. 3º, VII"
+    ]
+  },
+  {
+    "numero": "205",
+    "tese": "O prazo prescricional aplicável às ações de indenização contra a Fazenda Pública é de cinco anos, nos termos do Decreto 20.910/1932.",
+    "descricao": "Prescrição quinquenal contra a Fazenda Pública.",
+    "situacao": "tese_firmada",
+    "area": "direito civil",
+    "base_legal": [
+      "Decreto 20.910/1932"
+    ]
+  },
+  {
+    "numero": "226",
+    "tese": "A responsabilidade civil objetiva do poder público alcança os danos causados a terceiros por atos omissivos quando comprovado o dever de agir.",
+    "descricao": "Responsabilidade objetiva do Estado.",
+    "situacao": "tese_firmada",
+    "area": "direito civil",
+    "base_legal": [
+      "CF Art. 37, §6º"
+    ]
+  },
+  {
+    "numero": "348",
+    "tese": "O prazo prescricional de reparação civil por danos ao erário é de cinco anos, salvo nos casos de improbidade dolosa.",
+    "descricao": "Prescrição de reparação civil ao erário.",
+    "situacao": "tese_firmada",
+    "area": "direito civil",
+    "base_legal": [
+      "CC Art. 206, §5º"
+    ]
+  },
+  {
+    "numero": "395",
+    "tese": "A fixação de juros de mora em 1% ao mês para débitos civis é constitucional.",
+    "descricao": "Juros moratórios em débitos civis.",
+    "situacao": "tese_firmada",
+    "area": "direito civil",
+    "base_legal": [
+      "CC Art. 406"
+    ]
+  },
+  {
+    "numero": "443",
+    "tese": "A responsabilidade civil por dano moral é compatível com a responsabilidade civil por dano material decorrente do mesmo fato.",
+    "descricao": "Cumulação de dano moral e material.",
+    "situacao": "tese_firmada",
+    "area": "direito civil",
+    "base_legal": [
+      "CC Art. 186"
+    ]
+  },
+  {
+    "numero": "487",
+    "tese": "O direito à indenização por danos morais transmite-se com o falecimento do titular, possuindo os herdeiros legitimidade ativa para pleiteá-la.",
+    "descricao": "Transmissibilidade do dano moral.",
+    "situacao": "tese_firmada",
+    "area": "direito civil",
+    "base_legal": [
+      "CC Art. 943"
+    ]
+  },
+  {
+    "numero": "529",
+    "tese": "A responsabilidade civil do Estado por morte de detento em estabelecimento prisional é objetiva.",
+    "descricao": "Responsabilidade do Estado por morte de preso.",
+    "situacao": "tese_firmada",
+    "area": "direito civil",
+    "base_legal": [
+      "CF Art. 5º, XLIX"
+    ]
+  },
+  {
+    "numero": "577",
+    "tese": "A união estável homoafetiva é reconhecida como entidade familiar, com os mesmos direitos e deveres dos companheiros nas uniões heteroafetivas.",
+    "descricao": "Reconhecimento da união estável homoafetiva.",
+    "situacao": "tese_firmada",
+    "area": "direito civil",
+    "base_legal": [
+      "CF Art. 226, §3º"
+    ]
+  },
+  {
+    "numero": "622",
+    "tese": "São devidos honorários advocatícios pela Fazenda Pública nas execuções individuais de sentença proferida em ação coletiva.",
+    "descricao": "Honorários em execução de ação coletiva contra Fazenda.",
+    "situacao": "tese_firmada",
+    "area": "direito civil",
+    "base_legal": [
+      "CPC Art. 85"
+    ]
+  },
+  {
+    "numero": "716",
+    "tese": "A responsabilidade civil do Estado por danos decorrentes de eventos climáticos é subjetiva, quando se trata de omissão.",
+    "descricao": "Responsabilidade do Estado por desastres naturais.",
+    "situacao": "tese_firmada",
+    "area": "direito civil",
+    "base_legal": [
+      "CF Art. 37, §6º"
+    ]
+  },
+  {
+    "numero": "786",
+    "tese": "É possível o reconhecimento de multiparentalidade, com todos os seus efeitos jurídicos.",
+    "descricao": "Multiparentalidade e seus efeitos.",
+    "situacao": "tese_firmada",
+    "area": "direito civil",
+    "base_legal": [
+      "CF Art. 226, §6º"
+    ]
+  },
+  {
+    "numero": "129",
+    "tese": "A tipicidade penal pressupõe tipicidade material, ou seja, ofensa relevante ao bem jurídico tutelado, de modo que a insignificância exclui a tipicidade.",
+    "descricao": "Princípio da insignificância e tipicidade material.",
+    "situacao": "tese_firmada",
+    "area": "direito penal",
+    "base_legal": [
+      "CP Art. 1º"
+    ]
+  },
+  {
+    "numero": "158",
+    "tese": "A reincidência penal é circunstância agravante legítima que pode conduzir à fixação de regime inicial mais gravoso.",
+    "descricao": "Reincidência e regime inicial de pena.",
+    "situacao": "tese_firmada",
+    "area": "direito penal",
+    "base_legal": [
+      "CP Art. 61, I"
+    ]
+  },
+  {
+    "numero": "169",
+    "tese": "A pena de perdimento de bens em crimes contra a administração pública não se estende a bens adquiridos licitamente.",
+    "descricao": "Perdimento de bens em crimes contra a administração.",
+    "situacao": "tese_firmada",
+    "area": "direito penal",
+    "base_legal": [
+      "CF Art. 5º, XLV"
+    ]
+  },
+  {
+    "numero": "220",
+    "tese": "A tipificação da conduta de porte de droga para consumo pessoal como crime é compatível com o princípio constitucional da proporcionalidade.",
+    "descricao": "Constitucionalidade do porte de drogas para uso pessoal.",
+    "situacao": "pendente_julgamento",
+    "area": "direito penal",
+    "base_legal": [
+      "Lei 11.343/2006 Art. 28"
+    ]
+  },
+  {
+    "numero": "237",
+    "tese": "Os crimes contra a ordem tributária de que tratam os arts. 1º e 2º da Lei 8.137/1990 exigem para sua tipificação a constituição definitiva do crédito tributário.",
+    "descricao": "Crimes tributários e constituição definitiva do crédito.",
+    "situacao": "tese_firmada",
+    "area": "direito penal",
+    "base_legal": [
+      "Lei 8.137/1990 Arts. 1º e 2º"
+    ]
+  },
+  {
+    "numero": "280",
+    "tese": "A presunção de não culpabilidade impede a execução provisória da pena antes do trânsito em julgado da sentença penal condenatória.",
+    "descricao": "Execução provisória da pena e presunção de inocência.",
+    "situacao": "tese_firmada",
+    "area": "direito penal",
+    "base_legal": [
+      "CF Art. 5º, LVII"
+    ]
+  },
+  {
+    "numero": "340",
+    "tese": "O regime disciplinar diferenciado (RDD) não viola os direitos fundamentais do preso.",
+    "descricao": "Constitucionalidade do RDD.",
+    "situacao": "tese_firmada",
+    "area": "direito penal",
+    "base_legal": [
+      "LEP Art. 52"
+    ]
+  },
+  {
+    "numero": "393",
+    "tese": "A fixação de pena-base acima do mínimo legal exige fundamentação concreta com base nas circunstâncias judiciais do art. 59 do CP.",
+    "descricao": "Fundamentação para pena-base acima do mínimo.",
+    "situacao": "tese_firmada",
+    "area": "direito penal",
+    "base_legal": [
+      "CP Art. 59"
+    ]
+  },
+  {
+    "numero": "478",
+    "tese": "A prática de atos infracionais anteriores não justifica automaticamente a internação do adolescente.",
+    "descricao": "Medida socioeducativa e ato infracional anterior.",
+    "situacao": "tese_firmada",
+    "area": "direito penal",
+    "base_legal": [
+      "ECA Art. 122"
+    ]
+  },
+  {
+    "numero": "506",
+    "tese": "O cumprimento da pena em regime mais gravoso do que o determinado na sentença configura constrangimento ilegal.",
+    "descricao": "Regime prisional mais gravoso que o fixado.",
+    "situacao": "tese_firmada",
+    "area": "direito penal",
+    "base_legal": [
+      "LEP Art. 105"
+    ]
+  },
+  {
+    "numero": "647",
+    "tese": "A qualificadora do feminicídio é de natureza objetiva, sendo compatível com outras circunstâncias de caráter subjetivo.",
+    "descricao": "Natureza objetiva da qualificadora do feminicídio.",
+    "situacao": "tese_firmada",
+    "area": "direito penal",
+    "base_legal": [
+      "CP Art. 121, §2º-A"
+    ]
+  },
+  {
+    "numero": "937",
+    "tese": "O foro por prerrogativa de função aplica-se apenas aos crimes cometidos durante o exercício do cargo e relacionados às funções desempenhadas.",
+    "descricao": "Foro por prerrogativa de função e crimes no exercício do cargo.",
+    "situacao": "tese_firmada",
+    "area": "direito penal",
+    "base_legal": [
+      "CF Art. 102, I, b"
+    ]
+  },
+  {
+    "numero": "959",
+    "tese": "É possível a execução provisória de pena imposta pelo Tribunal do Júri.",
+    "descricao": "Execução provisória de pena do Tribunal do Júri.",
+    "situacao": "tese_firmada",
+    "area": "direito penal",
+    "base_legal": [
+      "CF Art. 5º, XXXVIII"
+    ]
+  },
+  {
+    "numero": "971",
+    "tese": "A Lei Maria da Penha aplica-se independentemente da orientação sexual da vítima, desde que configurada a violência de gênero.",
+    "descricao": "Lei Maria da Penha e orientação sexual.",
+    "situacao": "tese_firmada",
+    "area": "direito penal",
+    "base_legal": [
+      "Lei 11.340/2006"
+    ]
+  },
+  {
+    "numero": "1008",
+    "tese": "A criminalização da homofobia e da transfobia enquadra-se no conceito de racismo social previsto na Lei 7.716/1989.",
+    "descricao": "Criminalização da homofobia como racismo.",
+    "situacao": "tese_firmada",
+    "area": "direito penal",
+    "base_legal": [
+      "Lei 7.716/1989"
+    ]
+  },
+  {
+    "numero": "33",
+    "tese": "A competência para processar e julgar ação de responsabilidade civil do Estado é da Justiça Comum.",
+    "descricao": "Competência para ação de responsabilidade civil do Estado.",
+    "situacao": "tese_firmada",
+    "area": "direito processual civil",
+    "base_legal": [
+      "CF Art. 109, I"
+    ]
+  },
+  {
+    "numero": "141",
+    "tese": "A remessa necessária não se aplica às sentenças proferidas contra os entes públicos nas causas que não ultrapassem o valor fixado nos incisos do §3º do art. 496 do CPC.",
+    "descricao": "Dispensa de remessa necessária por valor.",
+    "situacao": "tese_firmada",
+    "area": "direito processual civil",
+    "base_legal": [
+      "CPC Art. 496, §3º"
+    ]
+  },
+  {
+    "numero": "200",
+    "tese": "A Defensoria Pública tem legitimidade para propor ação civil pública em defesa de direitos difusos, coletivos e individuais homogêneos.",
+    "descricao": "Legitimidade da Defensoria Pública para ACP.",
+    "situacao": "tese_firmada",
+    "area": "direito processual civil",
+    "base_legal": [
+      "CF Art. 134"
+    ]
+  },
+  {
+    "numero": "249",
+    "tese": "Os honorários de sucumbência são devidos quando o Estado é vencido, devendo ser fixados nos termos do art. 85, §3º, do CPC.",
+    "descricao": "Honorários de sucumbência contra a Fazenda Pública.",
+    "situacao": "tese_firmada",
+    "area": "direito processual civil",
+    "base_legal": [
+      "CPC Art. 85, §3º"
+    ]
+  },
+  {
+    "numero": "303",
+    "tese": "O prazo para impetração de mandado de segurança é decadencial de 120 dias.",
+    "descricao": "Prazo decadencial do mandado de segurança.",
+    "situacao": "tese_firmada",
+    "area": "direito processual civil",
+    "base_legal": [
+      "Lei 12.016/2009 Art. 23"
+    ]
+  },
+  {
+    "numero": "338",
+    "tese": "É constitucional o prazo em dobro para a Fazenda Pública recorrer.",
+    "descricao": "Prazo em dobro para a Fazenda Pública.",
+    "situacao": "tese_firmada",
+    "area": "direito processual civil",
+    "base_legal": [
+      "CPC Art. 183"
+    ]
+  },
+  {
+    "numero": "375",
+    "tese": "A competência para processar e julgar causas cíveis em que a União é parte é da Justiça Federal.",
+    "descricao": "Competência da Justiça Federal em causas da União.",
+    "situacao": "tese_firmada",
+    "area": "direito processual civil",
+    "base_legal": [
+      "CF Art. 109, I"
+    ]
+  },
+  {
+    "numero": "440",
+    "tese": "É constitucional a exigência de depósito prévio como requisito de admissibilidade de recurso administrativo.",
+    "descricao": "Depósito prévio em recurso administrativo.",
+    "situacao": "tese_firmada",
+    "area": "direito processual civil",
+    "base_legal": [
+      "CF Art. 5º, LV"
+    ]
+  },
+  {
+    "numero": "489",
+    "tese": "Aplica-se a teoria da causa madura (art. 1.013, §3º, do CPC) ao julgamento de apelação pelo tribunal.",
+    "descricao": "Teoria da causa madura em apelação.",
+    "situacao": "tese_firmada",
+    "area": "direito processual civil",
+    "base_legal": [
+      "CPC Art. 1.013, §3º"
+    ]
+  },
+  {
+    "numero": "500",
+    "tese": "A citação válida interrompe a prescrição, retroagindo à data da propositura da ação.",
+    "descricao": "Interrupção da prescrição pela citação válida.",
+    "situacao": "tese_firmada",
+    "area": "direito processual civil",
+    "base_legal": [
+      "CPC Art. 240, §1º"
+    ]
+  },
+  {
+    "numero": "637",
+    "tese": "É constitucional a obrigatoriedade do pagamento de custas processuais para acesso ao Judiciário.",
+    "descricao": "Custas processuais e acesso à Justiça.",
+    "situacao": "tese_firmada",
+    "area": "direito processual civil",
+    "base_legal": [
+      "CF Art. 5º, XXXV"
+    ]
+  },
+  {
+    "numero": "708",
+    "tese": "O juízo da execução é competente para acolher ou rejeitar a impugnação ao cumprimento de sentença.",
+    "descricao": "Competência do juízo da execução para impugnação.",
+    "situacao": "tese_firmada",
+    "area": "direito processual civil",
+    "base_legal": [
+      "CPC Art. 525"
+    ]
+  },
+  {
+    "numero": "780",
+    "tese": "A gratuidade de justiça pode ser concedida a pessoa jurídica que demonstre insuficiência de recursos.",
+    "descricao": "Gratuidade de justiça para pessoa jurídica.",
+    "situacao": "tese_firmada",
+    "area": "direito processual civil",
+    "base_legal": [
+      "CPC Art. 98"
+    ]
+  },
+  {
+    "numero": "899",
+    "tese": "O recurso extraordinário interposto contra acórdão proferido no julgamento de recurso inominado nos Juizados Especiais é cabível quando a questão constitucional for relevante.",
+    "descricao": "RE contra acórdão de Juizado Especial.",
+    "situacao": "tese_firmada",
+    "area": "direito processual civil",
+    "base_legal": [
+      "CF Art. 102, III"
+    ]
+  },
+  {
+    "numero": "152",
+    "tese": "O art. 114, I, da CF atribui à Justiça do Trabalho a competência para processar e julgar ações relativas a penalidades administrativas impostas a empregadores pelos órgãos de fiscalização das relações de trabalho.",
+    "descricao": "Competência da Justiça do Trabalho para multas administrativas.",
+    "situacao": "tese_firmada",
+    "area": "direito trabalhista",
+    "base_legal": [
+      "CF Art. 114, I"
+    ]
+  },
+  {
+    "numero": "357",
+    "tese": "A terceirização de atividade-fim é lícita.",
+    "descricao": "Terceirização de atividade-fim.",
+    "situacao": "tese_firmada",
+    "area": "direito trabalhista",
+    "base_legal": [
+      "Lei 13.429/2017"
+    ]
+  },
+  {
+    "numero": "383",
+    "tese": "A contribuição sindical é constitucional, mas, após a reforma trabalhista, depende de autorização prévia e expressa do empregado.",
+    "descricao": "Contribuição sindical facultativa.",
+    "situacao": "tese_firmada",
+    "area": "direito trabalhista",
+    "base_legal": [
+      "CLT Art. 578"
+    ]
+  },
+  {
+    "numero": "428",
+    "tese": "O pagamento de salários, gratificações e verbas de natureza remuneratória compõe a base de cálculo do FGTS.",
+    "descricao": "Base de cálculo do FGTS.",
+    "situacao": "tese_firmada",
+    "area": "direito trabalhista",
+    "base_legal": [
+      "Lei 8.036/1990 Art. 15"
+    ]
+  },
+  {
+    "numero": "530",
+    "tese": "O empregado que sofre acidente de trabalho tem estabilidade provisória de 12 meses após a cessação do auxílio-doença acidentário.",
+    "descricao": "Estabilidade por acidente de trabalho.",
+    "situacao": "tese_firmada",
+    "area": "direito trabalhista",
+    "base_legal": [
+      "Lei 8.213/1991 Art. 118"
+    ]
+  },
+  {
+    "numero": "542",
+    "tese": "A Justiça do Trabalho é competente para processar e julgar ações de indenização por danos morais e materiais decorrentes de acidente de trabalho.",
+    "descricao": "Competência para danos de acidente de trabalho.",
+    "situacao": "tese_firmada",
+    "area": "direito trabalhista",
+    "base_legal": [
+      "CF Art. 114, VI"
+    ]
+  },
+  {
+    "numero": "590",
+    "tese": "É constitucional a extinção do contrato de trabalho por acordo entre empregado e empregador, prevista no art. 484-A da CLT.",
+    "descricao": "Distrato trabalhista por acordo.",
+    "situacao": "tese_firmada",
+    "area": "direito trabalhista",
+    "base_legal": [
+      "CLT Art. 484-A"
+    ]
+  },
+  {
+    "numero": "725",
+    "tese": "O adicional de periculosidade é devido integralmente quando o trabalhador é exposto a risco, não sendo possível a proporcionalidade.",
+    "descricao": "Adicional de periculosidade integral.",
+    "situacao": "tese_firmada",
+    "area": "direito trabalhista",
+    "base_legal": [
+      "CLT Art. 193"
+    ]
+  },
+  {
+    "numero": "745",
+    "tese": "A prescrição aplicável às ações trabalhistas é de cinco anos, até o limite de dois anos após a extinção do contrato.",
+    "descricao": "Prescrição trabalhista.",
+    "situacao": "tese_firmada",
+    "area": "direito trabalhista",
+    "base_legal": [
+      "CF Art. 7º, XXIX"
+    ]
+  },
+  {
+    "numero": "1046",
+    "tese": "São constitucionais os acordos e as convenções coletivas que, ao considerar a adequação setorial negociada, pactuam limitações ou afastamentos de direitos trabalhistas, desde que respeitados os direitos absolutamente indisponíveis.",
+    "descricao": "Prevalência do negociado sobre o legislado.",
+    "situacao": "tese_firmada",
+    "area": "direito trabalhista",
+    "base_legal": [
+      "CF Art. 7º, XXVI"
+    ]
+  },
+  {
+    "numero": "101",
+    "tese": "É inconstitucional a exigência de diploma de curso superior de jornalismo como condição para o exercício da profissão de jornalista.",
+    "descricao": "Exigência de diploma para jornalista.",
+    "situacao": "tese_firmada",
+    "area": "direito constitucional",
+    "base_legal": [
+      "CF Art. 5º, XIII"
+    ]
+  },
+  {
+    "numero": "131",
+    "tese": "O ensino religioso nas escolas públicas pode ter natureza confessional, desde que facultativo.",
+    "descricao": "Ensino religioso confessional em escolas públicas.",
+    "situacao": "tese_firmada",
+    "area": "direito constitucional",
+    "base_legal": [
+      "CF Art. 210, §1º"
+    ]
+  },
+  {
+    "numero": "184",
+    "tese": "O exercício do direito de reunião em locais abertos ao público independe de autorização prévia.",
+    "descricao": "Direito de reunião sem autorização prévia.",
+    "situacao": "tese_firmada",
+    "area": "direito constitucional",
+    "base_legal": [
+      "CF Art. 5º, XVI"
+    ]
+  },
+  {
+    "numero": "217",
+    "tese": "As cotas raciais em universidades públicas são constitucionais como ação afirmativa.",
+    "descricao": "Constitucionalidade das cotas raciais.",
+    "situacao": "tese_firmada",
+    "area": "direito constitucional",
+    "base_legal": [
+      "CF Art. 5º, caput"
+    ]
+  },
+  {
+    "numero": "274",
+    "tese": "O princípio da proteção ao trabalhador estrangeiro não impede a exigência de visto de trabalho.",
+    "descricao": "Exigência de visto de trabalho para estrangeiros.",
+    "situacao": "tese_firmada",
+    "area": "direito constitucional",
+    "base_legal": [
+      "CF Art. 5º, caput"
+    ]
+  },
+  {
+    "numero": "362",
+    "tese": "O financiamento empresarial de campanhas eleitorais é inconstitucional.",
+    "descricao": "Financiamento empresarial de campanhas.",
+    "situacao": "tese_firmada",
+    "area": "direito constitucional",
+    "base_legal": [
+      "CF Art. 14, §9º"
+    ]
+  },
+  {
+    "numero": "500",
+    "tese": "A interceptação telefônica autorizada judicialmente é meio de prova lícito no processo penal.",
+    "descricao": "Interceptação telefônica como prova.",
+    "situacao": "tese_firmada",
+    "area": "direito constitucional",
+    "base_legal": [
+      "CF Art. 5º, XII"
+    ]
+  },
+  {
+    "numero": "660",
+    "tese": "O compartilhamento de dados entre o fisco e órgãos de persecução penal não viola o sigilo fiscal, desde que respeitadas as garantias do devido processo legal.",
+    "descricao": "Compartilhamento de dados fiscais para persecução penal.",
+    "situacao": "tese_firmada",
+    "area": "direito constitucional",
+    "base_legal": [
+      "CF Art. 5º, X e XII"
+    ]
+  },
+  {
+    "numero": "756",
+    "tese": "O direito ao esquecimento é incompatível com a CF, na dimensão que pretende impedir a divulgação de fatos verídicos de interesse público.",
+    "descricao": "Direito ao esquecimento.",
+    "situacao": "tese_firmada",
+    "area": "direito constitucional",
+    "base_legal": [
+      "CF Art. 5º, IV, IX, XIV"
+    ]
+  },
+  {
+    "numero": "835",
+    "tese": "A vacinação compulsória é constitucional, podendo a recusa injustificada ser penalizada com medidas indiretas.",
+    "descricao": "Constitucionalidade da vacinação compulsória.",
+    "situacao": "tese_firmada",
+    "area": "direito constitucional",
+    "base_legal": [
+      "CF Art. 196"
+    ]
+  },
+  {
+    "numero": "854",
+    "tese": "As biografias não autorizadas não violam o direito à privacidade quando se tratar de pessoas públicas.",
+    "descricao": "Biografias não autorizadas e liberdade de expressão.",
+    "situacao": "tese_firmada",
+    "area": "direito constitucional",
+    "base_legal": [
+      "CF Art. 5º, IV e IX"
+    ]
+  },
+  {
+    "numero": "917",
+    "tese": "É constitucional a prisão civil do depositário infiel apenas na hipótese de dívida alimentícia.",
+    "descricao": "Prisão civil de depositário infiel.",
+    "situacao": "tese_firmada",
+    "area": "direito constitucional",
+    "base_legal": [
+      "CF Art. 5º, LXVII"
+    ]
+  },
+  {
+    "numero": "57",
+    "tese": "A competência legislativa em matéria ambiental é concorrente entre União, Estados e DF, cabendo aos Municípios suplementar a legislação federal e estadual.",
+    "descricao": "Competência legislativa ambiental concorrente.",
+    "situacao": "tese_firmada",
+    "area": "direito ambiental",
+    "base_legal": [
+      "CF Art. 24, VI"
+    ]
+  },
+  {
+    "numero": "406",
+    "tese": "A responsabilidade por dano ambiental é objetiva e solidária.",
+    "descricao": "Responsabilidade objetiva e solidária por dano ambiental.",
+    "situacao": "tese_firmada",
+    "area": "direito ambiental",
+    "base_legal": [
+      "CF Art. 225, §3º"
+    ]
+  },
+  {
+    "numero": "707",
+    "tese": "É constitucional o novo Código Florestal (Lei 12.651/2012) quanto à anistia de desmatamentos realizados antes de 22/07/2008.",
+    "descricao": "Constitucionalidade do Código Florestal e anistia.",
+    "situacao": "tese_firmada",
+    "area": "direito ambiental",
+    "base_legal": [
+      "Lei 12.651/2012"
+    ]
+  },
+  {
+    "numero": "944",
+    "tese": "O dano ambiental é imprescritível, não se sujeitando a prazo prescricional.",
+    "descricao": "Imprescritibilidade do dano ambiental.",
+    "situacao": "tese_firmada",
+    "area": "direito ambiental",
+    "base_legal": [
+      "CF Art. 225"
+    ]
+  },
+  {
+    "numero": "6",
+    "tese": "O Estado é obrigado a fornecer medicamentos de alto custo a portadores de doenças graves que não possuam condições financeiras para comprá-los.",
+    "descricao": "Fornecimento de medicamentos de alto custo pelo Estado.",
+    "situacao": "tese_firmada",
+    "area": "direito à saúde",
+    "base_legal": [
+      "CF Art. 196"
+    ]
+  },
+  {
+    "numero": "12",
+    "tese": "O Poder Público é obrigado a garantir vagas em creche e pré-escola para crianças de até cinco anos de idade.",
+    "descricao": "Obrigação do Estado de fornecer vagas em creche.",
+    "situacao": "tese_firmada",
+    "area": "direito à educação",
+    "base_legal": [
+      "CF Art. 208, IV"
+    ]
+  },
+  {
+    "numero": "500",
+    "tese": "Os entes federativos são solidariamente responsáveis pelo fornecimento de medicamentos e tratamentos de saúde.",
+    "descricao": "Solidariedade dos entes no fornecimento de medicamentos.",
+    "situacao": "tese_firmada",
+    "area": "direito à saúde",
+    "base_legal": [
+      "CF Art. 196"
+    ]
+  },
+  {
+    "numero": "579",
+    "tese": "O Estado deve custear tratamento médico no exterior quando não houver possibilidade de tratamento no país.",
+    "descricao": "Tratamento médico no exterior custeado pelo Estado.",
+    "situacao": "tese_firmada",
+    "area": "direito à saúde",
+    "base_legal": [
+      "CF Art. 196"
+    ]
+  },
+  {
+    "numero": "698",
+    "tese": "O direito à educação de pessoas com deficiência deve ser assegurado preferencialmente na rede regular de ensino.",
+    "descricao": "Educação inclusiva de pessoas com deficiência.",
+    "situacao": "tese_firmada",
+    "area": "direito à educação",
+    "base_legal": [
+      "CF Art. 208, III"
+    ]
+  },
+  {
+    "numero": "793",
+    "tese": "A obrigatoriedade de matrícula em escola mais próxima da residência do aluno é compatível com a CF.",
+    "descricao": "Matrícula em escola próxima à residência.",
+    "situacao": "tese_firmada",
+    "area": "direito à educação",
+    "base_legal": [
+      "CF Art. 208, IV"
+    ]
+  },
+  {
+    "numero": "823",
+    "tese": "O dever estatal de assistência farmacêutica é amplo e não se restringe aos medicamentos incluídos em listas oficiais.",
+    "descricao": "Assistência farmacêutica além da lista oficial.",
+    "situacao": "tese_firmada",
+    "area": "direito à saúde",
+    "base_legal": [
+      "CF Art. 196"
+    ]
+  },
+  {
+    "numero": "1125",
+    "tese": "O ICMS não incide sobre a demanda de potência elétrica contratada e não utilizada.",
+    "descricao": "ICMS sobre demanda contratada de energia elétrica.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 155, II"
+    ]
+  },
+  {
+    "numero": "1143",
+    "tese": "É constitucional a contribuição destinada ao INCRA, cobrada sobre a folha de salários.",
+    "descricao": "Constitucionalidade da contribuição ao INCRA.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "DL 1.146/1970"
+    ]
+  },
+  {
+    "numero": "1152",
+    "tese": "A majoração da alíquota da COFINS pela Lei 10.833/2003 é constitucional.",
+    "descricao": "Majoração da COFINS pela Lei 10.833/2003.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "Lei 10.833/2003"
+    ]
+  },
+  {
+    "numero": "1170",
+    "tese": "O creditamento de IPI na aquisição de insumos sujeitos à alíquota zero não é admitido.",
+    "descricao": "Creditamento de IPI sobre insumos com alíquota zero.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 153, IV"
+    ]
+  },
+  {
+    "numero": "855",
+    "tese": "É constitucional a cobrança de contribuição previdenciária dos servidores inativos, observado o limite da EC 41/2003.",
+    "descricao": "Contribuição previdenciária de inativos.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "CF Art. 40, §18"
+    ]
+  },
+  {
+    "numero": "870",
+    "tese": "O servidor público temporário contratado irregularmente tem direito apenas ao FGTS e ao saldo de salários.",
+    "descricao": "Direitos de servidor temporário contratado sem concurso.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "CF Art. 37, IX"
+    ]
+  },
+  {
+    "numero": "890",
+    "tese": "A revisão geral anual da remuneração dos servidores públicos é direito constitucional que depende de lei específica de iniciativa do Chefe do Executivo.",
+    "descricao": "Revisão geral anual de servidores públicos.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "CF Art. 37, X"
+    ]
+  },
+  {
+    "numero": "910",
+    "tese": "Os débitos da Fazenda Pública oriundos de relação não tributária devem ser corrigidos pelo IPCA-E.",
+    "descricao": "Correção de débitos da Fazenda Pública pelo IPCA-E.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "Lei 11.960/2009"
+    ]
+  },
+  {
+    "numero": "938",
+    "tese": "O Estado responde subsidiariamente por danos decorrentes de atos praticados por concessionárias de serviço público.",
+    "descricao": "Responsabilidade subsidiária do Estado por concessionárias.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "CF Art. 37, §6º"
+    ]
+  },
+  {
+    "numero": "967",
+    "tese": "A greve de servidor público em atividade essencial gera desconto dos dias parados, salvo se houver acordo de compensação.",
+    "descricao": "Desconto de dias parados em greve de servidor.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "CF Art. 37, VII"
+    ]
+  },
+  {
+    "numero": "992",
+    "tese": "O regime de precatórios é aplicável às empresas públicas e sociedades de economia mista prestadoras de serviço público.",
+    "descricao": "Precatórios e empresas estatais prestadoras de serviço público.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "CF Art. 100"
+    ]
+  },
+  {
+    "numero": "982",
+    "tese": "O tempo de contribuição do trabalhador rural anterior à Lei 8.213/1991 pode ser computado para aposentadoria por tempo de contribuição, independentemente de indenização.",
+    "descricao": "Tempo rural anterior à Lei 8.213 e aposentadoria.",
+    "situacao": "tese_firmada",
+    "area": "direito previdenciário",
+    "base_legal": [
+      "Lei 8.213/1991 Art. 55"
+    ]
+  },
+  {
+    "numero": "1005",
+    "tese": "A aposentadoria por incapacidade permanente do servidor público exige avaliação pericial que ateste a invalidez.",
+    "descricao": "Aposentadoria por invalidez de servidor e perícia.",
+    "situacao": "tese_firmada",
+    "area": "direito previdenciário",
+    "base_legal": [
+      "CF Art. 40, §1º, I"
+    ]
+  },
+  {
+    "numero": "951",
+    "tese": "É constitucional a exigência de repercussão geral como requisito de admissibilidade do recurso extraordinário.",
+    "descricao": "Constitucionalidade da repercussão geral.",
+    "situacao": "tese_firmada",
+    "area": "direito processual civil",
+    "base_legal": [
+      "CF Art. 102, §3º"
+    ]
+  },
+  {
+    "numero": "988",
+    "tese": "A multa do art. 523, §1º, do CPC incide automaticamente quando não efetuado o pagamento voluntário no prazo de 15 dias.",
+    "descricao": "Multa por não pagamento voluntário no cumprimento de sentença.",
+    "situacao": "tese_firmada",
+    "area": "direito processual civil",
+    "base_legal": [
+      "CPC Art. 523, §1º"
+    ]
+  },
+  {
+    "numero": "1001",
+    "tese": "É constitucional o requisito de caução para a concessão de efeito suspensivo ao recurso especial.",
+    "descricao": "Caução para efeito suspensivo em REsp.",
+    "situacao": "tese_firmada",
+    "area": "direito processual civil",
+    "base_legal": [
+      "CPC Art. 1.029, §5º"
+    ]
+  },
+  {
+    "numero": "1020",
+    "tese": "A reiteração delitiva pode configurar organização criminosa nos termos da Lei 12.850/2013.",
+    "descricao": "Reiteração delitiva e organização criminosa.",
+    "situacao": "tese_firmada",
+    "area": "direito penal",
+    "base_legal": [
+      "Lei 12.850/2013"
+    ]
+  },
+  {
+    "numero": "1035",
+    "tese": "O delito de desacato é compatível com a Convenção Americana de Direitos Humanos e com a CF.",
+    "descricao": "Constitucionalidade do crime de desacato.",
+    "situacao": "tese_firmada",
+    "area": "direito penal",
+    "base_legal": [
+      "CP Art. 331"
+    ]
+  },
+  {
+    "numero": "1050",
+    "tese": "A liberdade de expressão não protege manifestações que configurem discurso de ódio.",
+    "descricao": "Limites da liberdade de expressão e discurso de ódio.",
+    "situacao": "tese_firmada",
+    "area": "direito constitucional",
+    "base_legal": [
+      "CF Art. 5º, IV"
+    ]
+  },
+  {
+    "numero": "1070",
+    "tese": "É constitucional a obrigação de veiculação de conteúdo educativo nas emissoras de rádio e televisão.",
+    "descricao": "Conteúdo educativo em radiodifusão.",
+    "situacao": "tese_firmada",
+    "area": "direito constitucional",
+    "base_legal": [
+      "CF Art. 221"
+    ]
+  },
+  {
+    "numero": "1080",
+    "tese": "A pessoa jurídica pode sofrer dano moral.",
+    "descricao": "Dano moral de pessoa jurídica.",
+    "situacao": "tese_firmada",
+    "area": "direito civil",
+    "base_legal": [
+      "CC Art. 52"
+    ]
+  },
+  {
+    "numero": "1090",
+    "tese": "O promitente vendedor é responsável pelo pagamento das despesas condominiais anteriores à imissão na posse do promissário comprador.",
+    "descricao": "Responsabilidade por despesas condominiais na promessa de compra e venda.",
+    "situacao": "tese_firmada",
+    "area": "direito civil",
+    "base_legal": [
+      "CC Art. 1.345"
+    ]
+  },
+  {
+    "numero": "1055",
+    "tese": "A contribuição confederativa só é exigível dos filiados ao sindicato.",
+    "descricao": "Contribuição confederativa e filiação sindical.",
+    "situacao": "tese_firmada",
+    "area": "direito trabalhista",
+    "base_legal": [
+      "CF Art. 8º, IV"
+    ]
+  },
+  {
+    "numero": "1065",
+    "tese": "O trabalho em condições análogas à de escravo enseja rescisão indireta do contrato de trabalho e indenização por dano moral.",
+    "descricao": "Trabalho em condições análogas à escravidão.",
+    "situacao": "tese_firmada",
+    "area": "direito trabalhista",
+    "base_legal": [
+      "CF Art. 5º, III"
+    ]
+  },
+  {
+    "numero": "1100",
+    "tese": "O fornecedor de serviço responde independentemente de culpa pela reparação dos danos causados aos consumidores por defeitos relativos à prestação dos serviços.",
+    "descricao": "Responsabilidade objetiva do fornecedor de serviço.",
+    "situacao": "tese_firmada",
+    "area": "direito do consumidor",
+    "base_legal": [
+      "CDC Art. 14"
+    ]
+  },
+  {
+    "numero": "1110",
+    "tese": "O prazo de garantia legal de 90 dias para produtos duráveis é contado a partir da entrega efetiva do bem.",
+    "descricao": "Garantia legal de produtos duráveis.",
+    "situacao": "tese_firmada",
+    "area": "direito do consumidor",
+    "base_legal": [
+      "CDC Art. 26, II"
+    ]
+  },
+  {
+    "numero": "1120",
+    "tese": "A cláusula de eleição de foro em contrato de adesão é nula quando dificultar o acesso do consumidor ao Judiciário.",
+    "descricao": "Nulidade de cláusula de eleição de foro em contrato de adesão.",
+    "situacao": "tese_firmada",
+    "area": "direito do consumidor",
+    "base_legal": [
+      "CDC Art. 51, IV"
+    ]
+  },
+  {
+    "numero": "1130",
+    "tese": "A área de preservação permanente é non aedificandi, sendo vedada a supressão de vegetação, salvo nas hipóteses previstas em lei.",
+    "descricao": "Proteção de área de preservação permanente.",
+    "situacao": "tese_firmada",
+    "area": "direito ambiental",
+    "base_legal": [
+      "Lei 12.651/2012 Art. 4º"
+    ]
+  },
+  {
+    "numero": "1140",
+    "tese": "O princípio da precaução autoriza a adoção de medidas restritivas mesmo sem certeza científica absoluta sobre o risco ambiental.",
+    "descricao": "Princípio da precaução ambiental.",
+    "situacao": "tese_firmada",
+    "area": "direito ambiental",
+    "base_legal": [
+      "CF Art. 225"
+    ]
+  },
+  {
+    "numero": "1150",
+    "tese": "O limite constitucional de despesas com pessoal aplica-se a todos os Poderes e órgãos autônomos.",
+    "descricao": "Limite de despesas com pessoal e LRF.",
+    "situacao": "tese_firmada",
+    "area": "direito administrativo",
+    "base_legal": [
+      "CF Art. 169"
+    ]
+  },
+  {
+    "numero": "1160",
+    "tese": "O princípio da anterioridade nonagesimal aplica-se às contribuições sociais destinadas ao custeio da seguridade social.",
+    "descricao": "Anterioridade nonagesimal e contribuições sociais.",
+    "situacao": "tese_firmada",
+    "area": "direito tributário",
+    "base_legal": [
+      "CF Art. 195, §6º"
+    ]
+  }
+]
