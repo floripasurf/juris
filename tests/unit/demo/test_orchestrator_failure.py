@@ -16,10 +16,7 @@ import asyncio
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
 
 from juris.demo.orchestrator import (
     DemoOrchestrator,
@@ -28,6 +25,7 @@ from juris.demo.orchestrator import (
     SourceMode,
     derive_demo_mode,
 )
+from juris.demo.output_mode import OutputMode
 from juris.mni.parsers.processo import Movimento, ProcessoDomain
 from juris.persistence.audit import AuditLog
 from juris.repertory.peticoes.models import TipoPeticao
@@ -209,6 +207,88 @@ class TestOrchestratorErrorPaths:
         assert result.prazo_report is None
         assert any(e.startswith("prazos:") for e in result.errors)
         assert result.draft is not None
+        assert result.succeeded is False
+
+    def test_rascunho_mode_degrades_when_local_llm_unavailable(self, tmp_path: Path) -> None:
+        skeleton, audit_path = _result_skeleton(tmp_path, is_demo_mode=False)
+        request = replace(
+            skeleton.request,
+            source=SourceMode.DATAJUD,
+            output_mode=OutputMode.RASCUNHO_PESQUISA,
+        )
+        orch, audit = self._build(audit_path)
+
+        orch._run_drafter = AsyncMock(  # type: ignore[method-assign]
+            side_effect=RuntimeError("All connection attempts failed")
+        )
+
+        fake_analysis = MagicMock(
+            analyzed=[],
+            actionable=[],
+            summary="rule-only analysis",
+            total_movimentos=1,
+            rule_classified=1,
+            llm_calls=0,
+        )
+        with (
+            patch(
+                "juris.demo.orchestrator.analyze_processo",
+                AsyncMock(return_value=fake_analysis),
+            ),
+            patch("juris.demo.orchestrator.compute_prazos") as mock_prazos,
+        ):
+            mock_prazos.return_value = MagicMock(prazos=[], summary="ok")
+            result = asyncio.run(
+                orch.run(
+                    request,
+                    processo=skeleton.processo,
+                    out_dir=skeleton.out_dir,
+                    is_demo_mode=False,
+                )
+            )
+
+        assert result.errors == []
+        assert result.draft is not None
+        assert "modo determinístico sem LLM" in result.draft.research_summary
+        assert result.succeeded is True
+        assert any(
+            e.event_type == "demo.rascunho_deterministic_fallback"
+            for e in audit.read_all()
+        )
+
+    def test_minuta_mode_does_not_hide_local_llm_failure(self, tmp_path: Path) -> None:
+        skeleton, audit_path = _result_skeleton(tmp_path, is_demo_mode=False)
+        request = replace(
+            skeleton.request,
+            source=SourceMode.DATAJUD,
+            output_mode=OutputMode.MINUTA_SUGERIDA,
+        )
+        orch, _ = self._build(audit_path)
+
+        orch._run_drafter = AsyncMock(  # type: ignore[method-assign]
+            side_effect=RuntimeError("All connection attempts failed")
+        )
+
+        fake_analysis = MagicMock(analyzed=[], actionable=[], summary="ok")
+        with (
+            patch(
+                "juris.demo.orchestrator.analyze_processo",
+                AsyncMock(return_value=fake_analysis),
+            ),
+            patch("juris.demo.orchestrator.compute_prazos") as mock_prazos,
+        ):
+            mock_prazos.return_value = MagicMock(prazos=[], summary="ok")
+            result = asyncio.run(
+                orch.run(
+                    request,
+                    processo=skeleton.processo,
+                    out_dir=skeleton.out_dir,
+                    is_demo_mode=False,
+                )
+            )
+
+        assert result.draft is None
+        assert any(e.startswith("draft:") for e in result.errors)
         assert result.succeeded is False
 
 

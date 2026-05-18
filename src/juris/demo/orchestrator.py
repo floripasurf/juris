@@ -180,8 +180,25 @@ class DemoOrchestrator:
         try:
             result.draft = await self._run_drafter(request, processo)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("demo_draft_failed", error=str(exc))
-            result.errors.append(f"draft: {exc}")
+            if _can_degrade_to_deterministic_rascunho(request, exc):
+                logger.warning("demo_rascunho_deterministic_fallback", error=str(exc))
+                result.draft = _build_deterministic_rascunho_draft(
+                    request=request,
+                    processo=processo,
+                    analysis=result.analysis,
+                )
+                self._audit.log(
+                    event_type="demo.rascunho_deterministic_fallback",
+                    actor="system",
+                    processo_cnj=processo.numero_cnj,
+                    details={
+                        "reason": str(exc),
+                        "output_mode": request.output_mode.value,
+                    },
+                )
+            else:
+                logger.warning("demo_draft_failed", error=str(exc))
+                result.errors.append(f"draft: {exc}")
 
         result.finished_at = datetime.now(UTC)
         result.duration_seconds = time.monotonic() - t0
@@ -246,6 +263,72 @@ class DemoOrchestrator:
     def _audit_path(self) -> Path:
         # AuditLog stores its path privately; reach in once via name-mangle-free attr.
         return getattr(self._audit, "_path", Path("audit.jsonl"))
+
+
+def _can_degrade_to_deterministic_rascunho(request: DemoRequest, exc: Exception) -> bool:
+    """Return True when RASCUNHO mode can complete without a live LLM.
+
+    RASCUNHO DE PESQUISA is not a fileable petition. If the local LLM is
+    unavailable, we can still produce a deterministic memo from DataJud,
+    rule-based movement analysis and prazo computation instead of aborting.
+    """
+    if request.output_mode is not OutputMode.RASCUNHO_PESQUISA:
+        return False
+    message = str(exc).lower()
+    return (
+        "all connection attempts failed" in message
+        or "connection refused" in message
+        or "connecterror" in exc.__class__.__name__.lower()
+    )
+
+
+def _build_deterministic_rascunho_draft(
+    *,
+    request: DemoRequest,
+    processo: ProcessoDomain,
+    analysis: ProcessoAnalysis | None,
+) -> DraftResult:
+    """Build raw material for the rascunho artifact without any LLM call."""
+    research_summary = (
+        "Execução em modo determinístico sem LLM local/API. "
+        "O memorando abaixo usa apenas dados públicos do DataJud, "
+        "classificação TPU por regras e cálculo de prazos."
+    )
+    if analysis is not None:
+        research_summary += f"\n\n{analysis.summary}"
+
+    headings = [
+        "# Rascunho determinístico",
+        "",
+        "## Contexto processual",
+        f"- CNJ: {processo.numero_cnj}",
+        f"- Tribunal: {request.tribunal}",
+    ]
+    if processo.classe:
+        headings.append(f"- Classe: {processo.classe}")
+    if processo.assunto:
+        headings.append(f"- Assunto: {processo.assunto}")
+    headings.extend(
+        [
+            "",
+            "## Pontos para validação manual",
+            "- Conferir os últimos movimentos diretamente no sistema do tribunal.",
+            "- Confirmar a contagem de prazo antes de qualquer providência.",
+            "- Redigir a peça manualmente com revisão de advogado(a).",
+        ]
+    )
+
+    contraponto = (
+        "Modo sem LLM: não houve geração de tese, pesquisa argumentativa ou "
+        "contraponto jurisprudencial. Use este arquivo apenas como triagem "
+        "operacional e ponto de partida para pesquisa manual."
+    )
+    return DraftResult(
+        draft_markdown="\n".join(headings),
+        contraponto_section=contraponto,
+        citations_used=[],
+        research_summary=research_summary,
+    )
 
 
 def load_processo(
