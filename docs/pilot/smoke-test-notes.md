@@ -194,7 +194,7 @@ local no Ollama" como caminho viável para caso real.
 
 | Contexto | Rota permitida agora | Observação |
 | --- | --- | --- |
-| Fixture sintética | `--source fixture --modo rascunho-pesquisa --cli-cloud claude|codex` | Rota principal do smoke com Raphael. |
+| Fixture sintética | `--source fixture --modo rascunho-pesquisa --cli-cloud claude\|codex` | Rota principal do smoke com Raphael. |
 | Caso real anonimizado/sem PII | `--source datajud --cloud --modo rascunho-pesquisa` | Só com confirmação explícita do(a) advogado(a). |
 | Caso real com PII | **bloqueado** | Requer anonimização/consentimento/rota cloud aprovada ou backend local mais forte. |
 | Minuta protocolável | **fora do smoke inicial** | Primeiro validar memorando, citações, auditoria e UX. |
