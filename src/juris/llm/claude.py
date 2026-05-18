@@ -29,7 +29,13 @@ class ClaudeLLM(AbstractLLM):
         schema: dict[str, Any] | None = None,
         max_tokens: int = 1024,
         temperature: float = 0.0,
+        *,
+        contains_pii: bool = False,
     ) -> LLMResponse:
+        if contains_pii:
+            msg = "ClaudeLLM is cloud-only and cannot handle PII-marked prompts."
+            raise ValueError(msg)
+
         import anthropic
 
         client = anthropic.AsyncAnthropic(api_key=self._api_key)
