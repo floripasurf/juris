@@ -116,4 +116,5 @@ Critério: saída com integridade OK e código de saída 0.
 - [x] PR #2 saiu de draft depois da revisão final e está pronto para review.
 - [x] Ajustar docs/comandos antes de novo smoke.
 - [x] Implementar correção antes de qualquer merge.
-- [ ] Planejar sessão com caso real anonimizado/sem PII.
+- [x] Planejar sessão com caso real anonimizado/sem PII:
+  `docs/pilot/sessions/2026-05-18-real-case-anonymized-plan.md`.
