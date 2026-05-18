@@ -21,7 +21,7 @@ ou backend local mais forte.
 - [x] Usar somente `--source fixture` nesta sessão.
 - [x] Remover run anterior da mesma sessão, se existir:
   `rm -rf juris-out-smoke-2026-05-18`.
-- [ ] Manter PR #2 em draft até Raphael aprovar o smoke.
+- [x] Marcar PR #2 como ready-for-review depois do smoke e da revisão final.
 
 ## Pré-flight obrigatório
 
@@ -86,7 +86,7 @@ Critério: saída com integridade OK e código de saída 0.
 - Caso real com PII: bloqueado.
 - Minuta protocolável: fora do smoke inicial.
 - Fallback para Ollama em caso complexo: bloqueado.
-- Merge do PR #2: bloqueado até o smoke passar.
+- Merge do PR #2: bloqueado até decisão explícita de merge.
 
 ## Notas da sessão
 
@@ -113,7 +113,7 @@ Critério: saída com integridade OK e código de saída 0.
 
 ### Decisão
 
-- [ ] PR #2 pode sair de draft depois de revisão final.
-- [ ] Ajustar docs/comandos antes de novo smoke.
+- [x] PR #2 saiu de draft depois da revisão final e está pronto para review.
+- [x] Ajustar docs/comandos antes de novo smoke.
 - [x] Implementar correção antes de qualquer merge.
 - [ ] Planejar sessão com caso real anonimizado/sem PII.
