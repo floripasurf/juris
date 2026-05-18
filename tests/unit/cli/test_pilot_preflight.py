@@ -115,6 +115,23 @@ def test_preflight_fixture_only_relaxes_corpus_requirement(monkeypatch):
     assert result.exit_code == 0, result.output
 
 
+def test_preflight_cli_cloud_provider_can_satisfy_fixture_llm_check(monkeypatch):
+    monkeypatch.setattr("juris.pilot.preflight.shutil.which", lambda command: f"/usr/bin/{command}")
+    result = runner.invoke(
+        app,
+        [
+            "pilot",
+            "preflight",
+            "--fixture-only",
+            "--skip-ollama-probe",
+            "--cli-cloud",
+            "claude",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "CLI cloud claude disponível" in result.output
+
+
 def test_preflight_json_payload_shape_when_passing(tmp_path, monkeypatch):
     db = tmp_path / "rep.db"
     monkeypatch.setenv(ENV_REPERTORY_PATH, str(db))

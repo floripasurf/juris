@@ -266,6 +266,7 @@ class DemoOrchestrator:
             thesis=request.thesis,
             custom_instructions=request.instructions,
             use_cloud_llm=request.use_cloud_llm,
+            contains_pii=request.source is not SourceMode.FIXTURE,
         )
         return await agent.draft(draft_req, context)
 

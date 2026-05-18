@@ -65,6 +65,34 @@ async def test_generate_marks_case_draft_prompt_as_pii() -> None:
 
 
 @pytest.mark.asyncio
+async def test_generate_allows_explicit_non_pii_demo_prompt() -> None:
+    llm = RecordingLLM()
+    agent = DrafterAgent(
+        llm=llm,
+        repertory=None,  # type: ignore[arg-type]
+        researcher=None,  # type: ignore[arg-type]
+        verifier=None,  # type: ignore[arg-type]
+    )
+
+    await agent._generate(
+        request=DraftRequest(
+            numero_cnj="DEMO-0000000-00.0000.0.00.0000",
+            tribunal="TJMG",
+            tipo_peticao=TipoPeticao.CONTESTACAO,
+            contains_pii=False,
+        ),
+        case_context={"numero_cnj": "DEMO-0000000-00.0000.0.00.0000"},
+        thesis="tese ficticia",
+        research=ResearchResult(thesis="tese ficticia"),
+        defesa_text="",
+        style_text="",
+        revision_feedback="",
+    )
+
+    assert llm.contains_pii_values == [False]
+
+
+@pytest.mark.asyncio
 async def test_thesis_inference_marks_case_context_prompt_as_pii() -> None:
     llm = RecordingLLM()
     agent = DrafterAgent(

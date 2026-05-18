@@ -2683,6 +2683,11 @@ def pilot_preflight(
         "--skip-ollama-probe",
         help="Não tenta conectar ao Ollama (útil em CI/offline).",
     ),
+    cli_cloud: str | None = typer.Option(
+        None,
+        "--cli-cloud",
+        help="Conta uma assinatura CLI cloud como provedor para sessão fixture sem PII: claude | codex.",
+    ),
     json_output: bool = typer.Option(False, "--json", help="Saída em JSON, sem cores ou tabela."),
 ) -> None:
     """Roda checks de readiness antes de uma sessão real com advogado(a).
@@ -2699,11 +2704,16 @@ def pilot_preflight(
 
     from juris.pilot.preflight import run_preflight
 
+    if cli_cloud is not None and cli_cloud not in {"claude", "codex"}:
+        console.print("[red]--cli-cloud inválido. Opções: claude, codex.[/red]")
+        raise typer.Exit(code=1)
+
     out_path = FilePath(out_root).expanduser() if out_root else None
     report = run_preflight(
         out_root=out_path,
         real_source_required=not fixture_only,
         embedding_model=embedding_model,
+        cli_cloud_provider=cli_cloud,
         probe_ollama=not skip_ollama_probe,
     )
 

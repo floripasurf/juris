@@ -174,6 +174,15 @@ def test_check_llm_availability_warn_when_only_anthropic(monkeypatch):
     assert "Ollama indisponível" in result.message
 
 
+def test_check_llm_availability_warn_when_only_cli_cloud(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setattr("juris.pilot.preflight.shutil.which", lambda command: f"/usr/bin/{command}")
+    result = check_llm_availability(probe_ollama=False, cli_cloud_provider="claude")
+    assert result.status is CheckStatus.WARN
+    assert "CLI cloud claude disponível" in result.message
+    assert result.details["cli_cloud_available"] is True
+
+
 def test_check_llm_availability_warn_when_only_ollama(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.setattr("juris.pilot.preflight._ollama_reachable", lambda url, timeout=1.5: True)

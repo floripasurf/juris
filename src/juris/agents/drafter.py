@@ -41,6 +41,7 @@ class DraftRequest:
     thesis: str | None = None
     custom_instructions: str = ""
     use_cloud_llm: bool = False
+    contains_pii: bool = True
     max_revision_rounds: int = 1
 
 
@@ -359,7 +360,7 @@ class DrafterAgent:
             system=SYSTEM_PROMPT,
             max_tokens=4096,
             temperature=0.15,
-            contains_pii=True,
+            contains_pii=request.contains_pii,
         )
         return response.content
 
@@ -380,7 +381,7 @@ class DrafterAgent:
                 prompt=prompt,
                 temperature=0.1,
                 max_tokens=256,
-                contains_pii=True,
+                contains_pii=request.contains_pii,
             )
             return response.content.strip()
         except Exception:
