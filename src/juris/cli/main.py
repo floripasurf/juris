@@ -2324,6 +2324,23 @@ from juris.cli.search_cli import search_app
 app.add_typer(search_app, name="search")
 
 
+@app.command()
+def web(
+    host: str = typer.Option("127.0.0.1", "--host", help="Host local da interface web"),
+    port: int = typer.Option(8765, "--port", "-p", help="Porta local da interface web"),
+    reload: bool = typer.Option(False, "--reload", help="Recarregar servidor durante desenvolvimento"),
+) -> None:
+    """Start the local browser UI for the Juris pilot workflow."""
+    import uvicorn
+
+    if host not in {"127.0.0.1", "localhost"}:
+        console.print("[red]A interface web local só pode escutar em 127.0.0.1 ou localhost.[/red]")
+        raise typer.Exit(code=1)
+
+    console.print(f"[green]Juris web:[/green] http://{host}:{port}")
+    uvicorn.run("juris.web.app:app", host=host, port=port, reload=reload)
+
+
 # ---------------------------------------------------------------------------
 # demo — end-to-end pilot pipeline (sprint 15)
 # ---------------------------------------------------------------------------

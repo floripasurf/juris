@@ -1,0 +1,211 @@
+"""Service layer for local web demo runs."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from juris.core.types import NumeroCNJ
+from juris.demo import DemoRequest, OutputMode, SourceMode, run_demo
+from juris.demo.artifacts import write_artifacts
+from juris.demo.disclaimer import output_dir_name
+from juris.demo.orchestrator import derive_demo_mode, load_processo
+from juris.repertory.peticoes.models import TipoPeticao
+
+if TYPE_CHECKING:
+    from juris.llm.base import AbstractLLM
+    from juris.repertory.retrieval.service import RepertoryService
+
+
+class DemoRunError(Exception):
+    """Raised when a local web demo run cannot be completed."""
+
+
+@dataclass(frozen=True, slots=True)
+class WebDemoRunRequest:
+    """Validated request used by the local web service."""
+
+    numero_cnj: str
+    tipo: str
+    tribunal: str = "tjmg"
+    source: str = "fixture"
+    modo: str = "rascunho-pesquisa"
+    out_root: Path = Path("juris-out")
+    thesis: str | None = None
+    instructions: str = ""
+    cloud: bool = False
+    skip_review: bool = False
+    use_cache: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class WebDemoArtifact:
+    """Artifact metadata and preview content for the local UI."""
+
+    name: str
+    path: str
+    sha256: str
+    preview: str
+
+
+@dataclass(frozen=True, slots=True)
+class WebDemoRun:
+    """Web-facing summary of a completed demo run."""
+
+    succeeded: bool
+    degraded: bool
+    degradation_reason: str
+    errors: tuple[str, ...]
+    duration_seconds: float
+    output_dir: str
+    artifacts: tuple[WebDemoArtifact, ...]
+
+
+async def execute_demo_run(request: WebDemoRunRequest) -> WebDemoRun:
+    """Run the existing demo pipeline and return UI-ready artifact previews."""
+    numero_cnj, tipo_peticao, source_mode, output_mode = _validate_request(request)
+    is_demo_mode = derive_demo_mode(source_mode)
+
+    repertory_path = _resolve_repertory_for_source(is_demo_mode)
+    case_dir = request.out_root / output_dir_name(numero_cnj, demo_mode=is_demo_mode)
+    case_dir.mkdir(parents=True, exist_ok=True)
+    audit_path = case_dir / "audit.jsonl"
+
+    llm = _build_llm(use_cloud=request.cloud)
+    repertory = _build_repertory(repertory_path)
+
+    try:
+        processo = load_processo(
+            numero_cnj,
+            request.tribunal,
+            source_mode,
+            use_cache=request.use_cache,
+            audit_path=audit_path,
+        )
+    except (LookupError, NotImplementedError, ValueError) as exc:
+        raise DemoRunError(str(exc)) from exc
+
+    demo_request = DemoRequest(
+        numero_cnj=numero_cnj,
+        tipo_peticao=tipo_peticao,
+        tribunal=request.tribunal,
+        source=source_mode,
+        out_root=request.out_root,
+        thesis=request.thesis,
+        instructions=request.instructions,
+        use_cloud_llm=request.cloud,
+        skip_review=request.skip_review,
+        output_mode=output_mode,
+    )
+
+    try:
+        result = await run_demo(
+            demo_request,
+            llm=llm,
+            repertory=repertory,
+            out_dir=case_dir,
+            audit_path=audit_path,
+            is_demo_mode=is_demo_mode,
+            processo=processo,
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise DemoRunError(f"Falha no pipeline demo: {exc}") from exc
+
+    artifact_hashes = write_artifacts(result)
+    artifacts = tuple(_artifact_preview(case_dir, name, sha256) for name, sha256 in sorted(artifact_hashes.items()))
+    return WebDemoRun(
+        succeeded=result.succeeded,
+        degraded=result.degraded,
+        degradation_reason=result.degradation_reason,
+        errors=tuple(result.errors),
+        duration_seconds=result.duration_seconds,
+        output_dir=str(case_dir),
+        artifacts=artifacts,
+    )
+
+
+def _validate_request(
+    request: WebDemoRunRequest,
+) -> tuple[str, TipoPeticao, SourceMode, OutputMode]:
+    try:
+        NumeroCNJ(request.numero_cnj)
+    except ValueError as exc:
+        raise DemoRunError("Número CNJ inválido. Use o formato NNNNNNN-DD.AAAA.J.TT.OOOO.") from exc
+
+    try:
+        tipo_peticao = TipoPeticao(request.tipo)
+    except ValueError as exc:
+        valid = ", ".join(item.value for item in TipoPeticao)
+        raise DemoRunError(f"Tipo de petição inválido. Opções: {valid}.") from exc
+
+    try:
+        source_mode = SourceMode(request.source)
+    except ValueError as exc:
+        raise DemoRunError("Origem inválida. Opções: datajud, mni, fixture.") from exc
+
+    try:
+        output_mode = OutputMode(request.modo)
+    except ValueError as exc:
+        valid = ", ".join(item.value for item in OutputMode)
+        raise DemoRunError(f"Modo de saída inválido. Opções: {valid}.") from exc
+
+    return request.numero_cnj, tipo_peticao, source_mode, output_mode
+
+
+def _resolve_repertory_for_source(is_demo_mode: bool) -> Path:
+    from juris.repertory.readiness import read_status, resolve_repertory_path
+
+    repertory_path = resolve_repertory_path()
+    if is_demo_mode:
+        return repertory_path
+
+    status = read_status(repertory_path)
+    if not status.is_ready:
+        raise DemoRunError(
+            "Corpus não está pronto para uso real. Rode `juris repertory status` antes de usar DataJud/MNI."
+        )
+    return repertory_path
+
+
+def _build_llm(*, use_cloud: bool) -> AbstractLLM:
+    if use_cloud:
+        from juris.config import get_settings
+        from juris.llm.claude import ClaudeLLM
+
+        settings = get_settings()
+        if not settings.anthropic_api_key:
+            raise DemoRunError("ANTHROPIC_API_KEY não configurada.")
+        return ClaudeLLM(api_key=settings.anthropic_api_key.get_secret_value())
+
+    from juris.llm.ollama import OllamaLLM
+
+    return OllamaLLM()
+
+
+def _build_repertory(repertory_path: Path) -> RepertoryService:
+    try:
+        from juris.repertory.embeddings import LegalEmbedder
+        from juris.repertory.retrieval.hybrid import HybridRetriever
+        from juris.repertory.retrieval.reranker import CrossEncoderReranker
+        from juris.repertory.retrieval.service import RepertoryService
+        from juris.repertory.vector_store import LocalFTSStore
+
+        store = LocalFTSStore(repertory_path)
+        retriever = HybridRetriever(
+            dense_store=store,
+            sparse_store=store,
+            embedder=LegalEmbedder(),
+            reranker=CrossEncoderReranker(),
+        )
+        return RepertoryService(retriever)
+    except Exception as exc:  # noqa: BLE001
+        raise DemoRunError(f"Falha ao inicializar repertório: {exc}") from exc
+
+
+def _artifact_preview(case_dir: Path, name: str, sha256: str) -> WebDemoArtifact:
+    path = case_dir / name
+    preview = ""
+    if path.exists() and path.is_file():
+        preview = path.read_text(encoding="utf-8", errors="replace")[:12000]
+    return WebDemoArtifact(name=name, path=str(path), sha256=sha256, preview=preview)
