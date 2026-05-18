@@ -1,10 +1,14 @@
 # Plano de Sessao — Caso Real Anonimizado
 
-Data alvo: a agendar  
-Base: smoke fixture de 2026-05-18  
-Modo recomendado: `rascunho-pesquisa`  
-Fonte permitida: `datajud`  
-LLM permitido: cloud somente com caso sem PII ou anonimizado  
+Data alvo: a agendar
+
+Base: smoke fixture de 2026-05-18
+
+Modo recomendado: `rascunho-pesquisa`
+
+Fonte permitida: `datajud`
+
+LLM permitido: cloud somente com caso sem PII ou anonimizado
 
 ## Objetivo
 
