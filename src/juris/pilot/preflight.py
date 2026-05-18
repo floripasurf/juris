@@ -296,8 +296,9 @@ def check_llm_availability(
             status=CheckStatus.WARN,
             message="ANTHROPIC_API_KEY presente; Ollama indisponível",
             remediation=(
-                "tarefas com PII falharão sem Ollama local; rode `ollama serve` "
-                "e confirme que o modelo padrão está baixado (`ollama pull qwen3`)"
+                "use cloud apenas para fixture, pesquisa pública ou contexto anonimizado; "
+                "casos com PII ficam bloqueados até haver anonimização/consentimento "
+                "ou backend local forte o bastante"
             ),
             details=details,
         )
@@ -307,8 +308,9 @@ def check_llm_availability(
             status=CheckStatus.WARN,
             message=f"CLI cloud {cli_cloud_provider} disponível; Ollama indisponível",
             remediation=(
-                "use apenas em sessão fixture/rascunho sem PII; tarefas com PII "
-                "seguem exigindo Ollama local"
+                "use apenas em sessão fixture/rascunho sem PII; casos com PII "
+                "ficam bloqueados até haver anonimização/consentimento ou backend "
+                "local forte o bastante"
             ),
             details=details,
         )

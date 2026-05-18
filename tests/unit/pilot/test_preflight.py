@@ -172,6 +172,8 @@ def test_check_llm_availability_warn_when_only_anthropic(monkeypatch):
     result = check_llm_availability(probe_ollama=False)
     assert result.status is CheckStatus.WARN
     assert "Ollama indisponível" in result.message
+    assert result.remediation is not None
+    assert "casos com PII ficam bloqueados" in result.remediation
 
 
 def test_check_llm_availability_warn_when_only_cli_cloud(monkeypatch):
@@ -181,6 +183,8 @@ def test_check_llm_availability_warn_when_only_cli_cloud(monkeypatch):
     assert result.status is CheckStatus.WARN
     assert "CLI cloud claude disponível" in result.message
     assert result.details["cli_cloud_available"] is True
+    assert result.remediation is not None
+    assert "casos com PII ficam bloqueados" in result.remediation
 
 
 def test_check_llm_availability_warn_when_only_ollama(monkeypatch):
