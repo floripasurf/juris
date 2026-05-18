@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -16,6 +15,7 @@ from juris.busca.models import (
 )
 from juris.busca.orchestrator import SearchOrchestrator
 from juris.busca.registry import ChannelRegistry
+from juris.datajud.safety import BatchGuardError
 
 
 def _make_resultado(
@@ -196,6 +196,36 @@ class TestSearchOrchestrator:
 
         assert relatorio.total_encontrado == 1
         assert relatorio.resultados[0].tribunal == "TJSP"
+
+    @pytest.mark.asyncio
+    async def test_datajud_channel_batch_requires_confirmation_at_ten_tribunals(self) -> None:
+        tribunais = [f"tj{i:02d}" for i in range(10)]
+        ch = _mock_channel(FonteOrigem.DATAJUD, tribunais, [])
+        registry = ChannelRegistry(channels=[ch])
+
+        orchestrator = SearchOrchestrator(registry=registry, cache=None, enrich=False)
+
+        with pytest.raises(BatchGuardError):
+            await orchestrator.search(BuscaRequest(nome="FULANO"))
+
+        ch.search_by_name.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_confirmed_datajud_channel_batch_can_dispatch(self) -> None:
+        tribunais = [f"tj{i:02d}" for i in range(10)]
+        ch = _mock_channel(FonteOrigem.DATAJUD, tribunais, [])
+        registry = ChannelRegistry(channels=[ch])
+
+        orchestrator = SearchOrchestrator(
+            registry=registry,
+            cache=None,
+            enrich=False,
+            confirm_datajud_batch=True,
+        )
+        relatorio = await orchestrator.search(BuscaRequest(nome="FULANO"))
+
+        assert relatorio.total_encontrado == 0
+        assert ch.search_by_name.call_count == 10
 
     @pytest.mark.asyncio
     async def test_cpf_dispatches_cpf_search(self) -> None:

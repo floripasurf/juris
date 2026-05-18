@@ -4,6 +4,11 @@
 !.env.example
 .venv/
 
+# Local agent coordination state
+.conclave/
+dialogue.md
+juris-out*/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -23,8 +28,9 @@ htmlcov/
 *.key
 
 # Data files (large, local)
-/data/
+/data/*
 !/data/corpus/
+!/data/corpus/**
 !/data/corpus-sources.md
 !/data/*_index.json
 

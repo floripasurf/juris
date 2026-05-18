@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import replace
-from typing import Any
 
 from juris.busca.abc import SearchChannel
 from juris.busca.cache import BuscaCache
@@ -19,6 +18,7 @@ from juris.busca.models import (
 )
 from juris.busca.registry import ChannelRegistry
 from juris.core.observability import get_logger
+from juris.datajud.safety import ensure_batch_allowed
 
 logger = get_logger(__name__)
 
@@ -57,10 +57,12 @@ class SearchOrchestrator:
         cache: BuscaCache | None = None,
         enrich: bool = True,
         max_concurrent_channels: int = 20,
+        confirm_datajud_batch: bool = False,
     ) -> None:
         self._registry = registry or ChannelRegistry()
         self._cache = cache
         self._enrich = enrich
+        self._confirm_datajud_batch = confirm_datajud_batch
         self._semaphore = asyncio.Semaphore(max_concurrent_channels)
 
     async def search(self, request: BuscaRequest) -> RelatoriosBusca:
@@ -92,6 +94,15 @@ class SearchOrchestrator:
         for tid in tribunais:
             for ch in self._registry.get_channels(tid):
                 pairs.append((tid, ch))
+
+        datajud_pairs = sum(1 for _, ch in pairs if ch.channel_name == FonteOrigem.DATAJUD)
+        if datajud_pairs:
+            ensure_batch_allowed(
+                cnj_count=datajud_pairs,
+                confirm_batch=self._confirm_datajud_batch,
+                calls_per_cnj=1,
+                item_label="consultas por tribunal",
+            )
 
         logger.info(
             "search_dispatching",
@@ -127,7 +138,10 @@ class SearchOrchestrator:
 
         # 6. Enrich
         if self._enrich and consolidated:
-            consolidated = await enrich_batch(consolidated)
+            consolidated = await enrich_batch(
+                consolidated,
+                confirm_batch=self._confirm_datajud_batch,
+            )
 
         # 7. Score
         has_cpf = bool(request.cpf)

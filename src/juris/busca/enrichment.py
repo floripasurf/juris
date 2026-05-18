@@ -9,12 +9,15 @@ from juris.busca.models import ResultadoConsolidado
 from juris.core.observability import get_logger
 from juris.datajud.client import consultar_processo
 from juris.datajud.parser import parse_datajud_processo
+from juris.datajud.safety import RateLimiter, ensure_batch_allowed
 
 logger = get_logger(__name__)
 
 
 async def enrich_resultado(
     resultado: ResultadoConsolidado,
+    *,
+    rate_limiter: RateLimiter | None = None,
 ) -> ResultadoConsolidado:
     """Enrich a single consolidated result with DataJud data.
 
@@ -33,6 +36,7 @@ async def enrich_resultado(
             consultar_processo,
             resultado.numero_cnj,
             resultado.tribunal,
+            rate_limiter=rate_limiter,
         )
     except Exception:
         logger.exception(
@@ -78,6 +82,8 @@ async def enrich_resultado(
 async def enrich_batch(
     resultados: list[ResultadoConsolidado],
     max_concurrent: int = 10,
+    *,
+    confirm_batch: bool = False,
 ) -> list[ResultadoConsolidado]:
     """Enrich a batch of consolidated results concurrently.
 
@@ -93,11 +99,25 @@ async def enrich_batch(
     if not resultados:
         return []
 
+    plan = ensure_batch_allowed(
+        cnj_count=len(resultados),
+        confirm_batch=confirm_batch,
+        calls_per_cnj=1,
+    )
+    rate_limiter = RateLimiter(calls_per_second=plan.rate_limit_per_second)
+    logger.info(
+        "datajud_batch_plan",
+        cnj_count=plan.cnj_count,
+        estimated_calls=plan.estimated_calls,
+        rate_limit_per_second=plan.rate_limit_per_second,
+        confirmed=confirm_batch,
+    )
+
     semaphore = asyncio.Semaphore(max_concurrent)
 
     async def _limited_enrich(r: ResultadoConsolidado) -> ResultadoConsolidado:
         async with semaphore:
-            return await enrich_resultado(r)
+            return await enrich_resultado(r, rate_limiter=rate_limiter)
 
     enriched = await asyncio.gather(*[_limited_enrich(r) for r in resultados])
 

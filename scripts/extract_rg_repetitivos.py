@@ -483,9 +483,12 @@ def main() -> None:
     # Generate STJ Repetitivos (merge with existing)
     stj_path = os.path.join(OUTPUT_DIR, "temas_repetitivos_stj.json")
 
-    # Read existing
-    with open(stj_path, "r", encoding="utf-8") as f:
-        existentes = json.load(f)
+    # Read existing when present; fresh checkouts may not have generated seeds yet.
+    if os.path.exists(stj_path):
+        with open(stj_path, "r", encoding="utf-8") as f:
+            existentes = json.load(f)
+    else:
+        existentes = []
 
     numeros_existentes = {t["numero"] for t in existentes}
     novos = gerar_temas_repetitivos_stj()

@@ -10,11 +10,25 @@ Docs: https://datajud-wiki.cnj.jus.br/
 from __future__ import annotations
 
 import os
+import time
+from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import httpx
 
 from juris.core.observability import get_logger
+from juris.datajud.safety import (
+    DEFAULT_MOVEMENT_TTL,
+    DataJudCache,
+    DataJudRequestMeta,
+    RateLimiter,
+    audit_datajud_call,
+    default_audit_path,
+    ensure_batch_allowed,
+    query_hash,
+)
+from juris.persistence.audit import AuditLog
 
 logger = get_logger(__name__)
 
@@ -106,10 +120,100 @@ def _strip_cnj(numero_cnj: str) -> str:
     return numero_cnj.replace("-", "").replace(".", "")
 
 
+def _hit_count(data: dict[str, Any]) -> int:
+    """Extract Elasticsearch hit count from a DataJud response."""
+    hits = data.get("hits", {}).get("hits", [])
+    return len(hits) if isinstance(hits, list) else 0
+
+
+def _post_datajud(
+    *,
+    url: str,
+    endpoint: str,
+    tribunal_id: str,
+    body: dict[str, Any],
+    api_key: str,
+    numero_cnj: str | None = None,
+    cache_dir: Path | None = None,
+    audit_path: Path | None = None,
+    use_cache: bool = True,
+    rate_limiter: RateLimiter | None = None,
+    post: Callable[..., httpx.Response] | None = None,
+) -> dict[str, Any]:
+    """POST to DataJud with cache, rate limit, and audit logging."""
+    meta = DataJudRequestMeta(
+        cnj=numero_cnj,
+        tribunal=tribunal_id.lower().strip(),
+        endpoint=endpoint,
+        query_hash=query_hash(body),
+    )
+    cache = DataJudCache(cache_dir)
+    audit = AuditLog(audit_path or default_audit_path())
+
+    start = time.monotonic()
+    if use_cache:
+        cached = cache.get(meta, ttl=DEFAULT_MOVEMENT_TTL)
+        if cached is not None:
+            audit_datajud_call(
+                audit,
+                meta,
+                cache_hit=True,
+                status_code=200,
+                duration_ms=(time.monotonic() - start) * 1000,
+                result_count=_hit_count(cached),
+            )
+            logger.info("datajud_cache_hit", tribunal=tribunal_id, endpoint=endpoint)
+            return cached
+
+    (rate_limiter or RateLimiter()).wait()
+    status_code: int | None = None
+    try:
+        post_fn = post or httpx.post
+        response = post_fn(
+            url,
+            headers={
+                "Authorization": f"APIKey {api_key}",
+                "Content-Type": "application/json",
+            },
+            json=body,
+            timeout=_TIMEOUT,
+        )
+        status_code = response.status_code
+        response.raise_for_status()
+        data = response.json()
+    except Exception:
+        audit_datajud_call(
+            audit,
+            meta,
+            cache_hit=False,
+            status_code=status_code,
+            duration_ms=(time.monotonic() - start) * 1000,
+            result_count=None,
+        )
+        raise
+
+    if use_cache:
+        cache.set(meta, data)
+    audit_datajud_call(
+        audit,
+        meta,
+        cache_hit=False,
+        status_code=status_code,
+        duration_ms=(time.monotonic() - start) * 1000,
+        result_count=_hit_count(data),
+    )
+    return data
+
+
 def consultar_processo(
     numero_cnj: str,
     tribunal_id: str,
     api_key: str = _API_KEY,
+    *,
+    cache_dir: Path | None = None,
+    audit_path: Path | None = None,
+    use_cache: bool = True,
+    rate_limiter: RateLimiter | None = None,
 ) -> dict[str, Any] | None:
     """Fetch a processo from DataJud by CNJ number.
 
@@ -126,20 +230,23 @@ def consultar_processo(
 
     logger.info("datajud_consulta", numero_cnj=numero_cnj, tribunal=tribunal_id)
 
-    response = httpx.post(
-        f"{_BASE_URL}/{index}/_search",
-        headers={
-            "Authorization": f"APIKey {api_key}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "query": {"match": {"numeroProcesso": numero_limpo}},
-            "size": 1,
-        },
-        timeout=_TIMEOUT,
+    body = {
+        "query": {"match": {"numeroProcesso": numero_limpo}},
+        "size": 1,
+    }
+    endpoint = f"/{index}/_search"
+    data = _post_datajud(
+        url=f"{_BASE_URL}{endpoint}",
+        endpoint=endpoint,
+        tribunal_id=tribunal_id,
+        numero_cnj=numero_cnj,
+        api_key=api_key,
+        body=body,
+        cache_dir=cache_dir,
+        audit_path=audit_path,
+        use_cache=use_cache,
+        rate_limiter=rate_limiter,
     )
-    response.raise_for_status()
-    data = response.json()
 
     hits = data.get("hits", {}).get("hits", [])
     if not hits:
@@ -193,6 +300,11 @@ def buscar_processos_por_cpf(
     tribunal_id: str,
     max_results: int = 20,
     api_key: str = _API_KEY,
+    *,
+    cache_dir: Path | None = None,
+    audit_path: Path | None = None,
+    use_cache: bool = True,
+    rate_limiter: RateLimiter | None = None,
 ) -> list[dict[str, Any]]:
     """Search DataJud for processos involving a CPF (as party document).
 
@@ -208,21 +320,23 @@ def buscar_processos_por_cpf(
     index = _get_index(tribunal_id)
     query = _build_party_query(cpf=cpf)
 
-    response = httpx.post(
-        f"{_BASE_URL}/{index}/_search",
-        headers={
-            "Authorization": f"APIKey {api_key}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "query": query,
-            "size": max_results,
-            "sort": [{"dataHoraUltimaAtualizacao": {"order": "desc"}}],
-        },
-        timeout=_TIMEOUT,
+    body = {
+        "query": query,
+        "size": max_results,
+        "sort": [{"dataHoraUltimaAtualizacao": {"order": "desc"}}],
+    }
+    endpoint = f"/{index}/_search"
+    data = _post_datajud(
+        url=f"{_BASE_URL}{endpoint}",
+        endpoint=endpoint,
+        tribunal_id=tribunal_id,
+        api_key=api_key,
+        body=body,
+        cache_dir=cache_dir,
+        audit_path=audit_path,
+        use_cache=use_cache,
+        rate_limiter=rate_limiter,
     )
-    response.raise_for_status()
-    data = response.json()
 
     hits = data.get("hits", {}).get("hits", [])
     return [h["_source"] for h in hits]
@@ -234,6 +348,11 @@ def buscar_parte_tribunal(
     cpf: str | None = None,
     max_results: int = 20,
     api_key: str = _API_KEY,
+    *,
+    cache_dir: Path | None = None,
+    audit_path: Path | None = None,
+    use_cache: bool = True,
+    rate_limiter: RateLimiter | None = None,
 ) -> list[dict[str, Any]]:
     """Search a single tribunal for processos by party name and/or CPF.
 
@@ -253,27 +372,29 @@ def buscar_parte_tribunal(
     logger.info("datajud_busca_parte", tribunal=tribunal_id, nome=nome, cpf=cpf)
 
     try:
-        response = httpx.post(
-            f"{_BASE_URL}/{index}/_search",
-            headers={
-                "Authorization": f"APIKey {api_key}",
-                "Content-Type": "application/json",
+        body = {
+            "query": query,
+            "size": max_results,
+            "_source": {
+                "excludes": ["movimentos"],
             },
-            json={
-                "query": query,
-                "size": max_results,
-                "_source": {
-                    "excludes": ["movimentos"],
-                },
-            },
-            timeout=_TIMEOUT,
+        }
+        endpoint = f"/{index}/_search"
+        data = _post_datajud(
+            url=f"{_BASE_URL}{endpoint}",
+            endpoint=endpoint,
+            tribunal_id=tribunal_id,
+            api_key=api_key,
+            body=body,
+            cache_dir=cache_dir,
+            audit_path=audit_path,
+            use_cache=use_cache,
+            rate_limiter=rate_limiter,
         )
-        response.raise_for_status()
     except (httpx.HTTPStatusError, httpx.ConnectError, httpx.TimeoutException) as e:
         logger.warning("datajud_busca_parte_error", tribunal=tribunal_id, error=str(e))
         return []
 
-    data = response.json()
     hits = data.get("hits", {}).get("hits", [])
 
     results = []
@@ -293,6 +414,12 @@ def buscar_parte_todos_tribunais(
     tribunais: list[str] | None = None,
     max_per_tribunal: int = 10,
     api_key: str = _API_KEY,
+    *,
+    cache_dir: Path | None = None,
+    audit_path: Path | None = None,
+    use_cache: bool = True,
+    rate_limiter: RateLimiter | None = None,
+    confirm_batch: bool = False,
 ) -> list[dict[str, Any]]:
     """Search multiple tribunals for processos by party name and/or CPF.
 
@@ -311,14 +438,18 @@ def buscar_parte_todos_tribunais(
     if tribunais is None:
         tribunais = list(_TRIBUNAL_INDEX.keys())
 
+    ensure_batch_allowed(
+        cnj_count=len(tribunais),
+        confirm_batch=confirm_batch,
+        calls_per_cnj=1,
+        item_label="tribunais DataJud",
+    )
+
     all_results: list[dict[str, Any]] = []
 
     with httpx.Client(timeout=_TIMEOUT) as client:
         query = _build_party_query(nome=nome, cpf=cpf)
-        headers = {
-            "Authorization": f"APIKey {api_key}",
-            "Content-Type": "application/json",
-        }
+        resolved_limiter = rate_limiter or RateLimiter()
         body = {
             "query": query,
             "size": max_per_tribunal,
@@ -332,17 +463,23 @@ def buscar_parte_todos_tribunais(
             logger.debug("datajud_busca_parte_tribunal", tribunal=tribunal_id)
 
             try:
-                resp = client.post(
-                    f"{_BASE_URL}/{index}/_search",
-                    headers=headers,
-                    json=body,
+                endpoint = f"/{index}/_search"
+                data = _post_datajud(
+                    url=f"{_BASE_URL}{endpoint}",
+                    endpoint=endpoint,
+                    tribunal_id=tribunal_id,
+                    api_key=api_key,
+                    body=body,
+                    cache_dir=cache_dir,
+                    audit_path=audit_path,
+                    use_cache=use_cache,
+                    rate_limiter=resolved_limiter,
+                    post=client.post,
                 )
-                resp.raise_for_status()
             except (httpx.HTTPStatusError, httpx.ConnectError, httpx.TimeoutException) as e:
                 logger.warning("datajud_busca_parte_skip", tribunal=tribunal_id, error=str(e))
                 continue
 
-            data = resp.json()
             hits = data.get("hits", {}).get("hits", [])
             for h in hits:
                 source = h["_source"]

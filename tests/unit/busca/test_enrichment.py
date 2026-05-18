@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from juris.busca.enrichment import enrich_batch, enrich_resultado
 from juris.busca.models import FonteOrigem, ResultadoConsolidado
+from juris.datajud.safety import BatchGuardError
 
 _DATAJUD_SOURCE = {
     "numeroProcesso": "50823514020178130024",
@@ -119,3 +120,33 @@ class TestEnrichBatch:
 
         for i, r in enumerate(enriched):
             assert r.numero_cnj == f"000000{i}-00.2024.8.13.0024"
+
+    @pytest.mark.asyncio
+    async def test_batch_guard_requires_confirmation_at_ten_cnjs(self) -> None:
+        results = [_make_resultado(numero_cnj=f"000000{i}-00.2024.8.13.0024") for i in range(10)]
+
+        with pytest.raises(BatchGuardError):
+            await enrich_batch(results)
+
+    @pytest.mark.asyncio
+    async def test_confirmed_large_batch_enriches(self) -> None:
+        results = [_make_resultado(numero_cnj=f"000000{i}-00.2024.8.13.0024") for i in range(10)]
+        with patch("juris.busca.enrichment.consultar_processo", return_value=_DATAJUD_SOURCE):
+            enriched = await enrich_batch(results, confirm_batch=True)
+
+        assert len(enriched) == 10
+
+    @pytest.mark.asyncio
+    async def test_batch_uses_shared_rate_limiter_for_datajud_calls(self) -> None:
+        results = [_make_resultado(numero_cnj=f"000000{i}-00.2024.8.13.0024") for i in range(2)]
+        seen_limiters: list[object] = []
+
+        def _mock_consultar(*args: object, **kwargs: object) -> dict:
+            seen_limiters.append(kwargs["rate_limiter"])
+            return _DATAJUD_SOURCE
+
+        with patch("juris.busca.enrichment.consultar_processo", side_effect=_mock_consultar):
+            await enrich_batch(results)
+
+        assert len(seen_limiters) == 2
+        assert seen_limiters[0] is seen_limiters[1]

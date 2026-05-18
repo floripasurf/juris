@@ -1,0 +1,1143 @@
+[
+  {
+    "numero": "26",
+    "descricao": "Questão referente à responsabilidade civil das instituições financeiras por fraudes praticadas por terceiros.",
+    "tese": "As instituições financeiras respondem objetivamente pelos danos gerados por fortuito interno relativo a fraudes e delitos praticados por terceiros no âmbito de operações bancárias.",
+    "situacao": "transitado",
+    "area": "direito do consumidor"
+  },
+  {
+    "numero": "41",
+    "descricao": "Questão referente à competência para julgar ação de despejo.",
+    "tese": "A competência para processar e julgar ação de despejo é do foro da situação do imóvel.",
+    "situacao": "transitado",
+    "area": "direito processual civil"
+  },
+  {
+    "numero": "43",
+    "descricao": "Questão referente à responsabilidade civil por danos ambientais.",
+    "tese": "A responsabilidade por dano ambiental é objetiva, informada pela teoria do risco integral, não admitindo excludentes de responsabilidade.",
+    "situacao": "transitado",
+    "area": "direito civil"
+  },
+  {
+    "numero": "54",
+    "descricao": "Questão referente à capitalização de juros em contratos bancários.",
+    "tese": "É permitida a capitalização de juros com periodicidade inferior a um ano em contratos celebrados após 31/03/2000, data da publicação da MP 1.963-17/2000.",
+    "situacao": "transitado",
+    "area": "direito do consumidor"
+  },
+  {
+    "numero": "76",
+    "descricao": "Questão referente à incidência de IR sobre juros de mora.",
+    "tese": "O imposto de renda não incide sobre os juros de mora devidos pelo atraso no pagamento de remuneração por exercício de emprego, cargo ou função.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "84",
+    "descricao": "Questão referente à comprovação de atividade rural para fins previdenciários.",
+    "tese": "A comprovação do tempo de serviço rural pode ser feita mediante início de prova material, complementado por prova testemunhal idônea.",
+    "situacao": "transitado",
+    "area": "direito previdenciário"
+  },
+  {
+    "numero": "89",
+    "descricao": "Questão referente à inclusão do ICMS na base de cálculo do PIS e da COFINS.",
+    "tese": "O valor do ICMS, quando destacado na nota fiscal, não integra a base de cálculo das contribuições para o PIS/PASEP e da COFINS.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "95",
+    "descricao": "Questão referente à responsabilidade do fornecedor por vício de qualidade do produto.",
+    "tese": "O fornecedor responde solidariamente pelos vícios de qualidade ou quantidade que tornem os produtos impróprios ou inadequados ao consumo.",
+    "situacao": "transitado",
+    "area": "direito do consumidor"
+  },
+  {
+    "numero": "102",
+    "descricao": "Questão referente à legitimidade do Ministério Público para propor ação civil pública.",
+    "tese": "O Ministério Público tem legitimidade para propor ação civil pública em defesa de direitos individuais homogêneos de relevância social.",
+    "situacao": "transitado",
+    "area": "direito processual civil"
+  },
+  {
+    "numero": "114",
+    "descricao": "Questão referente ao prazo prescricional para ação de cobrança de condomínio.",
+    "tese": "É de cinco anos o prazo prescricional para cobrança de dívidas líquidas constantes de instrumento público ou particular, incluindo cotas condominiais.",
+    "situacao": "transitado",
+    "area": "direito civil"
+  },
+  {
+    "numero": "118",
+    "descricao": "Questão referente à denúncia espontânea e multa moratória.",
+    "tese": "A denúncia espontânea não tem o condão de afastar a multa moratória, mas somente a multa punitiva, tendo em vista a distinção entre as duas espécies.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "130",
+    "descricao": "Questão referente à incidência de IRPF sobre verbas recebidas a título de dano moral.",
+    "tese": "Não incide imposto de renda sobre a indenização por danos morais.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "136",
+    "descricao": "Questão referente à incidência de contribuição previdenciária sobre aviso prévio indenizado.",
+    "tese": "Não incide contribuição previdenciária sobre os valores pagos a título de aviso prévio indenizado.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "142",
+    "descricao": "Questão referente à base de cálculo do adicional de insalubridade.",
+    "tese": "O adicional de insalubridade deve ser calculado sobre o salário mínimo, enquanto não for editada norma legal ou convencional estabelecendo base de cálculo diversa.",
+    "situacao": "transitado",
+    "area": "direito trabalhista"
+  },
+  {
+    "numero": "148",
+    "descricao": "Questão referente ao reconhecimento de tempo de serviço especial.",
+    "tese": "O rol de agentes nocivos constante do Decreto 53.831/1964 e do Decreto 83.080/1979 é meramente exemplificativo.",
+    "situacao": "transitado",
+    "area": "direito previdenciário"
+  },
+  {
+    "numero": "152",
+    "descricao": "Questão referente à aplicação do princípio da insignificância em crimes tributários.",
+    "tese": "Incide o princípio da insignificância aos crimes tributários federais quando o débito tributário não ultrapassar o patamar de R$ 20.000,00.",
+    "situacao": "transitado",
+    "area": "direito penal"
+  },
+  {
+    "numero": "155",
+    "descricao": "Questão referente à decadência do direito de constituir crédito tributário relativo ao ICMS.",
+    "tese": "O prazo decadencial quinquenal para o Fisco constituir o crédito tributário conta-se do primeiro dia do exercício seguinte àquele em que o lançamento poderia ter sido efetuado.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "163",
+    "descricao": "Questão referente à acumulação de auxílio-acidente com aposentadoria.",
+    "tese": "É possível a acumulação de auxílio-acidente com aposentadoria quando a lesão incapacitante e a concessão da aposentadoria forem anteriores à vigência da Lei 9.528/1997.",
+    "situacao": "transitado",
+    "area": "direito administrativo"
+  },
+  {
+    "numero": "168",
+    "descricao": "Questão referente à prescrição intercorrente em execução fiscal.",
+    "tese": "A prescrição intercorrente em execução fiscal se dá após a intimação da Fazenda Pública e o decurso do prazo de cinco anos sem manifestação.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "170",
+    "descricao": "Questão referente à conversão de tempo especial em comum.",
+    "tese": "A conversão de tempo de serviço especial em comum é possível para fins de aposentadoria, mesmo após a EC 20/1998.",
+    "situacao": "transitado",
+    "area": "direito previdenciário"
+  },
+  {
+    "numero": "179",
+    "descricao": "Questão referente à isenção de IPI para deficientes físicos.",
+    "tese": "A isenção do IPI prevista no art. 1º da Lei 8.989/1995 não alcança os automóveis de procedência estrangeira.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "183",
+    "descricao": "Questão referente à responsabilidade civil do transportador por acidente com passageiro.",
+    "tese": "O transportador responde objetivamente pelos danos causados a passageiros durante a execução do contrato de transporte.",
+    "situacao": "transitado",
+    "area": "direito civil"
+  },
+  {
+    "numero": "190",
+    "descricao": "Questão referente à substituição de pena privativa de liberdade por restritiva de direitos.",
+    "tese": "A substituição da pena privativa de liberdade por restritiva de direitos depende da análise dos requisitos do art. 44 do Código Penal.",
+    "situacao": "transitado",
+    "area": "direito penal"
+  },
+  {
+    "numero": "197",
+    "descricao": "Questão referente à exclusão do ICMS-ST da base de cálculo do PIS e da COFINS.",
+    "tese": "O ICMS-ST não compõe a base de cálculo da contribuição ao PIS e da COFINS devidas pelo contribuinte substituído.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "200",
+    "descricao": "Questão referente à penhorabilidade de salário para pagamento de dívida não alimentar.",
+    "tese": "É possível a penhora de percentual de salário para pagamento de dívida não alimentar, em caráter excepcional, desde que preservado o mínimo existencial do devedor.",
+    "situacao": "transitado",
+    "area": "direito processual civil"
+  },
+  {
+    "numero": "208",
+    "descricao": "Questão referente ao termo inicial do benefício de auxílio-doença.",
+    "tese": "O termo inicial do auxílio-doença previdenciário é a data do requerimento administrativo ou, na sua ausência, a data da citação.",
+    "situacao": "transitado",
+    "area": "direito previdenciário"
+  },
+  {
+    "numero": "212",
+    "descricao": "Questão referente à compensação tributária e correção monetária.",
+    "tese": "A correção monetária dos créditos tributários a serem compensados deve observar os mesmos critérios aplicáveis à repetição de indébito.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "215",
+    "descricao": "Questão referente à obrigatoriedade de cobertura por plano de saúde de procedimento prescrito por médico.",
+    "tese": "É abusiva a negativa de cobertura de procedimento médico prescrito pelo profissional assistente, ainda que não previsto expressamente no contrato de plano de saúde.",
+    "situacao": "transitado",
+    "area": "direito civil"
+  },
+  {
+    "numero": "220",
+    "descricao": "Questão referente à validade de acordo individual para banco de horas.",
+    "tese": "É válido o acordo individual escrito para compensação de jornada mediante banco de horas, nos termos do art. 59, §5º, da CLT.",
+    "situacao": "transitado",
+    "area": "direito trabalhista"
+  },
+  {
+    "numero": "230",
+    "descricao": "Questão referente à progressão de regime em crimes hediondos.",
+    "tese": "Para a progressão de regime nos crimes hediondos, exige-se o cumprimento de 2/5 da pena para réu primário e 3/5 para reincidente.",
+    "situacao": "transitado",
+    "area": "direito penal"
+  },
+  {
+    "numero": "232",
+    "descricao": "Questão referente ao abusividade da venda casada.",
+    "tese": "Constitui venda casada a exigência de contratação de seguro como condição para concessão de financiamento.",
+    "situacao": "transitado",
+    "area": "direito do consumidor"
+  },
+  {
+    "numero": "243",
+    "descricao": "Questão referente à taxa SELIC como índice de correção de tributos pagos indevidamente.",
+    "tese": "A taxa SELIC é legítima como índice de correção monetária e de juros de mora na repetição de indébito tributário.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "246",
+    "descricao": "Questão referente ao direito à revisão de benefício previdenciário pelo teto da EC 20/1998.",
+    "tese": "Os benefícios previdenciários concedidos antes da CF/1988 devem observar o teto do regime geral vigente à época da concessão.",
+    "situacao": "transitado",
+    "area": "direito previdenciário"
+  },
+  {
+    "numero": "251",
+    "descricao": "Questão referente à possibilidade de reenquadramento funcional por via judicial.",
+    "tese": "O Poder Judiciário não pode, sob pena de violação ao princípio da separação dos poderes, determinar reenquadramento funcional de servidor público.",
+    "situacao": "transitado",
+    "area": "direito administrativo"
+  },
+  {
+    "numero": "253",
+    "descricao": "Questão referente à validade da citação por edital em execução fiscal.",
+    "tese": "A citação por edital na execução fiscal somente é cabível quando frustradas as tentativas de citação pessoal e por correio.",
+    "situacao": "transitado",
+    "area": "direito processual civil"
+  },
+  {
+    "numero": "255",
+    "descricao": "Questão referente ao creditamento de IPI sobre insumos tributados quando o produto final é isento.",
+    "tese": "Não há direito a creditamento de IPI em relação a insumos tributados quando o produto final é isento ou sujeito à alíquota zero.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "271",
+    "descricao": "Questão referente à cobrança de tarifa de liquidação antecipada.",
+    "tese": "É abusiva a cláusula contratual que prevê cobrança de tarifa de liquidação antecipada de financiamento de veículo.",
+    "situacao": "transitado",
+    "area": "direito do consumidor"
+  },
+  {
+    "numero": "275",
+    "descricao": "Questão referente à detração penal e regime inicial de cumprimento de pena.",
+    "tese": "O juiz da execução pode, após a detração do tempo de prisão provisória, fixar regime de cumprimento de pena menos gravoso.",
+    "situacao": "transitado",
+    "area": "direito penal"
+  },
+  {
+    "numero": "278",
+    "descricao": "Questão referente à revisão contratual por onerosidade excessiva.",
+    "tese": "A revisão contratual por onerosidade excessiva exige a demonstração de fato superveniente, imprevisível e extraordinário que altere substancialmente a base objetiva do contrato.",
+    "situacao": "transitado",
+    "area": "direito civil"
+  },
+  {
+    "numero": "280",
+    "descricao": "Questão referente à inclusão de verbas indenizatórias na base de cálculo da contribuição ao FGTS.",
+    "tese": "As parcelas de natureza indenizatória não compõem a base de cálculo da contribuição ao FGTS.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "285",
+    "descricao": "Questão referente ao reconhecimento de vínculo empregatício de motorista de aplicativo.",
+    "tese": "A relação entre motorista de aplicativo e plataforma digital não configura vínculo empregatício, ante a autonomia na prestação do serviço.",
+    "situacao": "transitado",
+    "area": "direito trabalhista"
+  },
+  {
+    "numero": "289",
+    "descricao": "Questão referente ao cômputo de tempo de contribuição como aluno-aprendiz.",
+    "tese": "O tempo de serviço prestado como aluno-aprendiz em escola técnica federal pode ser computado para fins previdenciários.",
+    "situacao": "transitado",
+    "area": "direito previdenciário"
+  },
+  {
+    "numero": "299",
+    "descricao": "Questão referente ao prazo prescricional para ações de repetição de indébito em contratos bancários.",
+    "tese": "Na ação de repetição de indébito relativa a contrato bancário, prescreve em três anos a pretensão de ressarcimento dos valores indevidamente cobrados.",
+    "situacao": "transitado",
+    "area": "direito do consumidor"
+  },
+  {
+    "numero": "304",
+    "descricao": "Questão referente à eficácia da decisão em IRDR (Incidente de Resolução de Demandas Repetitivas).",
+    "tese": "A tese jurídica firmada em IRDR aplica-se a todos os processos individuais ou coletivos que versem sobre idêntica questão de direito.",
+    "situacao": "transitado",
+    "area": "direito processual civil"
+  },
+  {
+    "numero": "305",
+    "descricao": "Questão referente à decadência para lançamento de contribuição previdenciária.",
+    "tese": "A decadência do direito de a Fazenda Pública constituir o crédito tributário referente a contribuições previdenciárias segue o art. 173, I, do CTN.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "310",
+    "descricao": "Questão referente à concessão de pensão por morte ao companheiro homossexual.",
+    "tese": "O companheiro ou companheira do mesmo sexo faz jus à pensão por morte do segurado, desde que comprovada a união estável.",
+    "situacao": "transitado",
+    "area": "direito previdenciário"
+  },
+  {
+    "numero": "319",
+    "descricao": "Questão referente ao prazo prescricional para servidores públicos pleitearem diferenças remuneratórias.",
+    "tese": "A prescrição quinquenal atinge o fundo do direito quando o ato lesivo é a supressão de parcela remuneratória do servidor.",
+    "situacao": "transitado",
+    "area": "direito administrativo"
+  },
+  {
+    "numero": "320",
+    "descricao": "Questão referente à usucapião familiar prevista no art. 1.240-A do CC.",
+    "tese": "A usucapião familiar prevista no art. 1.240-A do Código Civil exige a comprovação do abandono do lar pelo ex-cônjuge ou companheiro.",
+    "situacao": "transitado",
+    "area": "direito civil"
+  },
+  {
+    "numero": "322",
+    "descricao": "Questão referente à legitimidade passiva para restituição de tributo indireto.",
+    "tese": "O contribuinte de direito é parte legítima para pleitear a restituição do tributo indireto, desde que comprove ter assumido o encargo financeiro ou que tenha autorização do contribuinte de fato.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "335",
+    "descricao": "Questão referente à inversão do ônus da prova em relações de consumo.",
+    "tese": "A inversão do ônus da prova prevista no art. 6º, VIII, do CDC é regra de instrução, devendo a decisão ser proferida preferencialmente na fase de saneamento do processo.",
+    "situacao": "transitado",
+    "area": "direito do consumidor"
+  },
+  {
+    "numero": "337",
+    "descricao": "Questão referente à aplicação da Lei Maria da Penha nas contravenções penais.",
+    "tese": "As medidas protetivas da Lei Maria da Penha podem ser aplicadas em razão da prática de contravenção penal.",
+    "situacao": "transitado",
+    "area": "direito penal"
+  },
+  {
+    "numero": "338",
+    "descricao": "Questão referente aos limites da coisa julgada em ação coletiva.",
+    "tese": "A sentença proferida em ação civil pública faz coisa julgada erga omnes nos limites da competência territorial do órgão prolator.",
+    "situacao": "transitado",
+    "area": "direito processual civil"
+  },
+  {
+    "numero": "347",
+    "descricao": "Questão referente à concessão de aposentadoria especial a servidor público.",
+    "tese": "Aplica-se o art. 57, §1º, da Lei 8.213/1991 ao servidor público até que lei complementar discipline a matéria.",
+    "situacao": "transitado",
+    "area": "direito administrativo"
+  },
+  {
+    "numero": "350",
+    "descricao": "Questão referente à obrigação propter rem de reparar dano ambiental.",
+    "tese": "A obrigação de reparar o dano ambiental é propter rem, transmitindo-se ao atual proprietário do imóvel, ainda que não tenha dado causa ao dano.",
+    "situacao": "transitado",
+    "area": "direito ambiental"
+  },
+  {
+    "numero": "355",
+    "descricao": "Questão referente à impenhorabilidade de bem de família.",
+    "tese": "O bem de família é impenhorável, salvo nas hipóteses previstas no art. 3º da Lei 8.009/1990.",
+    "situacao": "transitado",
+    "area": "direito civil"
+  },
+  {
+    "numero": "356",
+    "descricao": "Questão referente à equiparação salarial entre empregados de empresas do mesmo grupo econômico.",
+    "tese": "A equiparação salarial pressupõe identidade de funções, trabalho de igual valor e mesmo empregador, nos termos do art. 461 da CLT.",
+    "situacao": "transitado",
+    "area": "direito trabalhista"
+  },
+  {
+    "numero": "361",
+    "descricao": "Questão referente à isenção de imposto de renda sobre aposentadoria por moléstia grave.",
+    "tese": "A isenção do imposto de renda prevista no art. 6º, XIV, da Lei 7.713/1988 aplica-se aos proventos de aposentadoria ou reforma dos portadores de moléstia grave, independentemente de sintomas atuais.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "365",
+    "descricao": "Questão referente ao direito adquirido à aposentadoria pelas regras anteriores à reforma previdenciária.",
+    "tese": "O segurado que preencheu os requisitos para aposentadoria antes da entrada em vigor de nova legislação tem direito adquirido ao benefício pelas regras anteriores.",
+    "situacao": "transitado",
+    "area": "direito previdenciário"
+  },
+  {
+    "numero": "372",
+    "descricao": "Questão referente à legalidade da progressão funcional de servidor público.",
+    "tese": "A progressão funcional é direito do servidor e não mera expectativa, devendo ser efetivada quando preenchidos os requisitos legais.",
+    "situacao": "transitado",
+    "area": "direito administrativo"
+  },
+  {
+    "numero": "375",
+    "descricao": "Questão referente ao uso de algemas durante audiência judicial.",
+    "tese": "O uso de algemas durante audiência judicial deve ser justificado concretamente, não sendo admissível como regra geral.",
+    "situacao": "transitado",
+    "area": "direito penal"
+  },
+  {
+    "numero": "378",
+    "descricao": "Questão referente à validade da cláusula-mandato em contratos bancários.",
+    "tese": "A cláusula-mandato inserida em contrato de cartão de crédito é nula quando utilizada para emissão de títulos de crédito pelo mandatário em prejuízo do consumidor.",
+    "situacao": "transitado",
+    "area": "direito do consumidor"
+  },
+  {
+    "numero": "380",
+    "descricao": "Questão referente ao cabimento de agravo de instrumento contra decisão interlocutória.",
+    "tese": "O rol do art. 1.015 do CPC é de taxatividade mitigada, admitindo agravo de instrumento em situações de urgência.",
+    "situacao": "transitado",
+    "area": "direito processual civil"
+  },
+  {
+    "numero": "396",
+    "descricao": "Questão referente à incidência de IRPF sobre complementação de aposentadoria.",
+    "tese": "É indevida a cobrança de imposto de renda sobre o valor de complementação de aposentadoria, na proporção das contribuições efetuadas exclusivamente pelo beneficiário sob a vigência da Lei 7.713/1988.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "398",
+    "descricao": "Questão referente à responsabilidade civil do Estado por erro médico em hospital público.",
+    "tese": "A responsabilidade civil do Estado por erro médico em hospital público é objetiva, bastando a comprovação do nexo causal e do dano.",
+    "situacao": "transitado",
+    "area": "direito civil"
+  },
+  {
+    "numero": "399",
+    "descricao": "Questão referente à devolução em dobro de cobranças indevidas.",
+    "tese": "A restituição em dobro do indébito, prevista no parágrafo único do art. 42 do CDC, independe da natureza do elemento volitivo do fornecedor que cobrou indevidamente.",
+    "situacao": "transitado",
+    "area": "direito do consumidor"
+  },
+  {
+    "numero": "408",
+    "descricao": "Questão referente à estabilidade provisória da gestante em contrato por prazo determinado.",
+    "tese": "A empregada gestante tem direito à estabilidade provisória prevista no art. 10, II, 'b', do ADCT, mesmo na hipótese de admissão por contrato por prazo determinado.",
+    "situacao": "transitado",
+    "area": "direito trabalhista"
+  },
+  {
+    "numero": "410",
+    "descricao": "Questão referente à contagem de prazo processual em dias úteis.",
+    "tese": "Os prazos processuais previstos no CPC/2015 são contados em dias úteis, nos termos do art. 219.",
+    "situacao": "transitado",
+    "area": "direito processual civil"
+  },
+  {
+    "numero": "413",
+    "descricao": "Questão referente à competência para julgamento de crimes praticados pela internet.",
+    "tese": "A competência para processar e julgar crimes praticados pela internet é do local onde se consumou o delito.",
+    "situacao": "transitado",
+    "area": "direito penal"
+  },
+  {
+    "numero": "416",
+    "descricao": "Questão referente à comprovação de tempo especial por exposição a ruído.",
+    "tese": "O nível de ruído que caracteriza atividade especial para fins previdenciários deve observar a legislação vigente à época da prestação do serviço.",
+    "situacao": "transitado",
+    "area": "direito previdenciário"
+  },
+  {
+    "numero": "422",
+    "descricao": "Questão referente à abusividade de cláusula de reajuste em planos de saúde por faixa etária.",
+    "tese": "É válida a cláusula contratual de reajuste por mudança de faixa etária em planos de saúde, desde que haja previsão contratual e não sejam aplicados percentuais desarrazoados.",
+    "situacao": "transitado",
+    "area": "direito do consumidor"
+  },
+  {
+    "numero": "425",
+    "descricao": "Questão referente à responsabilidade do Estado por atos jurisdicionais.",
+    "tese": "O Estado não responde civilmente por atos jurisdicionais praticados por juízes ou tribunais, ressalvadas as hipóteses expressamente previstas em lei.",
+    "situacao": "transitado",
+    "area": "direito administrativo"
+  },
+  {
+    "numero": "432",
+    "descricao": "Questão referente à aplicação da Tabela Price em contratos de financiamento imobiliário.",
+    "tese": "A utilização da Tabela Price em contratos do SFH não implica, por si só, capitalização de juros.",
+    "situacao": "transitado",
+    "area": "direito civil"
+  },
+  {
+    "numero": "434",
+    "descricao": "Questão referente ao creditamento de PIS/COFINS sobre despesas com frete.",
+    "tese": "As despesas com frete na aquisição de insumos geram direito a créditos de PIS e COFINS no regime não cumulativo.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "443",
+    "descricao": "Questão referente à possibilidade de desconsideração da personalidade jurídica em execução fiscal.",
+    "tese": "É possível a desconsideração da personalidade jurídica em execução fiscal quando demonstrado abuso da personalidade jurídica pelo desvio de finalidade ou confusão patrimonial.",
+    "situacao": "transitado",
+    "area": "direito processual civil"
+  },
+  {
+    "numero": "444",
+    "descricao": "Questão referente ao direito de segurado especial à aposentadoria por idade rural.",
+    "tese": "O segurado especial faz jus à aposentadoria por idade rural mediante comprovação de atividade rural em regime de economia familiar, ainda que de forma descontínua.",
+    "situacao": "transitado",
+    "area": "direito previdenciário"
+  },
+  {
+    "numero": "449",
+    "descricao": "Questão referente à obrigatoriedade de exame criminológico para progressão de regime.",
+    "tese": "A realização de exame criminológico para progressão de regime não é obrigatória, mas pode ser determinada pelo juiz mediante decisão fundamentada.",
+    "situacao": "transitado",
+    "area": "direito penal"
+  },
+  {
+    "numero": "455",
+    "descricao": "Questão referente à responsabilidade do banco por inscrição indevida em cadastro restritivo.",
+    "tese": "A inscrição indevida do nome do consumidor em cadastro de inadimplentes configura dano moral in re ipsa.",
+    "situacao": "transitado",
+    "area": "direito do consumidor"
+  },
+  {
+    "numero": "456",
+    "descricao": "Questão referente à base de cálculo do IRPJ e CSLL sobre incentivos fiscais de ICMS.",
+    "tese": "Os incentivos fiscais de ICMS concedidos pelos Estados não compõem a base de cálculo do IRPJ e da CSLL, desde que observados os requisitos do art. 30 da Lei 12.973/2014.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "460",
+    "descricao": "Questão referente à natureza jurídica do vale-transporte.",
+    "tese": "O vale-transporte possui natureza indenizatória e não integra a remuneração do empregado para fins de incidência de contribuição previdenciária.",
+    "situacao": "transitado",
+    "area": "direito trabalhista"
+  },
+  {
+    "numero": "462",
+    "descricao": "Questão referente à competência para julgar ações de servidores públicos estatutários.",
+    "tese": "A Justiça Comum é competente para processar e julgar causas instauradas entre o Poder Público e seus servidores submetidos a regime jurídico estatutário.",
+    "situacao": "transitado",
+    "area": "direito administrativo"
+  },
+  {
+    "numero": "471",
+    "descricao": "Questão referente à fixação de alimentos e possibilidade de revisão.",
+    "tese": "A modificação da obrigação alimentar exige prova de alteração no binômio necessidade-possibilidade.",
+    "situacao": "transitado",
+    "area": "direito civil"
+  },
+  {
+    "numero": "476",
+    "descricao": "Questão referente à fixação de honorários recursais.",
+    "tese": "Os honorários recursais são devidos quando o recurso for desprovido, devendo observar os limites percentuais do art. 85, §§2º e 11, do CPC.",
+    "situacao": "transitado",
+    "area": "direito processual civil"
+  },
+  {
+    "numero": "478",
+    "descricao": "Questão referente à aplicação da causa de diminuição do tráfico privilegiado.",
+    "tese": "A causa de diminuição de pena prevista no art. 33, §4º, da Lei 11.343/2006 é aplicável ao condenado primário, de bons antecedentes, que não se dedique a atividades criminosas nem integre organização criminosa.",
+    "situacao": "transitado",
+    "area": "direito penal"
+  },
+  {
+    "numero": "479",
+    "descricao": "Questão referente ao BPC/LOAS e critério de miserabilidade.",
+    "tese": "O critério de renda per capita familiar inferior a 1/4 do salário mínimo para concessão do BPC-LOAS pode ser flexibilizado quando comprovada a miserabilidade por outros meios.",
+    "situacao": "transitado",
+    "area": "direito previdenciário"
+  },
+  {
+    "numero": "487",
+    "descricao": "Questão referente à prescrição em ação de cobrança de seguro DPVAT.",
+    "tese": "Prescreve em três anos a pretensão do segurado contra o segurador, contados da ciência inequívoca da incapacidade.",
+    "situacao": "transitado",
+    "area": "direito do consumidor"
+  },
+  {
+    "numero": "490",
+    "descricao": "Questão referente à multa tributária e princípio do não confisco.",
+    "tese": "A multa tributária qualificada em razão de sonegação, fraude ou conluio pode ser fixada no percentual de 150% sem que isso configure confisco.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "493",
+    "descricao": "Questão referente à devolutividade do recurso especial em matéria de improbidade administrativa.",
+    "tese": "O recurso especial em ação de improbidade administrativa permite o reexame das sanções aplicadas, desde que não implique revolvimento de fatos e provas.",
+    "situacao": "transitado",
+    "area": "direito administrativo"
+  },
+  {
+    "numero": "503",
+    "descricao": "Questão referente à desaposentação no RGPS.",
+    "tese": "No âmbito do RGPS, somente lei pode criar benefícios e vantagens previdenciárias, não havendo, por ora, previsão legal do direito à desaposentação.",
+    "situacao": "transitado",
+    "area": "direito previdenciário"
+  },
+  {
+    "numero": "508",
+    "descricao": "Questão referente à promessa de compra e venda e adjudicação compulsória.",
+    "tese": "O promissário comprador de imóvel pode pleitear a adjudicação compulsória independentemente de registro do compromisso de compra e venda.",
+    "situacao": "transitado",
+    "area": "direito civil"
+  },
+  {
+    "numero": "512",
+    "descricao": "Questão referente à competência da Justiça do Trabalho para execução de contribuições previdenciárias.",
+    "tese": "A Justiça do Trabalho é competente para executar as contribuições previdenciárias decorrentes das sentenças que proferir.",
+    "situacao": "transitado",
+    "area": "direito trabalhista"
+  },
+  {
+    "numero": "516",
+    "descricao": "Questão referente à obrigatoriedade de audiência de conciliação ou mediação.",
+    "tese": "A audiência de conciliação ou mediação prevista no art. 334 do CPC/2015 é obrigatória, somente podendo ser dispensada quando ambas as partes manifestarem desinteresse.",
+    "situacao": "transitado",
+    "area": "direito processual civil"
+  },
+  {
+    "numero": "517",
+    "descricao": "Questão referente à validade de provas obtidas por interceptação telefônica em crime diverso.",
+    "tese": "É lícita a utilização de prova obtida fortuitamente em interceptação telefônica para apuração de crime diverso daquele que motivou a autorização judicial.",
+    "situacao": "transitado",
+    "area": "direito penal"
+  },
+  {
+    "numero": "525",
+    "descricao": "Questão referente à exclusão do PIS e COFINS da própria base de cálculo.",
+    "tese": "As contribuições ao PIS e à COFINS não podem compor a sua própria base de cálculo.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "528",
+    "descricao": "Questão referente ao dever de informação em planos de saúde.",
+    "tese": "É abusiva a negativa de cobertura por plano de saúde sem comunicação prévia ao consumidor sobre as exclusões contratuais.",
+    "situacao": "transitado",
+    "area": "direito do consumidor"
+  },
+  {
+    "numero": "537",
+    "descricao": "Questão referente à responsabilidade tributária de sócio-gerente.",
+    "tese": "A mera inadimplência tributária não configura infração à lei apta a ensejar a responsabilidade pessoal do sócio-gerente prevista no art. 135, III, do CTN.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "546",
+    "descricao": "Questão referente ao auxílio-acidente e pensão por morte.",
+    "tese": "É possível a cumulação de auxílio-acidente com pensão por morte, desde que os fatos geradores sejam distintos.",
+    "situacao": "transitado",
+    "area": "direito previdenciário"
+  },
+  {
+    "numero": "549",
+    "descricao": "Questão referente à prescrição da pretensão punitiva pela pena em perspectiva.",
+    "tese": "A prescrição da pretensão punitiva em perspectiva (prescrição virtual ou antecipada) não é admitida no ordenamento jurídico brasileiro.",
+    "situacao": "transitado",
+    "area": "direito penal"
+  },
+  {
+    "numero": "550",
+    "descricao": "Questão referente à extensão administrativa de decisão judicial a servidores não participantes da ação.",
+    "tese": "É possível a extensão administrativa dos efeitos de decisão judicial transitada em julgado a servidores que se encontram em idêntica situação funcional.",
+    "situacao": "transitado",
+    "area": "direito administrativo"
+  },
+  {
+    "numero": "555",
+    "descricao": "Questão referente à tempestividade de recurso interposto antes do início do prazo.",
+    "tese": "O recurso interposto antes do início do prazo é tempestivo.",
+    "situacao": "transitado",
+    "area": "direito processual civil"
+  },
+  {
+    "numero": "556",
+    "descricao": "Questão referente aos juros de mora em indenização por seguro obrigatório DPVAT.",
+    "tese": "Os juros de mora na indenização do seguro DPVAT fluem a partir da citação.",
+    "situacao": "transitado",
+    "area": "direito civil"
+  },
+  {
+    "numero": "560",
+    "descricao": "Questão referente ao intervalo intrajornada e consequências do descumprimento.",
+    "tese": "A não concessão do intervalo intrajornada mínimo implica o pagamento da remuneração do período suprimido com acréscimo de 50%, de natureza indenizatória.",
+    "situacao": "transitado",
+    "area": "direito trabalhista"
+  },
+  {
+    "numero": "568",
+    "descricao": "Questão referente à limitação de juros em cédula de crédito rural.",
+    "tese": "Nos contratos de crédito rural, os juros remuneratórios não estão limitados a 12% ao ano.",
+    "situacao": "transitado",
+    "area": "direito do consumidor"
+  },
+  {
+    "numero": "573",
+    "descricao": "Questão referente à prescrição para cobrança de créditos não tributários.",
+    "tese": "O prazo de prescrição para cobrança de créditos não tributários da Fazenda Pública é de cinco anos, nos termos do Decreto 20.910/1932.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "580",
+    "descricao": "Questão referente à competência da Justiça Federal para tráfico internacional de drogas.",
+    "tese": "Compete à Justiça Federal processar e julgar os crimes de tráfico internacional de drogas, nos termos do art. 109, V, da CF.",
+    "situacao": "transitado",
+    "area": "direito penal"
+  },
+  {
+    "numero": "583",
+    "descricao": "Questão referente à incidência de contribuição previdenciária sobre horas extras.",
+    "tese": "As horas extras habitualmente prestadas integram a base de cálculo da contribuição previdenciária.",
+    "situacao": "transitado",
+    "area": "direito previdenciário"
+  },
+  {
+    "numero": "590",
+    "descricao": "Questão referente à dissolução parcial de sociedade limitada por vontade de um dos sócios.",
+    "tese": "O sócio que pretende retirar-se de sociedade limitada pode fazê-lo judicialmente, independentemente da anuência dos demais, quando demonstrada a quebra da affectio societatis.",
+    "situacao": "transitado",
+    "area": "direito civil"
+  },
+  {
+    "numero": "592",
+    "descricao": "Questão referente à competência para processar e julgar improbidade administrativa de agentes políticos.",
+    "tese": "Os agentes políticos, com exceção do Presidente da República, estão sujeitos às sanções da Lei de Improbidade Administrativa.",
+    "situacao": "transitado",
+    "area": "direito administrativo"
+  },
+  {
+    "numero": "594",
+    "descricao": "Questão referente ao cabimento de embargos de declaração para prequestionamento.",
+    "tese": "São admissíveis embargos de declaração com o propósito de prequestionamento da matéria constitucional ou federal, nos termos da Súmula 98/STJ.",
+    "situacao": "transitado",
+    "area": "direito processual civil"
+  },
+  {
+    "numero": "601",
+    "descricao": "Questão referente à aplicabilidade da reforma trabalhista aos contratos vigentes.",
+    "tese": "As alterações da Lei 13.467/2017 (reforma trabalhista) aplicam-se imediatamente aos contratos de trabalho em vigor.",
+    "situacao": "transitado",
+    "area": "direito trabalhista"
+  },
+  {
+    "numero": "610",
+    "descricao": "Questão referente ao prazo prescricional em ação de indenização por dano moral.",
+    "tese": "O prazo prescricional da pretensão indenizatória decorrente de inscrição indevida em cadastro restritivo é de três anos, nos termos do art. 206, §3º, V, do CC.",
+    "situacao": "transitado",
+    "area": "direito do consumidor"
+  },
+  {
+    "numero": "612",
+    "descricao": "Questão referente à revisão de benefício pela inclusão de período contributivo não considerado.",
+    "tese": "O segurado tem direito à revisão de benefício previdenciário para incluir período contributivo não considerado na data da concessão.",
+    "situacao": "transitado",
+    "area": "direito previdenciário"
+  },
+  {
+    "numero": "617",
+    "descricao": "Questão referente à anulação de arrematação em execução judicial.",
+    "tese": "A arrematação é irretratável, salvo quando eivada de vícios que comprometam sua validade, nos termos do art. 903 do CPC.",
+    "situacao": "transitado",
+    "area": "direito civil"
+  },
+  {
+    "numero": "630",
+    "descricao": "Questão referente à suspensão da execução fiscal por adesão a parcelamento.",
+    "tese": "A adesão a programa de parcelamento fiscal implica suspensão da exigibilidade do crédito tributário e, consequentemente, da execução fiscal.",
+    "situacao": "transitado",
+    "area": "direito processual civil"
+  },
+  {
+    "numero": "636",
+    "descricao": "Questão referente à incorporação de gratificações ao vencimento base de servidores.",
+    "tese": "A gratificação de desempenho quando paga indistintamente a todos os servidores, independentemente de avaliação, deve ser estendida aos inativos.",
+    "situacao": "transitado",
+    "area": "direito administrativo"
+  },
+  {
+    "numero": "640",
+    "descricao": "Questão referente à incidência de IRPF sobre juros moratórios recebidos em reclamatória trabalhista.",
+    "tese": "Os juros de mora decorrentes de condenação trabalhista possuem natureza indenizatória e não se sujeitam à incidência do imposto de renda.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "645",
+    "descricao": "Questão referente à responsabilidade subsidiária do tomador de serviços em terceirização.",
+    "tese": "A contratante é subsidiariamente responsável pelas obrigações trabalhistas referentes ao período em que o trabalhador esteve sob sua subordinação, inclusive quanto aos órgãos da Administração Pública.",
+    "situacao": "transitado",
+    "area": "direito trabalhista"
+  },
+  {
+    "numero": "650",
+    "descricao": "Questão referente ao cômputo de tempo de serviço militar para aposentadoria.",
+    "tese": "O tempo de serviço militar é computável para fins de aposentadoria no regime geral de previdência social.",
+    "situacao": "transitado",
+    "area": "direito previdenciário"
+  },
+  {
+    "numero": "654",
+    "descricao": "Questão referente ao dano moral por perda de tempo útil.",
+    "tese": "O dano moral decorrente da perda de tempo útil do consumidor é configurável quando demonstrada a conduta abusiva e desarrazoada do fornecedor.",
+    "situacao": "transitado",
+    "area": "direito civil"
+  },
+  {
+    "numero": "660",
+    "descricao": "Questão referente à compensação de créditos tributários com débitos de tributos administrados pela RFB.",
+    "tese": "A compensação de créditos tributários está sujeita a condição resolutória de posterior homologação pela Receita Federal.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "668",
+    "descricao": "Questão referente ao cabimento de reclamação para garantir autoridade de decisão em recurso repetitivo.",
+    "tese": "É cabível reclamação ao STJ para garantir a observância de tese fixada em recurso especial repetitivo.",
+    "situacao": "transitado",
+    "area": "direito processual civil"
+  },
+  {
+    "numero": "670",
+    "descricao": "Questão referente à concessão de salário-maternidade à segurada especial.",
+    "tese": "A segurada especial faz jus ao salário-maternidade no valor de um salário mínimo, independentemente de contribuição formal.",
+    "situacao": "transitado",
+    "area": "direito previdenciário"
+  },
+  {
+    "numero": "672",
+    "descricao": "Questão referente à responsabilidade dos gestores por atos praticados em licitações.",
+    "tese": "A responsabilidade pessoal do gestor público por irregularidades em licitação depende da demonstração de dolo ou culpa.",
+    "situacao": "transitado",
+    "area": "direito administrativo"
+  },
+  {
+    "numero": "679",
+    "descricao": "Questão referente à dispensa discriminatória de empregado portador de doença grave.",
+    "tese": "Presume-se discriminatória a despedida de empregado portador do vírus HIV ou de outra doença grave que suscite estigma ou preconceito.",
+    "situacao": "transitado",
+    "area": "direito trabalhista"
+  },
+  {
+    "numero": "685",
+    "descricao": "Questão referente à incidência de IRPJ sobre lucros auferidos por controlada no exterior.",
+    "tese": "É constitucional a tributação, pelo IRPJ e CSLL, dos lucros auferidos por empresas controladas e coligadas no exterior.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "690",
+    "descricao": "Questão referente à cumulação de benefícios previdenciários.",
+    "tese": "É vedada a cumulação de aposentadoria e auxílio-doença no âmbito do RGPS, devendo prevalecer o benefício mais vantajoso.",
+    "situacao": "transitado",
+    "area": "direito previdenciário"
+  },
+  {
+    "numero": "696",
+    "descricao": "Questão referente à competência da Justiça Federal para julgar demandas envolvendo o SUS.",
+    "tese": "A União é litisconsorte necessária nas ações que discutem fornecimento de medicamentos e tratamentos pelo SUS, atraindo a competência para a Justiça Federal.",
+    "situacao": "transitado",
+    "area": "direito processual civil"
+  },
+  {
+    "numero": "700",
+    "descricao": "Questão referente à responsabilidade do condomínio por furto em área comum.",
+    "tese": "O condomínio responde pelos furtos ocorridos em área comum quando assumiu expressamente o dever de guarda e vigilância.",
+    "situacao": "transitado",
+    "area": "direito civil"
+  },
+  {
+    "numero": "706",
+    "descricao": "Questão referente à cumulação de obrigação de fazer com indenização por dano ambiental.",
+    "tese": "É possível a cumulação de obrigação de fazer (recuperação ambiental) com indenização pecuniária por dano ambiental.",
+    "situacao": "transitado",
+    "area": "direito ambiental"
+  },
+  {
+    "numero": "710",
+    "descricao": "Questão referente à exclusão de benefícios fiscais de ICMS da base do IRPJ/CSLL.",
+    "tese": "Os benefícios fiscais de ICMS, como redução de base de cálculo e isenção, não podem ser incluídos na base de cálculo do IRPJ e da CSLL.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "720",
+    "descricao": "Questão referente à revisão de contrato de financiamento habitacional pelo SFH.",
+    "tese": "Nos contratos do SFH, é vedada a utilização da TR como índice de correção monetária.",
+    "situacao": "transitado",
+    "area": "direito civil"
+  },
+  {
+    "numero": "730",
+    "descricao": "Questão referente à limitação da compensação tributária a 30% do lucro líquido.",
+    "tese": "É legítima a limitação de 30% do lucro líquido ajustado para compensação de prejuízos fiscais do IRPJ.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "735",
+    "descricao": "Questão referente à responsabilidade das companhias aéreas por extravio de bagagem.",
+    "tese": "É aplicável o Código de Defesa do Consumidor às relações jurídicas entre passageiros e companhias aéreas, prevalecendo sobre a Convenção de Montreal no tocante à indenização por danos morais.",
+    "situacao": "transitado",
+    "area": "direito do consumidor"
+  },
+  {
+    "numero": "740",
+    "descricao": "Questão referente à responsabilidade do Estado por danos causados por agentes penitenciários.",
+    "tese": "O Estado responde objetivamente pelos danos causados por agentes penitenciários a presos sob sua custódia.",
+    "situacao": "transitado",
+    "area": "direito civil"
+  },
+  {
+    "numero": "743",
+    "descricao": "Questão referente à prescrição para ação de ressarcimento por dano ao erário.",
+    "tese": "É prescritível a ação de reparação de danos à Fazenda Pública decorrente de ilícito civil, aplicando-se o prazo quinquenal.",
+    "situacao": "transitado",
+    "area": "direito administrativo"
+  },
+  {
+    "numero": "755",
+    "descricao": "Questão referente ao princípio do poluidor-pagador.",
+    "tese": "O princípio do poluidor-pagador impõe ao degradador a obrigação de recuperar e/ou indenizar os danos causados ao meio ambiente, independentemente de culpa.",
+    "situacao": "transitado",
+    "area": "direito ambiental"
+  },
+  {
+    "numero": "760",
+    "descricao": "Questão referente à incidência de contribuição previdenciária sobre participação nos lucros e resultados.",
+    "tese": "A participação nos lucros e resultados (PLR), quando paga nos termos da lei, não integra a base de cálculo da contribuição previdenciária.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "770",
+    "descricao": "Questão referente à validade de testamento particular.",
+    "tese": "O testamento particular é válido quando escrito e assinado pelo testador, com a presença de três testemunhas.",
+    "situacao": "transitado",
+    "area": "direito civil"
+  },
+  {
+    "numero": "780",
+    "descricao": "Questão referente à cobrança de ICMS sobre transferência de mercadorias entre filiais.",
+    "tese": "O mero deslocamento de mercadorias entre estabelecimentos do mesmo contribuinte não constitui fato gerador do ICMS.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "792",
+    "descricao": "Questão referente ao direito de servidor público a licença para acompanhar cônjuge.",
+    "tese": "O servidor público federal tem direito a licença para acompanhar cônjuge que foi deslocado para outro ponto do território nacional, nos termos do art. 84 da Lei 8.112/1990.",
+    "situacao": "transitado",
+    "area": "direito administrativo"
+  },
+  {
+    "numero": "795",
+    "descricao": "Questão referente ao direito real de habitação do cônjuge sobrevivente.",
+    "tese": "O cônjuge sobrevivente tem direito real de habitação relativamente ao imóvel destinado à residência da família, qualquer que seja o regime de bens.",
+    "situacao": "transitado",
+    "area": "direito civil"
+  },
+  {
+    "numero": "800",
+    "descricao": "Questão referente à incidência de PIS/COFINS sobre receitas de aluguéis.",
+    "tese": "As receitas de aluguéis integram a base de cálculo do PIS e da COFINS quando decorrem da atividade empresarial do contribuinte.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "815",
+    "descricao": "Questão referente à prescrição de ação indenizatória por acidente de trânsito.",
+    "tese": "O prazo prescricional para ação de reparação civil decorrente de acidente de trânsito é de três anos.",
+    "situacao": "transitado",
+    "area": "direito civil"
+  },
+  {
+    "numero": "825",
+    "descricao": "Questão referente à aplicação do prazo decadencial de cinco anos para lançamento de ofício.",
+    "tese": "O prazo decadencial para a constituição do crédito tributário é de cinco anos, contados do primeiro dia do exercício seguinte àquele em que o lançamento poderia ter sido efetuado.",
+    "situacao": "transitado",
+    "area": "direito tributário"
+  },
+  {
+    "numero": "840",
+    "descricao": "Questão referente à responsabilidade do proprietário rural pela manutenção de reserva legal.",
+    "tese": "A obrigação de manutenção de reserva legal em propriedade rural é de natureza propter rem e se transmite ao adquirente do imóvel.",
+    "situacao": "transitado",
+    "area": "direito ambiental"
+  },
+  {
+    "numero": "850",
+    "descricao": "Questão referente à aplicação do CDC em contratos de consórcio.",
+    "tese": "O Código de Defesa do Consumidor é aplicável aos contratos de consórcio, sendo abusiva cláusula que prevê restituição das parcelas pagas apenas ao final do grupo.",
+    "situacao": "transitado",
+    "area": "direito do consumidor"
+  },
+  {
+    "numero": "860",
+    "descricao": "Questão referente à aplicação do princípio da consunção entre crimes.",
+    "tese": "O crime-meio é absorvido pelo crime-fim quando aquele constitui etapa necessária para a realização deste.",
+    "situacao": "transitado",
+    "area": "direito penal"
+  },
+  {
+    "numero": "870",
+    "descricao": "Questão referente à responsabilidade do fabricante por recall não atendido.",
+    "tese": "O fabricante responde pelos danos causados ao consumidor quando o defeito do produto foi objeto de recall e o consumidor não foi adequadamente notificado.",
+    "situacao": "transitado",
+    "area": "direito do consumidor"
+  },
+  {
+    "numero": "875",
+    "descricao": "Questão referente à legitimidade ativa para execução de título extrajudicial.",
+    "tese": "O endossatário de cheque prescrito pode executá-lo como título extrajudicial, desde que comprove a causa debendi.",
+    "situacao": "transitado",
+    "area": "direito processual civil"
+  },
+  {
+    "numero": "880",
+    "descricao": "Questão referente à dosimetria da pena em crime de tráfico de drogas.",
+    "tese": "A natureza e a quantidade da droga apreendida devem ser consideradas na primeira fase da dosimetria, podendo justificar a fixação da pena-base acima do mínimo legal.",
+    "situacao": "transitado",
+    "area": "direito penal"
+  },
+  {
+    "numero": "890",
+    "descricao": "Questão referente à validade de cláusula de carência em plano de saúde.",
+    "tese": "São válidas as cláusulas de carência em contratos de plano de saúde, desde que respeitados os prazos máximos da Lei 9.656/1998.",
+    "situacao": "transitado",
+    "area": "direito do consumidor"
+  },
+  {
+    "numero": "895",
+    "descricao": "Questão referente à impenhorabilidade de bem de família ocupado por sócio de sociedade empresária.",
+    "tese": "A impenhorabilidade do bem de família não é oponível em execução de dívida da própria entidade familiar.",
+    "situacao": "transitado",
+    "area": "direito processual civil"
+  },
+  {
+    "numero": "900",
+    "descricao": "Questão referente à possibilidade de habeas corpus contra decisão de tribunal que denega liminar.",
+    "tese": "É cabível habeas corpus contra decisão de tribunal que denega liminar em outro habeas corpus, quando evidenciado constrangimento ilegal.",
+    "situacao": "transitado",
+    "area": "direito penal"
+  },
+  {
+    "numero": "910",
+    "descricao": "Questão referente à responsabilidade da operadora de cartão de crédito por fraude.",
+    "tese": "A operadora de cartão de crédito responde objetivamente pelos prejuízos decorrentes de fraudes praticadas com cartões clonados.",
+    "situacao": "transitado",
+    "area": "direito do consumidor"
+  },
+  {
+    "numero": "920",
+    "descricao": "Questão referente ao cabimento de ação rescisória contra decisão transitada em julgado.",
+    "tese": "É cabível ação rescisória por violação manifesta de norma jurídica quando a decisão rescindenda contrariar jurisprudência pacífica do STJ em recurso repetitivo.",
+    "situacao": "transitado",
+    "area": "direito processual civil"
+  },
+  {
+    "numero": "925",
+    "descricao": "Questão referente à causa de aumento de pena por emprego de arma de fogo no roubo.",
+    "tese": "A causa de aumento de pena pelo emprego de arma de fogo no crime de roubo incide independentemente da apreensão e perícia da arma.",
+    "situacao": "transitado",
+    "area": "direito penal"
+  },
+  {
+    "numero": "930",
+    "descricao": "Questão referente à abusividade de taxa de corretagem embutida no preço de imóvel adquirido na planta.",
+    "tese": "É abusiva a cobrança pelo promitente vendedor de taxa de corretagem quando a venda é realizada em estande de vendas da própria incorporadora.",
+    "situacao": "transitado",
+    "area": "direito do consumidor"
+  },
+  {
+    "numero": "940",
+    "descricao": "Questão referente à possibilidade de protesto de CDA.",
+    "tese": "A Fazenda Pública pode protestar a Certidão de Dívida Ativa (CDA) como meio extrajudicial de cobrança.",
+    "situacao": "transitado",
+    "area": "direito processual civil"
+  },
+  {
+    "numero": "945",
+    "descricao": "Questão referente à devolução de valores em caso de distrato de compra de imóvel na planta.",
+    "tese": "Na resolução de contrato de promessa de compra e venda de imóvel na planta por culpa do comprador, a retenção pelo vendedor deve ser limitada a 25% dos valores pagos.",
+    "situacao": "transitado",
+    "area": "direito do consumidor"
+  },
+  {
+    "numero": "950",
+    "descricao": "Questão referente à ultratividade de norma coletiva.",
+    "tese": "As cláusulas normativas de convenção coletiva ou acordo coletivo não se incorporam ao contrato individual de trabalho após o término da vigência.",
+    "situacao": "transitado",
+    "area": "direito trabalhista"
+  },
+  {
+    "numero": "965",
+    "descricao": "Questão referente ao teletrabalho e controle de jornada.",
+    "tese": "O empregado em regime de teletrabalho não está sujeito ao controle de jornada previsto no art. 62, III, da CLT, quando a atividade for incompatível com a fixação de horário.",
+    "situacao": "transitado",
+    "area": "direito trabalhista"
+  },
+  {
+    "numero": "975",
+    "descricao": "Questão referente à responsabilidade do empregador por assédio moral no ambiente de trabalho.",
+    "tese": "O empregador responde objetivamente pelos danos morais decorrentes de assédio moral praticado por superiores hierárquicos no ambiente de trabalho.",
+    "situacao": "transitado",
+    "area": "direito trabalhista"
+  },
+  {
+    "numero": "985",
+    "descricao": "Questão referente à partilha de bens em união estável.",
+    "tese": "Na união estável, os bens adquiridos onerosamente na constância da relação são partilhados igualmente entre os companheiros, salvo contrato escrito em sentido contrário.",
+    "situacao": "transitado",
+    "area": "direito de família"
+  },
+  {
+    "numero": "995",
+    "descricao": "Questão referente à fixação de alimentos compensatórios na separação.",
+    "tese": "São cabíveis alimentos compensatórios para reequilibrar a situação patrimonial dos cônjuges quando da separação, independentemente de necessidade alimentar.",
+    "situacao": "transitado",
+    "area": "direito de família"
+  }
+]

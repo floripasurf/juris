@@ -167,6 +167,7 @@ def _print_processo(processo) -> None:
 def datajud(
     numero_cnj: str = typer.Argument(..., help="Case number in CNJ format"),
     tribunal: str = typer.Option("tjmg", "--tribunal", "-t", help="Tribunal ID"),
+    use_cache: bool = typer.Option(True, "--cache/--no-cache", help="Usar cache local DataJud"),
 ) -> None:
     """Fetch a case from DataJud (CNJ public API). Works for all tribunals."""
     from juris.datajud.client import consultar_processo
@@ -175,7 +176,7 @@ def datajud(
     console.print(f"[bold]Fetching from DataJud:[/bold] {numero_cnj} ({tribunal})")
 
     try:
-        source = consultar_processo(numero_cnj, tribunal)
+        source = consultar_processo(numero_cnj, tribunal, use_cache=use_cache)
     except Exception as e:
         console.print(f"[red]DataJud Error:[/red] {type(e).__name__}: {e}")
         raise typer.Exit(code=1) from e
@@ -186,6 +187,26 @@ def datajud(
 
     processo = parse_datajud_processo(source)
     _print_processo(processo)
+
+
+cache_app = typer.Typer(name="cache", help="Local cache management.")
+app.add_typer(cache_app)
+
+
+@cache_app.command("purge")
+def cache_purge(
+    datajud: bool = typer.Option(False, "--datajud", help="Remove cache local da API Pública DataJud"),
+) -> None:
+    """Purge local caches."""
+    if not datajud:
+        console.print("[yellow]Nada para limpar. Use --datajud.[/yellow]")
+        raise typer.Exit(code=1)
+
+    from juris.datajud.safety import DataJudCache
+
+    removed = DataJudCache().purge()
+    suffix = "arquivo" if removed == 1 else "arquivos"
+    console.print(f"[green]Cache DataJud limpo:[/green] {removed} {suffix} removido(s).")
 
 
 @app.command()
@@ -323,7 +344,8 @@ def _export_token_cert(cert_path: str, chain_path: str, pin: str) -> None:
     # Export all certs from token
     result = subprocess.run(
         [
-            "p11tool", f"--provider={pkcs11_module}",
+            "p11tool",
+            f"--provider={pkcs11_module}",
             "--list-all-certs",
             "pkcs11:token=TOKEN%20CERTDATA",
             "--outder",
@@ -350,8 +372,10 @@ def _export_token_cert(cert_path: str, chain_path: str, pin: str) -> None:
     # Export CA chain (all certs except user cert)
     result = subprocess.run(
         [
-            "p11tool", f"--provider={pkcs11_module}",
-            "--export-chain", user_cert_uri,
+            "p11tool",
+            f"--provider={pkcs11_module}",
+            "--export-chain",
+            user_cert_uri,
         ],
         capture_output=True,
         env={**__import__("os").environ, "GNUTLS_PIN": pin},
@@ -463,12 +487,14 @@ def pull_updates(
         if proc:
             known_keys = db.get_known_movimento_keys(proc.id)
 
-        processos.append({
-            "numero_cnj": cnj,
-            "tribunal_id": tribunal_id,
-            "last_sync_at": last_sync,
-            "known_movimento_keys": known_keys,
-        })
+        processos.append(
+            {
+                "numero_cnj": cnj,
+                "tribunal_id": tribunal_id,
+                "last_sync_at": last_sync,
+                "known_movimento_keys": known_keys,
+            }
+        )
 
     # Resolve credentials
     resolved_cpf = cpf or ""
@@ -480,14 +506,18 @@ def pull_updates(
     differential_count = sum(1 for p in processos if p["last_sync_at"] is not None)
     console.print(f"[bold]Syncing {len(processos)} processos...[/bold]")
     if differential_count:
-        console.print(f"[dim]{differential_count} with prior sync (differential), {len(processos) - differential_count} full sync[/dim]")
+        console.print(
+            f"[dim]{differential_count} with prior sync (differential), {len(processos) - differential_count} full sync[/dim]"
+        )
     console.print()
 
-    summary = asyncio.run(run_overnight_sync(
-        processos=processos,
-        cpf=resolved_cpf,
-        senha=resolved_senha,
-    ))
+    summary = asyncio.run(
+        run_overnight_sync(
+            processos=processos,
+            cpf=resolved_cpf,
+            senha=resolved_senha,
+        )
+    )
 
     # Persist results to LocalDB
     for result in summary.results:
@@ -514,13 +544,20 @@ def pull_updates(
             new_count = db.insert_movimentos(proc_id, mov_dicts)
 
             db.log_sync(
-                result.numero_cnj, result.tribunal_id, "mni",
-                success=True, had_changes=True, new_movimentos=new_count,
+                result.numero_cnj,
+                result.tribunal_id,
+                "mni",
+                success=True,
+                had_changes=True,
+                new_movimentos=new_count,
             )
         elif not result.error:
             db.log_sync(
-                result.numero_cnj, result.tribunal_id, "mni",
-                success=True, had_changes=False,
+                result.numero_cnj,
+                result.tribunal_id,
+                "mni",
+                success=True,
+                had_changes=False,
             )
 
     # Print results
@@ -528,10 +565,7 @@ def pull_updates(
         if result.error:
             console.print(f"  [red]FAIL[/red] {result.numero_cnj}: {result.error}")
         elif result.had_changes:
-            console.print(
-                f"  [green]UPDATED[/green] {result.numero_cnj}: "
-                f"{len(result.new_movimentos)} new movements"
-            )
+            console.print(f"  [green]UPDATED[/green] {result.numero_cnj}: {len(result.new_movimentos)} new movements")
         else:
             console.print(f"  [dim]OK[/dim] {result.numero_cnj}: no changes")
 
@@ -593,17 +627,20 @@ def analyze(
     if use_llm:
         try:
             from juris.llm.ollama import OllamaLLM
+
             llm = OllamaLLM()
             console.print("[dim]LLM: Ollama (local) for ambiguous movements[/dim]")
         except Exception:
             console.print("[yellow]Ollama not available, using rules only.[/yellow]")
 
-    analysis = asyncio.run(analyze_processo(
-        numero_cnj=processo.numero_cnj,
-        tribunal=tribunal,
-        movimentos=processo.movimentos,
-        llm=llm,
-    ))
+    analysis = asyncio.run(
+        analyze_processo(
+            numero_cnj=processo.numero_cnj,
+            tribunal=tribunal,
+            movimentos=processo.movimentos,
+            llm=llm,
+        )
+    )
 
     # Print results
     console.print(f"\n[bold green]{analysis.summary}[/bold green]\n")
@@ -639,7 +676,9 @@ def analyze(
         )
     console.print(table)
 
-    console.print(f"\n[dim]Rule: {analysis.rule_classified} | LLM: {analysis.llm_calls} | Total: {analysis.total_movimentos}[/dim]")
+    console.print(
+        f"\n[dim]Rule: {analysis.rule_classified} | LLM: {analysis.llm_calls} | Total: {analysis.total_movimentos}[/dim]"
+    )
 
 
 @app.command()
@@ -671,11 +710,13 @@ def prazos(
         return
 
     # Analyze
-    analysis = asyncio.run(analyze_processo(
-        numero_cnj=processo.numero_cnj,
-        tribunal=tribunal,
-        movimentos=processo.movimentos,
-    ))
+    analysis = asyncio.run(
+        analyze_processo(
+            numero_cnj=processo.numero_cnj,
+            tribunal=tribunal,
+            movimentos=processo.movimentos,
+        )
+    )
 
     # Compute prazos
     report = compute_prazos(
@@ -708,7 +749,11 @@ def prazos(
     table.add_column("Base Legal", width=25)
     table.add_column("Ação")
 
-    display_prazos = report.prazos if show_all else [p for p in report.prazos if p.status != StatusPrazo.ABERTO or p.dias_uteis_restantes <= 10]
+    display_prazos = (
+        report.prazos
+        if show_all
+        else [p for p in report.prazos if p.status != StatusPrazo.ABERTO or p.dias_uteis_restantes <= 10]
+    )
     for p in display_prazos:
         style = status_colors.get(p.status, "")
         dias_str = f"{p.dias_uteis_restantes}d" if p.dias_uteis_restantes >= 0 else f"{p.dias_uteis_restantes}d"
@@ -748,10 +793,7 @@ def sync(
     if tribunal:
         tracked_list = [p for p in tracked_list if p.get("tribunal") == tribunal]
 
-    processos = [
-        {"numero_cnj": p["numero_cnj"], "tribunal": p.get("tribunal", "tjmg")}
-        for p in tracked_list
-    ]
+    processos = [{"numero_cnj": p["numero_cnj"], "tribunal": p.get("tribunal", "tjmg")} for p in tracked_list]
 
     db = LocalDB()
     console.print(f"[bold]Syncing {len(processos)} processos (full pipeline)...[/bold]")
@@ -775,6 +817,7 @@ def sync(
             # Show critical alerts inline
             if r.alert_batch and r.alert_batch.has_critical:
                 from juris.alerts.deadline_alerts import AlertLevel
+
                 for a in r.alert_batch.alerts:
                     if a.level == AlertLevel.CRITICAL:
                         console.print(f"    [red]{a.short_message}[/red]")
@@ -811,10 +854,7 @@ def overnight(
     if tribunal:
         tracked_list = [p for p in tracked_list if p.get("tribunal") == tribunal]
 
-    processos = [
-        {"numero_cnj": p["numero_cnj"], "tribunal": p.get("tribunal", "tjmg")}
-        for p in tracked_list
-    ]
+    processos = [{"numero_cnj": p["numero_cnj"], "tribunal": p.get("tribunal", "tjmg")} for p in tracked_list]
 
     db = LocalDB()
     resolved_cpf = cpf or ""
@@ -823,13 +863,15 @@ def overnight(
     console.print(f"[bold]Nightly pipeline: {len(processos)} processos[/bold]")
     console.print(f"[dim]DB: {db.path} | Concurrent: {max_concurrent} | Analyze: {analyze}[/dim]\n")
 
-    summary = asyncio.run(run_nightly(
-        processos=processos,
-        db=db,
-        cpf=resolved_cpf,
-        senha=resolved_senha,
-        max_concurrent=max_concurrent,
-    ))
+    summary = asyncio.run(
+        run_nightly(
+            processos=processos,
+            db=db,
+            cpf=resolved_cpf,
+            senha=resolved_senha,
+            max_concurrent=max_concurrent,
+        )
+    )
 
     # Print results
     for r in summary.results:
@@ -850,6 +892,7 @@ def overnight(
             # Show critical alerts inline
             if r.alert_batch and r.alert_batch.has_critical:
                 from juris.alerts.deadline_alerts import AlertLevel
+
                 for a in r.alert_batch.alerts:
                     if a.level == AlertLevel.CRITICAL:
                         console.print(f"    [red]{a.short_message}[/red]")
@@ -975,13 +1018,9 @@ def defesas(
 
     # Build ProcessoContext from ProcessoDomain
     movimentos_raw = [
-        {"codigo": m.codigo_nacional, "data": m.data_hora.strftime("%Y-%m-%d")}
-        for m in (processo.movimentos or [])
+        {"codigo": m.codigo_nacional, "data": m.data_hora.strftime("%Y-%m-%d")} for m in (processo.movimentos or [])
     ]
-    partes_raw = [
-        {"nome": p.nome, "tipo": p.tipo}
-        for p in (processo.partes or [])
-    ]
+    partes_raw = [{"nome": p.nome, "tipo": p.tipo} for p in (processo.partes or [])]
 
     context = ProcessoContext(
         numero_cnj=processo.numero_cnj,
@@ -1029,10 +1068,17 @@ def busca_parte(
     cpf: str = typer.Option(None, "--cpf", "-c", help="CPF da parte (e.g., '123.456.789-00')"),
     oab: str = typer.Option(None, "--oab", "-o", help="OAB do advogado (e.g., 'SP123456')"),
     tribunal: str = typer.Option(None, "--tribunal", "-t", help="Tribunal específico (omita para buscar todos)"),
-    justica: str = typer.Option(None, "--justica", "-j", help="Filtrar por ramo: estadual, trabalho, federal, superior"),
+    justica: str = typer.Option(
+        None, "--justica", "-j", help="Filtrar por ramo: estadual, trabalho, federal, superior"
+    ),
     max_results: int = typer.Option(10, "--max", "-m", help="Máximo de resultados por tribunal"),
     enrich: bool = typer.Option(True, "--enrich/--no-enrich", help="Enriquecer via DataJud"),
     use_cache: bool = typer.Option(True, "--cache/--no-cache", help="Usar cache de resultados"),
+    confirm_datajud_batch: bool = typer.Option(
+        False,
+        "--confirm-datajud-batch",
+        help="Autoriza consultas DataJud em lote (>=10 itens) com rate limit e auditoria.",
+    ),
 ) -> None:
     """Search for processos by party name, CPF, or OAB across all channels.
 
@@ -1079,7 +1125,9 @@ def busca_parte(
     console.print(f"[bold]Busca por parte:[/bold] {' | '.join(search_parts)}")
 
     target_count = len(tribunais_busca) if tribunais_busca else len(all_tribunais)
-    console.print(f"[dim]Buscando em {target_count} tribunais via 5 canais (ESAJ, eProc, EJEF, PROJUDI, DataJud)...[/dim]")
+    console.print(
+        f"[dim]Buscando em {target_count} tribunais via 5 canais (ESAJ, eProc, EJEF, PROJUDI, DataJud)...[/dim]"
+    )
 
     request = BuscaRequest(
         nome=nome,
@@ -1094,6 +1142,7 @@ def busca_parte(
         registry=registry,
         cache=cache,
         enrich=enrich,
+        confirm_datajud_batch=confirm_datajud_batch,
     )
 
     with console.status("[bold]Consultando canais..."):
@@ -1232,7 +1281,9 @@ app.add_typer(repertory_app)
 
 @repertory_app.command("ingest")
 def repertory_ingest(
-    source: str = typer.Option(None, "--source", "-s", help="Source key (omit for all). Use 'juris repertory sources' to list."),
+    source: str = typer.Option(
+        None, "--source", "-s", help="Source key (omit for all). Use 'juris repertory sources' to list."
+    ),
     corpus_dir: str = typer.Option(None, "--corpus-dir", help="Path to corpus JSON directory"),
     include_superseded: bool = typer.Option(False, "--include-superseded", help="Include cancelada/superada entries"),
     limit: int = typer.Option(None, "--limit", "-l", help="Max items to ingest (class-based ingesters only)"),
@@ -1250,7 +1301,9 @@ def repertory_ingest(
         console.print(f"Available: {', '.join(REGISTRY)}")
         raise typer.Exit(code=1)
 
-    fts_path = Path.home() / ".juris" / "repertory.db"
+    from juris.repertory.readiness import resolve_repertory_path
+
+    fts_path = resolve_repertory_path()
     fts_path.parent.mkdir(parents=True, exist_ok=True)
     store = LocalFTSStore(db_path=fts_path)
 
@@ -1330,11 +1383,10 @@ def repertory_sources(
 @repertory_app.command("verify")
 def repertory_verify() -> None:
     """Run diagnostic verification queries against the ingested corpus."""
-    from pathlib import Path
-
+    from juris.repertory.readiness import resolve_repertory_path
     from juris.repertory.vector_store import LocalFTSStore
 
-    fts_path = Path.home() / ".juris" / "repertory.db"
+    fts_path = resolve_repertory_path()
     if not fts_path.exists():
         console.print("[yellow]No corpus ingested yet. Run 'juris repertory ingest' first.[/yellow]")
         raise typer.Exit(code=1)
@@ -1357,7 +1409,7 @@ def repertory_verify() -> None:
         status = "[green]PASS[/green]" if len(results) >= min_results else "[red]FAIL[/red]"
         if len(results) < min_results:
             all_passed = False
-        console.print(f"  {status} \"{query}\" — {len(results)} results (min: {min_results})")
+        console.print(f'  {status} "{query}" — {len(results)} results (min: {min_results})')
 
     if all_passed:
         console.print("\n[green bold]All verification queries passed.[/green bold]")
@@ -1372,13 +1424,12 @@ def repertory_search(
     top_k: int = typer.Option(10, "--top-k", "-k", help="Number of results"),
 ) -> None:
     """Search the jurisprudence corpus."""
-    from pathlib import Path
-
     from rich.table import Table as RichTable
 
+    from juris.repertory.readiness import resolve_repertory_path
     from juris.repertory.vector_store import LocalFTSStore
 
-    fts_path = Path.home() / ".juris" / "repertory.db"
+    fts_path = resolve_repertory_path()
     if not fts_path.exists():
         console.print("[yellow]No corpus ingested yet. Run 'juris repertory ingest' first.[/yellow]")
         raise typer.Exit(code=1)
@@ -1410,6 +1461,112 @@ def repertory_search(
 def repertory_poll_noticias() -> None:
     """Poll court RSS feeds for new noticias (placeholder — wired in Phase 6)."""
     console.print("[yellow]poll-noticias not yet implemented. Will be wired in Phase 6.[/yellow]")
+
+
+@repertory_app.command("status")
+def repertory_status(
+    path: str | None = typer.Option(
+        None,
+        "--path",
+        "-p",
+        help="Caminho do repertory.db (default: ~/.juris/repertory.db ou JURIS_REPERTORY_PATH).",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Saída em JSON, sem cores ou tabela."),
+    min_chunks: int | None = typer.Option(
+        None,
+        "--min-chunks",
+        help="Limiar mínimo de chunks (default: 100 ou JURIS_MIN_REPERTORY_CHUNKS).",
+    ),
+    min_source_types: int | None = typer.Option(
+        None,
+        "--min-source-types",
+        help="Limiar mínimo de tipos de fonte (default: 2 ou JURIS_MIN_REPERTORY_SOURCE_TYPES).",
+    ),
+) -> None:
+    """Inspeciona o estado do corpus jurisprudencial e diz se está pronto.
+
+    Este comando substitui as conferências manuais via `sqlite3` que o runbook
+    de smoke-test usava. Ele nunca cria nem move o banco — só lê. Saída sai
+    em texto pretty-printed por padrão; use `--json` para automação.
+    """
+    import json as _json
+    from pathlib import Path as FilePath
+
+    from rich.table import Table as RichTable
+
+    from juris.repertory.readiness import (
+        detect_legacy_path,
+        read_status,
+        resolve_repertory_path,
+    )
+
+    explicit = FilePath(path).expanduser() if path else None
+    db_path = resolve_repertory_path(explicit)
+    status = read_status(
+        db_path,
+        min_chunks=min_chunks,
+        min_source_types=min_source_types,
+    )
+    legacy = detect_legacy_path(canonical=db_path)
+
+    if json_output:
+        payload: dict[str, object] = status.to_dict()
+        if legacy is not None:
+            payload["legacy_db_detected"] = str(legacy)
+        console.print_json(_json.dumps(payload, ensure_ascii=False))
+        if not status.is_ready:
+            raise typer.Exit(code=1)
+        return
+
+    color = "green" if status.is_ready else "red"
+    console.print(f"[bold]Repertory:[/bold] {status.db_path}")
+    console.print(f"[bold]Pronto para uso real:[/bold] [{color}]{'sim' if status.is_ready else 'não'}[/{color}]")
+    if not status.is_ready and status.not_ready_reason:
+        console.print(f"[red]Motivo:[/red] {status.not_ready_reason}")
+
+    table = RichTable(title="Resumo do corpus")
+    table.add_column("Métrica", style="cyan", width=24)
+    table.add_column("Valor", justify="right", width=14)
+    table.add_column("Limiar", justify="right", width=10)
+    table.add_row("Existe em disco", "sim" if status.exists else "não", "—")
+    table.add_row(
+        "Total de chunks",
+        str(status.chunk_count),
+        f"≥ {status.min_chunks}",
+    )
+    table.add_row(
+        "Documentos (source_id)",
+        str(status.source_count),
+        "—",
+    )
+    table.add_row(
+        "Tipos de fonte distintos",
+        str(status.source_type_count),
+        f"≥ {status.min_source_types}",
+    )
+    console.print(table)
+
+    if status.source_type_breakdown:
+        breakdown = RichTable(title="Chunks por tipo de fonte")
+        breakdown.add_column("source_type", style="cyan")
+        breakdown.add_column("chunks", justify="right")
+        for tipo, count in sorted(
+            status.source_type_breakdown.items(),
+            key=lambda kv: kv[1],
+            reverse=True,
+        ):
+            breakdown.add_row(tipo, str(count))
+        console.print(breakdown)
+
+    if legacy is not None:
+        console.print(
+            f"[yellow]Aviso: banco legado encontrado em {legacy}.[/yellow] "
+            "[yellow]Mova o conteúdo manualmente para o caminho canônico ou "
+            "defina JURIS_REPERTORY_PATH para usar este DB.[/yellow]"
+        )
+
+    if not status.is_ready:
+        raise typer.Exit(code=1)
 
 
 @repertory_app.command("ingest-peticoes")
@@ -1494,6 +1651,7 @@ def review(
         try:
             from juris.config import get_settings
             from juris.llm.claude import ClaudeLLM
+
             settings = get_settings()
             if not settings.anthropic_api_key:
                 console.print("[red]ANTHROPIC_API_KEY not configured. Set it in .env or environment.[/red]")
@@ -1508,6 +1666,7 @@ def review(
     else:
         try:
             from juris.llm.ollama import OllamaLLM
+
             llm = OllamaLLM()
             console.print("[dim]LLM: Ollama (local)[/dim]")
         except Exception:
@@ -1516,11 +1675,12 @@ def review(
 
     # Set up retriever
     from juris.repertory.embeddings import LegalEmbedder
+    from juris.repertory.readiness import resolve_repertory_path
     from juris.repertory.retrieval.hybrid import HybridRetriever
     from juris.repertory.retrieval.service import RepertoryService
     from juris.repertory.vector_store import LocalFTSStore
 
-    fts_path = Path.home() / ".juris" / "repertory.db"
+    fts_path = resolve_repertory_path()
     if not fts_path.exists():
         console.print("[yellow]No corpus ingested. Run 'juris repertory ingest' first.[/yellow]")
         console.print("[dim]Proceeding without retrieval context...[/dim]")
@@ -1573,7 +1733,9 @@ def review(
 
     # Print summary
     console.print(f"\n[bold green]Review complete[/bold green] ({report.duration_seconds:.1f}s)")
-    console.print(f"  Critical: {report.critical_count} | Important: {report.important_count} | Suggestions: {report.suggestion_count}")
+    console.print(
+        f"  Critical: {report.critical_count} | Important: {report.important_count} | Suggestions: {report.suggestion_count}"
+    )
     console.print(f"  Citations: {len(report.citations_found)} | LLM calls: {report.llm_calls}")
 
     # Print issues
@@ -1644,6 +1806,7 @@ def draft(
         try:
             from juris.config import get_settings
             from juris.llm.claude import ClaudeLLM
+
             settings = get_settings()
             if not settings.anthropic_api_key:
                 console.print("[red]ANTHROPIC_API_KEY not configured. Set it in .env or environment.[/red]")
@@ -1658,6 +1821,7 @@ def draft(
     else:
         try:
             from juris.llm.ollama import OllamaLLM
+
             llm = OllamaLLM()
             console.print("[dim]LLM: Ollama (local)[/dim]")
         except Exception as exc:
@@ -1667,12 +1831,13 @@ def draft(
     # Set up retrieval infrastructure
     try:
         from juris.repertory.embeddings import LegalEmbedder
+        from juris.repertory.readiness import resolve_repertory_path
         from juris.repertory.retrieval.hybrid import HybridRetriever
         from juris.repertory.retrieval.reranker import CrossEncoderReranker
         from juris.repertory.vector_store import LocalFTSStore
 
         embedder = LegalEmbedder()
-        fts_store = LocalFTSStore(Path("data/repertory.db"))
+        fts_store = LocalFTSStore(resolve_repertory_path())
         reranker = CrossEncoderReranker()
         retriever = HybridRetriever(
             dense_store=fts_store,
@@ -1696,6 +1861,7 @@ def draft(
     reviewer = None
     if not skip_review:
         from juris.review.reviewer import ReviewerAgent
+
         reviewer = ReviewerAgent(llm=llm, retriever=repertory, audit_log=audit)
 
     agent = DrafterAgent(
@@ -1738,11 +1904,13 @@ def draft(
 
     if result.contraponto_section:
         console.print()
-        console.print(Panel(
-            result.contraponto_section,
-            title="[bold yellow]CONTRAPONTO PREVISTO[/bold yellow]",
-            border_style="yellow",
-        ))
+        console.print(
+            Panel(
+                result.contraponto_section,
+                title="[bold yellow]CONTRAPONTO PREVISTO[/bold yellow]",
+                border_style="yellow",
+            )
+        )
 
     # Summary footer
     console.print()
@@ -1754,9 +1922,7 @@ def draft(
     if result.reviewer_report:
         rr = result.reviewer_report
         console.print(
-            f"Revisor: {rr.critical_count} criticos, "
-            f"{rr.important_count} importantes, "
-            f"{rr.suggestion_count} sugestoes"
+            f"Revisor: {rr.critical_count} criticos, {rr.important_count} importantes, {rr.suggestion_count} sugestoes"
         )
 
     # Save to file if requested
@@ -1828,11 +1994,13 @@ def alerts_send() -> None:
         for pr in pending:
             if pr.status in ("vencido", "urgente", "proximo"):
                 level = AlertLevel.CRITICAL if pr.status in ("vencido", "urgente") else AlertLevel.WARNING
-                alerts_list.append(DeadlineAlert(
-                    prazo=pr,
-                    level=level,
-                    message=f"{pr.rule_nome}: {pr.status}",
-                ))
+                alerts_list.append(
+                    DeadlineAlert(
+                        prazo=pr,
+                        level=level,
+                        message=f"{pr.rule_nome}: {pr.status}",
+                    )
+                )
 
         if not alerts_list:
             continue
@@ -1932,11 +2100,12 @@ def benchmark_run(
     # Set up retrieval
     try:
         from juris.repertory.embeddings import LegalEmbedder
+        from juris.repertory.readiness import resolve_repertory_path
         from juris.repertory.retrieval.hybrid import HybridRetriever
         from juris.repertory.retrieval.service import RepertoryService
         from juris.repertory.vector_store import LocalFTSStore
 
-        fts_path = Path.home() / ".juris" / "repertory.db"
+        fts_path = resolve_repertory_path()
         store = LocalFTSStore(db_path=fts_path)
         embedder = LegalEmbedder()
         retriever = HybridRetriever(dense_store=store, sparse_store=store, embedder=embedder)
@@ -2131,7 +2300,7 @@ def file_petition(
         return
 
     if result.success:
-        console.print(f"\n[bold green]Petição protocolada com sucesso![/bold green]")
+        console.print("\n[bold green]Petição protocolada com sucesso![/bold green]")
         if result.receipt:
             console.print(f"  Protocolo: [bold]{result.receipt.protocolo}[/bold]")
             console.print(f"  Mensagem: {result.receipt.mensagem}")
@@ -2143,7 +2312,7 @@ def file_petition(
             console.print(f"  [dim]Signed hash: {result.chain_of_custody.signed_pdf_hash[:16]}...[/dim]")
         console.print(f"  Audit entries: {len(result.audit_entry_ids)}")
     else:
-        console.print(f"\n[bold red]Falha no protocolo.[/bold red]")
+        console.print("\n[bold red]Falha no protocolo.[/bold red]")
         console.print(f"  Erro: {result.error}")
         if result.audit_entry_ids:
             console.print(f"  [dim]Audit entries: {len(result.audit_entry_ids)}[/dim]")
@@ -2153,6 +2322,397 @@ def file_petition(
 from juris.cli.search_cli import search_app
 
 app.add_typer(search_app, name="search")
+
+
+@app.command()
+def web(
+    host: str = typer.Option("127.0.0.1", "--host", help="Host local da interface web"),
+    port: int = typer.Option(8765, "--port", "-p", help="Porta local da interface web"),
+    reload: bool = typer.Option(False, "--reload", help="Recarregar servidor durante desenvolvimento"),
+) -> None:
+    """Start the local browser UI for the Juris pilot workflow."""
+    import uvicorn
+
+    if host not in {"127.0.0.1", "localhost"}:
+        console.print("[red]A interface web local só pode escutar em 127.0.0.1 ou localhost.[/red]")
+        raise typer.Exit(code=1)
+
+    console.print(f"[green]Juris web:[/green] http://{host}:{port}")
+    uvicorn.run("juris.web.app:app", host=host, port=port, reload=reload)
+
+
+# ---------------------------------------------------------------------------
+# demo — end-to-end pilot pipeline (sprint 15)
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def demo(
+    numero_cnj: str = typer.Argument(..., help="Número CNJ do processo"),
+    tipo: str = typer.Argument(..., help="Tipo de petição (contestacao, inicial, apelacao, ...)"),
+    tribunal: str = typer.Option("tjmg", "--tribunal", "-t", help="ID do tribunal"),
+    cpf: str | None = typer.Option(None, "--cpf", help="CPF do advogado (futuro: MNI)"),
+    source: str = typer.Option("datajud", "--source", help="Origem do processo: datajud | mni | fixture"),
+    out_root: str = typer.Option("juris-out", "--out", "-o", help="Diretório raiz para artefatos"),
+    thesis: str | None = typer.Option(None, "--thesis", "-T", help="Tese explícita"),
+    instructions: str = typer.Option("", "--instructions", "-i", help="Instruções extras"),
+    cloud: bool = typer.Option(False, "--cloud", help="Usar Claude (cloud) em vez de Ollama"),
+    skip_review: bool = typer.Option(False, "--skip-review", help="Pular revisão pós-draft"),
+    use_cache: bool = typer.Option(True, "--cache/--no-cache", help="Usar cache local DataJud"),
+    modo: str = typer.Option(
+        "minuta-sugerida",
+        "--modo",
+        help="Modo de saída: minuta-sugerida (default) | rascunho-pesquisa",
+    ),
+) -> None:
+    """Pipeline ponta-a-ponta para demonstração com advogado(a) parceiro(a).
+
+    Lê o processo (DataJud/MNI/fixture), analisa movimentos, calcula prazos,
+    gera petição com revisão e exporta todos os artefatos + audit chain para
+    `<out>/<cnj>/`. Modo fixture força DEMO MODE (banner + prefixo `DEMO-`).
+    """
+    import asyncio
+    from pathlib import Path as FilePath
+
+    from juris.core.types import NumeroCNJ
+    from juris.demo import DemoRequest, OutputMode, SourceMode, run_demo
+    from juris.demo.artifacts import write_artifacts
+    from juris.demo.disclaimer import output_dir_name
+    from juris.demo.orchestrator import derive_demo_mode, load_processo
+    from juris.demo.output_mode import label_for as output_mode_label
+    from juris.repertory.peticoes.models import TipoPeticao
+
+    # Validate inputs. CNJ format check runs first so a typo never creates
+    # an output directory that would carry the bad string into artifacts.
+    try:
+        NumeroCNJ(numero_cnj)
+    except ValueError as exc:
+        console.print(f"[red]Número CNJ inválido: '{numero_cnj}'. Formato esperado: NNNNNNN-DD.AAAA.J.TT.OOOO[/red]")
+        raise typer.Exit(code=1) from exc
+
+    try:
+        tipo_peticao = TipoPeticao(tipo)
+    except ValueError as exc:
+        valid = ", ".join(t.value for t in TipoPeticao)
+        console.print(f"[red]Tipo inválido: '{tipo}'. Opções: {valid}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    try:
+        source_mode = SourceMode(source)
+    except ValueError as exc:
+        console.print(f"[red]--source inválido: '{source}'. Opções: datajud, mni, fixture.[/red]")
+        raise typer.Exit(code=1) from exc
+
+    try:
+        output_mode = OutputMode(modo)
+    except ValueError as exc:
+        valid_modes = ", ".join(m.value for m in OutputMode)
+        console.print(f"[red]--modo inválido: '{modo}'. Opções: {valid_modes}.[/red]")
+        raise typer.Exit(code=1) from exc
+
+    is_demo_mode = derive_demo_mode(source_mode)
+
+    # Real-source safety gate: refuse to run against a missing/empty corpus
+    # when the source is datajud or mni. Fixture mode is allowed through
+    # because its output is loud-banner DEMO and not lawyer-fileable.
+    # Without this gate, a real run would silently fall back to empty
+    # retrieval and produce a "draft" with no verifiable citations — the
+    # worst failure mode in a lawyer-facing demo (Sprint 16, Codex review).
+    from juris.repertory.readiness import (
+        detect_legacy_path,
+        read_status,
+        resolve_repertory_path,
+    )
+
+    repertory_path = resolve_repertory_path()
+    legacy_db = detect_legacy_path(canonical=repertory_path)
+    if legacy_db is not None:
+        console.print(
+            f"[yellow]Aviso: banco legado encontrado em {legacy_db}.[/yellow] "
+            "[yellow]O demo usa o caminho canônico. Defina JURIS_REPERTORY_PATH "
+            "para usar o banco legado.[/yellow]"
+        )
+
+    if not is_demo_mode:
+        status = read_status(repertory_path)
+        if not status.is_ready:
+            console.print(f"[red]Corpus não está pronto para uso real ({status.not_ready_reason}).[/red]")
+            console.print(
+                "[red]Demo abortado: rodar contra source='datajud' ou 'mni' sem "
+                "corpus suficiente produziria minuta sem citações verificáveis.[/red]"
+            )
+            console.print("[yellow]Diagnóstico:[/yellow] [bold]juris repertory status[/bold]")
+            console.print(
+                "[yellow]Re-ingestão:[/yellow] "
+                "[bold]juris repertory ingest[/bold] (ou aponte JURIS_REPERTORY_PATH "
+                "para um banco populado)."
+            )
+            raise typer.Exit(code=1)
+
+    # Resolve output paths
+    out_root_path = FilePath(out_root)
+    case_dir = out_root_path / output_dir_name(numero_cnj, demo_mode=is_demo_mode)
+    case_dir.mkdir(parents=True, exist_ok=True)
+    audit_path = case_dir / "audit.jsonl"
+
+    # Banner — print loud if demo mode
+    if is_demo_mode:
+        console.print(
+            "[yellow bold]MODO DEMONSTRAÇÃO ATIVO[/yellow bold] "
+            "[yellow](source=fixture). Saída não pode ser usada processualmente.[/yellow]"
+        )
+
+    # Set up LLM (mirrors `draft` command)
+    if cloud:
+        console.print(
+            "[yellow]AVISO PII:[/yellow] --cloud envia dados do processo "
+            "para API externa. Use apenas se o caso não contiver dados sensíveis."
+        )
+        try:
+            from juris.config import get_settings
+            from juris.llm.claude import ClaudeLLM
+
+            settings = get_settings()
+            if not settings.anthropic_api_key:
+                console.print("[red]ANTHROPIC_API_KEY não configurada (.env ou ambiente).[/red]")
+                raise typer.Exit(code=1)
+            llm = ClaudeLLM(api_key=settings.anthropic_api_key.get_secret_value())
+            console.print("[dim]LLM: Claude (cloud)[/dim]")
+        except typer.Exit:
+            raise
+        except Exception as exc:
+            console.print(f"[red]Claude indisponível: {exc}[/red]")
+            raise typer.Exit(code=1) from exc
+    else:
+        try:
+            from juris.llm.ollama import OllamaLLM
+
+            llm = OllamaLLM()
+            console.print("[dim]LLM: Ollama (local)[/dim]")
+        except Exception as exc:
+            console.print("[red]Ollama indisponível. Servidor Ollama está rodando?[/red]")
+            raise typer.Exit(code=1) from exc
+
+    # Set up retrieval
+    try:
+        from juris.repertory.embeddings import LegalEmbedder
+        from juris.repertory.retrieval.hybrid import HybridRetriever
+        from juris.repertory.retrieval.reranker import CrossEncoderReranker
+        from juris.repertory.retrieval.service import RepertoryService
+        from juris.repertory.vector_store import LocalFTSStore
+
+        embedder = LegalEmbedder()
+        # Use the canonical (or env-overridden) repertory path so this run
+        # reads from the same DB the safety gate validated above.
+        fts_store = LocalFTSStore(repertory_path)
+        reranker = CrossEncoderReranker()
+        retriever = HybridRetriever(
+            dense_store=fts_store,
+            sparse_store=fts_store,
+            embedder=embedder,
+            reranker=reranker,
+        )
+        repertory = RepertoryService(retriever)
+    except Exception as exc:
+        console.print(f"[red]Falha ao inicializar retrieval: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    # Load processo
+    try:
+        processo = load_processo(numero_cnj, tribunal, source_mode, use_cache=use_cache, audit_path=audit_path)
+    except (LookupError, NotImplementedError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    # Build request
+    request = DemoRequest(
+        numero_cnj=numero_cnj,
+        tipo_peticao=tipo_peticao,
+        tribunal=tribunal,
+        cpf=cpf,
+        source=source_mode,
+        out_root=out_root_path,
+        thesis=thesis,
+        instructions=instructions,
+        use_cloud_llm=cloud,
+        skip_review=skip_review,
+        output_mode=output_mode,
+    )
+
+    console.print(
+        f"[bold]Demo:[/bold] {numero_cnj} ({tribunal}) — tipo={tipo_peticao.value}, source={source_mode.value}"
+    )
+    console.print(f"[bold]Modo:[/bold] {output_mode_label(output_mode)} ({output_mode.value})")
+    console.print(f"[dim]Saída: {case_dir}[/dim]")
+
+    try:
+        result = asyncio.run(
+            run_demo(
+                request,
+                llm=llm,
+                repertory=repertory,
+                out_dir=case_dir,
+                audit_path=audit_path,
+                is_demo_mode=is_demo_mode,
+                processo=processo,
+            )
+        )
+    except Exception as exc:
+        console.print(f"[red]Falha no pipeline demo: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    artifacts = write_artifacts(result)
+
+    # Print summary
+    console.print()
+    if result.succeeded:
+        console.print(f"[green]Concluído em {result.duration_seconds:.1f}s.[/green]")
+    else:
+        console.print(f"[red]Falhou após {result.duration_seconds:.1f}s (artefatos parciais gravados).[/red]")
+    if result.degraded:
+        console.print(f"[yellow]Execução degradada: {result.degradation_reason}[/yellow]")
+    if result.errors:
+        for e in result.errors:
+            console.print(f"[yellow]- {e}[/yellow]")
+    console.print(f"[bold]Artefatos ({len(artifacts)}):[/bold]")
+    for name in sorted(artifacts):
+        console.print(f"  - {case_dir / name}")
+    if is_demo_mode:
+        console.print(
+            "[yellow bold]Lembrete:[/yellow bold] [yellow]Saída em modo DEMO. Não pode ser protocolada.[/yellow]"
+        )
+
+    if not result.succeeded:
+        # Lawyer-facing demo must surface failure in the exit code so callers
+        # (CI, smoke-test runbook, partner walkthrough) can't mistake a partial
+        # run for a successful one.
+        raise typer.Exit(code=2)
+
+
+# ---------------------------------------------------------------------------
+# audit — chain integrity verification
+# ---------------------------------------------------------------------------
+
+
+audit_app = typer.Typer(name="audit", help="Comandos de auditoria.")
+app.add_typer(audit_app)
+
+
+@audit_app.command("verify")
+def audit_verify(
+    path: str = typer.Argument(..., help="Caminho do audit.jsonl a verificar"),
+) -> None:
+    """Verifica a integridade da cadeia de hashes em um arquivo audit.jsonl."""
+    from pathlib import Path as FilePath
+
+    from juris.demo.audit_verify import verify_audit_file
+
+    audit_path = FilePath(path)
+    try:
+        report = verify_audit_file(audit_path)
+    except FileNotFoundError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    console.print(report.to_text())
+    if not report.is_intact:
+        raise typer.Exit(code=2)
+
+
+# ---------------------------------------------------------------------------
+# pilot — operator preflight before a lawyer-facing demo session
+# ---------------------------------------------------------------------------
+
+
+pilot_app = typer.Typer(name="pilot", help="Ferramentas para sessões com advogado(a) parceiro(a).")
+app.add_typer(pilot_app)
+
+
+_PREFLIGHT_STATUS_STYLE = {
+    "pass": "green",
+    "warn": "yellow",
+    "fail": "red",
+    "skip": "dim",
+}
+
+
+@pilot_app.command("preflight")
+def pilot_preflight(
+    out_root: str | None = typer.Option(
+        None,
+        "--out",
+        "-o",
+        help="Diretório de saída do `juris demo` para validar contra runs anteriores.",
+    ),
+    fixture_only: bool = typer.Option(
+        False,
+        "--fixture-only",
+        help="Aceita corpus vazio (modo fixture). Por padrão exige corpus pronto.",
+    ),
+    embedding_model: str = typer.Option(
+        "BAAI/bge-m3",
+        "--embedding-model",
+        help="Modelo de embeddings a verificar no cache HF.",
+    ),
+    skip_ollama_probe: bool = typer.Option(
+        False,
+        "--skip-ollama-probe",
+        help="Não tenta conectar ao Ollama (útil em CI/offline).",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Saída em JSON, sem cores ou tabela."),
+) -> None:
+    """Roda checks de readiness antes de uma sessão real com advogado(a).
+
+    Substitui o checklist manual em ``docs/pilot/smoke-test-notes.md`` §0.
+    Sai com código 0 quando todos os checks passam (PASS/WARN). Qualquer FAIL
+    aborta com código 1 — operador deve remediar antes de rodar `juris demo`
+    contra um caso real.
+    """
+    import json as _json
+    from pathlib import Path as FilePath
+
+    from rich.table import Table as RichTable
+
+    from juris.pilot.preflight import run_preflight
+
+    out_path = FilePath(out_root).expanduser() if out_root else None
+    report = run_preflight(
+        out_root=out_path,
+        real_source_required=not fixture_only,
+        embedding_model=embedding_model,
+        probe_ollama=not skip_ollama_probe,
+    )
+
+    if json_output:
+        console.print_json(_json.dumps(report.to_dict(), ensure_ascii=False))
+        if not report.is_ready:
+            raise typer.Exit(code=1)
+        return
+
+    table = RichTable(title="Pilot preflight")
+    table.add_column("Check", style="cyan", width=22)
+    table.add_column("Status", width=8)
+    table.add_column("Mensagem", overflow="fold")
+    for check in report.checks:
+        style = _PREFLIGHT_STATUS_STYLE.get(check.status.value, "white")
+        table.add_row(
+            check.name,
+            f"[{style}]{check.status.value.upper()}[/{style}]",
+            check.message,
+        )
+    console.print(table)
+
+    for check in report.checks:
+        if check.remediation:
+            console.print(f"[yellow]→ {check.name}:[/yellow] {check.remediation}")
+
+    if report.is_ready:
+        flavor = " (com avisos)" if report.has_warnings else ""
+        console.print(f"[green]Preflight OK{flavor}.[/green]")
+        return
+
+    console.print("[red]Preflight falhou. Não rode `juris demo` em modo real até remediar os checks com FAIL.[/red]")
+    raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":
