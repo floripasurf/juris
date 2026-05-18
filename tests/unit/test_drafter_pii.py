@@ -1,0 +1,91 @@
+"""PII propagation tests for the drafter LLM calls."""
+
+from __future__ import annotations
+
+from typing import Any
+
+import pytest
+
+from juris.agents.drafter import DrafterAgent, DraftRequest
+from juris.agents.researcher import ResearchResult
+from juris.defesas.context import ProcessoContext
+from juris.llm.base import AbstractLLM, LLMResponse
+from juris.repertory.peticoes.models import TipoPeticao
+
+
+class RecordingLLM(AbstractLLM):
+    """Records PII markers passed to completion calls."""
+
+    def __init__(self) -> None:
+        self.contains_pii_values: list[bool] = []
+
+    async def complete(
+        self,
+        prompt: str,
+        system: str | None = None,
+        schema: dict[str, Any] | None = None,
+        max_tokens: int = 1024,
+        temperature: float = 0.0,
+        *,
+        contains_pii: bool = False,
+    ) -> LLMResponse:
+        self.contains_pii_values.append(contains_pii)
+        return LLMResponse(content="texto gerado", model=self.model_name)
+
+    @property
+    def model_name(self) -> str:
+        return "recording-llm"
+
+
+@pytest.mark.asyncio
+async def test_generate_marks_case_draft_prompt_as_pii() -> None:
+    llm = RecordingLLM()
+    agent = DrafterAgent(
+        llm=llm,
+        repertory=None,  # type: ignore[arg-type]
+        researcher=None,  # type: ignore[arg-type]
+        verifier=None,  # type: ignore[arg-type]
+    )
+
+    await agent._generate(
+        request=DraftRequest(
+            numero_cnj="0000001-02.2024.8.26.0100",
+            tribunal="TJSP",
+            tipo_peticao=TipoPeticao.CONTESTACAO,
+        ),
+        case_context={"numero_cnj": "0000001-02.2024.8.26.0100"},
+        thesis="nulidade de citacao",
+        research=ResearchResult(thesis="nulidade de citacao"),
+        defesa_text="",
+        style_text="",
+        revision_feedback="",
+    )
+
+    assert llm.contains_pii_values == [True]
+
+
+@pytest.mark.asyncio
+async def test_thesis_inference_marks_case_context_prompt_as_pii() -> None:
+    llm = RecordingLLM()
+    agent = DrafterAgent(
+        llm=llm,
+        repertory=None,  # type: ignore[arg-type]
+        researcher=None,  # type: ignore[arg-type]
+        verifier=None,  # type: ignore[arg-type]
+    )
+
+    await agent._infer_thesis(
+        DraftRequest(
+            numero_cnj="0000001-02.2024.8.26.0100",
+            tribunal="TJSP",
+            tipo_peticao=TipoPeticao.CONTESTACAO,
+        ),
+        ProcessoContext(
+            numero_cnj="0000001-02.2024.8.26.0100",
+            tribunal="TJSP",
+            classe="Procedimento Comum Civel",
+            assuntos=["Responsabilidade civil"],
+        ),
+    )
+
+    assert llm.contains_pii_values == [True]

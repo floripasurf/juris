@@ -359,6 +359,7 @@ class DrafterAgent:
             system=SYSTEM_PROMPT,
             max_tokens=4096,
             temperature=0.15,
+            contains_pii=True,
         )
         return response.content
 
@@ -379,6 +380,7 @@ class DrafterAgent:
                 prompt=prompt,
                 temperature=0.1,
                 max_tokens=256,
+                contains_pii=True,
             )
             return response.content.strip()
         except Exception:
