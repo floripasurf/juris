@@ -1,8 +1,8 @@
 # Smoke Session — Raphael Primeiro Teste
 
-Data alvo: 2026-05-18  
-Branch/PR: `feat/llm-cli-cloud-adapter` / PR #2  
-Modo: fixture-only, sem PII, `rascunho-pesquisa`, CLI cloud `claude`  
+Data alvo: 2026-05-18
+Branch/PR: `feat/llm-cli-cloud-adapter` / PR #2
+Modo: fixture-only, sem PII, `rascunho-pesquisa`, CLI cloud `claude`
 Diretório de saída: `juris-out-smoke-2026-05-18`
 
 ## Decisão operacional
