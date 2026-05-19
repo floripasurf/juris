@@ -131,8 +131,6 @@ class LocalCliLLM(AbstractLLM):
             "exec",
             "--sandbox",
             "read-only",
-            "--ask-for-approval",
-            "never",
             "--skip-git-repo-check",
             "--ephemeral",
             _CODEX_OUTPUT_FLAG,

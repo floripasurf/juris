@@ -100,6 +100,26 @@ async def test_codex_output_file_is_read_and_cleaned_up(
     assert not output_path.exists()
 
 
+def test_codex_command_uses_current_exec_flags() -> None:
+    llm = LocalCliLLM(provider="codex")
+
+    command, stdin = llm._command_and_stdin(
+        prompt="responda ok",
+        system=None,
+        schema=None,
+        max_tokens=128,
+        temperature=0.0,
+    )
+
+    assert command[:4] == ["codex", "exec", "--sandbox", "read-only"]
+    assert "--ask-for-approval" not in command
+    assert "never" not in command
+    assert "--skip-git-repo-check" in command
+    assert "--ephemeral" in command
+    assert command[-1] == "-"
+    assert stdin == "responda ok"
+
+
 @pytest.mark.asyncio
 async def test_codex_output_file_is_cleaned_up_on_failure(
     tmp_path: Path,
