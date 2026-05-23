@@ -5,8 +5,20 @@ from __future__ import annotations
 from enum import Enum
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+# URLs that exist purely as developer convenience defaults. Each must be
+# explicitly overridden via environment variables when ENVIRONMENT=prod
+# so a missing env var doesn't silently fall back to a dev service.
+_DEV_DEFAULTS = {
+    "database_url": "postgresql+asyncpg://juris:juris_dev@localhost:5432/juris",
+    "database_url_sync": "postgresql+psycopg://juris:juris_dev@localhost:5432/juris",
+    "qdrant_url": "http://localhost:6333",
+    "redis_url": "redis://localhost:6379/0",
+    "ollama_url": "http://localhost:11434",
+}
 
 
 class Environment(str, Enum):
@@ -71,6 +83,24 @@ class Settings(BaseSettings):
     @property
     def is_dev(self) -> bool:
         return self.environment == Environment.DEV
+
+    @model_validator(mode="after")
+    def _reject_dev_defaults_in_prod(self) -> "Settings":
+        """Fail closed if ENVIRONMENT=prod is set but any localhost dev URL was not overridden."""
+        if self.environment != Environment.PROD:
+            return self
+        leaked = [
+            name
+            for name, dev_value in _DEV_DEFAULTS.items()
+            if getattr(self, name) == dev_value
+        ]
+        if leaked:
+            joined = ", ".join(leaked)
+            raise ValueError(
+                f"ENVIRONMENT=prod requires explicit override for: {joined}. "
+                "Set the matching env vars (e.g., DATABASE_URL=...) before starting."
+            )
+        return self
 
 
 _settings: Settings | None = None
