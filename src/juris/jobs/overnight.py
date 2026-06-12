@@ -74,6 +74,7 @@ async def sync_processo_mni(
     from juris.mni.auth import PasswordAuth
     from juris.mni.client import get_mni_client
     from juris.mni.operations.consulta import consultar_processo
+    from juris.mni.tribunais import get_tribunal
 
     try:
         circuit_breaker.check(tribunal_id)
@@ -85,27 +86,43 @@ async def sync_processo_mni(
         )
 
     try:
-        auth = PasswordAuth(cpf=cpf, senha=senha)
-        client = get_mni_client(tribunal_id, auth)
-        response = consultar_processo(
-            client=client,
-            id_consultante=cpf,
-            senha_consultante=senha,
-            numero_cnj=numero_cnj,
-            com_documentos=False,
-        )
+        tribunal_cfg = get_tribunal(tribunal_id)
+    except KeyError:
+        tribunal_cfg = None
 
-        sucesso = getattr(response, "sucesso", None)
-        if sucesso is False:
-            msg = getattr(response, "mensagem", "Unknown error")
-            circuit_breaker.record_failure(tribunal_id)
-            return DiffResult(
+    try:
+        # mTLS tribunals (e.g. TJMG) authenticate with the A3 hardware token,
+        # not zeep+password. Route them through the PKCS#11 path.
+        if tribunal_cfg is not None and tribunal_cfg.requires_mtls:
+            fetched = _fetch_mni_mtls(
                 numero_cnj=numero_cnj,
-                tribunal_id=tribunal_id,
-                error=f"MNI error: {msg}",
+                tribunal_cfg=tribunal_cfg,
+                cpf=cpf,
+                senha=senha,
+            )
+        else:
+            auth = PasswordAuth(cpf=cpf, senha=senha)
+            client = get_mni_client(tribunal_id, auth)
+            response = consultar_processo(
+                client=client,
+                id_consultante=cpf,
+                senha_consultante=senha,
+                numero_cnj=numero_cnj,
+                com_documentos=False,
             )
 
-        fetched = parse_processo(response, tribunal_id=tribunal_id)
+            sucesso = getattr(response, "sucesso", None)
+            if sucesso is False:
+                msg = getattr(response, "mensagem", "Unknown error")
+                circuit_breaker.record_failure(tribunal_id)
+                return DiffResult(
+                    numero_cnj=numero_cnj,
+                    tribunal_id=tribunal_id,
+                    error=f"MNI error: {msg}",
+                )
+
+            fetched = parse_processo(response, tribunal_id=tribunal_id)
+
         circuit_breaker.record_success(tribunal_id)
 
         return diff_processo(
@@ -123,6 +140,65 @@ async def sync_processo_mni(
             tribunal_id=tribunal_id,
             error=f"{type(e).__name__}: {e}",
         )
+
+
+def _fetch_mni_mtls(
+    numero_cnj: str,
+    tribunal_cfg: Any,
+    cpf: str,
+    senha: str,
+) -> ProcessoDomain:
+    """Fetch a processo from an mTLS tribunal via the A3 token (PKCS#11).
+
+    For unattended runs the token PIN comes from ``settings.token_pin``; if
+    it is unset, the run can't unlock the token and a clear error is raised
+    so the caller records a per-processo failure rather than crashing.
+
+    Args:
+        numero_cnj: Case number.
+        tribunal_cfg: TribunalConfig for the mTLS tribunal.
+        cpf: Consultant CPF (idConsultante).
+        senha: PJe application password (senhaConsultante).
+
+    Returns:
+        The fetched :class:`ProcessoDomain`.
+
+    Raises:
+        RuntimeError: If no token PIN is available for the unattended run.
+    """
+    from urllib.parse import urlparse
+
+    from juris.config import get_settings
+    from juris.mni.operations.consulta_pkcs11 import consultar_processo_pkcs11
+    from juris.mni.token import build_pkcs11_config, extract_token_material
+
+    settings = get_settings()
+    if not settings.token_pin:
+        msg = "mTLS tribunal requires TOKEN_PIN for unattended sync (set it in the environment)."
+        raise RuntimeError(msg)
+    pin = settings.token_pin.get_secret_value()
+
+    material = extract_token_material(settings.pkcs11_module)
+    pkcs11_config = build_pkcs11_config(material, pin, settings.pkcs11_module)
+
+    service_url = tribunal_cfg.service_url_override or tribunal_cfg.wsdl_url.replace("?wsdl", "")
+    parsed = urlparse(service_url)
+
+    result = consultar_processo_pkcs11(
+        host=parsed.hostname or "",
+        path=parsed.path or "/pje/intercomunicacao",
+        pkcs11_config=pkcs11_config,
+        id_consultante=cpf,
+        senha_consultante=senha,
+        numero_cnj=numero_cnj,
+        mni_version=tribunal_cfg.mni_version,
+        com_documentos=False,
+    )
+    if not result.sucesso:
+        msg = f"MNI error: {result.mensagem}"
+        raise RuntimeError(msg)
+
+    return result.to_processo_domain(tribunal_id=tribunal_cfg.id, numero_cnj=numero_cnj)
 
 
 async def sync_processo_datajud(

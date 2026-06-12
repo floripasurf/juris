@@ -261,3 +261,47 @@ class TestConsultaResultRealResponse:
         codes = {m["codigo"]: m["descricao"] for m in described}
         assert codes.get("85") == "Prazo concedido"
         assert codes.get("60") == "Despacho"
+
+
+class TestProcessoDomainBridge:
+    """Convert a PKCS#11 ConsultaResult into the diff-pipeline ProcessoDomain."""
+
+    def _result(self):
+        from pathlib import Path
+
+        from juris.mni.operations.consulta_pkcs11 import _parse_response
+        from juris.mni.pkcs11_transport import SOAPResponse
+
+        xml = Path("tests/fixtures/mni_responses/tjmg_consulta_real.xml").read_bytes()
+        return _parse_response(SOAPResponse(status_code=200, body=xml), "50823514020178130024")
+
+    def test_parse_mni_datetime(self) -> None:
+        from datetime import datetime
+
+        from juris.mni.operations.consulta_pkcs11 import _parse_mni_datetime
+
+        assert _parse_mni_datetime("20180322155100042") == datetime(2018, 3, 22, 15, 51, 0)
+        assert _parse_mni_datetime("20170619") == datetime(2017, 6, 19, 0, 0, 0)
+        assert _parse_mni_datetime("") == datetime.min
+        assert _parse_mni_datetime("garbage") == datetime.min
+
+    def test_to_processo_domain_movimentos(self) -> None:
+        pd = self._result().to_processo_domain(tribunal_id="tjmg", numero_cnj="x")
+        assert pd.numero_cnj == "50823514020178130024"
+        assert pd.tribunal == "tjmg"
+        assert len(pd.movimentos) == 44
+        # movimentos sorted ascending; last is the most recent
+        assert pd.ultimo_movimento is not None
+        assert pd.ultimo_movimento.codigo_nacional == 1051
+
+    def test_dedup_keys_unique(self) -> None:
+        pd = self._result().to_processo_domain(tribunal_id="tjmg")
+        keys = {(m.data_hora, m.codigo_nacional, m.id_movimento) for m in pd.movimentos}
+        assert len(keys) == len(pd.movimentos)  # every movement has a distinct key
+
+    def test_numero_fallback_when_missing(self) -> None:
+        from juris.mni.operations.consulta_pkcs11 import ConsultaResult
+
+        empty = ConsultaResult(sucesso=True, mensagem="ok")
+        pd = empty.to_processo_domain(tribunal_id="tjmg", numero_cnj="0001-02.2024.8.13.0024")
+        assert pd.numero_cnj == "0001-02.2024.8.13.0024"

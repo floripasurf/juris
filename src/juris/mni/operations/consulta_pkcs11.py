@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import contextlib
+from datetime import datetime
 from typing import Any
 from xml.etree import ElementTree as ET
 
 from juris.core.observability import get_logger
 from juris.core.types import NumeroCNJ
+from juris.mni.parsers.processo import Documento, Movimento, Parte, ProcessoDomain
 from juris.mni.pkcs11_transport import (
     PKCS11Config,
     SOAPResponse,
@@ -147,6 +149,7 @@ class ConsultaResult:
         elif tag == "movimento":
             mov = {
                 "data": elem.get("dataHora", ""),
+                "id": elem.get("identificadorMovimento", ""),
                 "codigo": "",
                 "descricao": "",
                 "complemento": "",
@@ -198,6 +201,83 @@ class ConsultaResult:
 
         for child in elem:
             self._extract_fields_recursive(child)
+
+    def to_processo_domain(
+        self, tribunal_id: str | None = None, numero_cnj: str = ""
+    ) -> ProcessoDomain:
+        """Convert this result to a :class:`ProcessoDomain` for the diff pipeline.
+
+        Lets the mTLS (PKCS#11) consulta path feed the same differential,
+        analysis and prazo machinery as the zeep/password path.
+
+        Args:
+            tribunal_id: Tribunal identifier to stamp on the domain object.
+            numero_cnj: Queried CNJ, used when the response omits dadosBasicos.
+
+        Returns:
+            A :class:`ProcessoDomain` with parsed movimentos, partes, documentos.
+        """
+        movimentos = [
+            Movimento(
+                data_hora=_parse_mni_datetime(m.get("data", "")),
+                tipo="nacional" if m.get("codigo") else "local",
+                codigo_nacional=int(m["codigo"]) if str(m.get("codigo") or "").isdigit() else None,
+                complemento=(m.get("complemento") or None),
+                descricao=(m.get("descricao") or None),
+                id_movimento=(m.get("id") or None),
+            )
+            for m in self.movimentos
+        ]
+        partes = [
+            Parte(
+                nome=p.get("nome", ""),
+                tipo=p.get("tipo", ""),
+                documento=(p.get("documento") or None),
+                advogados=list(p.get("advogados", [])),
+            )
+            for p in self.partes
+        ]
+        documentos = [
+            Documento(
+                id_documento=d.get("id", ""),
+                tipo_documento=d.get("tipo", ""),
+                descricao=(d.get("descricao") or None),
+                mime_type=(d.get("mimetype") or "application/pdf"),
+            )
+            for d in self.documentos
+        ]
+        return ProcessoDomain(
+            numero_cnj=self.numero or numero_cnj,
+            classe=self.classe or None,
+            assunto=self.assunto or None,
+            valor_causa=self.valor_causa or None,
+            orgao_julgador=self.orgao_julgador or None,
+            tribunal=tribunal_id,
+            movimentos=sorted(movimentos, key=lambda mv: mv.data_hora),
+            partes=partes,
+            documentos=documentos,
+        )
+
+
+def _parse_mni_datetime(raw: str) -> datetime:
+    """Parse an MNI timestamp (YYYYMMDDHHMMSS[mmm]) into a datetime.
+
+    Falls back to ``datetime.min`` when the value is missing or malformed,
+    matching the zeep parser so downstream sorting/dedup stays consistent.
+    """
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    if len(digits) < 8:
+        return datetime.min
+    try:
+        year = int(digits[0:4])
+        month = int(digits[4:6])
+        day = int(digits[6:8])
+        hour = int(digits[8:10]) if len(digits) >= 10 else 0
+        minute = int(digits[10:12]) if len(digits) >= 12 else 0
+        second = int(digits[12:14]) if len(digits) >= 14 else 0
+        return datetime(year, month, day, hour, minute, second)
+    except ValueError:
+        return datetime.min
 
 
 def _parse_response(response: SOAPResponse, numero_cnj: str) -> ConsultaResult:

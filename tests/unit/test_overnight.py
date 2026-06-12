@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from juris.jobs.overnight import (
     SyncSummary,
@@ -273,3 +271,53 @@ class TestSyncSummary:
         s.finish()
         assert s.finished_at is not None
         assert s.duration_seconds > 0
+
+
+class TestMtlsRouting:
+    """sync_processo_mni must route mTLS tribunals through the token path."""
+
+    def test_tjmg_routes_to_mtls(self) -> None:
+        from juris.mni.parsers.processo import Movimento, ProcessoDomain
+
+        fetched = ProcessoDomain(
+            numero_cnj="50823514020178130024",
+            tribunal="tjmg",
+            movimentos=[
+                Movimento(data_hora=datetime(2018, 11, 7, 0, 31), tipo="nacional", codigo_nacional=1051)
+            ],
+        )
+
+        with patch("juris.jobs.overnight._fetch_mni_mtls", return_value=fetched) as mock_mtls:
+            result = asyncio.run(
+                sync_processo_mni(
+                    numero_cnj="50823514020178130024",
+                    tribunal_id="tjmg",
+                    cpf="00000000000",
+                    senha="senha",
+                )
+            )
+
+        mock_mtls.assert_called_once()
+        assert result.error is None
+        assert result.total_movimentos_fetched == 1
+
+    def test_non_mtls_uses_zeep_path(self) -> None:
+        # A non-mTLS tribunal must NOT touch the token path.
+        with (
+            patch("juris.jobs.overnight._fetch_mni_mtls") as mock_mtls,
+            patch("juris.mni.client.get_mni_client"),
+            patch("juris.mni.operations.consulta.consultar_processo") as mock_consulta,
+            patch("juris.mni.parsers.processo.parse_processo") as mock_parse,
+        ):
+            mock_consulta.return_value = MagicMock(sucesso=True)
+            mock_parse.return_value = ProcessoDomain(numero_cnj="x", tribunal="tjes")
+            asyncio.run(
+                sync_processo_mni(
+                    numero_cnj="0001000-00.2024.8.08.0024",
+                    tribunal_id="tjes",
+                    cpf="00000000000",
+                    senha="senha",
+                )
+            )
+
+        mock_mtls.assert_not_called()
