@@ -1,4 +1,5 @@
 """Unit tests for the STJ adapter."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -29,7 +30,7 @@ class TestSTJAdapter:
         mock_client.__aexit__ = AsyncMock(return_value=False)
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        with patch("juris.search.adapters.stj.httpx.AsyncClient", return_value=mock_client):
+        with patch("juris.search.http.httpx.AsyncClient", return_value=mock_client):
             adapter = STJAdapter()
             q = SearchQuery(query_type="tema", value="improbidade administrativa")
             results = await adapter.search(q)
@@ -50,7 +51,7 @@ class TestSTJAdapter:
         mock_client.__aexit__ = AsyncMock(return_value=False)
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        with patch("juris.search.adapters.stj.httpx.AsyncClient", return_value=mock_client):
+        with patch("juris.search.http.httpx.AsyncClient", return_value=mock_client):
             adapter = STJAdapter()
             q = SearchQuery(query_type="tema", value="improbidade administrativa")
             results = await adapter.search(q)
@@ -80,7 +81,7 @@ class TestSTJAdapter:
         mock_client.__aexit__ = AsyncMock(return_value=False)
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        with patch("juris.search.adapters.stj.httpx.AsyncClient", return_value=mock_client):
+        with patch("juris.search.http.httpx.AsyncClient", return_value=mock_client):
             adapter = STJAdapter()
             q = SearchQuery(query_type="tema", value="improbidade administrativa")
             results = await adapter.search(q)
@@ -102,7 +103,7 @@ class TestSTJAdapter:
         mock_client.__aexit__ = AsyncMock(return_value=False)
         mock_client.get = AsyncMock(side_effect=_httpx.ConnectError("timeout"))
 
-        with patch("juris.search.adapters.stj.httpx.AsyncClient", return_value=mock_client):
+        with patch("juris.search.http.httpx.AsyncClient", return_value=mock_client):
             adapter = STJAdapter()
             q = SearchQuery(query_type="tema", value="teste")
             results = await adapter.search(q)
@@ -123,7 +124,7 @@ class TestSTJAdapter:
         mock_client.__aexit__ = AsyncMock(return_value=False)
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        with patch("juris.search.adapters.stj.httpx.AsyncClient", return_value=mock_client):
+        with patch("juris.search.http.httpx.AsyncClient", return_value=mock_client):
             adapter = STJAdapter()
             q = SearchQuery(query_type="tema", value="improbidade administrativa")
             results = await adapter.search(q)

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-
-import httpx
+from typing import ClassVar
 
 from juris.search.adapters import register_adapter
 from juris.search.adapters.base import SearchAdapter
+from juris.search.http import make_portal_client
 from juris.search.models import QueryType, SearchQuery, SearchResult
 from juris.search.utils import clean_ementa, normalize_cnj, parse_br_date
 
@@ -26,10 +26,10 @@ class STFAdapter(SearchAdapter):
     JSON response into :class:`~juris.search.models.SearchResult` objects.
     """
 
-    court_code: str = "stf"
-    portal_url: str = "https://jurisprudencia.stf.jus.br"
-    rate_limit_seconds: float = 2.0
-    supported_query_types: set[QueryType] = {"tema"}
+    court_code: ClassVar[str] = "stf"
+    portal_url: ClassVar[str] = "https://jurisprudencia.stf.jus.br"
+    rate_limit_seconds: ClassVar[float] = 2.0
+    supported_query_types: ClassVar[set[QueryType]] = {"tema"}
 
     async def search(self, query: SearchQuery) -> list[SearchResult]:
         """Search the STF jurisprudência API.
@@ -55,10 +55,7 @@ class STFAdapter(SearchAdapter):
         }
 
         try:
-            async with httpx.AsyncClient(
-                headers={"User-Agent": self.user_agent},
-                timeout=30.0,
-            ) as client:
+            async with make_portal_client(self.user_agent) as client:
                 response = await client.get(_SEARCH_URL, params=params)
                 response.raise_for_status()
                 data = response.json()

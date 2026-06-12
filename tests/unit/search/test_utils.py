@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from juris.search.utils import normalize_cnj, parse_br_date, clean_ementa, normalize_oab
+from juris.search.utils import clean_ementa, normalize_cnj, normalize_oab, parse_br_date
 
 
 class TestNormalizeCnj:

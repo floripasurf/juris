@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-import pytest
-
 from juris.search.models import SearchQuery, SearchResult
 from juris.search.ranking import rank_results
 

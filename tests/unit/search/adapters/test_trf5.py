@@ -1,4 +1,5 @@
 """Tests for TRF5 search adapter."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -66,6 +67,7 @@ class TestTRF5AdapterParse:
 
     def test_parse_decision_date(self, adapter: TRF5Adapter, query: SearchQuery) -> None:
         from datetime import date
+
         results = adapter._parse(_MINIMAL_HTML, query)
         assert results[0].decision_date == date(2023, 8, 22)
 
@@ -104,9 +106,7 @@ class TestTRF5AdapterSearch:
         results = await adapter.search(q)
         assert results == []
 
-    async def test_search_http_error_returns_empty(
-        self, adapter: TRF5Adapter, query: SearchQuery
-    ) -> None:
+    async def test_search_http_error_returns_empty(self, adapter: TRF5Adapter, query: SearchQuery) -> None:
         mock_resp = MagicMock()
         mock_resp.raise_for_status.side_effect = Exception("timeout")
 
@@ -121,9 +121,7 @@ class TestTRF5AdapterSearch:
 
         assert results == []
 
-    async def test_search_returns_parsed_results(
-        self, adapter: TRF5Adapter, query: SearchQuery
-    ) -> None:
+    async def test_search_returns_parsed_results(self, adapter: TRF5Adapter, query: SearchQuery) -> None:
         mock_resp = MagicMock()
         mock_resp.text = _MINIMAL_HTML
         mock_resp.raise_for_status = MagicMock()
