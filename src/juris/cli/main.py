@@ -46,16 +46,29 @@ def consulta(
 ) -> None:
     """Fetch a case from a tribunal via MNI consultarProcesso."""
     from juris.core.types import NumeroCNJ
-    from juris.mni.auth import PasswordAuth
-    from juris.mni.client import get_mni_client
-    from juris.mni.operations.consulta import consultar_processo
-    from juris.mni.parsers.processo import parse_processo
+    from juris.mni.tribunais import get_tribunal
 
     try:
         cnj = NumeroCNJ(numero_cnj)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(code=1) from e
+
+    try:
+        tribunal_cfg = get_tribunal(tribunal)
+    except KeyError as e:
+        console.print(f"[red]Tribunal not found:[/red] {tribunal}")
+        raise typer.Exit(code=1) from e
+
+    # mTLS tribunals (e.g. TJMG) need the A3 hardware token, not zeep+password.
+    if tribunal_cfg.requires_mtls:
+        _consulta_mtls(cnj, tribunal_cfg, cpf, senha, com_documentos)
+        return
+
+    from juris.mni.auth import PasswordAuth
+    from juris.mni.client import get_mni_client
+    from juris.mni.operations.consulta import consultar_processo
+    from juris.mni.parsers.processo import parse_processo
 
     resolved_senha = _get_senha(tribunal, cpf, senha)
     auth = PasswordAuth(cpf=cpf, senha=resolved_senha)
@@ -161,6 +174,122 @@ def _print_processo(processo) -> None:
         console.print(f"\n[bold]Documentos ({len(processo.documentos)}):[/bold]")
         for d in processo.documentos:
             console.print(f"  [{d.id_documento}] {d.tipo_documento}: {d.descricao or ''}")
+
+
+def _consulta_mtls(cnj, tribunal_cfg, cpf: str, senha: str | None, com_documentos: bool) -> None:
+    """consultarProcesso against an mTLS tribunal using the A3 hardware token."""
+    from urllib.parse import urlparse
+
+    from juris.config import get_settings
+    from juris.mni.operations.consulta_pkcs11 import consultar_processo_pkcs11
+    from juris.mni.token import TokenError, build_pkcs11_config, extract_token_material
+
+    settings = get_settings()
+    console.print(f"[bold]Fetching case (mTLS):[/bold] {cnj}")
+    console.print(f"  Tribunal: {tribunal_cfg.id} ({tribunal_cfg.nome})")
+
+    # 1. Read public cert + chain from the token (no PIN needed).
+    try:
+        console.print("[dim]Lendo certificado do token…[/dim]")
+        material = extract_token_material(settings.pkcs11_module)
+    except TokenError as e:
+        console.print(f"[red]Token:[/red] {e}")
+        raise typer.Exit(code=1) from e
+
+    console.print(f"  Certificado: {material.subject}")
+    console.print(f"  Válido até: {material.not_valid_after}")
+    if material.cpf and material.cpf != cpf:
+        console.print(
+            f"[yellow]Aviso:[/yellow] CPF do token ({material.cpf}) ≠ --cpf ({cpf})."
+        )
+
+    # 2. PIN (token) + senha (PJe application login).
+    pin = settings.token_pin.get_secret_value() if settings.token_pin else None
+    if not pin:
+        pin = getpass.getpass("PIN do token A3: ")
+    if not pin:
+        console.print("[red]PIN vazio.[/red]")
+        raise typer.Exit(code=1)
+    resolved_senha = _get_senha(tribunal_cfg.id, cpf, senha)
+
+    service_url = tribunal_cfg.service_url_override or tribunal_cfg.wsdl_url.replace("?wsdl", "")
+    parsed = urlparse(service_url)
+    host = parsed.hostname or ""
+    path = parsed.path or "/pje/intercomunicacao"
+
+    pkcs11_config = build_pkcs11_config(material, pin, settings.pkcs11_module)
+
+    try:
+        result = consultar_processo_pkcs11(
+            host=host,
+            path=path,
+            pkcs11_config=pkcs11_config,
+            id_consultante=cpf,
+            senha_consultante=resolved_senha,
+            numero_cnj=str(cnj),
+            mni_version=tribunal_cfg.mni_version,
+            com_documentos=com_documentos,
+        )
+    except Exception as e:
+        console.print(f"[red]MNI Error:[/red] {type(e).__name__}: {e}")
+        raise typer.Exit(code=1) from e
+
+    if not result.sucesso:
+        console.print(f"[red]MNI returned error:[/red] {result.mensagem}")
+        if "login" in result.mensagem.lower() or "autenticação" in result.mensagem.lower():
+            from juris.core.credentials import delete_credential
+
+            delete_credential(f"mni_{tribunal_cfg.id}_{cpf}")
+            console.print("[yellow]Senha PJe limpa do Keychain. Rode de novo para reinserir.[/yellow]")
+        raise typer.Exit(code=1)
+
+    _print_consulta_result(result)
+
+
+def _print_consulta_result(result) -> None:
+    """Pretty-print a ConsultaResult (PKCS#11 mTLS path) to the console."""
+    console.print(f"\n[bold green]Processo: {result.numero or 'N/A'}[/bold green]")
+    console.print(f"  [dim]{result.mensagem}[/dim]")
+    console.print(f"  Classe: {result.classe or 'N/A'}")
+    if result.orgao_julgador:
+        console.print(f"  Órgão: {result.orgao_julgador}")
+
+    if result.partes:
+        console.print("\n[bold]Partes:[/bold]")
+        for p in result.partes:
+            advs = f" (Advs: {', '.join(p['advogados'])})" if p.get("advogados") else ""
+            console.print(f"  [{p['tipo']}] {p['nome']}{advs}")
+
+    if result.movimentos:
+        console.print(f"\n[bold]Movimentos ({len(result.movimentos)}):[/bold]")
+        ordered = sorted(result.movimentos, key=lambda m: m.get("data", ""))
+        table = Table()
+        table.add_column("Data", style="cyan", width=16)
+        table.add_column("Código", width=7)
+        table.add_column("Descrição")
+        table.add_column("Complemento")
+        for m in ordered[-15:]:
+            table.add_row(
+                _fmt_mni_datetime(m.get("data", "")),
+                str(m.get("codigo") or ""),
+                (m.get("descricao") or "")[:40],
+                (m.get("complemento") or "")[:40],
+            )
+        console.print(table)
+
+    if result.documentos:
+        console.print(f"\n[bold]Documentos ({len(result.documentos)}):[/bold]")
+        for d in result.documentos:
+            console.print(f"  [{d['id']}] {d['tipo']}: {d.get('descricao') or ''}")
+
+
+def _fmt_mni_datetime(raw: str) -> str:
+    """Format an MNI timestamp (YYYYMMDDHHMMSS[ms]) as YYYY-MM-DD HH:MM."""
+    if len(raw) >= 12 and raw[:12].isdigit():
+        return f"{raw[0:4]}-{raw[4:6]}-{raw[6:8]} {raw[8:10]}:{raw[10:12]}"
+    if len(raw) >= 8 and raw[:8].isdigit():
+        return f"{raw[0:4]}-{raw[4:6]}-{raw[6:8]}"
+    return raw
 
 
 @app.command()

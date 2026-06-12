@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 from xml.etree import ElementTree as ET
 
@@ -123,11 +124,7 @@ class ConsultaResult:
 
     def _parse_processo(self, root: ET.Element) -> None:
         """Extract processo fields from the XML response."""
-        # Find the processo element (may be nested in various ways)
-        ns_map = {
-            "soap": "http://schemas.xmlsoap.org/soap/envelope/",
-        }
-        # Try to find processo data — MNI response structure varies by tribunal
+        # MNI response structure varies by tribunal; walk it generically.
         self._extract_fields_recursive(root)
 
     def _extract_fields_recursive(self, elem: ET.Element) -> None:
@@ -144,10 +141,8 @@ class ConsultaResult:
                 elif child_tag == "orgaoJulgador":
                     self.orgao_julgador = child.get("nomeOrgao", "")
                 elif child_tag == "valorCausa":
-                    try:
+                    with contextlib.suppress(ValueError):
                         self.valor_causa = float(child.text or "0")
-                    except ValueError:
-                        pass
 
         elif tag == "movimento":
             mov = {
@@ -160,6 +155,7 @@ class ConsultaResult:
                 child_tag = _local_name(child.tag)
                 if child_tag == "movimentoNacional":
                     mov["codigo"] = child.get("codigoNacional", "")
+                    mov["descricao"] = _tpu_descricao(mov["codigo"])
                 elif child_tag == "complemento":
                     # Get all text content
                     mov["complemento"] = _get_text(child)
@@ -169,30 +165,29 @@ class ConsultaResult:
             polo_tipo = elem.get("polo", "")
             for parte_elem in elem:
                 if _local_name(parte_elem.tag) == "parte":
-                    parte = {
-                        "tipo": polo_tipo,
-                        "nome": "",
-                        "documento": "",
-                        "advogados": [],
-                    }
-                    pessoa = parte_elem.find(".//{*}pessoa") or parte_elem
-                    for child in pessoa:
-                        child_tag = _local_name(child.tag)
-                        if child_tag == "nome":
-                            parte["nome"] = child.text or ""
-                        elif child_tag == "numeroDocumentoPrincipal":
-                            parte["documento"] = child.text or ""
-                    # Find advogados
+                    pessoa = parte_elem.find(".//{*}pessoa")
+                    if pessoa is None:
+                        pessoa = parte_elem
+                    # MNI carries name/document as attributes on <pessoa>,
+                    # with child elements as a fallback for older schemas.
+                    advogados: list[str] = []
                     for adv in parte_elem.findall(".//{*}advogado"):
-                        adv_nome = ""
-                        for child in adv:
-                            if _local_name(child.tag) == "nome":
-                                adv_nome = child.text or ""
+                        adv_nome = adv.get("nome", "") or _child_text(adv, "nome")
                         if adv_nome:
-                            parte["advogados"].append(adv_nome)
+                            advogados.append(adv_nome)
+                    parte: dict[str, Any] = {
+                        "tipo": polo_tipo,
+                        "nome": pessoa.get("nome", "") or _child_text(pessoa, "nome"),
+                        "documento": pessoa.get("numeroDocumentoPrincipal", "")
+                        or _child_text(pessoa, "numeroDocumentoPrincipal"),
+                        "advogados": advogados,
+                    }
                     self.partes.append(parte)
 
-        elif tag == "documento":
+        elif tag == "documento" and elem.get("idDocumento"):
+            # Only process documents carry idDocumento; party-identity
+            # <documento> elements (OAB, CPF, …) use codigoDocumento and
+            # must not be mistaken for case documents.
             doc = {
                 "id": elem.get("idDocumento", ""),
                 "tipo": elem.get("tipoDocumento", ""),
@@ -224,7 +219,7 @@ def _parse_response(response: SOAPResponse, numero_cnj: str) -> ConsultaResult:
         )
 
     try:
-        root = ET.fromstring(xml_body)
+        root = ET.fromstring(xml_body)  # noqa: S314 — tribunal-controlled SOAP, not arbitrary input
     except ET.ParseError as e:
         logger.error("xml_parse_error", error=str(e), body_preview=xml_body[:200])
         return ConsultaResult(
@@ -269,6 +264,24 @@ def _find_recursive(elem: ET.Element, local_name: str) -> ET.Element | None:
         if found is not None:
             return found
     return None
+
+
+def _tpu_descricao(codigo: str) -> str:
+    """Map a TPU movement code to its human-readable description (empty if unknown)."""
+    if not codigo or not codigo.isdigit():
+        return ""
+    from juris.mni.tpu import get_entry
+
+    entry = get_entry(int(codigo))
+    return entry.descricao if entry else ""
+
+
+def _child_text(elem: ET.Element, local_name: str) -> str:
+    """Return the text of the first direct child with the given local name."""
+    for child in elem:
+        if _local_name(child.tag) == local_name:
+            return child.text or ""
+    return ""
 
 
 def _local_name(tag: str) -> str:

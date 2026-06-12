@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pathlib
+
 from juris.mni.pkcs11_transport import (
     SOAPResponse,
     _decode_chunked,
@@ -157,3 +159,105 @@ class TestConsultaResult:
         result = _parse_response(resp, "test")
         assert not result.sucesso
         assert "500" in result.mensagem
+
+
+class TestTokenURIBuilding:
+    """Test PKCS#11 URI construction from token material (no token needed)."""
+
+    def test_percent_encode_bytes(self) -> None:
+        from juris.mni.token import _percent_encode_bytes
+
+        assert _percent_encode_bytes(b"\x79\x70") == "%79%70"
+        assert _percent_encode_bytes(b"") == ""
+
+    def test_build_pkcs11_config_uri(self) -> None:
+        from juris.mni.token import TokenMaterial, build_pkcs11_config
+
+        material = TokenMaterial(
+            token_label="TOKEN CERTDATA",  # noqa: S106 — label, not a secret
+            subject="CN=FULANO:00000000000",
+            cpf="00000000000",
+            not_valid_after="2027-06-04",
+            cert_pem_path="fake-dir/cert.pem",
+            chain_pem_path="fake-dir/chain.pem",
+            key_id_hex="7970445a",
+        )
+        cfg = build_pkcs11_config(material, pin="1234")
+        assert cfg.key_uri == "pkcs11:token=TOKEN%20CERTDATA;id=%79%70%44%5a;type=private"
+        assert cfg.pin == "1234"
+        assert cfg.cert_pem_path == "fake-dir/cert.pem"
+
+    def test_cpf_from_subject(self) -> None:
+        from juris.mni.token import _cpf_from_subject
+
+        assert _cpf_from_subject("CN=FULANO DE TAL:07671039632,OU=x") == "07671039632"
+        assert _cpf_from_subject("CN=SEM CPF") is None
+
+
+class TestEngineConf:
+    """Test the OpenSSL engine config writer (PIN delivery mechanism)."""
+
+    def test_write_engine_conf_contains_pin_and_module(self) -> None:
+        import os
+
+        from juris.mni.pkcs11_transport import PKCS11Config, _write_engine_conf
+
+        cfg = PKCS11Config(pkcs11_module="/path/to/mod.dylib", pin="secret123")
+        path = _write_engine_conf(cfg)
+        try:
+            content = pathlib.Path(path).read_text()
+            assert "engine_id = pkcs11" in content
+            assert "MODULE_PATH = /path/to/mod.dylib" in content
+            assert "PIN = secret123" in content
+            # file must be private (contains the PIN)
+            assert oct(os.stat(path).st_mode)[-3:] == "600"
+        finally:
+            os.unlink(path)
+
+
+class TestConsultaResultRealResponse:
+    """Parse the real (sanitized) TJMG consultarProcesso response."""
+
+    def _load(self):
+        from pathlib import Path
+
+        from juris.mni.operations.consulta_pkcs11 import _parse_response
+        from juris.mni.pkcs11_transport import SOAPResponse
+
+        xml = Path("tests/fixtures/mni_responses/tjmg_consulta_real.xml").read_bytes()
+        return _parse_response(SOAPResponse(status_code=200, body=xml), "50823514020178130024")
+
+    def test_sucesso(self) -> None:
+        result = self._load()
+        assert result.sucesso
+        assert "sucesso" in result.mensagem.lower()
+
+    def test_dados_basicos(self) -> None:
+        result = self._load()
+        assert result.numero == "50823514020178130024"
+        assert result.classe == "7"
+
+    def test_movimentos_parsed(self) -> None:
+        result = self._load()
+        assert len(result.movimentos) == 44
+        assert all("data" in m for m in result.movimentos)
+
+    def test_partes_parsed(self) -> None:
+        result = self._load()
+        assert len(result.partes) >= 1
+        nomes = " ".join(p["nome"] for p in result.partes)
+        assert "FULANO" in nomes
+
+    def test_documentos_excludes_party_id_docs(self) -> None:
+        # incluirDocumentos=false → no process documents. Party identity
+        # <documento> elements (OAB/CPF/…) must not leak in as case docs.
+        result = self._load()
+        assert len(result.documentos) == 0
+
+    def test_movimentos_have_tpu_descriptions(self) -> None:
+        result = self._load()
+        described = [m for m in result.movimentos if m["descricao"]]
+        assert described, "expected at least some movimentos enriched via TPU"
+        codes = {m["codigo"]: m["descricao"] for m in described}
+        assert codes.get("85") == "Prazo concedido"
+        assert codes.get("60") == "Despacho"
