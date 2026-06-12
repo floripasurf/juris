@@ -1,29 +1,58 @@
 {
-  "items": [
+  "tempoGasto": 175,
+  "totalRegistros": 25759,
+  "registros": [
     {
-      "id": "TST-RR-10014-28.2019.5.03.0097",
-      "numeroProcesso": "RR-10014-28.2019.5.03.0097",
-      "relator": "Min. Mauricio Godinho Delgado",
-      "dataJulgamento": "22/05/2024",
-      "orgaoJulgador": "3ª Turma",
-      "ementa": "IMPROBIDADE ADMINISTRATIVA. AGENTE PÚBLICO. VÍNCULO EMPREGATÍCIO. COMPETÊNCIA DA JUSTIÇA DO TRABALHO. ILÍCITO TRABALHISTA DISTINTO DO ILÍCITO ADMINISTRATIVO. APLICAÇÃO CONCOMITANTE DA LIA E DA CLT. POSSIBILIDADE. A Lei n. 8.429/1992, com a redação dada pela Lei n. 14.230/2021, não afasta a competência da Justiça do Trabalho para processar e julgar ações decorrentes da relação de emprego, ainda que o fato gerador configure, em tese, ato de improbidade administrativa. A responsabilização trabalhista e a responsabilização por ato de improbidade administrativa são institutos juridicamente distintos, com fundamentos, pressupostos e sanções próprias, podendo coexistir sem que haja bis in idem. Recurso de revista conhecido e provido.",
-      "url": "https://jurisprudencia.tst.jus.br/processos/detalhe/TST-RR-10014-28.2019.5.03.0097",
-      "publicacao": "DEJT 31/05/2024",
-      "decisao": "Recurso de revista conhecido e provido"
+      "registro": {
+        "id": "c8f563ad1a64a28e97620072b1b6cf6",
+        "tipo": {
+          "codigoTipoJurisprudencia": "ACORDAO",
+          "nome": "Acordão"
+        },
+        "orgaoJudicante": {
+          "codigo": 517,
+          "descricao": "7ª Turma"
+        },
+        "dtaJulgamento": "2026-05-13",
+        "numFormatado": "RRAg - 2093-21.2017.5.09.0015",
+        "dtaPublicacao": "2026-06-12T07:00:00-03",
+        "nomRelator": "evandro pereira valadao lopes",
+        "ementa": "I - AGRAVO DE INSTRUMENTO EM RECURSO DE REVISTA. NULIDADE PROCESSUAL POR NEGATIVA DE PRESTAÇÃO JURISDICIONAL. AUSÊNCIA DE MANIFESTAÇÃO QUANTO À ALEGAÇÃO DE QUE AS NORMAS INTERNAS EVIDENCIAM A NECESSIDADE DE INSTAURAÇÃO DE SINDICÂNCIA DE PROCESSO ADMINISTRATIVO QUANTO ÀS INFRAÇÕES COMETIDAS APENAS PELO CORPO DISCENTE. Em face de possível violação do art. 93, IX, da Constituição Federal, deve-se dar provimento ao agravo de instrumento, para melhor exame do recurso de revista. Agravo de instrumento conhecido e provido, no particular. SUSPEIÇÃO DE TESTEMUNHA DISPENSADA POR JUSTA CAUSA. ALEGAÇÃO DE",
+        "numeracaoUnica": {
+          "numero": 2093,
+          "digito": 21,
+          "ano": 2017,
+          "orgao": 5,
+          "tribunal": 9,
+          "vara": 15
+        }
+      }
     },
     {
-      "id": "TST-AIRR-20082-55.2021.5.04.0121",
-      "numeroProcesso": "AIRR-20082-55.2021.5.04.0121",
-      "relator": "Min. Alexandre Luiz Ramos",
-      "dataJulgamento": "14/02/2024",
-      "orgaoJulgador": "4ª Turma",
-      "ementa": "AGRAVO DE INSTRUMENTO. RECURSO DE REVISTA. SERVIDOR PÚBLICO. IMPROBIDADE ADMINISTRATIVA. DANO AO ERÁRIO. DOLO ESPECÍFICO. PROVA. ÔNUS. NOVA LEI DE IMPROBIDADE ADMINISTRATIVA (LEI N. 14.230/2021). RETROATIVIDADE. APLICABILIDADE. A teor do decidido pelo Supremo Tribunal Federal nas ADIs 6.029, 7.042 e 7.043, a exigência de dolo específico para configuração do ato de improbidade administrativa, introduzida pela Lei n. 14.230/2021, tem caráter retroativo, beneficiando os réus em ações em curso. O ônus da prova do elemento subjetivo doloso incumbe ao autor da ação. Agravo de instrumento desprovido.",
-      "url": "https://jurisprudencia.tst.jus.br/processos/detalhe/TST-AIRR-20082-55.2021.5.04.0121",
-      "publicacao": "DEJT 22/02/2024",
-      "decisao": "Agravo de instrumento desprovido"
+      "registro": {
+        "id": "6994efe0de57fb5315bbc0f0b1bb854b",
+        "tipo": {
+          "codigoTipoJurisprudencia": "ACORDAO",
+          "nome": "Acordão"
+        },
+        "orgaoJudicante": {
+          "codigo": 517,
+          "descricao": "7ª Turma"
+        },
+        "dtaJulgamento": "2026-05-28",
+        "numFormatado": "Ag-AIRR - 643-04.2020.5.07.0012",
+        "dtaPublicacao": "2026-06-12T07:00:00-03",
+        "nomRelator": "alexandre de souza agra belmonte",
+        "ementa": "AGRAVO EM AGRAVO DE INSTRUMENTO EM RECURSO DE REVISTA. PROCEDIMENTO SUMARÍSSIMO. PROCESSO ADMINISTRATIVO DISCIPLINAR. PERDÃO TÁCITO. MATÉRIA FÁTICA. AUSÊNCIA DE TRANSCENDÊNCIA . Não desconstituídos os fundamentos do despacho denegatório, não prospera o agravo de instrumento destinado a viabilizar o trânsito do recurso de revista, conforme demonstrado no voto. Agravo conhecido e desprovido.",
+        "numeracaoUnica": {
+          "numero": 643,
+          "digito": 4,
+          "ano": 2020,
+          "orgao": 5,
+          "tribunal": 7,
+          "vara": 12
+        }
+      }
     }
-  ],
-  "total": 2,
-  "page": 1,
-  "pageSize": 10
+  ]
 }
