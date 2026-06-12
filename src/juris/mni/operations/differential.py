@@ -27,6 +27,9 @@ class DiffResult:
     total_movimentos_fetched: int = 0
     had_changes: bool = False
     error: str | None = None
+    # The full processo fetched during the diff, so downstream analysis can
+    # reuse it instead of re-fetching from a different (possibly emptier) source.
+    fetched: ProcessoDomain | None = None
 
     @property
     def summary(self) -> str:
@@ -139,6 +142,7 @@ def diff_processo(
         new_documento_ids=new_docs,
         total_movimentos_fetched=len(fetched.movimentos),
         had_changes=bool(new_movs or new_docs),
+        fetched=fetched,
     )
 
     logger.info(

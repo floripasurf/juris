@@ -173,13 +173,17 @@ async def run_nightly_single(
         result.success = True
         return result
 
-    # 5. Changes detected — fetch full processo for complete analysis
-    try:
-        processo = _fetch_full_processo(numero_cnj, tribunal)
-    except Exception as e:
-        result.error = f"Full fetch failed: {type(e).__name__}: {e}"
-        db.log_sync(numero_cnj, tribunal, source, success=False, error=result.error)
-        return result
+    # 5. Changes detected — get the full processo for complete analysis.
+    # Reuse the processo already fetched during the diff (MNI/mTLS carries it);
+    # only fall back to a DataJud fetch when the diff didn't include one.
+    processo = diff.fetched
+    if processo is None:
+        try:
+            processo = _fetch_full_processo(numero_cnj, tribunal)
+        except Exception as e:
+            result.error = f"Full fetch failed: {type(e).__name__}: {e}"
+            db.log_sync(numero_cnj, tribunal, source, success=False, error=result.error)
+            return result
 
     if processo is None:
         result.error = "Full fetch returned None"

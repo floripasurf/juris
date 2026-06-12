@@ -255,7 +255,10 @@ async def sync_processo_datajud(
 
 
 # Tribunals where MNI is broken and DataJud should be used
-_DATAJUD_FALLBACK_TRIBUNALS = {"tjmg"}
+# Tribunals to read via DataJud first (no working MNI). TJMG used to be here
+# as a stopgap; now that mTLS via the A3 token works it goes through MNI first,
+# with DataJud still available as the on-error fallback inside run_nightly_single.
+_DATAJUD_FALLBACK_TRIBUNALS: set[str] = set()
 
 
 async def run_overnight_sync(

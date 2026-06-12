@@ -179,7 +179,8 @@ class TestRunOvernightSync:
         assert summary.processos_failed == 0
         mock_mni.assert_awaited_once()
 
-    def test_datajud_fallback_tribunal(self) -> None:
+    def test_tjmg_routes_to_mni(self) -> None:
+        # TJMG now reads via MNI (mTLS token), not DataJud-first.
         diff = _mock_diff_result(had_changes=True)
 
         processos = [
@@ -187,13 +188,13 @@ class TestRunOvernightSync:
         ]
 
         with (
-            patch("juris.jobs.overnight.sync_processo_mni") as mock_mni,
-            patch("juris.jobs.overnight.sync_processo_datajud", return_value=diff) as mock_dj,
+            patch("juris.jobs.overnight.sync_processo_mni", return_value=diff) as mock_mni,
+            patch("juris.jobs.overnight.sync_processo_datajud") as mock_dj,
         ):
             summary = asyncio.run(run_overnight_sync(processos, cpf="cpf", senha="senha"))
 
-        mock_mni.assert_not_awaited()
-        mock_dj.assert_awaited_once()
+        mock_mni.assert_awaited_once()
+        mock_dj.assert_not_awaited()
         assert summary.processos_updated == 1
 
     def test_mni_fail_datajud_fallback(self) -> None:
