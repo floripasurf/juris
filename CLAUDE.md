@@ -155,6 +155,10 @@ uv run juris consulta <numero_cnj>
 uv run juris tribunais
 uv run juris draft <numero_cnj> contestacao
 uv run juris draft <numero_cnj> inicial --cloud --thesis "..."
+uv run juris search --tema "improbidade administrativa" --courts tst
+uv run juris search --cnj "0001234-56.2024.8.26.0001"   # auto-detects court
+uv run juris search doctor                               # adapter health checks
+# Portal automation status: see docs/usage/search.md (most portals WAF/captcha-gated)
 
 # Database
 uv run alembic upgrade head
