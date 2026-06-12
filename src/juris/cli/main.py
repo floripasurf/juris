@@ -283,6 +283,16 @@ def _print_consulta_result(result) -> None:
             console.print(f"  [{d['id']}] {d['tipo']}: {d.get('descricao') or ''}")
 
 
+def _safe_get_tribunal(tribunal_id: str):
+    """Return the TribunalConfig for an id, or None if unknown."""
+    from juris.mni.tribunais import get_tribunal
+
+    try:
+        return get_tribunal(tribunal_id)
+    except KeyError:
+        return None
+
+
 def _fmt_mni_datetime(raw: str) -> str:
     """Format an MNI timestamp (YYYYMMDDHHMMSS[ms]) as YYYY-MM-DD HH:MM."""
     if len(raw) >= 12 and raw[:12].isdigit():
@@ -961,7 +971,8 @@ def sync(
 def overnight(
     tribunal: str = typer.Option(None, "--tribunal", "-t", help="Filter by tribunal"),
     cpf: str = typer.Option(None, "--cpf", help="CPF for MNI auth"),
-    senha: str = typer.Option(None, "--senha", "-s", help="Senha PJe"),
+    senha: str = typer.Option(None, "--senha", "-s", help="Senha PJe (else Keychain)"),
+    pin: str = typer.Option(None, "--pin", help="Token PIN for mTLS tribunals (else prompted/env)"),
     analyze: bool = typer.Option(True, "--analyze/--no-analyze", help="Run analysis after sync"),
     max_concurrent: int = typer.Option(10, "--max-concurrent", "-c", help="Max concurrent syncs"),
 ) -> None:
@@ -987,7 +998,32 @@ def overnight(
 
     db = LocalDB()
     resolved_cpf = cpf or ""
+    # Resolve PJe password from Keychain when a CPF is known and senha omitted.
     resolved_senha = senha or ""
+    if resolved_cpf and not resolved_senha:
+        from juris.core.credentials import get_credential
+
+        tribunais = {p["tribunal"] for p in processos}
+        for trib in tribunais:
+            stored = get_credential(f"mni_{trib}_{resolved_cpf}")
+            if stored:
+                resolved_senha = stored
+                break
+
+    # If any tracked tribunal needs mTLS, ensure we have a token PIN.
+    needs_mtls = any(
+        (_t := _safe_get_tribunal(p["tribunal"])) is not None and _t.requires_mtls
+        for p in processos
+    )
+    resolved_pin = pin
+    if needs_mtls and not resolved_pin:
+        from juris.config import get_settings
+
+        settings = get_settings()
+        if settings.token_pin:
+            resolved_pin = settings.token_pin.get_secret_value()
+        else:
+            resolved_pin = getpass.getpass("PIN do token A3 (mTLS): ")
 
     console.print(f"[bold]Nightly pipeline: {len(processos)} processos[/bold]")
     console.print(f"[dim]DB: {db.path} | Concurrent: {max_concurrent} | Analyze: {analyze}[/dim]\n")
@@ -999,6 +1035,7 @@ def overnight(
             cpf=resolved_cpf,
             senha=resolved_senha,
             max_concurrent=max_concurrent,
+            token_pin=resolved_pin,
         )
     )
 

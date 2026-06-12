@@ -56,6 +56,7 @@ async def sync_processo_mni(
     last_sync_at: datetime | None = None,
     known_movimento_keys: set[tuple] | None = None,
     known_doc_ids: set[str] | None = None,
+    token_pin: str | None = None,
 ) -> DiffResult:
     """Sync a single processo via MNI.
 
@@ -99,6 +100,7 @@ async def sync_processo_mni(
                 tribunal_cfg=tribunal_cfg,
                 cpf=cpf,
                 senha=senha,
+                token_pin=token_pin,
             )
         else:
             auth = PasswordAuth(cpf=cpf, senha=senha)
@@ -147,24 +149,27 @@ def _fetch_mni_mtls(
     tribunal_cfg: Any,
     cpf: str,
     senha: str,
+    token_pin: str | None = None,
 ) -> ProcessoDomain:
     """Fetch a processo from an mTLS tribunal via the A3 token (PKCS#11).
 
-    For unattended runs the token PIN comes from ``settings.token_pin``; if
-    it is unset, the run can't unlock the token and a clear error is raised
-    so the caller records a per-processo failure rather than crashing.
+    The token PIN comes from ``token_pin`` (passed by an interactive caller)
+    or, for unattended runs, from ``settings.token_pin``. If neither is set
+    the token can't be unlocked and a clear error is raised so the caller
+    records a per-processo failure rather than crashing.
 
     Args:
         numero_cnj: Case number.
         tribunal_cfg: TribunalConfig for the mTLS tribunal.
         cpf: Consultant CPF (idConsultante).
         senha: PJe application password (senhaConsultante).
+        token_pin: Token PIN; falls back to settings.token_pin when None.
 
     Returns:
         The fetched :class:`ProcessoDomain`.
 
     Raises:
-        RuntimeError: If no token PIN is available for the unattended run.
+        RuntimeError: If no token PIN is available.
     """
     from urllib.parse import urlparse
 
@@ -173,10 +178,10 @@ def _fetch_mni_mtls(
     from juris.mni.token import build_pkcs11_config, extract_token_material
 
     settings = get_settings()
-    if not settings.token_pin:
-        msg = "mTLS tribunal requires TOKEN_PIN for unattended sync (set it in the environment)."
+    pin = token_pin or (settings.token_pin.get_secret_value() if settings.token_pin else None)
+    if not pin:
+        msg = "mTLS tribunal requires a token PIN (pass --pin or set TOKEN_PIN)."
         raise RuntimeError(msg)
-    pin = settings.token_pin.get_secret_value()
 
     material = extract_token_material(settings.pkcs11_module)
     pkcs11_config = build_pkcs11_config(material, pin, settings.pkcs11_module)

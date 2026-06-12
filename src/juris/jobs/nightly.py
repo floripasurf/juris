@@ -108,6 +108,7 @@ async def run_nightly_single(
     cpf: str,
     senha: str,
     today: date | None = None,
+    token_pin: str | None = None,
 ) -> NightlyResult:
     """Run the nightly pipeline for a single processo.
 
@@ -144,6 +145,7 @@ async def run_nightly_single(
     else:
         diff = await sync_processo_mni(
             numero_cnj, tribunal, cpf, senha, last_sync_at, known_keys,
+            token_pin=token_pin,
         )
         source = "mni"
         if diff.error:
@@ -276,6 +278,7 @@ async def run_nightly(
     senha: str = "",
     max_concurrent: int = 10,
     today: date | None = None,
+    token_pin: str | None = None,
 ) -> NightlySummary:
     """Run the nightly pipeline for a batch of processos with concurrency control.
 
@@ -303,6 +306,7 @@ async def run_nightly(
                 cpf=cpf,
                 senha=senha,
                 today=today,
+                token_pin=token_pin,
             )
 
     tasks = [_run_one(proc) for proc in processos]
