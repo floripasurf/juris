@@ -1,18 +1,17 @@
 """Tests for SearchDispatcher — fanout, dedup, ranking, explain."""
+
 from __future__ import annotations
 
 from datetime import date, datetime
 from pathlib import Path
 
-import pytest
-
-from juris.search.models import SearchQuery, SearchResult, SearchResponse
+from juris.search.models import SearchQuery, SearchResult
 from juris.search.rate_limiter import CourtRateLimiter
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_query(query_type: str = "tema", value: str = "improbidade") -> SearchQuery:
     return SearchQuery(query_type=query_type, value=value)  # type: ignore[arg-type]
@@ -41,6 +40,7 @@ def _make_result(
 # ---------------------------------------------------------------------------
 # Mock adapters
 # ---------------------------------------------------------------------------
+
 
 class _MockAdapter:
     """Minimal concrete adapter — not a subclass of SearchAdapter so we avoid
@@ -75,6 +75,7 @@ def _zero_limiter(tmp_path: Path) -> CourtRateLimiter:
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 class TestSearchDispatcher:
     async def test_fanout_to_multiple_adapters(self, tmp_path: Path) -> None:

@@ -1,4 +1,5 @@
 """Tests for TRF3 search adapter — uses data/search-fixtures/trf3_tema_sample.html."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -10,12 +11,7 @@ import pytest
 from juris.search.adapters.trf3 import TRF3Adapter
 from juris.search.models import SearchQuery
 
-_FIXTURE_PATH = (
-    Path(__file__).parent.parent.parent.parent.parent
-    / "data"
-    / "search-fixtures"
-    / "trf3_tema_sample.html"
-)
+_FIXTURE_PATH = Path(__file__).parent.parent.parent.parent.parent / "data" / "search-fixtures" / "trf3_tema_sample.html"
 
 
 @pytest.fixture()
@@ -30,9 +26,7 @@ def adapter() -> TRF3Adapter:
 
 @pytest.fixture()
 def query() -> SearchQuery:
-    return SearchQuery(
-        query_type="tema", value="improbidade administrativa", max_results_per_court=10
-    )
+    return SearchQuery(query_type="tema", value="improbidade administrativa", max_results_per_court=10)
 
 
 class TestTRF3AdapterMeta:
@@ -53,45 +47,31 @@ class TestTRF3AdapterMeta:
 
 
 class TestTRF3AdapterParseFixture:
-    def test_parse_returns_two_results(
-        self, adapter: TRF3Adapter, fixture_html: str, query: SearchQuery
-    ) -> None:
+    def test_parse_returns_two_results(self, adapter: TRF3Adapter, fixture_html: str, query: SearchQuery) -> None:
         results = adapter._parse(fixture_html, query)
         assert len(results) == 2
 
-    def test_parse_first_case_number(
-        self, adapter: TRF3Adapter, fixture_html: str, query: SearchQuery
-    ) -> None:
+    def test_parse_first_case_number(self, adapter: TRF3Adapter, fixture_html: str, query: SearchQuery) -> None:
         results = adapter._parse(fixture_html, query)
         assert results[0].case_number == "5001234-56.2020.4.03.6100"
 
-    def test_parse_second_case_number(
-        self, adapter: TRF3Adapter, fixture_html: str, query: SearchQuery
-    ) -> None:
+    def test_parse_second_case_number(self, adapter: TRF3Adapter, fixture_html: str, query: SearchQuery) -> None:
         results = adapter._parse(fixture_html, query)
         assert results[1].case_number == "5009876-12.2018.4.03.6105"
 
-    def test_parse_cnj_number_first(
-        self, adapter: TRF3Adapter, fixture_html: str, query: SearchQuery
-    ) -> None:
+    def test_parse_cnj_number_first(self, adapter: TRF3Adapter, fixture_html: str, query: SearchQuery) -> None:
         results = adapter._parse(fixture_html, query)
         assert results[0].cnj_number == "5001234-56.2020.4.03.6100"
 
-    def test_parse_decision_date_first(
-        self, adapter: TRF3Adapter, fixture_html: str, query: SearchQuery
-    ) -> None:
+    def test_parse_decision_date_first(self, adapter: TRF3Adapter, fixture_html: str, query: SearchQuery) -> None:
         results = adapter._parse(fixture_html, query)
         assert results[0].decision_date == date(2024, 4, 12)
 
-    def test_parse_decision_date_second(
-        self, adapter: TRF3Adapter, fixture_html: str, query: SearchQuery
-    ) -> None:
+    def test_parse_decision_date_second(self, adapter: TRF3Adapter, fixture_html: str, query: SearchQuery) -> None:
         results = adapter._parse(fixture_html, query)
         assert results[1].decision_date == date(2024, 3, 5)
 
-    def test_parse_relator_strips_prefix(
-        self, adapter: TRF3Adapter, fixture_html: str, query: SearchQuery
-    ) -> None:
+    def test_parse_relator_strips_prefix(self, adapter: TRF3Adapter, fixture_html: str, query: SearchQuery) -> None:
         results = adapter._parse(fixture_html, query)
         assert results[0].relator == "CARLOS MUTA"
 
@@ -101,68 +81,48 @@ class TestTRF3AdapterParseFixture:
         results = adapter._parse(fixture_html, query)
         assert results[1].relator == "MÔNICA NOBRE"
 
-    def test_parse_ementa_contains_keyword(
-        self, adapter: TRF3Adapter, fixture_html: str, query: SearchQuery
-    ) -> None:
+    def test_parse_ementa_contains_keyword(self, adapter: TRF3Adapter, fixture_html: str, query: SearchQuery) -> None:
         results = adapter._parse(fixture_html, query)
         assert "IMPROBIDADE" in results[0].ementa
 
-    def test_parse_url_has_trf3_prefix(
-        self, adapter: TRF3Adapter, fixture_html: str, query: SearchQuery
-    ) -> None:
+    def test_parse_url_has_trf3_prefix(self, adapter: TRF3Adapter, fixture_html: str, query: SearchQuery) -> None:
         results = adapter._parse(fixture_html, query)
         assert results[0].url.startswith("https://web.trf3.jus.br")
 
-    def test_parse_court_is_trf3(
-        self, adapter: TRF3Adapter, fixture_html: str, query: SearchQuery
-    ) -> None:
+    def test_parse_court_is_trf3(self, adapter: TRF3Adapter, fixture_html: str, query: SearchQuery) -> None:
         results = adapter._parse(fixture_html, query)
         for r in results:
             assert r.court == "trf3"
 
-    def test_parse_source_query_preserved(
-        self, adapter: TRF3Adapter, fixture_html: str, query: SearchQuery
-    ) -> None:
+    def test_parse_source_query_preserved(self, adapter: TRF3Adapter, fixture_html: str, query: SearchQuery) -> None:
         results = adapter._parse(fixture_html, query)
         assert results[0].source_query is query
 
 
 class TestTRF3AdapterParseEdgeCases:
-    def test_parse_no_table_returns_empty(
-        self, adapter: TRF3Adapter, query: SearchQuery
-    ) -> None:
+    def test_parse_no_table_returns_empty(self, adapter: TRF3Adapter, query: SearchQuery) -> None:
         results = adapter._parse("<html><body><p>sem resultados</p></body></html>", query)
         assert results == []
 
-    def test_parse_empty_tbody_returns_empty(
-        self, adapter: TRF3Adapter, query: SearchQuery
-    ) -> None:
+    def test_parse_empty_tbody_returns_empty(self, adapter: TRF3Adapter, query: SearchQuery) -> None:
         html = '<table id="tabelaResultado"><tbody></tbody></table>'
         results = adapter._parse(html, query)
         assert results == []
 
-    def test_parse_respects_max_results(
-        self, adapter: TRF3Adapter, fixture_html: str
-    ) -> None:
-        q = SearchQuery(
-            query_type="tema", value="improbidade", max_results_per_court=1
-        )
+    def test_parse_respects_max_results(self, adapter: TRF3Adapter, fixture_html: str) -> None:
+        q = SearchQuery(query_type="tema", value="improbidade", max_results_per_court=1)
         results = adapter._parse(fixture_html, q)
         assert len(results) == 1
 
 
 @pytest.mark.asyncio()
 class TestTRF3AdapterSearch:
-    async def test_search_unsupported_type_returns_empty(
-        self, adapter: TRF3Adapter
-    ) -> None:
+    async def test_search_unsupported_type_returns_empty(self, adapter: TRF3Adapter) -> None:
         q = SearchQuery(query_type="cnj", value="5001234-56.2020.4.03.6100")
         results = await adapter.search(q)
         assert results == []
 
-    async def test_search_http_error_returns_empty(
-        self, adapter: TRF3Adapter, query: SearchQuery
-    ) -> None:
+    async def test_search_http_error_returns_empty(self, adapter: TRF3Adapter, query: SearchQuery) -> None:
         mock_resp = MagicMock()
         mock_resp.raise_for_status.side_effect = Exception("connection refused")
 

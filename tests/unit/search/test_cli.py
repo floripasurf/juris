@@ -1,9 +1,9 @@
 """Tests for juris search CLI subcommand."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from typer.testing import CliRunner
 
 from juris.cli.search_cli import search_app
@@ -29,8 +29,8 @@ class TestSearchCLI:
         mock_response.query.query_type = "tema"
         mock_response.query.value = "test"
 
-        with patch("juris.cli.search_cli.SearchDispatcher") as MockDispatcher:
-            instance = MockDispatcher.return_value
+        with patch("juris.cli.search_cli.SearchDispatcher") as mock_dispatcher_cls:
+            instance = mock_dispatcher_cls.return_value
             instance.search = AsyncMock(return_value=mock_response)
             result = runner.invoke(search_app, ["--tema", "improbidade"])
             assert result.exit_code == 0
@@ -47,8 +47,8 @@ class TestSearchCLI:
         mock_response.query.query_type = "tema"
         mock_response.query.value = "test"
 
-        with patch("juris.cli.search_cli.SearchDispatcher") as MockDispatcher:
-            instance = MockDispatcher.return_value
+        with patch("juris.cli.search_cli.SearchDispatcher") as mock_dispatcher_cls:
+            instance = mock_dispatcher_cls.return_value
             instance.search = AsyncMock(return_value=mock_response)
             result = runner.invoke(search_app, ["--tema", "test", "--format", "json"])
             assert result.exit_code == 0
@@ -69,8 +69,8 @@ class TestSearchCLI:
         mock_response.query.query_type = "tema"
         mock_response.query.value = "test"
 
-        with patch("juris.cli.search_cli.SearchDispatcher") as MockDispatcher:
-            instance = MockDispatcher.return_value
+        with patch("juris.cli.search_cli.SearchDispatcher") as mock_dispatcher_cls:
+            instance = mock_dispatcher_cls.return_value
             instance.search = AsyncMock(return_value=mock_response)
             result = runner.invoke(search_app, ["--tema", "test", "--format", "markdown"])
             assert result.exit_code == 0
@@ -94,8 +94,8 @@ class TestSearchCLI:
         mock_response.query.query_type = "tema"
         mock_response.query.value = "test"
 
-        with patch("juris.cli.search_cli.SearchDispatcher") as MockDispatcher:
-            instance = MockDispatcher.return_value
+        with patch("juris.cli.search_cli.SearchDispatcher") as mock_dispatcher_cls:
+            instance = mock_dispatcher_cls.return_value
             instance.search = AsyncMock(return_value=mock_response)
             result = runner.invoke(search_app, ["--tema", "test"])
             assert result.exit_code == 0

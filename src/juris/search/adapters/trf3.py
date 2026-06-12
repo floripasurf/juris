@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from typing import ClassVar
 
-import httpx
 from bs4 import BeautifulSoup
 
 from juris.search.adapters import register_adapter
 from juris.search.adapters.base import SearchAdapter
+from juris.search.http import make_portal_client
 from juris.search.models import QueryType, SearchQuery, SearchResult
 from juris.search.utils import clean_ementa, normalize_cnj, parse_br_date
 
@@ -30,10 +31,10 @@ class TRF3Adapter(SearchAdapter):
     ``/base-textual/Home/ListaResumida`` endpoint.
     """
 
-    court_code: str = "trf3"
-    portal_url: str = _PORTAL_URL
-    rate_limit_seconds: float = 2.0
-    supported_query_types: set[QueryType] = {"tema"}
+    court_code: ClassVar[str] = "trf3"
+    portal_url: ClassVar[str] = _PORTAL_URL
+    rate_limit_seconds: ClassVar[float] = 2.0
+    supported_query_types: ClassVar[set[QueryType]] = {"tema"}
 
     async def search(self, query: SearchQuery) -> list[SearchResult]:
         """Search TRF3 jurisprudência portal.
@@ -47,11 +48,7 @@ class TRF3Adapter(SearchAdapter):
         if not self.supports(query.query_type):
             return []
         try:
-            async with httpx.AsyncClient(
-                headers={"User-Agent": self.user_agent},
-                timeout=30.0,
-                follow_redirects=True,
-            ) as client:
+            async with make_portal_client(self.user_agent, follow_redirects=True) as client:
                 resp = await client.get(self.portal_url, params={"strPesq": query.value})
                 resp.raise_for_status()
             return self._parse(resp.text, query)
@@ -103,7 +100,7 @@ class TRF3Adapter(SearchAdapter):
                 cnj_line = next((ln for ln in lines if _CNJ_PATTERN_RE.search(ln)), None)
                 case_number = cnj_line if cnj_line else (lines[-1] if lines else "")
 
-                href = link.get("href", "")
+                href = str(link.get("href") or "")
                 url = _URL_PREFIX + href if href.startswith("/") else href or self.portal_url
 
                 date_text = col_data.get_text(strip=True) if col_data else None
