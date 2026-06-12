@@ -305,3 +305,61 @@ class TestProcessoDomainBridge:
         empty = ConsultaResult(sucesso=True, mensagem="ok")
         pd = empty.to_processo_domain(tribunal_id="tjmg", numero_cnj="0001-02.2024.8.13.0024")
         assert pd.numero_cnj == "0001-02.2024.8.13.0024"
+
+
+class TestAvisosPkcs11:
+    """Parse consultarAvisosPendentes responses over the mTLS path."""
+
+    def _call(self, body_xml: bytes):
+        from unittest.mock import patch
+
+        from juris.mni.operations.intimacoes import consultar_avisos_pendentes_pkcs11
+        from juris.mni.pkcs11_transport import PKCS11Config, SOAPResponse
+
+        resp = SOAPResponse(status_code=200, body=body_xml)
+        with patch("juris.mni.pkcs11_transport.pkcs11_soap_call", return_value=resp):
+            return consultar_avisos_pendentes_pkcs11(
+                host="pje-consulta-publica.tjmg.jus.br",
+                path="/pje/intercomunicacao",
+                pkcs11_config=PKCS11Config(),
+                id_consultante="00000000000",
+                senha_consultante="x",
+            )
+
+    def test_parses_pending_avisos(self) -> None:
+        xml = (
+            b"<soap:Envelope xmlns:soap='http://schemas.xmlsoap.org/soap/envelope/'>"
+            b"<soap:Body><ns:consultarAvisosPendentesResposta xmlns:ns='x'>"
+            b"<sucesso>true</sucesso><mensagem>ok</mensagem>"
+            b"<aviso idAviso='A1' tipoComunicacao='intimacao' "
+            b"numeroProcesso='5000001-11.2025.8.13.0024' orgaoJulgador='1a Vara'/>"
+            b"<aviso idAviso='A2' tipoComunicacao='citacao' "
+            b"numeroProcesso='5000002-22.2025.8.13.0024'/>"
+            b"</ns:consultarAvisosPendentesResposta></soap:Body></soap:Envelope>"
+        )
+        result = self._call(xml)
+        assert result.sucesso
+        assert len(result.avisos) == 2
+        assert result.avisos[0].numero_processo == "5000001-11.2025.8.13.0024"
+        assert result.avisos[0].tipo_comunicacao == "intimacao"
+        assert result.avisos[1].id_aviso == "A2"
+
+    def test_empty_avisos_success(self) -> None:
+        xml = (
+            b"<soap:Envelope xmlns:soap='http://schemas.xmlsoap.org/soap/envelope/'>"
+            b"<soap:Body><resposta><sucesso>true</sucesso>"
+            b"<mensagem>sem avisos</mensagem></resposta></soap:Body></soap:Envelope>"
+        )
+        result = self._call(xml)
+        assert result.sucesso
+        assert result.avisos == []
+
+    def test_failure_reported(self) -> None:
+        xml = (
+            b"<soap:Envelope xmlns:soap='http://schemas.xmlsoap.org/soap/envelope/'>"
+            b"<soap:Body><resposta><sucesso>false</sucesso>"
+            b"<mensagem>Erro de login</mensagem></resposta></soap:Body></soap:Envelope>"
+        )
+        result = self._call(xml)
+        assert not result.sucesso
+        assert "login" in result.mensagem.lower()

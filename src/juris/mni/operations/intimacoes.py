@@ -156,3 +156,108 @@ def _parse_aviso(raw: Any) -> Aviso:
         data_limite_ciencia=getattr(raw, "dataLimiteCiencia", None),
         orgao_julgador=str(getattr(raw, "orgaoJulgador", "")) or None,
     )
+
+
+# --- PKCS#11 mTLS variant (tribunals requiring a client certificate) ---
+
+_AVISOS_SOAP_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns="{namespace}">
+  <soap:Body>
+    <ns:consultarAvisosPendentes>
+      <idConsultante>{id_consultante}</idConsultante>
+      <senhaConsultante>{senha_consultante}</senhaConsultante>
+    </ns:consultarAvisosPendentes>
+  </soap:Body>
+</soap:Envelope>"""
+
+
+def consultar_avisos_pendentes_pkcs11(
+    host: str,
+    path: str,
+    pkcs11_config: Any,
+    id_consultante: str,
+    senha_consultante: str,
+    mni_version: str = "2.2.3",
+) -> AvisosResult:
+    """Fetch pending avisos via PKCS#11 mTLS (e.g. TJMG).
+
+    Mirrors :func:`consultar_avisos_pendentes` but talks to the tribunal
+    over the hardware-token mTLS transport instead of zeep.
+
+    Args:
+        host: Tribunal hostname.
+        path: SOAP endpoint path.
+        pkcs11_config: PKCS#11 token configuration.
+        id_consultante: Consultant CPF.
+        senha_consultante: PJe application password.
+        mni_version: MNI namespace version.
+
+    Returns:
+        AvisosResult with parsed avisos (sucesso=False on error).
+    """
+    from xml.etree import ElementTree as ET
+
+    from juris.mni.operations.consulta_pkcs11 import (
+        _MNI_NAMESPACES,
+        _find_recursive,
+        _local_name,
+        _xml_escape,
+    )
+    from juris.mni.pkcs11_transport import extract_soap_body, pkcs11_soap_call
+
+    namespace = _MNI_NAMESPACES.get(mni_version, _MNI_NAMESPACES["2.2.3"])
+    soap_xml = _AVISOS_SOAP_TEMPLATE.format(
+        namespace=namespace,
+        id_consultante=_xml_escape(id_consultante),
+        senha_consultante=_xml_escape(senha_consultante),
+    )
+
+    logger.info("consultar_avisos_pendentes_pkcs11", host=host, id_consultante=id_consultante)
+
+    try:
+        response = pkcs11_soap_call(host=host, path=path, soap_xml=soap_xml, config=pkcs11_config, timeout=60)
+    except Exception as e:
+        logger.warning("avisos_pkcs11_transport_error", error=str(e))
+        return AvisosResult(sucesso=False, mensagem=f"{type(e).__name__}: {e}")
+
+    if not response.ok:
+        return AvisosResult(sucesso=False, mensagem=f"HTTP {response.status_code}")
+
+    xml_body = extract_soap_body(response)
+    try:
+        root = ET.fromstring(xml_body)  # noqa: S314 — tribunal-controlled SOAP
+    except ET.ParseError as e:
+        return AvisosResult(sucesso=False, mensagem=f"XML parse error: {e}")
+
+    sucesso_elem = _find_recursive(root, "sucesso")
+    mensagem_elem = _find_recursive(root, "mensagem")
+    sucesso = (sucesso_elem.text or "").strip().lower() == "true" if sucesso_elem is not None else False
+    mensagem = (mensagem_elem.text or "") if mensagem_elem is not None else ""
+
+    if not sucesso:
+        return AvisosResult(sucesso=False, mensagem=mensagem)
+
+    avisos = [_parse_aviso_xml(e) for e in root.iter() if _local_name(e.tag) == "aviso"]
+    logger.info("avisos_pkcs11_ok", count=len(avisos))
+    return AvisosResult(sucesso=True, mensagem=mensagem, avisos=avisos)
+
+
+def _parse_aviso_xml(elem: Any) -> Aviso:
+    """Parse an <aviso> element (attributes or child elements) into an Aviso."""
+    from juris.mni.operations.consulta_pkcs11 import _local_name
+
+    def _get(name: str) -> str:
+        val = elem.get(name)
+        if val:
+            return str(val)
+        for child in elem:
+            if _local_name(child.tag) == name:
+                return child.text or ""
+        return ""
+
+    return Aviso(
+        id_aviso=_get("idAviso"),
+        tipo_comunicacao=_get("tipoComunicacao"),
+        numero_processo=_get("numeroProcesso"),
+        orgao_julgador=_get("orgaoJulgador") or None,
+    )
