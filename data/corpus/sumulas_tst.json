@@ -1,0 +1,600 @@
+[
+  {
+    "numero": "1",
+    "texto": "É admissível a oposição de embargos de terceiro em execução trabalhista.",
+    "tema": "embargos de terceiro",
+    "base_legal": [
+      "CPC Art. 674"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "6",
+    "texto": "Não se distingue, para efeito de prescrição, entre os que ingressam na empresa antes e após o advento da Constituição.",
+    "tema": "prescrição trabalhista",
+    "base_legal": [
+      "CF Art. 7º XXIX"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "51",
+    "texto": "O trabalhador avulso tem direito à remuneração correspondente ao repouso semanal remunerado.",
+    "tema": "avulso",
+    "base_legal": [
+      "CF Art. 7º XXXIV"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "85",
+    "texto": "A compensação de jornada de trabalho deve ser ajustada por acordo individual escrito, acordo coletivo ou convenção coletiva. O acordo individual para compensação de horas é válido, salvo se houver norma coletiva em sentido contrário.",
+    "tema": "compensação de jornada",
+    "base_legal": [
+      "CLT Art. 59"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "90",
+    "texto": "I - Somente por lei se pode sujeitar a exame psicotécnico a habilitação de candidato a cargo público. II - É ilegal o exame psicotécnico como critério eliminatório nos processos seletivos.",
+    "tema": "concurso público",
+    "base_legal": [
+      "CF Art. 37 II"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "102",
+    "texto": "O mandato classista não suspende o prazo prescricional.",
+    "tema": "prescrição trabalhista",
+    "base_legal": [
+      "CLT Art. 11"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "126",
+    "texto": "É incabível o recurso de revista ou de embargos (CLT, art. 896 e 894, b) para reexame de fatos e provas.",
+    "tema": "recurso de revista",
+    "base_legal": [
+      "CLT Art. 896"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "129",
+    "texto": "A prestação de serviços a mais de uma empresa do mesmo grupo econômico, durante a mesma jornada de trabalho, não caracteriza a coexistência de mais de um contrato de trabalho, salvo ajuste em contrário.",
+    "tema": "grupo econômico",
+    "base_legal": [
+      "CLT Art. 2º §2º"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "132",
+    "texto": "I - O FGTS incide sobre todas as parcelas remuneratórias pagas ao empregado. II - O FGTS incide sobre a remuneração mensal devida ao empregado, incluídas as horas extras e adicionais eventuais.",
+    "tema": "FGTS incidência",
+    "base_legal": [
+      "Lei 8.036/90 Art. 15"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "146",
+    "texto": "O trabalho realizado em domingos e feriados, não compensado, deve ser pago em dobro, sem prejuízo da remuneração relativa ao repouso semanal.",
+    "tema": "trabalho em feriados",
+    "base_legal": [
+      "Lei 605/49 Art. 9º"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "159",
+    "texto": "A substituição do período de férias por pagamento em dinheiro, fora dos casos previstos no Art. 143 da CLT, é vedada.",
+    "tema": "férias",
+    "base_legal": [
+      "CLT Art. 143"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "171",
+    "texto": "Os feriados declarados em lei municipal são dias de repouso remunerado.",
+    "tema": "feriados",
+    "base_legal": [
+      "Lei 9.093/95"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "199",
+    "texto": "O empregado que recebe salário por produção tem direito ao recebimento de horas extras, quando ultrapassada a jornada normal de trabalho.",
+    "tema": "horas extras",
+    "base_legal": [
+      "CLT Art. 59"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "212",
+    "texto": "O ônus de provar o término do contrato de trabalho, quando negados a prestação de serviço e o despedimento, é do empregador, pois o princípio da continuidade da relação de emprego constitui presunção favorável ao empregado.",
+    "tema": "ônus da prova",
+    "base_legal": [
+      "CLT Art. 818"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "219",
+    "texto": "Na Justiça do Trabalho, a condenação ao pagamento de honorários advocatícios não decorre pura e simplesmente da sucumbência, devendo a parte, concomitantemente: a) estar assistida por sindicato da categoria profissional; b) comprovar a percepção de salário inferior ao dobro do salário mínimo ou encontrar-se em situação econômica que não lhe permita demandar sem prejuízo do próprio sustento ou da respectiva família.",
+    "tema": "honorários advocatícios",
+    "base_legal": [
+      "Lei 5.584/70 Art. 14"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "221",
+    "texto": "I - A admissão do recurso de embargos depende de demonstração de divergência jurisprudencial atual. II - A divergência apta a ensejar os embargos deve ser atual, não se considerando tal a ultrapassada por súmula do TST ou do STF.",
+    "tema": "embargos divergência",
+    "base_legal": [
+      "CLT Art. 894"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "228",
+    "texto": "Não cabe recurso de revista por violação de lei federal, quando a decisão recorrida estiver em consonância com súmula da jurisprudência uniforme do TST.",
+    "tema": "recurso de revista",
+    "base_legal": [
+      "CLT Art. 896"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "244",
+    "texto": "A gestante tem direito à estabilidade provisória prevista no art. 10, inciso II, alínea b, do Ato das Disposições Constitucionais Transitórias, mesmo na hipótese de admissão mediante contrato por tempo determinado.",
+    "tema": "estabilidade gestante",
+    "base_legal": [
+      "ADCT Art. 10 II b"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "269",
+    "texto": "O empregado eleito para ocupar cargo de diretor tem o respectivo contrato de trabalho suspenso, não se computando o tempo de serviço desse período, salvo se permanecer a subordinação jurídica inerente à relação de emprego.",
+    "tema": "diretor empregado",
+    "base_legal": [
+      "CLT Art. 499"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "291",
+    "texto": "A supressão total ou parcial, pelo empregador, de serviço suplementar prestado com habitualidade, durante pelo menos 1 (um) ano, assegura ao empregado o direito à indenização correspondente ao valor de 1 (um) mês das horas suprimidas, total ou parcialmente, para cada ano ou fração igual ou superior a seis meses de prestação de serviço acima da jornada normal.",
+    "tema": "horas extras suprimidas",
+    "base_legal": [
+      "CLT Art. 468"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "296",
+    "texto": "O empregado que percebe remuneração mista, fixo e variável, tem direito ao recebimento de horas extras apenas quanto à parcela fixa.",
+    "tema": "horas extras mista",
+    "base_legal": [
+      "CLT Art. 59"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "297",
+    "texto": "O empregado investido de mandato de dirigente sindical goza de estabilidade provisória desde o registro da candidatura até um ano após o final do mandato.",
+    "tema": "estabilidade sindical",
+    "base_legal": [
+      "CF Art. 8º VIII"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "298",
+    "texto": "O empregado integrante de categoria diferenciada, investido de mandato de representação sindical, tem direito à estabilidade provisória prevista no art. 8º, VIII, da CF/1988.",
+    "tema": "categoria diferenciada",
+    "base_legal": [
+      "CF Art. 8º VIII"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "303",
+    "texto": "O empregado sujeito a controle de horário que extrapola a jornada legal é devedor de horas extras, independentemente de ajuste individual, e o intervalo intrajornada não concedido deve ser remunerado como hora extra.",
+    "tema": "intervalo intrajornada",
+    "base_legal": [
+      "CLT Art. 71"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "305",
+    "texto": "O pagamento relativo ao período de aviso prévio, trabalhado ou não, está sujeito à contribuição para o FGTS.",
+    "tema": "FGTS aviso prévio",
+    "base_legal": [
+      "Lei 8.036/90 Art. 15"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "318",
+    "texto": "Tratando-se de empregado horista, a adoção do divisor 220 não importa o reconhecimento de horas extras além da 8ª diária.",
+    "tema": "divisor hora",
+    "base_legal": [
+      "CLT Art. 64"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "330",
+    "texto": "A quitação passada pelo empregado, com assistência de entidade sindical de sua categoria, ao empregador, com observância dos requisitos exigidos nos parágrafos do art. 477 da CLT, tem eficácia liberatória em relação às parcelas expressamente consignadas no recibo.",
+    "tema": "quitação rescisão",
+    "base_legal": [
+      "CLT Art. 477"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "331",
+    "texto": "A contratação de trabalhadores por empresa interposta é ilegal, formando-se o vínculo diretamente com o tomador dos serviços, salvo no caso de trabalho temporário.",
+    "tema": "terceirização",
+    "base_legal": [
+      "CLT Art. 2º",
+      "Lei 6.019/74"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "338",
+    "texto": "I - É ônus do empregador que conta com mais de 10 (dez) empregados o registro da jornada de trabalho na forma do art. 74, § 2º, da CLT. A não-apresentação injustificada dos controles de frequência gera presunção relativa de veracidade da jornada de trabalho alegada na inicial.",
+    "tema": "controle de jornada",
+    "base_legal": [
+      "CLT Art. 74 §2º"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "339",
+    "texto": "I - O empregado acidentado tem garantia de emprego por prazo mínimo de 12 meses após a cessação do auxílio-doença acidentário, independentemente de percepção de auxílio-acidente. II - São pressupostos da estabilidade: o afastamento superior a 15 dias e a consequente percepção do auxílio-doença acidentário, salvo se constatada, após a despedida, doença profissional que guarde relação de causalidade com a execução do contrato de emprego.",
+    "tema": "estabilidade acidentário",
+    "base_legal": [
+      "Lei 8.213/91 Art. 118"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "340",
+    "texto": "O empregado que, durante a vigência do contrato de trabalho, adquire estabilidade sindical, tem direito a ela mesmo após sua demissão.",
+    "tema": "estabilidade sindical",
+    "base_legal": [
+      "CF Art. 8º VIII"
+    ],
+    "situacao": "cancelada"
+  },
+  {
+    "numero": "342",
+    "texto": "Descontos salariais efetuados pelo empregador, com a autorização prévia e por escrito do empregado, para ser integrado em planos de assistência odontológica, médico-hospitalar, de seguro, de previdência privada, ou de entidade cooperativa, cultural ou recreativo-associativa de seus trabalhadores, em seu benefício e de seus dependentes, não afrontam o disposto no art. 462 da CLT.",
+    "tema": "descontos salariais",
+    "base_legal": [
+      "CLT Art. 462"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "346",
+    "texto": "Os digitadores, por aplicação analógica do art. 72 da CLT, equiparam-se aos trabalhadores nos serviços de mecanografia (datilografia, escrituração ou cálculo), razão pela qual têm direito a intervalos de descanso de 10 (dez) minutos a cada 90 (noventa) de trabalho consecutivo.",
+    "tema": "digitadores intervalo",
+    "base_legal": [
+      "CLT Art. 72"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "349",
+    "texto": "Não existe previsão legal para a concessão de intervalo de descanso para o trabalho noturno do menor.",
+    "tema": "trabalho noturno menor",
+    "base_legal": [
+      "CLT Art. 73"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "354",
+    "texto": "As gorjetas cobradas pelo empregador na nota de serviço ou oferecidas espontaneamente pelos clientes integram a remuneração do empregado, não servindo de base de cálculo para as parcelas de aviso-prévio, adicional noturno, horas extras e repouso semanal remunerado.",
+    "tema": "gorjetas",
+    "base_legal": [
+      "CLT Art. 457 §3º"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "363",
+    "texto": "A contratação de servidor público, após a CF/1988, sem prévia aprovação em concurso público, encontra óbice no respectivo art. 37, II e § 2º, somente lhe conferindo direito ao pagamento da contraprestação pactuada, em relação ao número de horas trabalhadas, respeitado o valor da hora do salário mínimo, e dos valores referentes aos depósitos do FGTS.",
+    "tema": "contratação nula",
+    "base_legal": [
+      "CF Art. 37 II",
+      "CF Art. 37 §2º"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "366",
+    "texto": "O cartão de ponto que não registra horários variáveis de entrada e saída não se presta a controlar a jornada de trabalho, invertendo-se o ônus da prova quanto às horas extras.",
+    "tema": "cartão britânico",
+    "base_legal": [
+      "CLT Art. 74 §2º"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "369",
+    "texto": "Ressalvadas as hipóteses previstas no art. 543, §3º, da CLT, o empregado dirigente sindical não pode ser dispensado do emprego desde o registro de sua candidatura até um ano após o final do seu mandato de representação sindical.",
+    "tema": "dirigente sindical",
+    "base_legal": [
+      "CLT Art. 543 §3º"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "370",
+    "texto": "Médico e engenheiro: enquadramento sindical. Havendo, na mesma localidade, sindicato da categoria profissional diferenciada a que pertence o empregado, é desnecessária a filiação.",
+    "tema": "enquadramento sindical",
+    "base_legal": [
+      "CLT Art. 511"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "371",
+    "texto": "A jornada de trabalho do farmacêutico é de 8 horas diárias e 44 semanais.",
+    "tema": "jornada farmacêutico",
+    "base_legal": [
+      "CF Art. 7º XIII"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "372",
+    "texto": "I - A gratificação de função percebida por 10 ou mais anos pelo empregado não pode ser suprimida pelo empregador sem justo motivo. II - Mantido o empregado no exercício da função comissionada, não pode o empregador reduzir o valor da gratificação.",
+    "tema": "gratificação de função",
+    "base_legal": [
+      "CLT Art. 468"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "378",
+    "texto": "I - É constitucional o art. 7º, I, da Constituição, que não obriga à reintegração, mas apenas ao pagamento de indenização nos casos de empregado acidentado demitido sem justa causa no período de estabilidade provisória. II - O direito à estabilidade provisória, assegurado ao empregado acidentado nos termos do art. 118 da Lei nº 8.213/91, alcança o empregado submetido a contrato de trabalho por tempo determinado.",
+    "tema": "estabilidade acidente",
+    "base_legal": [
+      "Lei 8.213/91 Art. 118"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "381",
+    "texto": "A fixação do valor dos honorários periciais deve obedecer às condições gerais de fixação de honorários previstas na legislação processual trabalhista.",
+    "tema": "honorários periciais",
+    "base_legal": [
+      "CLT Art. 790-B"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "382",
+    "texto": "A transferência do regime jurídico de celetista para estatutário implica extinção do contrato de trabalho, fluindo o prazo da prescrição bienal a partir da mudança de regime.",
+    "tema": "mudança de regime",
+    "base_legal": [
+      "CF Art. 7º XXIX"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "385",
+    "texto": "I - A compensação de créditos trabalhistas não poderá ser superior a 30% do valor líquido a ser recebido pelo empregado.",
+    "tema": "compensação créditos",
+    "base_legal": [
+      "CLT Art. 767"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "386",
+    "texto": "Preenchidos os requisitos do art. 3º da CLT, é legítimo o reconhecimento de relação de emprego entre policial militar e empresa privada, independentemente do eventual cabimento de penalidade disciplinar prevista no Estatuto do Policial Militar.",
+    "tema": "policial militar vínculo",
+    "base_legal": [
+      "CLT Art. 3º"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "389",
+    "texto": "I - Insere-se na competência material da Justiça do Trabalho a lide entre empregado e empregador tendo por objeto indenização pelo não fornecimento das guias do seguro-desemprego.",
+    "tema": "guias seguro-desemprego",
+    "base_legal": [
+      "Lei 7.998/90"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "390",
+    "texto": "I - É lícita a adoção do critério de remuneração por hora trabalhada, para os empregados domésticos.",
+    "tema": "doméstico remuneração",
+    "base_legal": [
+      "LC 150/2015"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "391",
+    "texto": "A petição inicial que não atender às exigências legais quanto à indicação de causa de pedir e pedido poderá ser indeferida de plano.",
+    "tema": "petição inicial",
+    "base_legal": [
+      "CLT Art. 840 §1º"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "392",
+    "texto": "A gestante que for dispensada tem direito ao pagamento dos salários e demais direitos correspondentes ao período de estabilidade, ainda que a estabilidade não tenha sido confirmada judicialmente.",
+    "tema": "estabilidade gestante indenização",
+    "base_legal": [
+      "ADCT Art. 10 II b"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "396",
+    "texto": "Para o recebimento de vale-transporte o empregado deve informar ao empregador, por escrito, seu endereço residencial e os serviços e meios de transporte mais adequados ao seu deslocamento residência-trabalho e vice-versa.",
+    "tema": "vale-transporte",
+    "base_legal": [
+      "Lei 7.418/85"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "403",
+    "texto": "Não tem direito ao adicional de periculosidade o empregado que, embora trabalhe em área de risco, está protegido e utiliza equipamento adequado de proteção, tornando afastada a exposição ao agente de risco.",
+    "tema": "periculosidade EPI",
+    "base_legal": [
+      "CLT Art. 193"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "421",
+    "texto": "O empregado que, durante a vigência do contrato de trabalho, laborou em área de risco, faz jus ao adicional de periculosidade, ainda que a exposição ao agente de risco não seja permanente.",
+    "tema": "periculosidade intermitente",
+    "base_legal": [
+      "CLT Art. 193"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "422",
+    "texto": "O empregador sujeito a revezamento de turnos não pode prestar mais de 6 horas de trabalho em cada turno, salvo ajuste coletivo.",
+    "tema": "turnos ininterruptos",
+    "base_legal": [
+      "CF Art. 7º XIV"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "428",
+    "texto": "Nos contratos de concessão de direito real de uso, o empregador pode dispensar o empregado sem pagamento de indenização.",
+    "tema": "concessão real uso",
+    "base_legal": [
+      "CLT Art. 477"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "437",
+    "texto": "Compete à Justiça do Trabalho o julgamento de ações possessórias ajuizadas em decorrência do exercício do direito de greve.",
+    "tema": "greve competência",
+    "base_legal": [
+      "CF Art. 114 II"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "440",
+    "texto": "É assegurada ao empregado a estabilidade prevista no art. 118 da Lei nº 8.213/91 a partir do retorno ao trabalho, após a cessação do benefício previdenciário.",
+    "tema": "estabilidade acidente retorno",
+    "base_legal": [
+      "Lei 8.213/91 Art. 118"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "443",
+    "texto": "Presume-se discriminatória a despedida de empregado portador do vírus HIV ou de outra doença grave que suscite estigma ou preconceito. Inválido o ato, o empregado tem direito à reintegração no emprego.",
+    "tema": "dispensa discriminatória",
+    "base_legal": [
+      "CF Art. 7º I",
+      "Lei 9.029/95"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "444",
+    "texto": "É válida, em caráter excepcional, a jornada de doze horas de trabalho por trinta e seis de descanso, prevista em lei ou ajustada exclusivamente mediante acordo coletivo de trabalho ou convenção coletiva de trabalho, assegurada a remuneração em dobro dos feriados trabalhados.",
+    "tema": "jornada 12x36",
+    "base_legal": [
+      "CLT Art. 59-A"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "450",
+    "texto": "É devido o pagamento da diferença do FGTS incidente sobre o complemento do aviso-prévio proporcional ao tempo de serviço de que trata o art. 1º da Lei nº 12.506/2011, quando o empregado for dispensado sem justa causa.",
+    "tema": "aviso prévio proporcional FGTS",
+    "base_legal": [
+      "Lei 12.506/2011"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "451",
+    "texto": "Fere o princípio da isonomia instituir vantagem mediante acordo coletivo ou convenção coletiva de trabalho que atinja apenas parte da categoria, quando o critério de exclusão for arbitrário.",
+    "tema": "isonomia coletiva",
+    "base_legal": [
+      "CF Art. 7º XXVI"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "452",
+    "texto": "É devida a indenização por dano moral decorrente do assédio moral no ambiente de trabalho, configurada pela conduta abusiva do empregador que submete o empregado a situações humilhantes de forma reiterada.",
+    "tema": "assédio moral",
+    "base_legal": [
+      "CF Art. 5º V e X",
+      "CC Art. 186"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "454",
+    "texto": "O empregado que lida com inflamáveis, explosivos, energia elétrica ou radiação ionizante, de forma habitual, tem direito ao adicional de periculosidade.",
+    "tema": "periculosidade adicional",
+    "base_legal": [
+      "CLT Art. 193"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "460",
+    "texto": "É devida a correção monetária no pagamento em atraso das diferenças salariais, ainda que devidas pela Administração Pública.",
+    "tema": "correção monetária",
+    "base_legal": [
+      "CLT Art. 459"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "461",
+    "texto": "A comprovação da tempestividade do recurso mediante certidão de publicação é ônus do recorrente. A juntada de comprovante de feriado local em momento posterior à interposição do recurso não se aplica.",
+    "tema": "tempestividade recurso",
+    "base_legal": [
+      "CLT Art. 775"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "463",
+    "texto": "A equiparação salarial pressupõe trabalho de igual valor, prestado ao mesmo empregador, na mesma localidade, correspondendo a funções idênticas, entre pessoas cuja diferença de tempo de serviço para o mesmo empregador não seja superior a quatro anos e a diferença de tempo na função não seja superior a dois anos.",
+    "tema": "equiparação salarial",
+    "base_legal": [
+      "CLT Art. 461"
+    ],
+    "situacao": "vigente"
+  }
+]
