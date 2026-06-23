@@ -41,6 +41,7 @@ class LocalCliLLM(AbstractLLM):
         self,
         *,
         provider: CliCloudProvider,
+        model: str | None = None,
         timeout_seconds: float = 180.0,
         cwd: Path | None = None,
     ) -> None:
@@ -48,6 +49,7 @@ class LocalCliLLM(AbstractLLM):
             msg = f"Unsupported CLI cloud provider: {provider}"
             raise ValueError(msg)
         self._provider = provider
+        self._model = model
         self._timeout_seconds = timeout_seconds
         self._cwd = cwd
 
@@ -93,7 +95,8 @@ class LocalCliLLM(AbstractLLM):
 
     @property
     def model_name(self) -> str:
-        return _PROVIDER_MODEL_NAMES[self._provider]
+        base = _PROVIDER_MODEL_NAMES[self._provider]
+        return f"{base}:{self._model}" if self._model else base
 
     @property
     def llm_provider(self) -> str:
@@ -120,8 +123,10 @@ class LocalCliLLM(AbstractLLM):
                 "",
                 "--permission-mode",
                 "dontAsk",
-                full_prompt,
             ]
+            if self._model:
+                command += ["--model", self._model]
+            command.append(full_prompt)
             return command, None
 
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as out:

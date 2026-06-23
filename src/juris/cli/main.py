@@ -2360,7 +2360,18 @@ def demo(
     cli_cloud: str | None = typer.Option(
         None,
         "--cli-cloud",
-        help="Usar assinatura via CLI cloud para rascunho-pesquisa fictício: claude | codex",
+        help="Usar assinatura via CLI cloud para rascunho-pesquisa: claude | codex",
+    ),
+    cli_model: str = typer.Option(
+        "haiku",
+        "--cli-model",
+        help="Modelo do --cli-cloud claude (ex.: haiku, sonnet). Default: haiku.",
+    ),
+    anonimizado: bool = typer.Option(
+        False,
+        "--anonimizado",
+        help="Operador confirma que o contexto enviado ao LLM está sem PII/anonimizado. "
+        "Libera --cli-cloud em --source datajud.",
     ),
     skip_review: bool = typer.Option(False, "--skip-review", help="Pular revisão pós-draft"),
     use_cache: bool = typer.Option(True, "--cache/--no-cache", help="Usar cache local DataJud"),
@@ -2427,8 +2438,14 @@ def demo(
         if output_mode is not OutputMode.RASCUNHO_PESQUISA:
             console.print("[red]--cli-cloud exige --modo rascunho-pesquisa.[/red]")
             raise typer.Exit(code=1)
-        if not is_demo_mode:
-            console.print("[red]--cli-cloud só aceita source=fixture para evitar envio de PII.[/red]")
+        if source_mode is SourceMode.MNI:
+            console.print("[red]--cli-cloud não é permitido com --source mni.[/red]")
+            raise typer.Exit(code=1)
+        if not is_demo_mode and not anonimizado:
+            console.print(
+                "[red]--cli-cloud em source real exige --anonimizado (operador confirma "
+                "contexto sem PII). Sem isso, use --source fixture.[/red]"
+            )
             raise typer.Exit(code=1)
 
     # Real-source safety gate: refuse to run against a missing/empty corpus
@@ -2485,8 +2502,15 @@ def demo(
     if cli_cloud is not None:
         from juris.llm.local_cli import LocalCliLLM
 
-        llm = LocalCliLLM(provider=cli_cloud)
-        console.print(f"[dim]LLM: {llm.model_name} (cloud via CLI; sem PII)[/dim]")
+        model = cli_model if cli_cloud == "claude" else None
+        llm = LocalCliLLM(provider=cli_cloud, model=model)
+        contexto = "anonimizado" if anonimizado else "sem PII"
+        console.print(f"[dim]LLM: {llm.model_name} (cloud via CLI; {contexto})[/dim]")
+        if anonimizado and not is_demo_mode:
+            console.print(
+                "[yellow]AVISO: --anonimizado afirma que o contexto enviado ao LLM está "
+                "sem PII. Confirme o gate do(a) advogado(a) antes de prosseguir.[/yellow]"
+            )
     elif cloud:
         console.print(
             "[yellow]AVISO PII:[/yellow] --cloud envia dados do processo "
@@ -2561,6 +2585,7 @@ def demo(
         use_cloud_llm=cloud or cli_cloud is not None,
         skip_review=skip_review,
         output_mode=output_mode,
+        assume_no_pii=anonimizado,
     )
 
     console.print(

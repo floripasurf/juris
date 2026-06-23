@@ -66,6 +66,10 @@ class DemoRequest:
     skip_review: bool = False
     use_llm_for_analysis: bool = False
     output_mode: OutputMode = OutputMode.MINUTA_SUGERIDA
+    # Operator asserts the context sent to the LLM is de-identified, so a
+    # real-source run (datajud/mni) may use a cloud backend. The lawyer-facing
+    # PII confirmation gate remains the human control for this assertion.
+    assume_no_pii: bool = False
 
 
 @dataclass(slots=True)
@@ -266,7 +270,7 @@ class DemoOrchestrator:
             thesis=request.thesis,
             custom_instructions=request.instructions,
             use_cloud_llm=request.use_cloud_llm,
-            contains_pii=request.source is not SourceMode.FIXTURE,
+            contains_pii=request.source is not SourceMode.FIXTURE and not request.assume_no_pii,
         )
         return await agent.draft(draft_req, context)
 

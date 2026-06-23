@@ -19,6 +19,35 @@ def test_cli_cloud_adapter_exposes_cloud_provider_identity() -> None:
     assert llm.allows_pii is False
 
 
+def test_cli_cloud_adapter_passes_model_flag_when_set() -> None:
+    llm = LocalCliLLM(provider="claude", model="haiku")
+
+    command, stdin = llm._command_and_stdin(
+        prompt="analise",
+        system=None,
+        schema=None,
+        max_tokens=128,
+        temperature=0.0,
+    )
+
+    assert "--model" in command
+    assert command[command.index("--model") + 1] == "haiku"
+    assert command[-1] == "analise"  # prompt stays last
+    assert stdin is None
+    assert llm.model_name == "claude_cli_subscription:haiku"
+
+
+def test_cli_cloud_adapter_omits_model_flag_when_unset() -> None:
+    llm = LocalCliLLM(provider="claude")
+
+    command, _ = llm._command_and_stdin(
+        prompt="analise", system=None, schema=None, max_tokens=128, temperature=0.0
+    )
+
+    assert "--model" not in command
+    assert llm.model_name == "claude_cli_subscription"
+
+
 @pytest.mark.asyncio
 async def test_cli_cloud_adapter_refuses_explicit_pii_context() -> None:
     llm = LocalCliLLM(provider="claude")
