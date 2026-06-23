@@ -1,11 +1,12 @@
 # Sessão — Caso Real Anonimizado (2026-06-23)
 
 Base do roteiro: `docs/pilot/sessions/2026-05-18-real-case-anonymized-plan.md`
-Branch/commit preparado: `feat/corpus-seeds` / `8c66e62`
+Branch/commit preparado: `feat/cli-cloud-haiku` / `8a4a9a3`
 Modo recomendado: `rascunho-pesquisa`
 Fonte permitida: `datajud` (consulta pública read-only — não protocola nada)
-LLM permitido: `--cloud` (Anthropic) **somente** com caso sem PII / anonimizado.
-NÃO usar `--cli-cloud` para caso real (restrito a fixture sem PII).
+LLM: **Haiku via assinatura Claude Code** (`--cli-cloud claude`, default Haiku),
+**sem `ANTHROPIC_API_KEY`**. Liberado para `datajud` apenas com `--anonimizado`
+(operador confirma contexto sem PII). `mni` permanece bloqueado nesta rota.
 
 ## Estado da preparação (preenchido por Claude)
 
@@ -16,15 +17,11 @@ NÃO usar `--cli-cloud` para caso real (restrito a fixture sem PII).
 | Banco legado vazio | ✅ removido (warning eliminado) |
 | Diretório de saída | ✅ `juris-out-real-anon-2026-06-23` livre (primeiro uso) |
 | Disco | ✅ ~28 GB livres |
-| **LLM provider** | ❌ **FALTA** — exportar `ANTHROPIC_API_KEY` antes de rodar (rota `--cloud`) |
+| LLM provider | ✅ WARN aceitável — CLI cloud `claude` disponível (Haiku via assinatura, sem API key) |
 
-> Único bloqueio técnico restante: a chave do LLM. Os demais checks passam.
-
-## Antes de rodar — exportar a chave
-
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...      # rota cloud para o memo anonimizado
-```
+> Sem bloqueio técnico. A rota usa o `claude` da sua assinatura (Haiku),
+> verificado ao vivo. Não precisa de `ANTHROPIC_API_KEY`. `WARN` de Ollama
+> indisponível é aceitável nesta rota.
 
 ## Gates de PII (humanos — confirmar com o(a) advogado(a) ANTES de rodar)
 
@@ -45,11 +42,13 @@ registrar o bloqueio na seção Notas.
 ```bash
 uv run juris pilot preflight \
   --out juris-out-real-anon-2026-06-23 \
-  --skip-ollama-probe
+  --skip-ollama-probe \
+  --cli-cloud claude
 ```
 
-Aceite: `Preflight OK` (ou com avisos). Com `ANTHROPIC_API_KEY` exportada,
-`llm_availability` deve virar PASS. Qualquer `FAIL` bloqueia a sessão.
+Aceite: `Preflight OK` (ou com avisos). `llm_availability` deve ser `WARN`
+(CLI cloud `claude` disponível; Ollama indisponível é aceitável). Qualquer
+`FAIL` bloqueia a sessão.
 
 Confirmar corpus:
 
@@ -66,9 +65,14 @@ uv run juris demo <NUMERO_CNJ_REAL> <TIPO_PETICAO> \
   --source datajud \
   --tribunal <TRIBUNAL> \
   --out juris-out-real-anon-2026-06-23 \
-  --cloud \
+  --cli-cloud claude \
+  --anonimizado \
   --modo rascunho-pesquisa
 ```
+
+`--cli-cloud claude` usa Haiku por default (`--cli-model haiku`; troque para
+`sonnet` se quiser mais qualidade no mesmo plano). `--anonimizado` afirma que
+o contexto vai sem PII — só usar com o gate do(a) advogado(a) confirmado.
 
 Com tese fixada (apenas texto anonimizado, sem PII):
 
@@ -77,7 +81,8 @@ uv run juris demo <NUMERO_CNJ_REAL> <TIPO_PETICAO> \
   --source datajud \
   --tribunal <TRIBUNAL> \
   --out juris-out-real-anon-2026-06-23 \
-  --cloud \
+  --cli-cloud claude \
+  --anonimizado \
   --modo rascunho-pesquisa \
   --thesis "<TESE SEM PII>"
 ```
