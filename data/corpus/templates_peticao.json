@@ -1,0 +1,249 @@
+[
+    {
+        "id": "tpl_inicial_indenizatoria",
+        "tipo": "inicial",
+        "titulo": "Petição Inicial - Ação de Indenização por Danos Morais e Materiais",
+        "ramo_direito": "direito civil",
+        "fase_processual": "conhecimento",
+        "estrutura": [
+            {"ordem": 1, "titulo": "Endereçamento", "proposito": "Identificar o juízo competente", "exemplo_resumido": "EXMO. SR. DR. JUIZ DE DIREITO DA _ª VARA CÍVEL DA COMARCA DE..."},
+            {"ordem": 2, "titulo": "Qualificação das Partes", "proposito": "Identificar autor e réu com qualificação completa", "exemplo_resumido": "FULANO DE TAL, brasileiro, casado, portador do CPF nº..., residente e domiciliado em..."},
+            {"ordem": 3, "titulo": "Dos Fatos", "proposito": "Narrar os fatos relevantes em ordem cronológica", "exemplo_resumido": "No dia XX/XX/XXXX, o autor celebrou contrato de..."},
+            {"ordem": 4, "titulo": "Do Direito", "proposito": "Fundamentação jurídica da pretensão", "exemplo_resumido": "Nos termos do art. 186 c/c art. 927 do Código Civil..."},
+            {"ordem": 5, "titulo": "Dos Danos Materiais", "proposito": "Quantificar os danos materiais sofridos", "exemplo_resumido": "Os danos materiais importam em R$..., conforme documentos anexos."},
+            {"ordem": 6, "titulo": "Dos Danos Morais", "proposito": "Fundamentar e quantificar os danos morais", "exemplo_resumido": "A conduta do réu causou abalo psicológico ao autor, configurando dano moral..."},
+            {"ordem": 7, "titulo": "Dos Pedidos", "proposito": "Formular pedidos específicos e determinados", "exemplo_resumido": "a) condenação do réu ao pagamento de indenização por danos materiais no valor de R$...; b) condenação ao pagamento de danos morais..."},
+            {"ordem": 8, "titulo": "Do Valor da Causa", "proposito": "Fixar valor da causa conforme art. 292 CPC", "exemplo_resumido": "Dá-se à causa o valor de R$..., nos termos do art. 292, V, do CPC."},
+            {"ordem": 9, "titulo": "Requerimentos Finais", "proposito": "Requerer citação, provas e demais providências", "exemplo_resumido": "Requer a citação do réu para, querendo, contestar a presente ação no prazo legal..."}
+        ],
+        "cadeia_argumentativa": [
+            "Fato gerador do dano",
+            "Conduta ilícita do réu",
+            "Nexo causal entre conduta e dano",
+            "Quantificação do dano material e moral",
+            "Dever de indenizar"
+        ],
+        "padroes_argumentacao": [
+            "Responsabilidade civil subjetiva (art. 186 CC)",
+            "Responsabilidade civil objetiva (art. 927 parágrafo único CC)",
+            "Dano moral in re ipsa"
+        ],
+        "fundamento_legal": [
+            "Art. 186 CC", "Art. 927 CC", "Art. 944 CC", "Art. 319 CPC", "Art. 292 CPC"
+        ]
+    },
+    {
+        "id": "tpl_contestacao_civel",
+        "tipo": "contestacao",
+        "titulo": "Contestação - Ação Cível",
+        "ramo_direito": "direito civil",
+        "fase_processual": "conhecimento",
+        "estrutura": [
+            {"ordem": 1, "titulo": "Endereçamento", "proposito": "Dirigir ao juízo da causa", "exemplo_resumido": "EXMO. SR. DR. JUIZ DE DIREITO DA _ª VARA CÍVEL DA COMARCA DE..."},
+            {"ordem": 2, "titulo": "Qualificação do Réu", "proposito": "Identificar o contestante", "exemplo_resumido": "FULANO DE TAL, já qualificado nos autos do processo nº..."},
+            {"ordem": 3, "titulo": "Preliminares", "proposito": "Arguir questões processuais prévias ao mérito", "exemplo_resumido": "DA INÉPCIA DA INICIAL — A petição inicial não preenche os requisitos do art. 319 do CPC..."},
+            {"ordem": 4, "titulo": "Do Mérito", "proposito": "Impugnar os fatos e fundamentos do autor", "exemplo_resumido": "No mérito, a pretensão do autor não merece prosperar, porquanto..."},
+            {"ordem": 5, "titulo": "Dos Pedidos", "proposito": "Requerer a improcedência", "exemplo_resumido": "Ante o exposto, requer: a) o acolhimento das preliminares; b) no mérito, a total improcedência dos pedidos..."},
+            {"ordem": 6, "titulo": "Provas", "proposito": "Requerer produção de provas", "exemplo_resumido": "Protesta pela produção de todas as provas em direito admitidas..."}
+        ],
+        "cadeia_argumentativa": [
+            "Arguição de preliminares processuais",
+            "Impugnação específica dos fatos narrados",
+            "Desconstituição do nexo causal",
+            "Inexistência ou exagero do dano",
+            "Pedido de improcedência"
+        ],
+        "padroes_argumentacao": [
+            "Impugnação especificada (art. 341 CPC)",
+            "Ônus da prova do autor (art. 373, I, CPC)",
+            "Excludentes de ilicitude (art. 188 CC)"
+        ],
+        "fundamento_legal": [
+            "Art. 335 CPC", "Art. 336 CPC", "Art. 337 CPC", "Art. 341 CPC", "Art. 373 CPC"
+        ]
+    },
+    {
+        "id": "tpl_apelacao_civel",
+        "tipo": "apelacao",
+        "titulo": "Apelação Cível",
+        "ramo_direito": "direito processual civil",
+        "fase_processual": "recursal",
+        "estrutura": [
+            {"ordem": 1, "titulo": "Endereçamento", "proposito": "Dirigir ao juízo a quo para remessa ao tribunal", "exemplo_resumido": "EXMO. SR. DR. JUIZ DE DIREITO DA _ª VARA CÍVEL DA COMARCA DE..."},
+            {"ordem": 2, "titulo": "Qualificação do Apelante", "proposito": "Identificar a parte recorrente", "exemplo_resumido": "FULANO DE TAL, já qualificado nos autos..."},
+            {"ordem": 3, "titulo": "Da Tempestividade", "proposito": "Demonstrar que o recurso é tempestivo", "exemplo_resumido": "A sentença foi publicada em XX/XX/XXXX, sendo o presente recurso interposto dentro do prazo legal de 15 dias úteis..."},
+            {"ordem": 4, "titulo": "Do Cabimento", "proposito": "Demonstrar o cabimento do recurso", "exemplo_resumido": "Cabível a presente apelação nos termos do art. 1.009 do CPC..."},
+            {"ordem": 5, "titulo": "Breve Síntese dos Fatos", "proposito": "Resumir o caso e a decisão recorrida", "exemplo_resumido": "Trata-se de ação de..., na qual o juízo a quo julgou..."},
+            {"ordem": 6, "titulo": "Das Razões Recursais", "proposito": "Fundamentar os motivos da reforma", "exemplo_resumido": "A r. sentença merece reforma pelos seguintes fundamentos..."},
+            {"ordem": 7, "titulo": "Do Prequestionamento", "proposito": "Prequestionar matéria constitucional e infraconstitucional", "exemplo_resumido": "Para fins de prequestionamento, invoca-se os arts. 5º, XXXV e LV, da CF/88..."},
+            {"ordem": 8, "titulo": "Dos Pedidos", "proposito": "Requerer o provimento do recurso", "exemplo_resumido": "Ante o exposto, requer o conhecimento e provimento do presente recurso para reformar a r. sentença..."}
+        ],
+        "cadeia_argumentativa": [
+            "Demonstração de tempestividade e cabimento",
+            "Síntese da decisão recorrida",
+            "Error in judicando ou error in procedendo",
+            "Fundamentação para reforma",
+            "Prequestionamento da matéria"
+        ],
+        "padroes_argumentacao": [
+            "Error in judicando (erro na aplicação do direito material)",
+            "Error in procedendo (erro processual)",
+            "Violação ao princípio do contraditório",
+            "Decisão contrária à jurisprudência dominante"
+        ],
+        "fundamento_legal": [
+            "Art. 1.009 CPC", "Art. 1.010 CPC", "Art. 1.003 §5º CPC", "Art. 1.012 CPC"
+        ]
+    },
+    {
+        "id": "tpl_agravo_instrumento",
+        "tipo": "agravo_instrumento",
+        "titulo": "Agravo de Instrumento",
+        "ramo_direito": "direito processual civil",
+        "fase_processual": "recursal",
+        "estrutura": [
+            {"ordem": 1, "titulo": "Endereçamento", "proposito": "Dirigir ao tribunal competente", "exemplo_resumido": "EXMO. SR. DR. DESEMBARGADOR PRESIDENTE DO TRIBUNAL DE JUSTIÇA DO ESTADO DE..."},
+            {"ordem": 2, "titulo": "Qualificação do Agravante", "proposito": "Identificar a parte recorrente", "exemplo_resumido": "FULANO DE TAL, já qualificado nos autos da ação de nº..."},
+            {"ordem": 3, "titulo": "Da Decisão Agravada", "proposito": "Transcrever e identificar a decisão interlocutória", "exemplo_resumido": "O MM. Juízo a quo proferiu a seguinte decisão interlocutória: '...'"},
+            {"ordem": 4, "titulo": "Da Tempestividade", "proposito": "Demonstrar que o recurso é tempestivo", "exemplo_resumido": "A decisão foi intimada em XX/XX/XXXX, sendo o presente agravo interposto no prazo de 15 dias úteis..."},
+            {"ordem": 5, "titulo": "Do Cabimento", "proposito": "Enquadrar nas hipóteses do art. 1.015 CPC", "exemplo_resumido": "O presente agravo é cabível nos termos do art. 1.015, I, do CPC (tutelas provisórias)..."},
+            {"ordem": 6, "titulo": "Das Razões do Recurso", "proposito": "Fundamentar o pedido de reforma da decisão", "exemplo_resumido": "A decisão agravada merece reforma porque..."},
+            {"ordem": 7, "titulo": "Do Efeito Suspensivo", "proposito": "Requerer atribuição de efeito suspensivo se cabível", "exemplo_resumido": "Presentes os requisitos do art. 1.019, I, do CPC, requer a atribuição de efeito suspensivo..."},
+            {"ordem": 8, "titulo": "Dos Pedidos", "proposito": "Requerer o provimento do recurso", "exemplo_resumido": "Requer o provimento do agravo para reformar a decisão agravada..."}
+        ],
+        "cadeia_argumentativa": [
+            "Identificação da decisão interlocutória agravada",
+            "Enquadramento no rol do art. 1.015 CPC",
+            "Demonstração do erro da decisão",
+            "Fundamentação para efeito suspensivo (fumus boni iuris e periculum in mora)",
+            "Pedido de reforma"
+        ],
+        "padroes_argumentacao": [
+            "Taxatividade mitigada do art. 1.015 CPC (STJ, Tema 988)",
+            "Urgência e risco de dano irreparável",
+            "Probabilidade de provimento do recurso"
+        ],
+        "fundamento_legal": [
+            "Art. 1.015 CPC", "Art. 1.016 CPC", "Art. 1.019 CPC", "Art. 1.003 §5º CPC"
+        ]
+    },
+    {
+        "id": "tpl_embargos_declaracao",
+        "tipo": "embargos_declaracao",
+        "titulo": "Embargos de Declaração",
+        "ramo_direito": "direito processual civil",
+        "fase_processual": "recursal",
+        "estrutura": [
+            {"ordem": 1, "titulo": "Endereçamento", "proposito": "Dirigir ao juízo ou tribunal prolator da decisão", "exemplo_resumido": "EXMO. SR. DR. JUIZ DE DIREITO DA _ª VARA CÍVEL..."},
+            {"ordem": 2, "titulo": "Qualificação do Embargante", "proposito": "Identificar a parte embargante", "exemplo_resumido": "FULANO DE TAL, já qualificado nos autos..."},
+            {"ordem": 3, "titulo": "Da Tempestividade", "proposito": "Demonstrar interposição no prazo de 5 dias", "exemplo_resumido": "A decisão embargada foi publicada em XX/XX/XXXX, sendo os presentes embargos opostos dentro do prazo de 5 dias..."},
+            {"ordem": 4, "titulo": "Da Obscuridade / Contradição / Omissão", "proposito": "Apontar o vício da decisão embargada", "exemplo_resumido": "A r. decisão incorreu em OMISSÃO ao deixar de analisar o pedido de..."},
+            {"ordem": 5, "titulo": "Do Prequestionamento", "proposito": "Prequestionar matéria para recurso superior", "exemplo_resumido": "Os presentes embargos também visam o prequestionamento dos arts..."},
+            {"ordem": 6, "titulo": "Dos Pedidos", "proposito": "Requerer o acolhimento dos embargos", "exemplo_resumido": "Requer o acolhimento dos embargos para sanar a omissão apontada..."}
+        ],
+        "cadeia_argumentativa": [
+            "Identificação do vício (obscuridade, contradição, omissão ou erro material)",
+            "Demonstração do ponto não enfrentado",
+            "Necessidade de prequestionamento",
+            "Pedido de integração da decisão"
+        ],
+        "padroes_argumentacao": [
+            "Omissão sobre ponto relevante (art. 1.022, II, CPC)",
+            "Contradição interna da decisão (art. 1.022, I, CPC)",
+            "Prequestionamento ficto (art. 1.025 CPC)",
+            "Efeitos infringentes excepcionais"
+        ],
+        "fundamento_legal": [
+            "Art. 1.022 CPC", "Art. 1.023 CPC", "Art. 1.024 CPC", "Art. 1.025 CPC"
+        ]
+    },
+    {
+        "id": "tpl_recurso_especial",
+        "tipo": "recurso_especial",
+        "titulo": "Recurso Especial",
+        "ramo_direito": "direito processual civil",
+        "fase_processual": "recursal extraordinária",
+        "estrutura": [
+            {"ordem": 1, "titulo": "Endereçamento", "proposito": "Dirigir ao Presidente do Tribunal de origem para admissibilidade", "exemplo_resumido": "EXMO. SR. DR. DESEMBARGADOR PRESIDENTE DO TRIBUNAL DE JUSTIÇA DO ESTADO DE..."},
+            {"ordem": 2, "titulo": "Qualificação do Recorrente", "proposito": "Identificar a parte recorrente", "exemplo_resumido": "FULANO DE TAL, já qualificado nos autos..."},
+            {"ordem": 3, "titulo": "Do Cabimento e Pressupostos de Admissibilidade", "proposito": "Demonstrar esgotamento das vias ordinárias e prequestionamento", "exemplo_resumido": "A matéria foi devidamente prequestionada, conforme decisão de fls..."},
+            {"ordem": 4, "titulo": "Da Tempestividade", "proposito": "Demonstrar interposição no prazo de 15 dias úteis", "exemplo_resumido": "O acórdão recorrido foi publicado em XX/XX/XXXX..."},
+            {"ordem": 5, "titulo": "Da Violação à Lei Federal", "proposito": "Demonstrar violação ou negativa de vigência de lei federal", "exemplo_resumido": "O v. acórdão recorrido violou o art. XXX da Lei nº XXX ao decidir que..."},
+            {"ordem": 6, "titulo": "Da Divergência Jurisprudencial", "proposito": "Demonstrar dissídio com outros tribunais se aplicável", "exemplo_resumido": "Há divergência entre o acórdão recorrido e o entendimento do TJ/XX, conforme..."},
+            {"ordem": 7, "titulo": "Dos Pedidos", "proposito": "Requerer o conhecimento e provimento do recurso", "exemplo_resumido": "Requer o conhecimento e provimento do recurso especial para reformar o v. acórdão..."}
+        ],
+        "cadeia_argumentativa": [
+            "Esgotamento das vias ordinárias",
+            "Prequestionamento da matéria federal",
+            "Demonstração da violação à lei federal (alínea 'a')",
+            "Demonstração da divergência jurisprudencial (alínea 'c')",
+            "Pedido de reforma do acórdão"
+        ],
+        "padroes_argumentacao": [
+            "Violação a dispositivo de lei federal (art. 105, III, 'a', CF)",
+            "Divergência jurisprudencial com cotejo analítico (art. 105, III, 'c', CF)",
+            "Demonstração da repercussão e relevância da questão federal"
+        ],
+        "fundamento_legal": [
+            "Art. 105, III, CF/88", "Art. 1.029 CPC", "Art. 1.030 CPC", "Art. 1.032 CPC"
+        ]
+    },
+    {
+        "id": "tpl_contrarrazoes_apelacao",
+        "tipo": "contrarrazoes",
+        "titulo": "Contrarrazões de Apelação",
+        "ramo_direito": "direito processual civil",
+        "fase_processual": "recursal",
+        "estrutura": [
+            {"ordem": 1, "titulo": "Endereçamento", "proposito": "Dirigir ao juízo a quo", "exemplo_resumido": "EXMO. SR. DR. JUIZ DE DIREITO DA _ª VARA CÍVEL DA COMARCA DE..."},
+            {"ordem": 2, "titulo": "Qualificação do Apelado", "proposito": "Identificar a parte recorrida", "exemplo_resumido": "FULANO DE TAL, já qualificado nos autos, vem apresentar CONTRARRAZÕES à apelação interposta por..."},
+            {"ordem": 3, "titulo": "Breve Síntese", "proposito": "Resumir a decisão favorável e o recurso adverso", "exemplo_resumido": "O juízo a quo julgou procedentes os pedidos do ora apelado. Inconformado, o apelante interpôs recurso alegando..."},
+            {"ordem": 4, "titulo": "Das Contrarrazões", "proposito": "Refutar ponto a ponto as razões do apelante", "exemplo_resumido": "As razões recursais não merecem acolhimento, conforme se demonstra..."},
+            {"ordem": 5, "titulo": "Do Pedido", "proposito": "Requerer o desprovimento do recurso", "exemplo_resumido": "Ante o exposto, requer o conhecimento e DESPROVIMENTO da apelação, mantendo-se integralmente a r. sentença..."}
+        ],
+        "cadeia_argumentativa": [
+            "Síntese da decisão favorável",
+            "Refutação específica das razões recursais",
+            "Reforço da fundamentação da sentença",
+            "Pedido de manutenção da decisão recorrida"
+        ],
+        "padroes_argumentacao": [
+            "Princípio da congruência recursal",
+            "Manutenção da sentença por seus próprios fundamentos",
+            "Jurisprudência consolidada em favor do recorrido"
+        ],
+        "fundamento_legal": [
+            "Art. 1.010, §1º CPC", "Art. 932 CPC", "Art. 1.003 §5º CPC"
+        ]
+    },
+    {
+        "id": "tpl_cumprimento_sentenca",
+        "tipo": "cumprimento_sentenca",
+        "titulo": "Petição de Cumprimento de Sentença",
+        "ramo_direito": "direito processual civil",
+        "fase_processual": "execução",
+        "estrutura": [
+            {"ordem": 1, "titulo": "Endereçamento", "proposito": "Dirigir ao juízo que proferiu a sentença", "exemplo_resumido": "EXMO. SR. DR. JUIZ DE DIREITO DA _ª VARA CÍVEL DA COMARCA DE..."},
+            {"ordem": 2, "titulo": "Qualificação do Exequente", "proposito": "Identificar o credor", "exemplo_resumido": "FULANO DE TAL, já qualificado nos autos, vem requerer o CUMPRIMENTO DE SENTENÇA em face de..."},
+            {"ordem": 3, "titulo": "Do Trânsito em Julgado", "proposito": "Demonstrar que a sentença transitou em julgado", "exemplo_resumido": "A r. sentença de fls. XX transitou em julgado em XX/XX/XXXX, conforme certidão de fls..."},
+            {"ordem": 4, "titulo": "Do Valor Devido", "proposito": "Apresentar memória de cálculo atualizada", "exemplo_resumido": "O valor devido, atualizado até a presente data, perfaz R$..., conforme memória de cálculo anexa..."},
+            {"ordem": 5, "titulo": "Da Intimação para Pagamento", "proposito": "Requerer intimação do devedor para pagamento em 15 dias", "exemplo_resumido": "Requer a intimação do executado para efetuar o pagamento no prazo de 15 dias, sob pena de multa de 10%..."},
+            {"ordem": 6, "titulo": "Dos Pedidos", "proposito": "Formular pedidos de cumprimento", "exemplo_resumido": "a) intimação do executado para pagamento; b) em caso de não pagamento, penhora de bens; c) expedição de mandado..."}
+        ],
+        "cadeia_argumentativa": [
+            "Existência de título executivo judicial",
+            "Trânsito em julgado",
+            "Apresentação de memória de cálculo atualizada",
+            "Legitimidade e interesse no cumprimento",
+            "Pedido de intimação e eventual penhora"
+        ],
+        "padroes_argumentacao": [
+            "Título executivo judicial líquido e exigível",
+            "Multa de 10% por não pagamento voluntário (art. 523, §1º, CPC)",
+            "Honorários de 10% sobre o débito (art. 523, §1º, CPC)"
+        ],
+        "fundamento_legal": [
+            "Art. 523 CPC", "Art. 524 CPC", "Art. 525 CPC", "Art. 528 CPC"
+        ]
+    }
+]

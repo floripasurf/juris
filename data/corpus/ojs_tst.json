@@ -1,0 +1,507 @@
+[
+  {
+    "numero": "1",
+    "texto": "A ação rescisória é admissível em face de sentença de mérito transitada em julgado no processo do trabalho.",
+    "tema": "ação rescisória",
+    "base_legal": [
+      "CPC Art. 966"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "7",
+    "texto": "Não se aplica multa do art. 477, § 8º, da CLT, quando houver controvérsia sobre a existência da obrigação cujo inadimplemento gerou a multa.",
+    "tema": "multa rescisória",
+    "base_legal": [
+      "CLT Art. 477 §8º"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "15",
+    "texto": "A competência da Justiça do Trabalho, prevista no art. 114, VIII, da Constituição, alcança a execução de ofício das contribuições previdenciárias.",
+    "tema": "contribuições previdenciárias",
+    "base_legal": [
+      "CF Art. 114 VIII"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "26",
+    "texto": "Para a concessão do intervalo intrajornada, é necessário o efetivo cumprimento da jornada mínima.",
+    "tema": "intervalo intrajornada",
+    "base_legal": [
+      "CLT Art. 71"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "30",
+    "texto": "Nos termos do art. 6º, § 1º, da Lei nº 5.889/73, a garantia do intervalo interjornada de 11 horas consecutivas é devida ao trabalhador rural.",
+    "tema": "rural intervalo",
+    "base_legal": [
+      "Lei 5.889/73 Art. 6º §1º"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "42",
+    "texto": "É válida a cláusula de convenção ou acordo coletivo de trabalho que preveja o pagamento proporcional do 13º salário e das férias para o empregado que tenha menos de um ano de contrato de trabalho.",
+    "tema": "13º proporcional",
+    "base_legal": [
+      "CF Art. 7º XXVI"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "65",
+    "texto": "A competência originária para o julgamento de habeas corpus contra ato de juiz do trabalho é do Tribunal Regional do Trabalho.",
+    "tema": "habeas corpus",
+    "base_legal": [
+      "CF Art. 114"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "73",
+    "texto": "A interposição de agravo de instrumento perante o TST é intempestiva quando ocorre antes da publicação da decisão agravada.",
+    "tema": "agravo prematuro",
+    "base_legal": [
+      "CLT Art. 897"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "88",
+    "texto": "O desconhecimento do teor de súmula ou orientação jurisprudencial do TST não justifica a não aplicação pelo juízo de primeiro grau.",
+    "tema": "aplicação jurisprudência",
+    "base_legal": [
+      "CLT Art. 8º"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "97",
+    "texto": "A compensação de jornada pactuada por acordo individual não se aplica aos menores.",
+    "tema": "menor compensação",
+    "base_legal": [
+      "CLT Art. 413"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "100",
+    "texto": "A ação de cumprimento, prevista no art. 872 da CLT, pode ser proposta pelo sindicato, independentemente de autorização dos substituídos.",
+    "tema": "ação cumprimento",
+    "base_legal": [
+      "CLT Art. 872"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "106",
+    "texto": "A jornada de trabalho do motorista de caminhão é aquela prevista no art. 235-C da CLT.",
+    "tema": "motorista jornada",
+    "base_legal": [
+      "CLT Art. 235-C"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "113",
+    "texto": "O sábado do bancário é dia útil não trabalhado, não dia de repouso remunerado. Não cabe a repercussão do pagamento de horas extras habituais em sua remuneração.",
+    "tema": "bancário sábado",
+    "base_legal": [
+      "CLT Art. 224"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "118",
+    "texto": "Havendo condenação solidária de duas ou mais empresas, o depósito recursal efetuado por uma delas aproveita as demais, quando a empresa que efetuou o depósito não pleiteia sua exclusão da lide.",
+    "tema": "depósito recursal solidário",
+    "base_legal": [
+      "CLT Art. 899"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "120",
+    "texto": "O empregado doméstico não tem direito ao benefício do vale-transporte, ante a vigência do art. 1º do Decreto nº 95.247/87.",
+    "tema": "doméstico vale-transporte",
+    "base_legal": [
+      "Decreto 95.247/87"
+    ],
+    "situacao": "superada"
+  },
+  {
+    "numero": "130",
+    "texto": "Ao sindicato assistente não se aplicam as penas da litigância de má-fé.",
+    "tema": "sindicato litigância",
+    "base_legal": [
+      "CLT Art. 793"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "140",
+    "texto": "Compete à Justiça Federal a apreciação de litígios entre o Correio e seus empregados.",
+    "tema": "ECT competência",
+    "base_legal": [
+      "CF Art. 109 I"
+    ],
+    "situacao": "superada"
+  },
+  {
+    "numero": "145",
+    "texto": "A multa prevista no art. 477, § 8º, da CLT, não se aplica à massa falida.",
+    "tema": "massa falida multa",
+    "base_legal": [
+      "CLT Art. 477 §8º"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "164",
+    "texto": "Não se caracteriza o nexo de causalidade entre o trabalho desenvolvido pelo empregado e a doença apresentada quando não há prova da exposição a agente nocivo ou da relação de causalidade com o trabalho.",
+    "tema": "doença ocupacional nexo",
+    "base_legal": [
+      "Lei 8.213/91 Art. 20"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "173",
+    "texto": "Extrai-se interpretação que o contrato de estágio não gera vínculo empregatício se observados os requisitos da Lei 11.788/2008.",
+    "tema": "estágio vínculo",
+    "base_legal": [
+      "Lei 11.788/2008"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "191",
+    "texto": "A contratação de trabalhadores, fora das hipóteses legais, por empresa pública ou sociedade de economia mista, constitui relação de emprego.",
+    "tema": "contratação irregular",
+    "base_legal": [
+      "CF Art. 37 II"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "199",
+    "texto": "É de empregado, e não de estagiário, o enquadramento do trabalhador que desempenha funções incompatíveis com as do estágio.",
+    "tema": "estágio desvio",
+    "base_legal": [
+      "Lei 11.788/2008"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "223",
+    "texto": "A implementação do horário de verão não autoriza o empregador a alterar a jornada de trabalho contratual.",
+    "tema": "horário verão",
+    "base_legal": [
+      "CLT Art. 468"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "235",
+    "texto": "O empregado que trabalha em local diverso da sede não tem direito ao recebimento de diárias.",
+    "tema": "diárias",
+    "base_legal": [
+      "CLT Art. 457 §2º"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "236",
+    "texto": "O direito de imagem constitui direito personalíssimo e intransferível.",
+    "tema": "direito imagem",
+    "base_legal": [
+      "CF Art. 5º X"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "247",
+    "texto": "É constitucional a instituição de contribuição sindical compulsória pela assembleia geral da categoria.",
+    "tema": "contribuição sindical",
+    "base_legal": [
+      "CLT Art. 578"
+    ],
+    "situacao": "superada"
+  },
+  {
+    "numero": "249",
+    "texto": "É ilícita a transferência do ônus do pagamento do vale-transporte ao empregado.",
+    "tema": "vale-transporte ônus",
+    "base_legal": [
+      "Lei 7.418/85"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "252",
+    "texto": "O professor que recebe salário mensal não tem direito ao recebimento de horas extras pelo trabalho em período de recesso escolar.",
+    "tema": "professor recesso",
+    "base_legal": [
+      "CLT Art. 322"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "260",
+    "texto": "Os dias de férias gozados após o período concessivo devem ser remunerados em dobro.",
+    "tema": "férias período concessivo",
+    "base_legal": [
+      "CLT Art. 137"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "270",
+    "texto": "A compensação de jornada de trabalho em atividade insalubre não é válida quando pactuada por acordo individual.",
+    "tema": "insalubre compensação",
+    "base_legal": [
+      "CLT Art. 60"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "282",
+    "texto": "Ao ser dispensado sem justa causa, o empregado tem direito ao recebimento do FGTS referente ao período de aviso prévio indenizado.",
+    "tema": "FGTS aviso prévio",
+    "base_legal": [
+      "Lei 8.036/90"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "307",
+    "texto": "A cláusula de instrumento normativo que fixa o salário profissional do técnico em radiologia é válida.",
+    "tema": "técnico radiologia salário",
+    "base_legal": [
+      "Lei 7.394/85"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "315",
+    "texto": "O intervalo interjornada mínimo de 11 horas consecutivas é inviolável e não pode ser suprimido por acordo ou convenção coletiva.",
+    "tema": "intervalo interjornada",
+    "base_legal": [
+      "CLT Art. 66"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "342",
+    "texto": "É inválido o instrumento normativo que, ao estabelecer a prevalência de cláusula de índice de reajuste salarial, não mantém as demais condições de trabalho.",
+    "tema": "norma coletiva validade",
+    "base_legal": [
+      "CF Art. 7º XXVI"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "345",
+    "texto": "O trabalho em condições insalubres assegura ao empregado o adicional previsto no art. 192 da CLT, independentemente da existência de norma coletiva sobre o tema.",
+    "tema": "insalubridade adicional",
+    "base_legal": [
+      "CLT Art. 192"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "355",
+    "texto": "O simples fato de o empregado laborar em condições de periculosidade não assegura o adicional se houver comprovação de que o EPI neutraliza o risco.",
+    "tema": "periculosidade EPI",
+    "base_legal": [
+      "CLT Art. 193"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "364",
+    "texto": "Tem direito ao adicional de periculosidade o empregado exposto permanentemente ou que, de forma intermitente, sujeita-se a condições de risco. Indevido, apenas, quando o contato dá-se de forma eventual.",
+    "tema": "periculosidade intermitente",
+    "base_legal": [
+      "CLT Art. 193"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "370",
+    "texto": "O empregado que trabalha em área de abastecimento de aeronaves tem direito ao adicional de periculosidade.",
+    "tema": "periculosidade aviação",
+    "base_legal": [
+      "CLT Art. 193"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "381",
+    "texto": "A jornada de trabalho do professor é limitada a 4 horas consecutivas em um mesmo estabelecimento ou a 6 horas intercaladas.",
+    "tema": "jornada professor",
+    "base_legal": [
+      "CLT Art. 318"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "382",
+    "texto": "A jornada de trabalho do professor é limitada a 4 horas consecutivas ou 6 horas intercaladas em um mesmo estabelecimento.",
+    "tema": "professor jornada",
+    "base_legal": [
+      "CLT Art. 318"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "383",
+    "texto": "A notificação postal entregue no endereço do reclamado é válida, ainda que recebida por terceiro.",
+    "tema": "notificação postal",
+    "base_legal": [
+      "CLT Art. 841"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "394",
+    "texto": "O FGTS é direito irrenunciável, de ordem social e trabalhista.",
+    "tema": "FGTS irrenunciabilidade",
+    "base_legal": [
+      "CF Art. 7º III"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "395",
+    "texto": "O ônus de provar o término do contrato de trabalho, quando negada a prestação de serviços e o despedimento, é do empregador.",
+    "tema": "ônus prova dispensa",
+    "base_legal": [
+      "CLT Art. 818"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "396",
+    "texto": "Não se aplica o intervalo previsto no art. 72 da CLT ao trabalho do digitador que não preenche os requisitos da equiparação aos trabalhadores nos serviços de mecanografia.",
+    "tema": "digitador intervalo",
+    "base_legal": [
+      "CLT Art. 72"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "397",
+    "texto": "O FGTS sobre as parcelas salariais reconhecidas em juízo é devido desde a data da prestação dos serviços.",
+    "tema": "FGTS parcelas judiciais",
+    "base_legal": [
+      "Lei 8.036/90"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "398",
+    "texto": "O aviso prévio proporcional ao tempo de serviço, previsto no art. 7º, XXI, da CF/1988, é direito do trabalhador e se aplica na dispensa sem justa causa.",
+    "tema": "aviso prévio proporcional",
+    "base_legal": [
+      "CF Art. 7º XXI",
+      "Lei 12.506/2011"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "399",
+    "texto": "É de 30 dias o aviso prévio mínimo, acrescido de 3 dias por ano de serviço prestado na mesma empresa, até o máximo de 60 dias, perfazendo um total de até 90 dias.",
+    "tema": "aviso prévio cálculo",
+    "base_legal": [
+      "Lei 12.506/2011"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "400",
+    "texto": "É assegurada a estabilidade provisória do empregado dirigente de cooperativa.",
+    "tema": "cooperativa estabilidade",
+    "base_legal": [
+      "Lei 5.764/71 Art. 55"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "401",
+    "texto": "Não é válida a dispensa de empregado reabilitado sem a prévia contratação de outro trabalhador em condição semelhante.",
+    "tema": "reabilitado dispensa",
+    "base_legal": [
+      "Lei 8.213/91 Art. 93 §1º"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "406",
+    "texto": "O pagamento do adicional de periculosidade é devido enquanto perdurar o trabalho em condições de risco, mesmo que por período inferior a 30 minutos da jornada.",
+    "tema": "periculosidade tempo mínimo",
+    "base_legal": [
+      "CLT Art. 193"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "408",
+    "texto": "Não padece de nulidade a cláusula de instrumento normativo que prevê a compensação de jornada.",
+    "tema": "compensação jornada norma",
+    "base_legal": [
+      "CLT Art. 59"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "410",
+    "texto": "O motorista que transporta produtos perigosos tem direito ao adicional de periculosidade.",
+    "tema": "motorista periculosidade",
+    "base_legal": [
+      "CLT Art. 193 I"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "413",
+    "texto": "O intervalo intrajornada não usufruído total ou parcialmente implica o pagamento total do período correspondente, com acréscimo de 50%, com natureza salarial.",
+    "tema": "intervalo não concedido",
+    "base_legal": [
+      "CLT Art. 71 §4º"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "414",
+    "texto": "O empregado integrante de categoria diferenciada não tem direito às vantagens previstas em instrumento coletivo quando a empresa empregadora não participou das negociações coletivas.",
+    "tema": "categoria diferenciada norma",
+    "base_legal": [
+      "CF Art. 7º XXVI"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "415",
+    "texto": "O empregado dispensado sem justa causa faz jus às verbas rescisórias proporcionais, inclusive férias proporcionais com 1/3.",
+    "tema": "verbas rescisórias",
+    "base_legal": [
+      "CLT Art. 477"
+    ],
+    "situacao": "vigente"
+  },
+  {
+    "numero": "416",
+    "texto": "O empregado é obrigado a comparecer às audiências designadas pela Justiça do Trabalho.",
+    "tema": "comparecimento audiência",
+    "base_legal": [
+      "CLT Art. 844"
+    ],
+    "situacao": "vigente"
+  }
+]

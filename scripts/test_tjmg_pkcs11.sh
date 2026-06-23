@@ -5,6 +5,8 @@
 set -euo pipefail
 
 OPENSSL="/opt/homebrew/opt/openssl@3/bin/openssl"
+# brew upgrades move the versioned engines dir; point at the stable symlink
+export OPENSSL_ENGINES="/opt/homebrew/lib/engines-3"
 PKCS11_MODULE="/usr/local/lib/libeTPkcs11.dylib"
 HOST="pje-consulta-publica.tjmg.jus.br"
 PATH_URL="/pje/intercomunicacao"
@@ -25,6 +27,13 @@ done
 if [ -z "${TOKEN_PIN:-}" ]; then
   echo -n "Token PIN: "
   read -s TOKEN_PIN
+  echo
+fi
+
+# Get the lawyer's PJe password for MNI application-level login
+if [ -z "${MNI_SENHA:-}" ]; then
+  echo -n "Senha do PJe TJMG (para o login MNI): "
+  read -s MNI_SENHA
   echo
 fi
 
@@ -57,7 +66,7 @@ SOAP='<?xml version="1.0" encoding="UTF-8"?>
   <soap:Body>
     <ns:consultarProcesso>
       <idConsultante>07671039632</idConsultante>
-      <senhaConsultante>07671039632</senhaConsultante>
+      <senhaConsultante>'"$MNI_SENHA"'</senhaConsultante>
       <numeroProcesso>5082351-40.2017.8.13.0024</numeroProcesso>
       <movimentos>true</movimentos>
       <incluirCabecalho>true</incluirCabecalho>

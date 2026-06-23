@@ -46,16 +46,29 @@ def consulta(
 ) -> None:
     """Fetch a case from a tribunal via MNI consultarProcesso."""
     from juris.core.types import NumeroCNJ
-    from juris.mni.auth import PasswordAuth
-    from juris.mni.client import get_mni_client
-    from juris.mni.operations.consulta import consultar_processo
-    from juris.mni.parsers.processo import parse_processo
+    from juris.mni.tribunais import get_tribunal
 
     try:
         cnj = NumeroCNJ(numero_cnj)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(code=1) from e
+
+    try:
+        tribunal_cfg = get_tribunal(tribunal)
+    except KeyError as e:
+        console.print(f"[red]Tribunal not found:[/red] {tribunal}")
+        raise typer.Exit(code=1) from e
+
+    # mTLS tribunals (e.g. TJMG) need the A3 hardware token, not zeep+password.
+    if tribunal_cfg.requires_mtls:
+        _consulta_mtls(cnj, tribunal_cfg, cpf, senha, com_documentos)
+        return
+
+    from juris.mni.auth import PasswordAuth
+    from juris.mni.client import get_mni_client
+    from juris.mni.operations.consulta import consultar_processo
+    from juris.mni.parsers.processo import parse_processo
 
     resolved_senha = _get_senha(tribunal, cpf, senha)
     auth = PasswordAuth(cpf=cpf, senha=resolved_senha)
@@ -161,6 +174,227 @@ def _print_processo(processo) -> None:
         console.print(f"\n[bold]Documentos ({len(processo.documentos)}):[/bold]")
         for d in processo.documentos:
             console.print(f"  [{d.id_documento}] {d.tipo_documento}: {d.descricao or ''}")
+
+
+def _consulta_mtls(cnj, tribunal_cfg, cpf: str, senha: str | None, com_documentos: bool) -> None:
+    """consultarProcesso against an mTLS tribunal using the A3 hardware token."""
+    from juris.mni.operations.consulta_pkcs11 import consultar_processo_pkcs11
+
+    console.print(f"[bold]Fetching case (mTLS):[/bold] {cnj}")
+    console.print(f"  Tribunal: {tribunal_cfg.id} ({tribunal_cfg.nome})")
+
+    pkcs11_config, host, path, resolved_senha, _material = _mtls_session(tribunal_cfg, cpf, senha)
+
+    try:
+        result = consultar_processo_pkcs11(
+            host=host,
+            path=path,
+            pkcs11_config=pkcs11_config,
+            id_consultante=cpf,
+            senha_consultante=resolved_senha,
+            numero_cnj=str(cnj),
+            mni_version=tribunal_cfg.mni_version,
+            com_documentos=com_documentos,
+        )
+    except Exception as e:
+        console.print(f"[red]MNI Error:[/red] {type(e).__name__}: {e}")
+        raise typer.Exit(code=1) from e
+
+    if not result.sucesso:
+        console.print(f"[red]MNI returned error:[/red] {result.mensagem}")
+        if "login" in result.mensagem.lower() or "autenticação" in result.mensagem.lower():
+            from juris.core.credentials import delete_credential
+
+            delete_credential(f"mni_{tribunal_cfg.id}_{cpf}")
+            console.print("[yellow]Senha PJe limpa do Keychain. Rode de novo para reinserir.[/yellow]")
+        raise typer.Exit(code=1)
+
+    _print_consulta_result(result)
+
+
+def _mtls_session(tribunal_cfg, cpf: str, senha: str | None, pin: str | None = None):
+    """Build the PKCS#11 mTLS session pieces shared by consulta and avisos.
+
+    Reads the token cert (no PIN), resolves the token PIN (arg → env → prompt)
+    and the PJe password (arg → Keychain → prompt), and derives host/path.
+
+    Returns:
+        Tuple (pkcs11_config, host, path, resolved_senha, material).
+    """
+    from urllib.parse import urlparse
+
+    from juris.config import get_settings
+    from juris.mni.token import TokenError, build_pkcs11_config, extract_token_material
+
+    settings = get_settings()
+    try:
+        console.print("[dim]Lendo certificado do token…[/dim]")
+        material = extract_token_material(settings.pkcs11_module)
+    except TokenError as e:
+        console.print(f"[red]Token:[/red] {e}")
+        raise typer.Exit(code=1) from e
+
+    console.print(f"  Certificado: {material.subject}")
+    console.print(f"  Válido até: {material.not_valid_after}")
+    if material.cpf and material.cpf != cpf:
+        console.print(f"[yellow]Aviso:[/yellow] CPF do token ({material.cpf}) ≠ --cpf ({cpf}).")
+
+    resolved_pin = pin or (settings.token_pin.get_secret_value() if settings.token_pin else None)
+    if not resolved_pin:
+        resolved_pin = getpass.getpass("PIN do token A3: ")
+    if not resolved_pin:
+        console.print("[red]PIN vazio.[/red]")
+        raise typer.Exit(code=1)
+
+    resolved_senha = _get_senha(tribunal_cfg.id, cpf, senha)
+
+    service_url = tribunal_cfg.service_url_override or tribunal_cfg.wsdl_url.replace("?wsdl", "")
+    parsed = urlparse(service_url)
+    pkcs11_config = build_pkcs11_config(material, resolved_pin, settings.pkcs11_module)
+    return (
+        pkcs11_config,
+        parsed.hostname or "",
+        parsed.path or "/pje/intercomunicacao",
+        resolved_senha,
+        material,
+    )
+
+
+@app.command()
+def avisos(
+    tribunal: str = typer.Option("tjmg", "--tribunal", "-t", help="Tribunal ID"),
+    cpf: str = typer.Option(..., "--cpf", help="CPF do consultante (advogado constituído)"),
+    senha: str = typer.Option(None, "--senha", "-s", help="Senha PJe (else Keychain)"),
+    pin: str = typer.Option(None, "--pin", help="PIN do token A3 (mTLS; else prompted)"),
+    track: bool = typer.Option(False, "--track", help="Rastrear os processos dos avisos"),
+) -> None:
+    """List pending court notices (intimações/citações) — the live-deadline feed.
+
+    For mTLS tribunals (e.g. TJMG) authenticates with the A3 hardware token.
+    With --track, every processo with a pending aviso is added to the tracked
+    list so 'juris overnight' computes its deadlines.
+    """
+    from juris.mni.operations.intimacoes import consultar_avisos_pendentes_pkcs11
+    from juris.mni.tribunais import get_tribunal
+
+    try:
+        tribunal_cfg = get_tribunal(tribunal)
+    except KeyError as e:
+        console.print(f"[red]Tribunal not found:[/red] {tribunal}")
+        raise typer.Exit(code=1) from e
+
+    if not tribunal_cfg.requires_mtls:
+        console.print(
+            f"[yellow]{tribunal.upper()} não exige mTLS; use a via zeep "
+            "(consultar_avisos_pendentes) — não implementada neste comando.[/yellow]"
+        )
+        raise typer.Exit(code=1)
+
+    console.print(f"[bold]Avisos pendentes (mTLS):[/bold] {tribunal_cfg.nome}")
+    pkcs11_config, host, path, resolved_senha, _material = _mtls_session(tribunal_cfg, cpf, senha, pin)
+
+    result = consultar_avisos_pendentes_pkcs11(
+        host=host,
+        path=path,
+        pkcs11_config=pkcs11_config,
+        id_consultante=cpf,
+        senha_consultante=resolved_senha,
+        mni_version=tribunal_cfg.mni_version,
+    )
+
+    if not result.sucesso:
+        console.print(f"[red]MNI returned error:[/red] {result.mensagem}")
+        raise typer.Exit(code=1)
+
+    if not result.avisos:
+        console.print("[green]Nenhum aviso pendente.[/green] [dim]Sem prazos novos para abrir.[/dim]")
+        return
+
+    table = Table(title=f"Avisos pendentes ({len(result.avisos)})")
+    table.add_column("Processo", style="cyan")
+    table.add_column("Tipo")
+    table.add_column("Órgão")
+    table.add_column("Limite ciência", style="red")
+    for a in result.avisos:
+        limite = a.data_limite_ciencia.strftime("%d/%m/%Y") if a.data_limite_ciencia else "—"
+        table.add_row(a.numero_processo, a.tipo_comunicacao or "—", a.orgao_julgador or "—", limite)
+    console.print(table)
+
+    if track:
+        import json
+
+        from juris.core.credentials import store_credential
+
+        tracked = _get_tracked_processos()
+        existing = {f"{p['tribunal']}:{p['numero_cnj']}" for p in tracked}
+        added = 0
+        for a in result.avisos:
+            if not a.numero_processo:
+                continue
+            key = f"{tribunal}:{a.numero_processo}"
+            if key not in existing:
+                tracked.append({"numero_cnj": a.numero_processo, "tribunal": tribunal})
+                existing.add(key)
+                added += 1
+        store_credential("tracked_processos", json.dumps(tracked))
+        console.print(f"[green]Rastreando +{added} processo(s)[/green] [dim](total: {len(tracked)})[/dim]")
+        console.print("[dim]Rode 'juris overnight --cpf " + cpf + "' para calcular os prazos.[/dim]")
+
+
+def _print_consulta_result(result) -> None:
+    """Pretty-print a ConsultaResult (PKCS#11 mTLS path) to the console."""
+    console.print(f"\n[bold green]Processo: {result.numero or 'N/A'}[/bold green]")
+    console.print(f"  [dim]{result.mensagem}[/dim]")
+    console.print(f"  Classe: {result.classe or 'N/A'}")
+    if result.orgao_julgador:
+        console.print(f"  Órgão: {result.orgao_julgador}")
+
+    if result.partes:
+        console.print("\n[bold]Partes:[/bold]")
+        for p in result.partes:
+            advs = f" (Advs: {', '.join(p['advogados'])})" if p.get("advogados") else ""
+            console.print(f"  [{p['tipo']}] {p['nome']}{advs}")
+
+    if result.movimentos:
+        console.print(f"\n[bold]Movimentos ({len(result.movimentos)}):[/bold]")
+        ordered = sorted(result.movimentos, key=lambda m: m.get("data", ""))
+        table = Table()
+        table.add_column("Data", style="cyan", width=16)
+        table.add_column("Código", width=7)
+        table.add_column("Descrição")
+        table.add_column("Complemento")
+        for m in ordered[-15:]:
+            table.add_row(
+                _fmt_mni_datetime(m.get("data", "")),
+                str(m.get("codigo") or ""),
+                (m.get("descricao") or "")[:40],
+                (m.get("complemento") or "")[:40],
+            )
+        console.print(table)
+
+    if result.documentos:
+        console.print(f"\n[bold]Documentos ({len(result.documentos)}):[/bold]")
+        for d in result.documentos:
+            console.print(f"  [{d['id']}] {d['tipo']}: {d.get('descricao') or ''}")
+
+
+def _safe_get_tribunal(tribunal_id: str):
+    """Return the TribunalConfig for an id, or None if unknown."""
+    from juris.mni.tribunais import get_tribunal
+
+    try:
+        return get_tribunal(tribunal_id)
+    except KeyError:
+        return None
+
+
+def _fmt_mni_datetime(raw: str) -> str:
+    """Format an MNI timestamp (YYYYMMDDHHMMSS[ms]) as YYYY-MM-DD HH:MM."""
+    if len(raw) >= 12 and raw[:12].isdigit():
+        return f"{raw[0:4]}-{raw[4:6]}-{raw[6:8]} {raw[8:10]}:{raw[10:12]}"
+    if len(raw) >= 8 and raw[:8].isdigit():
+        return f"{raw[0:4]}-{raw[4:6]}-{raw[6:8]}"
+    return raw
 
 
 @app.command()
@@ -832,7 +1066,8 @@ def sync(
 def overnight(
     tribunal: str = typer.Option(None, "--tribunal", "-t", help="Filter by tribunal"),
     cpf: str = typer.Option(None, "--cpf", help="CPF for MNI auth"),
-    senha: str = typer.Option(None, "--senha", "-s", help="Senha PJe"),
+    senha: str = typer.Option(None, "--senha", "-s", help="Senha PJe (else Keychain)"),
+    pin: str = typer.Option(None, "--pin", help="Token PIN for mTLS tribunals (else prompted/env)"),
     analyze: bool = typer.Option(True, "--analyze/--no-analyze", help="Run analysis after sync"),
     max_concurrent: int = typer.Option(10, "--max-concurrent", "-c", help="Max concurrent syncs"),
 ) -> None:
@@ -858,7 +1093,32 @@ def overnight(
 
     db = LocalDB()
     resolved_cpf = cpf or ""
+    # Resolve PJe password from Keychain when a CPF is known and senha omitted.
     resolved_senha = senha or ""
+    if resolved_cpf and not resolved_senha:
+        from juris.core.credentials import get_credential
+
+        tribunais = {p["tribunal"] for p in processos}
+        for trib in tribunais:
+            stored = get_credential(f"mni_{trib}_{resolved_cpf}")
+            if stored:
+                resolved_senha = stored
+                break
+
+    # If any tracked tribunal needs mTLS, ensure we have a token PIN.
+    needs_mtls = any(
+        (_t := _safe_get_tribunal(p["tribunal"])) is not None and _t.requires_mtls
+        for p in processos
+    )
+    resolved_pin = pin
+    if needs_mtls and not resolved_pin:
+        from juris.config import get_settings
+
+        settings = get_settings()
+        if settings.token_pin:
+            resolved_pin = settings.token_pin.get_secret_value()
+        else:
+            resolved_pin = getpass.getpass("PIN do token A3 (mTLS): ")
 
     console.print(f"[bold]Nightly pipeline: {len(processos)} processos[/bold]")
     console.print(f"[dim]DB: {db.path} | Concurrent: {max_concurrent} | Analyze: {analyze}[/dim]\n")
@@ -870,6 +1130,7 @@ def overnight(
             cpf=resolved_cpf,
             senha=resolved_senha,
             max_concurrent=max_concurrent,
+            token_pin=resolved_pin,
         )
     )
 

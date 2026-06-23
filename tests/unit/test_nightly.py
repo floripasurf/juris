@@ -7,8 +7,6 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from juris.jobs.nightly import (
     NightlyResult,
     NightlySummary,
@@ -290,21 +288,22 @@ class TestRunNightlySingle:
         assert result.success
         assert result.critical_alerts == 2
 
-    def test_datajud_fallback_tribunal(self, tmp_path: Path) -> None:
+    def test_tjmg_routes_to_mni(self, tmp_path: Path) -> None:
+        # TJMG now reads via MNI (mTLS token), not DataJud-first.
         db = LocalDB(tmp_path / "test.db")
         diff = _mock_diff_result(had_changes=False, new_movimentos=[])
 
         with (
-            patch("juris.jobs.nightly.sync_processo_mni") as mock_mni,
-            patch("juris.jobs.nightly.sync_processo_datajud", return_value=diff) as mock_dj,
+            patch("juris.jobs.nightly.sync_processo_mni", return_value=diff) as mock_mni,
+            patch("juris.jobs.nightly.sync_processo_datajud") as mock_dj,
         ):
-            result = asyncio.run(run_nightly_single(
+            asyncio.run(run_nightly_single(
                 "1234567-89.2026.8.13.0001", "tjmg", db, "cpf", "senha",
                 today=date(2026, 4, 10),
             ))
 
-        mock_mni.assert_not_awaited()
-        mock_dj.assert_awaited_once()
+        mock_mni.assert_awaited_once()
+        mock_dj.assert_not_awaited()
 
     def test_logs_sync_on_success(self, tmp_path: Path) -> None:
         db = LocalDB(tmp_path / "test.db")
@@ -421,3 +420,85 @@ class TestNightlySummary:
         assert summary.succeeded == 2
         assert summary.failed == 1
         assert summary.total_critical_alerts == 3
+
+
+class TestNightlyMtlsEndToEnd:
+    """Offline end-to-end: real TJMG response → diff → persist → analyze → prazos.
+
+    Injects the captured (sanitized) mTLS response so the full nightly chain
+    runs without the hardware token, proving the pipeline over real MNI data.
+    """
+
+    def _real_processo(self):
+        from pathlib import Path
+
+        from juris.mni.operations.consulta_pkcs11 import _parse_response
+        from juris.mni.pkcs11_transport import SOAPResponse
+
+        xml = Path("tests/fixtures/mni_responses/tjmg_consulta_real.xml").read_bytes()
+        result = _parse_response(SOAPResponse(status_code=200, body=xml), "50823514020178130024")
+        return result.to_processo_domain(tribunal_id="tjmg", numero_cnj="50823514020178130024")
+
+    def test_first_run_persists_and_analyzes(self, tmp_path) -> None:
+        import asyncio
+        from unittest.mock import patch
+
+        from juris.jobs.nightly import run_nightly_single
+        from juris.mni.operations.differential import diff_processo
+        from juris.persistence.local_db import LocalDB
+
+        processo = self._real_processo()
+        db = LocalDB(db_path=tmp_path / "nightly.db")
+
+        # Stand in for the token fetch: diff carries the real processo.
+        async def fake_sync(numero_cnj, tribunal_id, *a, **k):
+            return diff_processo(fetched=processo, last_sync_at=None)
+
+        with patch("juris.jobs.nightly.sync_processo_mni", side_effect=fake_sync):
+            result = asyncio.run(
+                run_nightly_single(
+                    numero_cnj="50823514020178130024",
+                    tribunal="tjmg",
+                    db=db,
+                    cpf="00000000000",
+                    senha="x",
+                )
+            )
+
+        assert result.success
+        assert result.error is None
+        assert result.new_movimentos == 44  # first run: every movement is new
+        assert result.analysis is not None
+        assert result.prazo_report is not None
+        # The persisted processo is queryable afterwards.
+        assert db.get_processo_by_cnj("50823514020178130024") is not None
+
+    def test_second_run_detects_no_changes(self, tmp_path) -> None:
+        import asyncio
+        from unittest.mock import patch
+
+        from juris.jobs.nightly import run_nightly_single
+        from juris.mni.operations.differential import diff_processo
+        from juris.persistence.local_db import LocalDB
+
+        processo = self._real_processo()
+        db = LocalDB(db_path=tmp_path / "nightly.db")
+
+        async def fake_sync(numero_cnj, tribunal_id, *a, **k):
+            # Honour the known-keys the pipeline passes from the DB so the
+            # second run sees everything as already-known.
+            known = k.get("known_movimento_keys") or (a[2] if len(a) > 2 else None)
+            return diff_processo(
+                fetched=processo, last_sync_at=None, known_movimento_keys=known
+            )
+
+        with patch("juris.jobs.nightly.sync_processo_mni", side_effect=fake_sync):
+            asyncio.run(
+                run_nightly_single("50823514020178130024", "tjmg", db, "00000000000", "x")
+            )
+            second = asyncio.run(
+                run_nightly_single("50823514020178130024", "tjmg", db, "00000000000", "x")
+            )
+
+        assert second.success
+        assert second.new_movimentos == 0  # nothing new on the second pass
