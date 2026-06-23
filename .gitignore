@@ -30,6 +30,8 @@ htmlcov/
 # Data files (large, local)
 /data/*
 !/data/corpus/
+!/data/search-fixtures/
+!/data/search-fixtures/**
 !/data/corpus/**
 !/data/corpus-sources.md
 !/data/*_index.json

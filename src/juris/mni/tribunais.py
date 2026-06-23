@@ -26,6 +26,7 @@ class TribunalConfig:
     certificate_auth_supported: bool = True
     password_auth_supported: bool = True
     service_url_override: str | None = None  # Override SOAP endpoint (e.g. TJMG consulta-publica)
+    requires_mtls: bool = False  # WSDL only reachable with an ICP-Brasil client cert (mTLS)
 
 
 # Initial registry — expand as tribunals are tested
@@ -79,6 +80,7 @@ TRIBUNAL_REGISTRY: dict[str, TribunalConfig] = {
         wsdl_url="https://pje-consulta-publica.tjmg.jus.br/pje/intercomunicacao?wsdl",
         mni_version="2.2.3",
         service_url_override="https://pje-consulta-publica.tjmg.jus.br/pje/intercomunicacao",
+        requires_mtls=True,  # validated 2026-06-12: WSDL 302s away without client cert
     ),
     # --- Confirmed working (WSDL accessible, no mTLS required) ---
     "tjes": TribunalConfig(

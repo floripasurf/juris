@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     cert_path: str | None = None
     cert_password: SecretStr | None = None
     advogado_cpf: str | None = None
+    # PKCS#11 module for A3 hardware tokens (mTLS tribunals like TJMG)
+    pkcs11_module: str = "/usr/local/lib/libeTPkcs11.dylib"
+    token_pin: SecretStr | None = None  # optional; prompted if absent
 
     @property
     def is_dev(self) -> bool:

@@ -1,7 +1,6 @@
 """Tests for CNJ number → court auto-detection per Resolução CNJ 65/2008."""
-from __future__ import annotations
 
-import pytest
+from __future__ import annotations
 
 from juris.search.cnj_router import cnj_to_court
 

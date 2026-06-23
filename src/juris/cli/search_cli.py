@@ -57,7 +57,7 @@ def search_command(
     cpf: str | None = typer.Option(None, "--cpf", help="Search by CPF"),
     cnpj: str | None = typer.Option(None, "--cnpj", help="Search by CNPJ"),
     cnj: str | None = typer.Option(None, "--cnj", help="Search by CNJ number"),
-    courts: str = typer.Option("stf,stj", "--courts", "-c", help="Comma-separated court codes, or 'all'"),
+    courts: str = typer.Option("tst,stf,stj", "--courts", "-c", help="Comma-separated court codes, or 'all'"),
     date_from: str | None = typer.Option(None, "--from", help="Start date (dd/mm/yyyy)"),
     date_to: str | None = typer.Option(None, "--to", help="End date (dd/mm/yyyy)"),
     max_per_court: int = typer.Option(20, "--max", help="Max results per court"),

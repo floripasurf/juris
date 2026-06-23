@@ -36,9 +36,11 @@ class CourtRateLimiter:
     def _load_state(self) -> dict[str, float]:
         if self._state_file.exists():
             try:
-                return json.loads(self._state_file.read_text())
+                raw = json.loads(self._state_file.read_text())
             except (json.JSONDecodeError, OSError):
                 return {}
+            if isinstance(raw, dict):
+                return {str(k): float(v) for k, v in raw.items()}
         return {}
 
     def _save_state(self) -> None:

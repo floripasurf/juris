@@ -108,3 +108,34 @@ src/juris/search/
     ├── trf1.py ... trf6.py
     └── tjsp.py
 ```
+
+## Addendum (2026-06-12) — Validação contra portais reais
+
+A validação live revelou que a maioria dos portais não aceita clientes HTTP
+automatizados, independentemente do parsing:
+
+| Portal | Resultado |
+|---|---|
+| TST | Funciona. Endpoint real descoberto: POST `jurisprudencia-backend2.tst.jus.br/rest/pesquisa-textual/{start}/{size}`; o array `tipos` precisa vir preenchido ou o backend ignora todos os filtros. Adapter reescrito e validado. |
+| STF | WAF descarta clientes não-navegador com HTTP 202 vazio (fingerprinting TLS). |
+| STJ | WAF responde 403 com página de desafio, inclusive para a home. |
+| TRF3 | Akamai aceita o handshake TLS e nunca responde à requisição. |
+| TJSP | eSAJ CJSG exige captcha (`uuidCaptcha`/`recaptcha_response_token`). O fluxo ViewState que o adapter implementava não existe mais (o form é Struts com jsessionid). |
+| TRF1/2/5 | Endpoints especulados no sprint retornam 404; portais foram reestruturados. |
+| TRF4 | Busca migrou para eproc (`jurisprudencia.trf4.jus.br/eproc2trf4/...`), sem captcha, mas o submit exige tokens gerados por JavaScript. |
+| TRF6 | Host do adapter não responde; portal migrou para portal.trf6.jus.br. |
+
+**Decisões decorrentes:**
+
+1. Não contornamos WAF nem captcha (regra operacional nº 2 do sprint). Os
+   adapters bloqueados permanecem no código com falha graciosa; os testes
+   live correspondentes são `xfail` com a razão documentada, para que um
+   portal desbloqueado apareça como XPASS.
+2. TLS passa a ser validado contra o trust store do sistema operacional via
+   `truststore` (`src/juris/search/http.py`) — os portais .jus.br usam
+   cadeias ICP-Brasil ausentes do bundle `certifi`.
+3. O default do CLI passou de `stf,stj` para `tst,stf,stj`, garantindo
+   resultados imediatos enquanto reporta os tribunais que falharam.
+4. Caminho futuro para portais WAF/captcha: automação via navegador
+   (Playwright) operando como o advogado operaria, ou APIs oficiais
+   (e.g. DataJud/CNJ) — decisão para sprint próprio.

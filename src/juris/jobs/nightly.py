@@ -108,6 +108,7 @@ async def run_nightly_single(
     cpf: str,
     senha: str,
     today: date | None = None,
+    token_pin: str | None = None,
 ) -> NightlyResult:
     """Run the nightly pipeline for a single processo.
 
@@ -144,6 +145,7 @@ async def run_nightly_single(
     else:
         diff = await sync_processo_mni(
             numero_cnj, tribunal, cpf, senha, last_sync_at, known_keys,
+            token_pin=token_pin,
         )
         source = "mni"
         if diff.error:
@@ -171,13 +173,17 @@ async def run_nightly_single(
         result.success = True
         return result
 
-    # 5. Changes detected — fetch full processo for complete analysis
-    try:
-        processo = _fetch_full_processo(numero_cnj, tribunal)
-    except Exception as e:
-        result.error = f"Full fetch failed: {type(e).__name__}: {e}"
-        db.log_sync(numero_cnj, tribunal, source, success=False, error=result.error)
-        return result
+    # 5. Changes detected — get the full processo for complete analysis.
+    # Reuse the processo already fetched during the diff (MNI/mTLS carries it);
+    # only fall back to a DataJud fetch when the diff didn't include one.
+    processo = diff.fetched
+    if processo is None:
+        try:
+            processo = _fetch_full_processo(numero_cnj, tribunal)
+        except Exception as e:
+            result.error = f"Full fetch failed: {type(e).__name__}: {e}"
+            db.log_sync(numero_cnj, tribunal, source, success=False, error=result.error)
+            return result
 
     if processo is None:
         result.error = "Full fetch returned None"
@@ -276,6 +282,7 @@ async def run_nightly(
     senha: str = "",
     max_concurrent: int = 10,
     today: date | None = None,
+    token_pin: str | None = None,
 ) -> NightlySummary:
     """Run the nightly pipeline for a batch of processos with concurrency control.
 
@@ -303,6 +310,7 @@ async def run_nightly(
                 cpf=cpf,
                 senha=senha,
                 today=today,
+                token_pin=token_pin,
             )
 
     tasks = [_run_one(proc) for proc in processos]

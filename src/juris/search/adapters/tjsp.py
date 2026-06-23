@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from typing import ClassVar
 
-import httpx
 from bs4 import BeautifulSoup
 
 from juris.search.adapters import register_adapter
 from juris.search.adapters.base import SearchAdapter
+from juris.search.http import make_portal_client
 from juris.search.models import QueryType, SearchQuery, SearchResult
 from juris.search.utils import clean_ementa, normalize_cnj, parse_br_date
 
@@ -34,10 +35,10 @@ class TJSPAdapter(SearchAdapter):
     the ESAJ platform.
     """
 
-    court_code: str = "tjsp"
-    portal_url: str = _PORTAL_BASE
-    rate_limit_seconds: float = 3.0
-    supported_query_types: set[QueryType] = {"tema"}
+    court_code: ClassVar[str] = "tjsp"
+    portal_url: ClassVar[str] = _PORTAL_BASE
+    rate_limit_seconds: ClassVar[float] = 3.0
+    supported_query_types: ClassVar[set[QueryType]] = {"tema"}
 
     async def search(self, query: SearchQuery) -> list[SearchResult]:
         """Search TJSP CJSG jurisprudência portal.
@@ -56,11 +57,7 @@ class TJSPAdapter(SearchAdapter):
         if not self.supports(query.query_type):
             return []
         try:
-            async with httpx.AsyncClient(
-                headers={"User-Agent": self.user_agent},
-                timeout=30.0,
-                follow_redirects=True,
-            ) as client:
+            async with make_portal_client(self.user_agent, follow_redirects=True) as client:
                 # Step 1: GET search page for ViewState + cookies
                 page_resp = await client.get(_CONSULTA_URL)
                 page_resp.raise_for_status()
@@ -129,7 +126,7 @@ class TJSPAdapter(SearchAdapter):
                 link = first_cell.find("a")
 
                 case_number = link.get_text(strip=True) if link else ""
-                href = link.get("href", "") if link else ""
+                href = str(link.get("href") or "") if link else ""
                 url = _PORTAL_BASE + href if href.startswith("/") else href or self.portal_url
 
                 classe_tag = first_cell.find("span", class_="classeTipoDocumento")

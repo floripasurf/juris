@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from typing import ClassVar
 
-import httpx
 from bs4 import BeautifulSoup
 
 from juris.search.adapters import register_adapter
 from juris.search.adapters.base import SearchAdapter
+from juris.search.http import make_portal_client
 from juris.search.models import QueryType, SearchQuery, SearchResult
 from juris.search.utils import clean_ementa, normalize_cnj, parse_br_date
 
@@ -44,10 +45,10 @@ class STJAdapter(SearchAdapter):
     BeautifulSoup to extract acordão results.
     """
 
-    court_code: str = "stj"
-    portal_url: str = "https://scon.stj.jus.br"
-    rate_limit_seconds: float = 2.0
-    supported_query_types: set[QueryType] = {"tema"}
+    court_code: ClassVar[str] = "stj"
+    portal_url: ClassVar[str] = "https://scon.stj.jus.br"
+    rate_limit_seconds: ClassVar[float] = 2.0
+    supported_query_types: ClassVar[set[QueryType]] = {"tema"}
 
     async def search(self, query: SearchQuery) -> list[SearchResult]:
         """Search the STJ SCON HTML portal.
@@ -66,10 +67,7 @@ class STJAdapter(SearchAdapter):
         }
 
         try:
-            async with httpx.AsyncClient(
-                headers={"User-Agent": self.user_agent},
-                timeout=30.0,
-            ) as client:
+            async with make_portal_client(self.user_agent) as client:
                 response = await client.get(_SEARCH_URL, params=params)
                 response.raise_for_status()
                 html = response.text
@@ -90,7 +88,7 @@ class STJAdapter(SearchAdapter):
                 # Process number: first td.dadoPesquisa containing an <a>
                 process_link = div.select_one("td.dadoPesquisa > a")
                 case_number = process_link.get_text(strip=True) if process_link else ""
-                raw_href = process_link.get("href", "") if process_link else ""
+                raw_href = str(process_link.get("href") or "") if process_link else ""
                 url = _URL_PREFIX + raw_href if raw_href.startswith("/") else raw_href
 
                 # All data rows
