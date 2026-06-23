@@ -152,6 +152,7 @@ class DemoOrchestrator:
                 "source": request.source.value,
                 "demo_mode": is_demo_mode,
                 "output_mode": request.output_mode.value,
+                "llm_provider": _llm_provider_name(self._llm),
                 "out_dir": str(out_dir),
             },
         )
@@ -265,6 +266,7 @@ class DemoOrchestrator:
             thesis=request.thesis,
             custom_instructions=request.instructions,
             use_cloud_llm=request.use_cloud_llm,
+            contains_pii=request.source is not SourceMode.FIXTURE,
         )
         return await agent.draft(draft_req, context)
 
@@ -285,6 +287,10 @@ def _can_degrade_to_deterministic_rascunho(request: DemoRequest, exc: Exception)
     if request.use_cloud_llm:
         return False
     return _is_local_ollama_connection_error(exc)
+
+
+def _llm_provider_name(llm: AbstractLLM) -> str:
+    return str(getattr(llm, "llm_provider", llm.model_name))
 
 
 def _is_local_ollama_connection_error(exc: Exception) -> bool:

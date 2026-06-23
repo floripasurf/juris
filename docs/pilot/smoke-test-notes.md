@@ -95,17 +95,16 @@ delicado nos minutos imediatamente antes da sessão.
 **Único comando obrigatório:**
 
 ```bash
-uv run juris pilot preflight --out juris-out
+uv run juris pilot preflight --out juris-out --fixture-only --skip-ollama-probe --cli-cloud claude
 ```
 
-Tudo verde (`Preflight OK`) → seguir. Qualquer `FAIL` → abortar e
-remediar. Itens com `WARN` são informativos (ex.: só Ollama OU só
-Anthropic configurado, mas a sessão pode rodar com qualquer um deles).
+`Preflight OK (com avisos)` → seguir para fixture sem PII. Qualquer `FAIL`
+→ abortar e remediar. `WARN` sobre Ollama indisponível é aceitável nesta
+rota, porque a primeira sessão não usa PII real nem depende de Ollama.
 
-Checks cobertos automaticamente: corpus pronto (§L1), modelo de
-embeddings em cache, ao menos um provedor de LLM disponível,
-diretório de saída sem runs anteriores (§L3), espaço em disco. Saída
-em `--json` para automação.
+Checks cobertos automaticamente: corpus pronto (§L1), modelo de embeddings
+em cache, CLI cloud disponível para a fixture, diretório de saída sem runs
+anteriores (§L3), espaço em disco. Saída em `--json` para automação.
 
 **Itens manuais que o pré-flight não cobre** (físicos / em papel):
 
@@ -120,10 +119,8 @@ em `--json` para automação.
 | Tempo | Atividade | Comando / artefato |
 | ---: | --- | --- |
 | 0:00–0:03 | Boas-vindas, recapitular limites do piloto §2 | `pilot-terms-pt.md` |
-| 0:03–0:08 | Demo em **modo fixture** (offline, dados sintéticos) | ver §2 |
-| 0:08–0:12 | Mostrar artefatos gerados em modo DEMO | `juris-out/DEMO-*/` |
-| 0:12–0:15 | Decidir o **modo de saída** para o caso real | ver §1.1 |
-| 0:15–0:35 | Demo em **modo real** sobre o caso escolhido | ver §3 |
+| 0:03–0:25 | Demo em **modo fixture** (offline, dados sintéticos, cloud CLI sem PII) | ver §2 |
+| 0:25–0:35 | Discutir o caso real de Raphael sem inserir PII no LLM | ver §3 |
 | 0:35–0:50 | Leitura conjunta dos artefatos | §4 + `[NOTAS]` |
 | 0:50–0:55 | Verificação da auditoria | `juris audit verify` |
 | 0:55–1:00 | Decisão: seguir, pausar, ajustar escopo | `[NOTAS] §10` |
@@ -167,7 +164,10 @@ Objetivo: mostrar pipeline funcionando **sem expor dados reais**, validar
 que o ambiente do(a) parceiro(a) está OK.
 
 ```bash
-uv run juris demo 0000000-00.0000.0.00.0000 contestacao --source fixture
+uv run juris demo 0000000-00.0000.0.00.0000 contestacao \
+  --source fixture \
+  --modo rascunho-pesquisa \
+  --cli-cloud claude
 ```
 
 **O que esperar:**
@@ -183,20 +183,25 @@ Mostre rapidamente abrindo `case-summary.md` e `audit-summary.md` no editor.
 
 ---
 
-## 3. Demo em modo real (20–25 min)
+## 3. Caso real: gate de PII e qualidade (10 min)
 
-Objetivo: produzir o artefato escolhido em §1.1 (minuta ou memorando) a
-partir de um caso real do(a) parceiro(a). **Esta é a hora da verdade do
-produto.**
+Objetivo: escolher o primeiro caso real sem quebrar o limite de PII. A
+decisão de Raphael nesta sessão foi clara: Ollama local é fraco demais para
+informações jurídicas complexas. Portanto, o piloto não deve tratar "rodar
+local no Ollama" como caminho viável para caso real.
+
+**Matriz operacional atual:**
+
+| Contexto | Rota permitida agora | Observação |
+| --- | --- | --- |
+| Fixture sintética | `--source fixture --modo rascunho-pesquisa --cli-cloud claude\|codex` | Rota principal do smoke com Raphael. |
+| Caso real anonimizado/sem PII | `--source datajud --cloud --modo rascunho-pesquisa` | Só com confirmação explícita do(a) advogado(a). |
+| Caso real com PII | **bloqueado** | Requer anonimização/consentimento/rota cloud aprovada ou backend local mais forte. |
+| Minuta protocolável | **fora do smoke inicial** | Primeiro validar memorando, citações, auditoria e UX. |
+
+Se o caso real estiver apto para uso sem PII, o comando base é:
 
 ```bash
-# Modo MINUTA SUGERIDA (default) — produz draft.md
-uv run juris demo \
-  <NUMERO_CNJ_REAL> contestacao \
-  --tribunal tjmg \
-  --thesis "<tese sugerida pelo(a) advogado(a) ou deixe em branco>" \
-  --cloud
-
 # Modo RASCUNHO DE PESQUISA — produz rascunho-pesquisa.md (memo)
 uv run juris demo \
   <NUMERO_CNJ_REAL> contestacao \
@@ -208,12 +213,11 @@ uv run juris demo \
 
 **Recomendações:**
 
-- Use `--source datajud` para o primeiro caso real. Isso faz consulta pública
-  read-only ao CNJ. Use `--no-cache` se o operador não puder manter resposta
-  DataJud em disco local; por padrão o cache evita chamadas repetidas ao CNJ.
-- Use `--cloud` se o caso **não** tiver dados sensíveis (PII de cliente,
-  dados médicos, segredo de justiça). Caso contrário, omita `--cloud` e
-  use Ollama local.
+- Use `--source datajud` apenas para caso real sem PII no contexto enviado ao
+  LLM. Isso faz consulta pública read-only ao CNJ. Use `--no-cache` se o
+  operador não puder manter resposta DataJud em disco local.
+- Não cair para Ollama local em caso complexo. Se houver PII, parar e
+  registrar o bloqueio em `[NOTAS] §13`.
 - Defina `--thesis` **somente** se o(a) advogado(a) quiser fixar a tese.
   Sem `--thesis`, o drafter infere via LLM.
 - `--modo` deve corresponder à decisão tomada em §1.1. O CLI confirma o

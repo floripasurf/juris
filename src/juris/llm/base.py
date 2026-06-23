@@ -28,6 +28,8 @@ class AbstractLLM(ABC):
         schema: dict[str, Any] | None = None,
         max_tokens: int = 1024,
         temperature: float = 0.0,
+        *,
+        contains_pii: bool = False,
     ) -> LLMResponse:
         """Generate a completion.
 
@@ -37,6 +39,7 @@ class AbstractLLM(ABC):
             schema: JSON schema for structured output (optional).
             max_tokens: Maximum output tokens.
             temperature: Sampling temperature.
+            contains_pii: Whether the prompt contains PII-sensitive case data.
 
         Returns:
             LLMResponse with content and metadata.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import suppress
 from typing import Any
 
 import httpx
@@ -31,7 +32,10 @@ class OllamaLLM(AbstractLLM):
         schema: dict[str, Any] | None = None,
         max_tokens: int = 1024,
         temperature: float = 0.0,
+        *,
+        contains_pii: bool = False,
     ) -> LLMResponse:
+        _ = contains_pii
         messages = []
         if system:
             messages.append({"role": "system", "content": system})
@@ -66,10 +70,8 @@ class OllamaLLM(AbstractLLM):
         # Try to parse structured output
         structured = None
         if schema and content:
-            try:
+            with suppress(json.JSONDecodeError):
                 structured = json.loads(content)
-            except json.JSONDecodeError:
-                pass
 
         # Ollama provides eval_count and prompt_eval_count
         usage = {

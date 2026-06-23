@@ -31,9 +31,14 @@ advogado(a) parceiro(a). Prepare estes itens com antecedência — o objetivo
   docker compose -f docker/docker-compose.yml up -d
   ```
 - [ ] Variáveis de ambiente em `.env`:
-  - `ANTHROPIC_API_KEY=` (se for usar `--cloud` para tarefas sem PII).
+  - `ANTHROPIC_API_KEY=` (opcional; use apenas para tarefas sem PII).
   - `DATAJUD_API_KEY=` (se a chave do CNJ for exigida).
-- [ ] Ollama rodando localmente (`ollama serve`) caso o demo use LLM local.
+- [ ] CLI cloud autenticado (`claude` ou `codex`) para a primeira sessão
+  fixture/anônima sem PII.
+- [ ] Não depender de Ollama local para caso complexo. O piloto atual trata
+  Ollama como fraco para redação jurídica complexa; caso real com PII fica
+  bloqueado até haver rota cloud com anonimização/consentimento ou outro
+  backend local suficientemente forte.
 - [ ] Repertório indexado: arquivo `data/repertory.db` presente; senão:
   ```bash
   uv run juris repertory ingest
@@ -46,9 +51,9 @@ Estrutura sugerida:
 | Tempo | Atividade |
 | ---: | --- |
 | 0:00–0:05 | Revisão dos limites do piloto (§2 dos termos). |
-| 0:05–0:15 | Demo em **modo fixture** para mostrar o pipeline sem pressão: `uv run juris demo 0000000-00.0000.0.00.0000 contestacao --source fixture` |
-| 0:15–0:35 | Demo em modo real (DataJud) sobre o caso escolhido pelo(a) advogado(a). |
-| 0:35–0:50 | Revisão conjunta de `draft.md`, `reviewer-report.md`, `prazos.md`. Capturar fricções em `docs/pilot/smoke-test-notes.md`. |
+| 0:05–0:25 | Demo em **modo fixture** para mostrar o pipeline sem PII: `uv run juris demo 0000000-00.0000.0.00.0000 contestacao --source fixture --modo rascunho-pesquisa --cli-cloud claude` |
+| 0:25–0:35 | Discutir um caso real apenas no nível operacional: área, peça, complexidade e riscos de PII. Não inserir dados reais no LLM. |
+| 0:35–0:50 | Revisão conjunta de `rascunho-pesquisa.md`, `reviewer-report.md`, `prazos.md`. Capturar fricções em `docs/pilot/smoke-test-notes.md`. |
 | 0:50–0:55 | Verificação de auditoria: `uv run juris audit verify <caso>/audit.jsonl` |
 | 0:55–1:00 | Próximos passos, escolha do modelo de cobrança (§5 dos termos). |
 
@@ -56,8 +61,9 @@ Estrutura sugerida:
 
 Ao final da sessão, o diretório `juris-out/<numero_cnj>/` deve conter:
 
-- `draft.md` (com rodapé de IA)
-- `draft.contraponto.md` (se houver)
+- `rascunho-pesquisa.md` (modo recomendado para a primeira sessão)
+- `draft.md` (apenas se o operador escolher `minuta-sugerida`)
+- `draft.contraponto.md` (se houver, apenas em modo minuta)
 - `reviewer-report.md`
 - `prazos.md`
 - `case-summary.md`
