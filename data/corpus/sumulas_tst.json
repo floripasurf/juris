@@ -3,7 +3,9 @@
     "numero": "1",
     "texto": "Quando a intimação tiver lugar na sexta-feira, ou a publicação com efeito de intimação for feita nesse dia, o prazo judicial será contado da segunda-feira imediata, inclusive, salvo se não houver expediente, caso em que fluirá no dia útil que se seguir.",
     "tema": "PRAZO JUDICIAL",
-    "base_legal": [],
+    "base_legal": [
+      "CPC Art. 674"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -43,7 +45,9 @@
     "numero": "6",
     "texto": "I - Para os fins previstos no § 2º do art. 461 da CLT, só é válido o quadro de pessoal organizado em carreira quando homologado pelo Ministério do Trabalho, excluindo-se, apenas, dessa exigência o quadro de carreira das entidades de direito público da administração direta, autárquica e fundacional aprovado por ato administrativo da autoridade competente. (item cancelado por perda de eficácia a partir de 11.11.2017, pela Lei 13.467/2017) – Res. 225/2025, DEJT divulgado em 30.06, 01 e 02.07.2025\nII - Para efeito de equiparação de salários em caso de trabalho igual, conta-se o tempo de serviço na função e não no emprego. (item cancelado por perda de eficácia a partir de 11.11.2017, pela Lei 13.467/2017) – Res. 225/2025, DEJT divulgado em 30.06, 01 e 02.07.2025\nIII - A equiparação salarial só é possível se o empregado e o paradigma exercerem a mesma função, desempenhando as mesmas tarefas, não importando se os cargos têm, ou não, a mesma denominação. (ex-OJ da SBDI-I nº 328 - DJ 09.12.2003)\nIV - É desnecessário que, ao tempo da reclamação sobre equiparação salarial, reclamante e paradigma estejam a serviço do estabelecimento, desde que o pedido se relacione com situação pretérita. (ex-Súmula nº 22 - RA 57/1970, DO-GB 27.11.1970)\nV - A cessão de empregados não exclui a equiparação salarial, embora exercida a função em órgão governamental estranho à cedente, se esta responde pelos salários do paradigma e do reclamante. (ex-Súmula nº 111 - RA 102/1980, DJ 25.09.1980)\nVI - Presentes os pressupostos do art. 461 da CLT, é irrelevante a circunstância de que o desnível salarial tenha origem em decisão judicial que beneficiou o paradigma, exceto: a) se decorrente de vantagem pessoal ou de tese jurídica superada pela jurisprudência de Corte Superior; b) na hipótese de equiparação salarial em cadeia, suscitada em defesa, se o empregador produzir prova do alegado fato modificativo, impeditivo ou extintivo do direito à equiparação salarial em relação ao paradigma remoto, considerada irrelevante, para esse efeito, a existência de diferença de tempo de serviço na função superior a dois anos entre o reclamante e os empregados paradigmas componentes da cadeia equiparatória, à exceção do paradigma imediato. (alínea cancelada por perda de eficácia a partir de 11.11.2017, pela Lei 13.467/2017) – Res. 225/2025, DEJT divulgado em 30.06, 01 e 02.07.2025\nVII - Desde que atendidos os requisitos do art. 461 da CLT, é possível a equiparação salarial de trabalho intelectual, que pode ser avaliado por sua perfeição técnica, cuja aferição terá critérios objetivos. (ex-OJ da SBDI-I nº 298 - DJ 11.08.2003)\nVIII - É do empregador o ônus da prova do fato impeditivo, modificativo ou extintivo da equiparação salarial. (ex-Súmula nº 68 - RA 9/1977, DJ 11.02.1977)\nIX - Na ação de equiparação salarial, a prescrição é parcial e só alcança as diferenças salariais vencidas no período de 5 (cinco) anos que precedeu o ajuizamento. (ex-Súmula nº 274 - alterada pela Res. 121/2003, DJ 21.11.2003)\nX - O conceito de \"mesma localidade\" de que trata o art. 461 da CLT refere-se, em princípio, ao mesmo município, ou a municípios distintos que, comprovadamente, pertençam à mesma região metropolitana. (item cancelado por perda de eficácia a partir de 11.11.2017, pela Lei 13.467/2017) – Res. 225/2025, DEJT divulgado em 30.06, 01 e 02.07.2025",
     "tema": "EQUIPARAÇÃO SALARIAL. ART. 461 DA CLT",
-    "base_legal": [],
+    "base_legal": [
+      "CF Art. 7º XXIX"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -403,7 +407,9 @@
     "numero": "51",
     "texto": "I - As cláusulas regulamentares, que revoguem ou alterem vantagens deferidas anteriormente, só atingirão os trabalhadores admitidos após a revogação ou alteração do regulamento. (ex-Súmula nº 51 - RA 41/1973, DJ 14.06.1973)\nII - Havendo a coexistência de dois regulamentos da empresa, a opção do empregado por um deles tem efeito jurídico de renúncia às regras do sistema do outro. (ex-OJ nº 163 da SBDI-I - inserida em 26.03.1999)",
     "tema": "NORMA REGULAMENTAR. VANTAGENS E OPÇÃO PELO NOVO REGULAMENTO. ART. 468 DA CLT",
-    "base_legal": [],
+    "base_legal": [
+      "CF Art. 7º XXXIV"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -675,7 +681,9 @@
     "numero": "85",
     "texto": "I. A compensação de jornada de trabalho deve ser ajustada por acordo individual escrito, acordo coletivo ou convenção coletiva. (ex-Súmula nº 85 - primeira parte - alterada pela Res. 121/2003, DJ 21.11.2003)\nII. O acordo individual para compensação de horas é válido, salvo se houver norma coletiva em sentido contrário. (ex-OJ nº 182 da SBDI-I - inserida em 08.11.2000)\nIII. O mero não atendimento das exigências legais para a compensação de jornada, inclusive quando encetada mediante acordo tácito, não implica a repetição do pagamento das horas excedentes à jornada normal diária, se não dilatada a jornada máxima semanal, sendo devido apenas o respectivo adicional. (ex-Súmula nº 85 - segunda parte - alterada pela Res. 121/2003, DJ 21.11.2003)\nIV. A prestação de horas extras habituais descaracteriza o acordo de compensação de jornada. Nesta hipótese, as horas que ultrapassarem a jornada semanal normal deverão ser pagas como horas extraordinárias e, quanto àquelas destinadas à compensação, deverá ser pago a mais apenas o adicional por trabalho extraordinário. (ex-OJ nº 220 da SBDI-I - inserida em 20.06.2001)\nV. As disposições contidas nesta súmula não se aplicam ao regime compensatório na modalidade “banco de horas”, que somente pode ser instituído por negociação coletiva.\nVI - Não é válido acordo de compensação de jornada em atividade insalubre, ainda que estipulado em norma coletiva, sem a necessária inspeção prévia e permissão da autoridade competente, na forma do art. 60 da CLT.",
     "tema": "COMPENSAÇÃO DE JORNADA",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 59"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -715,7 +723,9 @@
     "numero": "90",
     "texto": "I - O tempo despendido pelo empregado, em condução fornecida pelo empregador, até o local de trabalho de difícil acesso, ou não servido por transporte público regular, e para o seu retorno é computável na jornada de trabalho. (ex-Súmula nº 90 - RA 80/1978, DJ 10.11.1978)\nII - A incompatibilidade entre os horários de início e término da jornada do empregado e os do transporte público regular é circunstância que também gera o direito às horas \"in itinere\". (ex-OJ nº 50 da SBDI-I - inserida em 01.02.1995)\nIII - A mera insuficiência de transporte público não enseja o pagamento de horas \"in itinere\". (ex-Súmula nº 324 – Res. 16/1993, DJ 21.12.1993)\nIV - Se houver transporte público regular em parte do trajeto percorrido em condução da empresa, as horas \"in itinere\" remuneradas limitam-se ao trecho não alcançado pelo transporte público. (ex-Súmula nº 325 – Res. 17/1993, DJ 21.12.1993)\nV - Considerando que as horas \"in itinere\" são computáveis na jornada de trabalho, o tempo que extrapola a jornada legal é considerado como extraordinário e sobre ele deve incidir o adicional respectivo. (ex-OJ nº 236 da SBDI-I - inserida em 20.06.2001)",
     "tema": "HORAS \"IN ITINERE\". TEMPO DE SERVIÇO",
-    "base_legal": [],
+    "base_legal": [
+      "CF Art. 37 II"
+    ],
     "situacao": "cancelada",
     "data_aprovacao": ""
   },
@@ -811,7 +821,9 @@
     "numero": "102",
     "texto": "I - A configuração, ou não, do exercício da função de confiança a que se refere o art. 224, § 2º, da CLT, dependente da prova das reais atribuições do empregado, é insuscetível de exame mediante recurso de revista ou de embargos. (ex-Súmula nº 204 - alterada pela Res. 121/2003, DJ 21.11.2003)\nII - O bancário que exerce a função a que se refere o § 2º do art. 224 da CLT e recebe gratificação não inferior a um terço de seu salário já tem remuneradas as duas horas extraordinárias excedentes de seis. (ex-Súmula nº 166 - RA 102/1982, DJ 11.10.1982 e DJ 15.10.1982)\nIII - Ao bancário exercente de cargo de confiança previsto no artigo 224, § 2º, da CLT são devidas as 7ª e 8ª horas, como extras, no período em que se verificar o pagamento a menor da gratificação de 1/3. (ex-OJ nº 288 da SBDI-I - DJ 11.08.2003)\nIV - O bancário sujeito à regra do art. 224, § 2º, da CLT cumpre jornada de trabalho de 8 (oito) horas, sendo extraordinárias as trabalhadas além da oitava. (ex-Súmula nº 232- RA 14/1985, DJ 19.09.1985)\nV - O advogado empregado de banco, pelo simples exercício da advocacia, não exerce cargo de confiança, não se enquadrando, portanto, na hipótese do § 2º do art. 224 da CLT. (ex-OJ nº 222 da SBDI-I - inserida em 20.06.2001)\nVI - O caixa bancário, ainda que caixa executivo, não exerce cargo de confiança. Se perceber gratificação igual ou superior a um terço do salário do posto efetivo, essa remunera apenas a maior responsabilidade do cargo e não as duas horas extraordinárias além da sexta. (ex-Súmula nº 102 - RA 66/1980, DJ 18.06.1980 e republicada DJ 14.07.1980)\nVII - O bancário exercente de função de confiança, que percebe a gratificação não inferior ao terço legal, ainda que norma coletiva contemple percentual superior, não tem direito às sétima e oitava horas como extras, mas tão somente às diferenças de gratificação de função, se postuladas. (ex-OJ nº 15 da SBDI-I - inserida em 14.03.1994)",
     "tema": "BANCÁRIO. CARGO DE CONFIANÇA",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 11"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -1003,7 +1015,9 @@
     "numero": "126",
     "texto": "Incabível o recurso de revista ou de embargos (arts. 896 e 894, \"b\", da CLT) para reexame de fatos e provas.",
     "tema": "RECURSO. CABIMENTO",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 896"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -1027,7 +1041,9 @@
     "numero": "129",
     "texto": "A prestação de serviços a mais de uma empresa do mesmo grupo econômico, durante a mesma jornada de trabalho, não caracteriza a coexistência de mais de um contrato de trabalho, salvo ajuste em contrário.",
     "tema": "CONTRATO DE TRABALHO. GRUPO ECONÔMICO",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 2º §2º"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -1051,7 +1067,9 @@
     "numero": "132",
     "texto": "I - O adicional de periculosidade, pago em caráter permanente, integra o cálculo de indenização e de horas extras (ex-Prejulgado nº 3). (ex-Súmula nº 132 - RA 102/1982, DJ 11.10.1982/ DJ 15.10.1982 - e ex-OJ nº 267 da SBDI-I - inserida em 27.09.2002)\nII - Durante as horas de sobreaviso, o empregado não se encontra em condições de risco, razão pela qual é incabível a integração do adicional de periculosidade sobre as mencionadas horas. (ex-OJ nº 174 da SBDI-I - inserida em 08.11.2000)",
     "tema": "ADICIONAL DE PERICULOSIDADE. INTEGRAÇÃO",
-    "base_legal": [],
+    "base_legal": [
+      "Lei 8.036/90 Art. 15"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -1163,7 +1181,9 @@
     "numero": "146",
     "texto": "O trabalho prestado em domingos e feriados, não compensado, deve ser pago em dobro, sem prejuízo da remuneração relativa ao repouso semanal.",
     "tema": "TRABALHO EM DOMINGOS E FERIADOS, NÃO COMPENSADO",
-    "base_legal": [],
+    "base_legal": [
+      "Lei 605/49 Art. 9º"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -1267,7 +1287,9 @@
     "numero": "159",
     "texto": "I - Enquanto perdurar a substituição que não tenha caráter meramente eventual, inclusive nas férias, o empregado substituto fará jus ao salário contratual do substituído. (ex-Súmula nº 159 - alterada pela Res. 121/2003, DJ 21.11.2003)\nII - Vago o cargo em definitivo, o empregado que passa a ocupá-lo não tem direito a salário igual ao do antecessor. (ex-OJ nº 112 da SBDI-I - inserida em 01.10.1997)",
     "tema": "SUBSTITUIÇÃO DE CARÁTER NÃO EVENTUAL E VACÂNCIA DO CARGO",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 143"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -1363,7 +1385,9 @@
     "numero": "171",
     "texto": "Salvo na hipótese de dispensa do empregado por justa causa, a extinção do contrato de trabalho sujeita o empregador ao pagamento da remuneração das férias proporcionais, ainda que incompleto o período aquisitivo de 12 (doze) meses (art. 147 da CLT) (ex-Prejulgado nº 51).",
     "tema": "FÉRIAS PROPORCIONAIS. CONTRATO DE TRABALHO. EXTINÇÃO",
-    "base_legal": [],
+    "base_legal": [
+      "Lei 9.093/95"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -1587,7 +1611,9 @@
     "numero": "199",
     "texto": "I - A contratação do serviço suplementar, quando da admissão do trabalhador bancário, é nula. Os valores assim ajustados apenas remuneram a jornada normal, sendo devidas as horas extras com o adicional de, no mínimo, 50% (cinqüenta por cento), as quais não configuram pré-contratação, se pactuadas após a admissão do bancário. (ex-Súmula nº 199 – alterada pela Res. 41/1995, DJ 21.02.1995 - e ex-OJ nº 48 da SBDI-I - inserida em 25.11.1996)\nII - Em se tratando de horas extras pré-contratadas, opera-se a prescrição total se a ação não for ajuizada no prazo de cinco anos, a partir da data em que foram suprimidas. (ex-OJ nº 63 da SBDI-I - inserida em 14.03.1994)",
     "tema": "BANCÁRIO. PRÉ-CONTRATAÇÃO DE HORAS EXTRAS",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 59"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -1691,7 +1717,9 @@
     "numero": "212",
     "texto": "O ônus de provar o término do contrato de trabalho, quando negados a prestação de serviço e o despedimento, é do empregador, pois o princípio da continuidade da relação de emprego constitui presunção favorável ao empregado.\n\nIRR-278 DESPEDIMENTO. ÔNUS DA PROVA. (RRAg-0000062-67.2023.5.09.0322, Tribunal Pleno, publicado em 03.09.2025, rel. Min. Aloysio Silva Corrêa da Veiga)\nO ônus de provar o término do contrato de trabalho, quando negados a prestação de serviço e o despedimento, é do empregador, pois o princípio da continuidade da relação de emprego constitui presunção favorável ao empregado.",
     "tema": "DESPEDIMENTO. ÔNUS DA PROVA",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 818"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -1747,7 +1775,9 @@
     "numero": "219",
     "texto": "I - Na Justiça do Trabalho, a condenação ao pagamento de honorários advocatícios não decorre pura e simplesmente da sucumbência, devendo a parte, concomitantemente: a) estar assistida por sindicato da categoria profissional; b) comprovar a percepção de salário inferior ao dobro do salário mínimo ou encontrar-se em situação econômica que não lhe permita demandar sem prejuízo do próprio sustento ou da respectiva família (art.14, § 1º, da Lei nº 5.584/1970). (ex-OJ nº 305 da SBDI-I).\nII - É cabível a condenação ao pagamento de honorários advocatícios em ação rescisória no processo trabalhista.\nIII - São devidos os honorários advocatícios nas causas em que o ente sindical figure como substituto processual e nas lides que não derivem da relação de emprego.\nIV - Na ação rescisória e nas lides que não derivem de relação de emprego, a responsabilidade pelo pagamento dos honorários advocatícios da sucumbência submete-se à disciplina do Código de Processo Civil (arts. 85, 86, 87 e 90). \nV - Em caso de assistência judiciária sindical ou de substituição processual sindical, excetuados os processos em que a Fazenda Pública for parte, os honorários advocatícios são devidos entre o mínimo de dez e o máximo de vinte por cento sobre o valor da condenação, do proveito econômico obtido ou, não sendo possível mensurá-lo, sobre o valor atualizado da causa (CPC de 2015, art. 85, § 2º). \nVI - Nas causas em que a Fazenda Pública for parte, aplicar-se-ão os percentuais específicos de honorários advocatícios contemplados no Código de Processo Civil.",
     "tema": "HONORÁRIOS ADVOCATÍCIOS. CABIMENTO",
-    "base_legal": [],
+    "base_legal": [
+      "Lei 5.584/70 Art. 14"
+    ],
     "situacao": "cancelada",
     "data_aprovacao": ""
   },
@@ -1763,7 +1793,9 @@
     "numero": "221",
     "texto": "A admissibilidade do recurso de revista por violação tem como pressuposto a indicação expressa do dispositivo de lei ou da Constituição tido como violado.",
     "tema": "RECURSO DE REVISTA. VIOLAÇÃO DE LEI. INDICAÇÃO DE PRECEITO",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 894"
+    ],
     "situacao": "cancelada",
     "data_aprovacao": ""
   },
@@ -1813,6 +1845,16 @@
     "tema": "SALÁRIO-FAMÍLIA. TRABALHADOR RURAL",
     "base_legal": [],
     "situacao": "cancelada",
+    "data_aprovacao": ""
+  },
+  {
+    "numero": "228",
+    "texto": "Não cabe recurso de revista por violação de lei federal, quando a decisão recorrida estiver em consonância com súmula da jurisprudência uniforme do TST.",
+    "tema": "recurso de revista",
+    "base_legal": [
+      "CLT Art. 896"
+    ],
+    "situacao": "vigente",
     "data_aprovacao": ""
   },
   {
@@ -1939,7 +1981,9 @@
     "numero": "244",
     "texto": "I - O desconhecimento do estado gravídico pelo empregador não afasta o direito ao pagamento da indenização decorrente da estabilidade (art. 10, II, \"b\" do ADCT). \nII - A garantia de emprego à gestante só autoriza a reintegração se esta se der durante o período de estabilidade. Do contrário, a garantia restringe-se aos salários e demais direitos correspondentes ao período de estabilidade. \nIII - A empregada gestante tem direito à estabilidade provisória prevista no art. 10, inciso II, alínea “b”, do Ato das Disposições Constitucionais Transitórias, mesmo na hipótese de admissão mediante contrato por tempo determinado.",
     "tema": "GESTANTE. ESTABILIDADE PROVISÓRIA",
-    "base_legal": [],
+    "base_legal": [
+      "ADCT Art. 10 II b"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -2139,7 +2183,9 @@
     "numero": "269",
     "texto": "O empregado eleito para ocupar cargo de diretor tem o respectivo contrato de trabalho suspenso, não se computando o tempo de serviço desse período, salvo se permanecer a subordinação jurídica inerente à relação de emprego.",
     "tema": "DIRETOR ELEITO. CÔMPUTO DO PERÍODO COMO TEMPO DE SERVIÇO",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 499"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -2315,7 +2361,9 @@
     "numero": "291",
     "texto": "A supressão total ou parcial, pelo empregador, de serviço suplementar prestado com habitualidade, durante pelo menos 1 (um) ano, assegura ao empregado o direito à indenização correspondente ao valor de 1 (um) mês das horas suprimidas, total ou parcialmente, para cada ano ou fração igual ou superior a seis meses de prestação de serviço acima da jornada normal. O cálculo observará a média das horas suplementares nos últimos 12 (doze) meses anteriores à mudança, multiplicada pelo valor da hora extra do dia da supressão.",
     "tema": "HORAS EXTRAS. HABITUALIDADE. SUPRESSÃO. INDENIZAÇÃO",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 468"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -2355,7 +2403,9 @@
     "numero": "296",
     "texto": "I - A divergência jurisprudencial ensejadora da admissibilidade, do prosseguimento e do conhecimento do recurso há de ser específica, revelando a existência de teses diversas na interpretação de um mesmo dispositivo legal, embora idênticos os fatos que as ensejaram. (ex-Súmula nº 296 - Res. 6/1989, DJ 19.04.1989)\nII - Não ofende o art. 896 da CLT decisão de Turma que, examinando premissas concretas de especificidade da divergência colacionada no apelo revisional, conclui pelo conhecimento ou desconhecimento do recurso. (ex-OJ nº 37 da SBDI-I - inserida em 01.02.1995)",
     "tema": "RECURSO. DIVERGÊNCIA JURISPRUDENCIAL. ESPECIFICIDADE",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 59"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -2363,7 +2413,9 @@
     "numero": "297",
     "texto": "I. Diz-se prequestionada a matéria ou questão quando na decisão impugnada haja sido adotada, explicitamente, tese a respeito.\nII. Incumbe à parte interessada, desde que a matéria haja sido invocada no recurso principal, opor embargos declaratórios objetivando o pronunciamento sobre o tema, sob pena de preclusão.\nIII. Considera-se prequestionada a questão jurídica invocada no recurso principal sobre a qual se omite o Tribunal de pronunciar tese, não obstante opostos embargos de declaração.",
     "tema": "PREQUESTIONAMENTO. OPORTUNIDADE. CONFIGURAÇÃO",
-    "base_legal": [],
+    "base_legal": [
+      "CF Art. 8º VIII"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -2371,7 +2423,9 @@
     "numero": "298",
     "texto": "I - A conclusão acerca da ocorrência de violação literal a disposição de lei pressupõe pronunciamento explícito, na sentença rescindenda, sobre a matéria veiculada. \nII - O pronunciamento explícito exigido em ação rescisória diz respeito à matéria e ao enfoque específico da tese debatida na ação, e não, necessariamente, ao dispositivo legal tido por violado. Basta que o conteúdo da norma reputada violada haja sido abordado na decisão rescindenda para que se considere preenchido o pressuposto. \nIII - Para efeito de ação rescisória, considera-se pronunciada explicitamente a matéria tratada na sentença quando, examinando remessa de ofício, o Tribunal simplesmente a confirma. \nIV - A sentença meramente homologatória, que silencia sobre os motivos de convencimento do juiz, não se mostra rescindível, por ausência de pronunciamento explícito. \nV - Não é absoluta a exigência de pronunciamento explícito na ação rescisória, ainda que esta tenha por fundamento violação de dispositivo de lei. Assim, prescindível o pronunciamento explícito quando o vício nasce no próprio julgamento, como se dá com a sentença \"extra, citra e ultra petita\".",
     "tema": "AÇÃO RESCISÓRIA. VIOLAÇÃO A DISPOSIÇÃO DE LEI. PRONUNCIAMENTO EXPLÍCITO",
-    "base_legal": [],
+    "base_legal": [
+      "CF Art. 8º VIII"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -2411,7 +2465,9 @@
     "numero": "303",
     "texto": "I - Em dissídio individual, está sujeita ao reexame necessário, mesmo na vigência da Constituição Federal de 1988, decisão contrária à Fazenda Pública, salvo quando a condenação não ultrapassar o valor correspondente a: a) 1.000 (mil) salários mínimos para a União e as respectivas autarquias e fundações de direito público; b) 500 (quinhentos) salários mínimos para os Estados, o Distrito Federal, as respectivas autarquias e fundações de direito público e os Municípios\nque constituam capitais dos Estados; c) 100 (cem) salários mínimos para todos os demais Municípios e respectivas autarquias e fundações de direito público.\nII – Também não se sujeita ao duplo grau de jurisdição a decisão fundada em: \na) súmula ou orientação jurisprudencial do Tribunal Superior do Trabalho; \nb) acórdão proferido pelo Supremo Tribunal Federal ou pelo Tribunal Superior do Trabalho em julgamento de recursos repetitivos; \nc) entendimento firmado em incidente deresolução de demandas repetitivas ou de assunção de competência; \nd) entendimento coincidente com orientação vinculante firmada no âmbito administrativo do próprio ente público, consolidada em manifestação, parecer ou súmula administrativa.\nIII - Em ação rescisória, a decisão proferida pelo Tribunal Regional do Trabalho está sujeita ao duplo grau de jurisdição obrigatório quando desfavorável ao ente público, exceto nas hipóteses dos incisos anteriores. (ex-OJ nº 71 da SBDI-1 - inserida em 03.06.1996) \nIV - Em mandado de segurança, somente cabe reexame necessário se, na relação processual, figurar pessoa jurídica de direito público como parte prejudicada pela concessão da ordem. Tal situação não ocorre na hipótese de figurar no feito como impetrante e terceiro interessado pessoa de direito privado, ressalvada a hipótese de matéria administrativa. (ex-OJs nºs 72 e 73 da SBDI-1 – inseridas, respectivamente, em 25.11.1996 e 03.06.1996)",
     "tema": "FAZENDA PÚBLICA. REEXAME NECESSÁRIO",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 71"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -2427,7 +2483,9 @@
     "numero": "305",
     "texto": "O pagamento relativo ao período de aviso prévio, trabalhado ou não, está sujeito a contribuição para o FGTS.",
     "tema": "FUNDO DE GARANTIA DO TEMPO DE SERVIÇO. INCIDÊNCIA SOBRE O AVISO PRÉVIO",
-    "base_legal": [],
+    "base_legal": [
+      "Lei 8.036/90 Art. 15"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -2523,7 +2581,9 @@
     "numero": "318",
     "texto": "Tratando-se de empregado mensalista, a integração das diárias no salário deve ser feita tomando-se por base o salário mensal por ele percebido e não o valor do dia de salário, somente sendo devida a referida integração quando o valor das diárias, no mês, for superior à metade do salário mensal.",
     "tema": "DIÁRIAS. BASE DE CÁLCULO PARA SUA INTEGRAÇÃO NO SALÁRIO",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 64"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -2619,7 +2679,9 @@
     "numero": "330",
     "texto": "A quitação passada pelo empregado, com assistência de entidade sindical de sua categoria, ao empregador, com observância dos requisitos exigidos nos parágrafos do art. 477 da CLT, tem eficácia liberatória em relação às parcelas expressamente consignadas no recibo, salvo se oposta ressalva expressa e especificada ao valor dado à parcela ou parcelas impugnadas.\nI - A quitação não abrange parcelas não consignadas no recibo de quitação e, conseqüentemente, seus reflexos em outras parcelas, ainda que estas constem desse recibo.\nII - Quanto a direitos que deveriam ter sido satisfeitos durante a vigência do contrato de trabalho, a quitação é válida em relação ao período expressamente consignado no recibo de quitação.",
     "tema": "QUITAÇÃO. VALIDADE",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 477"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -2627,7 +2689,10 @@
     "numero": "331",
     "texto": "I - A contratação de trabalhadores por empresa interposta é ilegal, formando-se o vínculo diretamente com o tomador dos serviços, salvo no caso de trabalho temporário (Lei nº 6.019, de 03.01.1974). (item I cancelado por perda de eficácia a partir de 11.11.2017, pela Lei 13.467/2017) – Res. 225/2025, DEJT divulgado em 30.06, 01 e 02.07.2025\nII - A contratação irregular de trabalhador, mediante empresa interposta, não gera vínculo de emprego com os órgãos da Administração Pública direta, indireta ou fundacional (art. 37, II, da CF/1988).\nIII - Não forma vínculo de emprego com o tomador a contratação de serviços de vigilância (Lei nº 7.102, de 20.06.1983) e de conservação e limpeza, bem como a de serviços especializados ligados à atividade-meio do tomador, desde que inexistente a pessoalidade e a subordinação direta.\nIV - O inadimplemento das obrigações trabalhistas, por parte do empregador, implica a responsabilidade subsidiária do tomador dos serviços quanto àquelas obrigações, desde que haja participado da relação processual e conste também do título executivo judicial.\nV - Os entes integrantes da Administração Pública direta e indireta respondem subsidiariamente, nas mesmas condições do item IV, caso evidenciada a sua conduta culposa no cumprimento das obrigações da Lei n.º 8.666, de 21.06.1993, especialmente na fiscalização do cumprimento das obrigações contratuais e legais da prestadora de serviço como empregadora. A aludida responsabilidade não decorre de mero inadimplemento das obrigações trabalhistas assumidas pela empresa regularmente contratada.\nVI – A responsabilidade subsidiária do tomador de serviços abrange todas as verbas decorrentes da condenação referentes ao período da prestação laboral.",
     "tema": "CONTRATO DE PRESTAÇÃO DE SERVIÇOS. LEGALIDADE",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 2º",
+      "Lei 6.019/74"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -2683,7 +2748,9 @@
     "numero": "338",
     "texto": "I - É ônus do empregador que conta com mais de 10 (dez) empregados o registro da jornada de trabalho na forma do art. 74, § 2º, da CLT. A não-apresentação injustificada dos controles de frequência gera presunção relativa de veracidade da jornada de trabalho, a qual pode ser elidida por prova em contrário. (ex-Súmula nº 338 – alterada pela Res. 121/2003, DJ 21.11.2003)\nII - A presunção de veracidade da jornada de trabalho, ainda que prevista em instrumento normativo, pode ser elidida por prova em contrário. (ex-OJ nº 234 da SBDI-I - inserida em 20.06.2001)\nIII - Os cartões de ponto que demonstram horários de entrada e saída uniformes são inválidos como meio de prova, invertendo-se o ônus da prova, relativo às horas extras, que passa a ser do empregador, prevalecendo a jornada da inicial se dele não se desincumbir. (ex-OJ nº 306 da SBDI-I- DJ 11.08.2003)",
     "tema": "JORNADA DE TRABALHO. REGISTRO. ÔNUS DA PROVA",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 74 §2º"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -2691,7 +2758,9 @@
     "numero": "339",
     "texto": "I - O suplente da CIPA goza da garantia de emprego prevista no art. 10, II, \"a\", do ADCT a partir da promulgação da Constituição Federal de 1988. (ex-Súmula nº 339 - Res. 39/1994, DJ 22.12.1994 - e ex-OJ nº 25 da SBDI-I - inserida em 29.03.1996). – Entendimento do intem I reafirmado no IRR nº 284.\nII - A estabilidade provisória do cipeiro não constitui vantagem pessoal, mas garantia para as atividades dos membros da CIPA, que somente tem razão de ser quando em atividade a empresa. Extinto o estabelecimento, não se verifica a despedida arbitrária, sendo impossível a reintegração e indevida a indenização do período estabilitário. (ex-OJ nº 329 da SBDI-I - DJ 09.12.2003). – Entendimento do item II reafirmado no IRR nº 281.\nIRR-284 ESTABILIDADE PROVISÓRIA. SUPLENTE DA CIPA. GARANTIA DE EMPREGO. (RR-0001708-34.2023.5.12.0030, Tribunal Pleno, publicado em 03.09.2025, rel. Min. Aloysio Silva Corrêa da Veiga)\nO suplente da CIPA goza da garantia de emprego prevista no art. 10, II, \"a\", do ADCT a partir da promulgação da Constituição da República de 1988. \nIRR-281 MEMBRO DA CIPA. ESTABILIDADE PROVISÓRIA. EXTINÇÃO DO ESTABELECIMENTO. (RR-0000290-29.2024.5.21.0013, Tribunal Pleno, publicado em 03.09.2025, rel. Min. Aloysio Silva Corrêa da Veiga)\nA estabilidade provisória do cipeiro não constitui vantagem pessoal, mas garantia para as atividades dos membros da CIPA, que somente tem razão de ser quando em atividade a empresa. Extinto o estabelecimento, não se verifica a despedida arbitrária, sendo impossível a reintegração e indevida a indenização do períodoestabilitário.",
     "tema": "CIPA. SUPLENTE. GARANTIA DE EMPREGO. CF/1988",
-    "base_legal": [],
+    "base_legal": [
+      "Lei 8.213/91 Art. 118"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -2699,7 +2768,9 @@
     "numero": "340",
     "texto": "O empregado, sujeito a controle de horário, remunerado à base de comissões, tem direito ao adicional de, no mínimo, 50% (cinqüenta por cento) pelo trabalho em horas extras, calculado sobre o valor-hora das comissões recebidas no mês, considerando-se como divisor o número de horas efetivamente trabalhadas.",
     "tema": "COMISSIONISTA. HORAS EXTRAS",
-    "base_legal": [],
+    "base_legal": [
+      "CF Art. 8º VIII"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -2715,7 +2786,9 @@
     "numero": "342",
     "texto": "Descontos salariais efetuados pelo empregador, com a autorização prévia e por escrito do empregado, para ser integrado em planos de assistência odontológica, médico-hospitalar, de seguro, de previdência privada, ou de entidade cooperativa, cultural ou recreativo-associativa de seus trabalhadores, em seu benefício e de seus dependentes, não afrontam o disposto no art. 462 da CLT, salvo se ficar demonstrada a existência de coação ou de outro defeito que vicie o ato jurídico.",
     "tema": "DESCONTOS SALARIAIS. ART. 462 DA CLT",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 462"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -2747,7 +2820,9 @@
     "numero": "346",
     "texto": "Os digitadores, por aplicação analógica do art. 72 da CLT, equiparam-se aos trabalhadores nos serviços de mecanografia (datilografia, escrituração ou cálculo), razão pela qual têm direito a intervalos de descanso de 10 (dez) minutos a cada 90 (noventa) de trabalho consecutivo.",
     "tema": "DIGITADOR. INTERVALOS INTRAJORNADA. APLICAÇÃO ANALÓGICA DO ART. 72 DA CLT",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 72"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -2771,7 +2846,9 @@
     "numero": "349",
     "texto": "A validade de acordo coletivo ou convenção coletiva de compensação de jornada de trabalho em atividade insalubre prescinde da inspeção prévia da autoridade competente em matéria de higiene do trabalho (art. 7º, XIII, da CF/1988; art. 60 da CLT).",
     "tema": "ACORDO DE COMPENSAÇÃO DE HORÁRIO EM ATIVIDADE INSALUBRE, CELEBRADO POR ACORDO COLETIVO. VALIDADE",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 73"
+    ],
     "situacao": "cancelada",
     "data_aprovacao": ""
   },
@@ -2811,7 +2888,9 @@
     "numero": "354",
     "texto": "As gorjetas, cobradas pelo empregador na nota de serviço ou oferecidas espontaneamente pelos clientes, integram a remuneração do empregado, não servindo de base de cálculo para as parcelas de aviso-prévio, adicional noturno, horas extras e repouso semanal remunerado.\nIRR-234 GORJETAS. NATUREZA JURÍDICA. REPERCUSSÕES. (RR-0000860-07.2024.5.13.0023, Tribunal Pleno, publicado em 29.08.2025, rel. Min. Aloysio Silva Corrêa da Veiga)\nAs gorjetas, cobradas pelo empregador na nota de serviço ou oferecidas espontaneamente pelos clientes, integram a remuneração do empregado, não servindo de base de cálculo para as parcelas de aviso-prévio, adicional noturno, horas extraordinárias e repouso semanal remunerado.",
     "tema": "GORJETAS. NATUREZA JURÍDICA. REPERCUSSÕES.",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 457 §3º"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -2883,7 +2962,10 @@
     "numero": "363",
     "texto": "A contratação de servidor público, após a CF/1988, sem prévia aprovação em concurso público, encontra óbice no respectivo art. 37, II e § 2º, somente lhe conferindo direito ao pagamento da contraprestação pactuada, em relação ao número de horas trabalhadas, respeitado o valor da hora do salário mínimo, e dos valores referentes aos depósitos do FGTS.\nIRR-233 CONTRATO NULO. EFEITOS. (RR-0000796-12.2022.5.08.0118, Tribunal Pleno, publicado em 01.09.2025, rel. Min. Aloysio Silva Corrêa da Veiga)\nA contratação de servidor público, após a Constituição da República de 1988, sem prévia aprovação em concurso público, encontra óbice no respectivo art. 37, II e § 2º, somente lhe conferindo direito ao pagamento da contraprestação pactuada, em relação ao número de horas trabalhadas, respeitado o valor da hora do salário mínimo, e dos valores referentes aos depósitos do FGTS.",
     "tema": "CONTRATO NULO. EFEITOS",
-    "base_legal": [],
+    "base_legal": [
+      "CF Art. 37 II",
+      "CF Art. 37 §2º"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -2907,7 +2989,9 @@
     "numero": "366",
     "texto": "Não serão descontadas nem computadas como jornada extraordinária as variações de horário do registro de ponto não excedentes de cinco minutos, observado o limite máximo de dez minutos diários. Se ultrapassado esse limite, será considerada como extra a totalidade do tempo que exceder a jornada normal, pois configurado tempo à disposição do empregador, não importando as atividades desenvolvidas pelo empregado ao longo do tempo residual (troca de uniforme, lanche, higiene pessoal, etc).",
     "tema": "CARTÃO DE PONTO. REGISTRO. HORAS EXTRAS. MINUTOS QUE ANTECEDEM E SUCEDEM A JORNADA DE TRABALHO",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 74 §2º"
+    ],
     "situacao": "cancelada",
     "data_aprovacao": ""
   },
@@ -2931,7 +3015,9 @@
     "numero": "369",
     "texto": "I - É assegurada a estabilidade provisória ao empregado dirigente sindical, ainda que a comunicação do registro da candidatura ou da eleição e da posse seja realizada fora do prazo previsto no art. 543, § 5º, da CLT, desde que a ciência ao empregador, por qualquer meio, ocorra na vigência do contrato de trabalho.\nII - O art. 522 da CLT foi recepcionado pela Constituição Federal de 1988. Fica limitada, assim, a estabilidade a que alude o art. 543, § 3.º, da CLT a sete dirigentes sindicais e igual número de suplentes.\nIII - O empregado de categoria diferenciada eleito dirigente sindical só goza de estabilidade se exercer na empresa atividade pertinente à categoria profissional do sindicato para o qual foi eleito dirigente. (ex-OJ nº 145 da SBDI-I - inserida em 27.11.1998)\nIV - Havendo extinção da atividade empresarial no âmbito da base territorial do sindicato, não há razão para subsistir a estabilidade. (ex-OJ nº 86 da SBDI-I - inserida em 28.04.1997)\nV - O registro da candidatura do empregado a cargo de dirigente sindical durante o período de aviso prévio, ainda que indenizado, não lhe assegura a estabilidade, visto que inaplicável a regra do § 3º do art. 543 da Consolidação das Leis do Trabalho. (ex-OJ nº 35 da SBDI-I - inserida em 14.03.1994)",
     "tema": "DIRIGENTE SINDICAL. ESTABILIDADE PROVISÓRIA",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 543 §3º"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -2939,7 +3025,9 @@
     "numero": "370",
     "texto": "Tendo em vista que as Leis nº 3.999/1961 e 4.950-A/1966 não estipulam a jornada reduzida, mas apenas estabelecem o salário mínimo da categoria para uma jornada de 4 horas para os médicos e de 6 horas para os engenheiros, não há que se falar em horas extras, salvo as excedentes à oitava, desde que seja respeitado o salário mínimo/horário das categorias.\nIRR-216 MÉDICO E ENGENHEIRO. JORNADA DE TRABALHO. LEIS Nos 3.999/1961 E 4.950-A/1966. (RR-0000014-52.2024.5.20.0004, Tribunal Pleno, publicado em 02.09.2025, rel. Min. Aloysio Silva Corrêa da Veiga) \nTendo em vista que as Leis nº 3.999/1961 e 4.950-A/1966 não estipulam a jornada reduzida, mas apenas estabelecem o salário mínimo da categoria para uma jornada de 4 horas para os médicos e de 6 horas para os engenheiros, não há que se falar em horas extraordinárias, salvo as excedentes à oitava, desde que seja respeitado o salário mínimo/horário das categorias.",
     "tema": "MÉDICO E ENGENHEIRO. JORNADA DE TRABALHO. LEIS Nos 3.999/1961 E 4.950-A/1966",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 511"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -2947,7 +3035,9 @@
     "numero": "371",
     "texto": "A projeção do contrato de trabalho para o futuro, pela concessão do aviso prévio indenizado, tem efeitos limitados às vantagens econômicas obtidas no período de pré-aviso, ou seja, salários, reflexos e verbas rescisórias. No caso de concessão de auxílio-doença no curso do aviso prévio, todavia, só se concretizam os efeitos da dispensa depois de expirado o benefício previdenciário. (ex-OJs nºs 40 e 135 da SBDI-I – inseridas, respectivamente, em 28.11.1995 e 27.11.1998)",
     "tema": "AVISO PRÉVIO INDENIZADO. EFEITOS. SUPERVENIÊNCIA DE AUXÍLIO-DOENÇA NO CURSO DESTE",
-    "base_legal": [],
+    "base_legal": [
+      "CF Art. 7º XIII"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -2955,7 +3045,9 @@
     "numero": "372",
     "texto": "I - Percebida a gratificação de função por dez ou mais anos pelo empregado, se o empregador, sem justo motivo, revertê-lo a seu cargo efetivo, não poderá retirar-lhe a gratificação tendo em vista o princípio da estabilidade financeira. (item cancelado por perda de eficácia a partir de 11.11.2017, pela Lei 13.467/2017) – Res. 225/2025, DEJT divulgado em 30.06, 01 e 02.07.2025\nII - Mantido o empregado no exercício da função comissionada, não pode o empregador reduzir o valor da gratificação. (ex-OJ nº 303 da SBDI-I - DJ 11.08.2003)",
     "tema": "GRATIFICAÇÃO DE FUNÇÃO. SUPRESSÃO OU REDUÇÃO. LIMITES",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 468"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -3003,7 +3095,9 @@
     "numero": "378",
     "texto": "I - É constitucional o artigo 118 da Lei nº 8.213/1991 que assegura o direito à estabilidade provisória por período de 12 meses após a cessação do auxílio-doença ao empregado acidentado. (ex-OJ nº 105 da SBDI-I - inserida em 01.10.1997)\nII - São pressupostos para a concessão da estabilidade o afastamento superior a 15 dias e a conseqüente percepção do auxílio-doença acidentário, salvo se constatada, após a despedida, doença profissional que guarde relação de causalidade com a execução do contrato de emprego. (primeira parte - ex-OJ nº 230 da SBDI-I - inserida em 20.06.2001).\nIII – O empregado submetido a contrato de trabalho por tempo determinado goza da garantia provisória de emprego decorrente de acidente de trabalho prevista no art. 118 da Lei nº 8.213/91.",
     "tema": "ESTABILIDADE PROVISÓRIA. ACIDENTE DO TRABALHO. ART. 118 DA LEI Nº 8.213/1991.",
-    "base_legal": [],
+    "base_legal": [
+      "Lei 8.213/91 Art. 118"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -3027,7 +3121,9 @@
     "numero": "381",
     "texto": "O pagamento dos salários até o 5º dia útil do mês subseqüente ao vencido não está sujeito à correção monetária. Se essa data limite for ultrapassada, incidirá o índice da correção monetária do mês subseqüente ao da prestação dos serviços, a partir do dia 1º. (ex-OJ nº 124 da SBDI-I - inserida em 20.04.1998)",
     "tema": "CORREÇÃO MONETÁRIA. SALÁRIO. ART. 459 DA CLT",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 790-B"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -3035,7 +3131,9 @@
     "numero": "382",
     "texto": "A transferência do regime jurídico de celetista para estatutário implica extinção do contrato de trabalho, fluindo o prazo da prescrição bienal a partir da mudança de regime. (ex-OJ nº 128 da SBDI-I - inserida em 20.04.1998)\nIRR-218 MUDANÇA DE REGIME CELETISTA PARA ESTATUTÁRIO. EXTINÇÃO DO CONTRATO. PRESCRIÇÃO BIENAL. (RR-0000034-30.2019.5.05.0491, Tribunal Pleno, publicado em 02.09.2025, rel. Min. Aloysio Silva Corrêa da Veiga)\nA transferência do regime jurídico de celetista para estatutário implica extinção do contrato de trabalho, fluindo o prazo da prescrição bienal a partir da mudança de regime.",
     "tema": "MUDANÇA DE REGIME CELETISTA PARA ESTATUTÁRIO. EXTINÇÃO DO CONTRATO. PRESCRIÇÃO BIENAL",
-    "base_legal": [],
+    "base_legal": [
+      "CF Art. 7º XXIX"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -3059,7 +3157,9 @@
     "numero": "385",
     "texto": "I – Incumbe à parte o ônus de provar, quando da interposição do recurso, a existência de feriado local que autorize a prorrogação do prazo recursal (art. 1.003, § 6º, do CPC de 2015). No caso de o recorrente alegar a existência de feriado local e não o comprovar no momento da interposição do recurso, cumpre ao relator conceder o prazo de 5 (cinco) dias para que seja sanado o vício (art. 932, parágrafo único, do CPC de 2015), sob pena de não conhecimento se da comprovação depender a tempestividade recursal;\nII – Na hipótese de feriado forense, incumbirá à autoridade que proferir a decisão de admissibilidade certificar o expediente nos autos;\nIII – Admite-se a reconsideração da análise da tempestividade do recurso, mediante prova documental superveniente, em agravo de instrumento, agravo interno, agravo regimental, ou embargos de declaração, desde que, em momento anterior, não tenha havido a concessão de prazo para a comprovação da ausência de expediente forense.",
     "tema": "FERIADO LOCAL OU FORENSE. AUSÊNCIA DE EXPEDIENTE. PRAZO RECURSAL. PRORROGAÇÃO. COMPROVAÇÃO. NECESSIDADE",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 767"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -3067,7 +3167,9 @@
     "numero": "386",
     "texto": "Preenchidos os requisitos do art. 3º da CLT, é legítimo o reconhecimento de relação de emprego entre policial militar e empresa privada, independentemente do eventual cabimento de penalidade disciplinar prevista no Estatuto do Policial Militar.\n\nIRR-270 POLICIAL MILITAR. RECONHECIMENTO DE VÍNCULO EMPREGATÍCIO COM EMPRESA PRIVADA. (RR-1001078-02.2023.5.02.0462, Tribunal Pleno, publicado em 02.09.2025, rel. Min. Aloysio Silva Corrêa da Veiga)\nPreenchidos os requisitos do art. 3º da CLT, é legítimo o reconhecimento de relação de emprego entre policial militar e empresa privada, independentemente do eventual cabimento de penalidade disciplinar prevista no Estatuto do Policial Militar.",
     "tema": "POLICIAL MILITAR. RECONHECIMENTO DE VÍNCULO EMPREGATÍCIO COM EMPRESA PRIVADA",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 3º"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -3091,7 +3193,9 @@
     "numero": "389",
     "texto": "I - Inscreve-se na competência material da Justiça do Trabalho a lide entre empregado e empregador tendo por objeto indenização pelo não-fornecimento das guias do seguro-desemprego. (ex-OJ nº 210 da SBDI-I - inserida em 08.11.2000)\nII - O não-fornecimento pelo empregador da guia necessária para o recebimento do seguro-desemprego dá origem ao direito à indenização. (ex-OJ nº 211 da SBDI-I - inserida em 08.11.2000)",
     "tema": "SEGURO-DESEMPREGO. COMPETÊNCIA DA JUSTIÇA DO TRABALHO. DIREITO À INDENIZAÇÃO POR NÃO LIBERAÇÃO DE GUIAS",
-    "base_legal": [],
+    "base_legal": [
+      "Lei 7.998/90"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -3099,7 +3203,9 @@
     "numero": "390",
     "texto": "I - O servidor público celetista da administração direta, autárquica ou fundacional é beneficiário da estabilidade prevista no art. 41 da CF/1988. (ex-OJs nºs 265 da SBDI-I - inserida em 27.09.2002 - e 22 da SBDI-II - inserida em 20.09.00)\nII - Ao empregado de empresa pública ou de sociedade de economia mista, ainda que admitido mediante aprovação em concurso público, não é garantida a estabilidade prevista no art. 41 da CF/1988. (ex-OJ nº 229 da SBDI-I - inserida em 20.06.2001)",
     "tema": "ESTABILIDADE. ART. 41 DA CF/1988. CELETISTA. ADMINISTRAÇÃO DIRETA, AUTÁRQUICA OU FUNDACIONAL. APLICABILIDADE. EMPREGADO DE EMPRESA PÚBLICA E SOCIEDADE DE ECONOMIA MISTA. INAPLICÁVEL",
-    "base_legal": [],
+    "base_legal": [
+      "LC 150/2015"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -3107,7 +3213,9 @@
     "numero": "391",
     "texto": "I - A Lei nº 5.811/1972 foi recepcionada pela CF/88 no que se refere à duração da jornada de trabalho em regime de revezamento dos petroleiros. (ex-OJ nº 240 da SBDI-I - inserida em 20.06.2001)\nII - A previsão contida no art. 10 da Lei nº 5.811/1972, possibilitando a mudança do regime de revezamento para horário fixo, constitui alteração lícita, não violando os arts. 468 da CLT e 7º, VI, da CF/1988. (ex-OJ nº 333 da SBDI-I - DJ 09.12.2003)",
     "tema": "PETROLEIROS. LEI Nº 5.811/1972. TURNO ININTERRUPTO DE REVEZAMENTO. HORAS EXTRAS E ALTERAÇÃO DA JORNADA PARA HORÁRIO FIXO",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 840 §1º"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -3115,7 +3223,9 @@
     "numero": "392",
     "texto": "Nos termos do art. 114, inc. VI, da Constituição da República, a Justiça do Trabalho é competente para processar e julgar ações de indenização por dano moral e material, decorrentes da relação de trabalho, inclusive as oriundas de acidente de trabalho e doenças a ele equiparadas, ainda que propostas pelos dependentes ou sucessores do trabalhador falecido.\nIRR-224 DANO MORAL E MATERIAL. RELAÇÃO DE TRABALHO. COMPETÊNCIA DA JUSTIÇA DO TRABALHO. (RR-0000146-58.2022.5.05.0017, Tribunal Pleno, publicado em 02.09.2025, rel. Min. Aloysio Silva Corrêa da Veiga)\nNos termos do art. 114, inc. VI, da Constituição da República, a Justiça do Trabalho é competente para processar e julgar ações de indenização por dano moral e material, decorrentes da relação de trabalho, inclusive as oriundas de acidente de trabalho e doenças a ele equiparadas, ainda que propostas pelos dependentes ou sucessores do trabalhador falecido.",
     "tema": "DANO MORAL E MATERIAL. RELAÇÃO DE TRABALHO. COMPETÊNCIA DA JUSTIÇA DO TRABALHO",
-    "base_legal": [],
+    "base_legal": [
+      "ADCT Art. 10 II b"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -3147,7 +3257,9 @@
     "numero": "396",
     "texto": "I - Exaurido o período de estabilidade, são devidos ao empregado apenas os salários do período compreendido entre a data da despedida e o final do período de estabilidade, não lhe sendo assegurada a reintegração no emprego. (ex-OJ nº 116 da SBDI-I - inserida em 01.10.1997)\nII - Não há nulidade por julgamento “extra petita” da decisão que deferir salário quando o pedido for de reintegração, dados os termos do art. 496 da CLT. (ex-OJ nº 106 da SBDI-I - inserida em 20.11.1997)",
     "tema": "ESTABILIDADE PROVISÓRIA. PEDIDO DE REINTEGRAÇÃO. CONCESSÃO DO SALÁRIO RELATIVO AO PERÍODO DE ESTABILIDADE JÁ EXAURIDO. INEXISTÊNCIA DE JULGAMENTO \"EXTRA PETITA\"",
-    "base_legal": [],
+    "base_legal": [
+      "Lei 7.418/85"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -3203,7 +3315,9 @@
     "numero": "403",
     "texto": "I - Não caracteriza dolo processual, previsto no art. 485, III, do CPC, o simples fato de a parte vencedora haver silenciado a respeito de fatos contrários a ela, porque o procedimento, por si só, não constitui ardil do qual resulte cerceamento de defesa e, em consequência, desvie o juiz de uma sentença não-condizente com a verdade. (ex-OJ nº 125 da SBDI-II - DJ 09.12.2003)\nII - Se a decisão rescindenda é homologatória de acordo, não há parte vencedora ou vencida, razão pela qual não é possível a sua desconstituição calcada no inciso III do art. 485 do CPC (dolo da parte vencedora em detrimento da vencida), pois constitui fundamento de rescindibilidade que supõe solução jurisdicional para a lide. (ex-OJ nº 111 da SBDI-II - DJ 29.04.2003)",
     "tema": "AÇÃO RESCISÓRIA. DOLO DA PARTE VENCEDORA EM DETRIMENTO DA VENCIDA. ART. 485, III, DO CPC",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 193"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -3347,7 +3461,9 @@
     "numero": "421",
     "texto": "I – Cabem embargos de declaração da decisão monocrática do relator prevista no art. 932 do CPC de 2015 (art. 557 do CPC de 1973), se a parte pretende tão somente juízo integrativo retificador da decisão e, não, modificação do julgado.\nII – Se a parte postular a revisão no mérito da decisão monocrática, cumpre ao relator converter os embargos de declaração em agravo, em face dos princípios da fungibilidade e celeridade processual, submetendo-o ao pronunciamento do Colegiado, após a intimação do recorrente para, no prazo de 5 (cinco) dias, complementar as razões recursais, de modo a ajustá-las às exigências do art. 1.021, § 1º, do CPC de 2015.",
     "tema": "EMBARGOS DE DECLARAÇÃO. CABIMENTO. DECISÃO MONOCRÁTICA DO RELATOR CALCADA NO ART. 932 do CPC DE 2015. ART. 557 DO CPC de 1973.",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 193"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -3355,7 +3471,9 @@
     "numero": "422",
     "texto": "I – Não se conhece de recurso para o Tribunal Superior do Trabalho se as razões do recorrente não impugnam os fundamentos da decisão recorrida, nos termos em que proferida. \nII – O entendimento referido no item anterior não se aplica em relação à motivação secundária e impertinente, consubstanciada em despacho de admissibilidade de recurso ou em decisão monocrática.\nIII – Inaplicável a exigência do item I relativamente ao recurso ordinário da competência de Tribunal Regional do Trabalho, exceto em caso de recurso cuja motivação é inteiramente dissociada dos fundamentos da sentença.",
     "tema": "RECURSO. FUNDAMENTO AUSENTE OU DEFICIENTE. NÃO CONHECIMENTO",
-    "base_legal": [],
+    "base_legal": [
+      "CF Art. 7º XIV"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -3403,7 +3521,9 @@
     "numero": "428",
     "texto": "I - O uso de instrumentos telemáticos ou informatizados fornecidos pela empresa ao empregado, por si só, não caracteriza o regime de sobreaviso.\nII - Considera-se em sobreaviso o empregado que, à distância e submetido a controle patronal por instrumentos telemáticos ou informatizados, permanecer em regime de plantão ou equivalente, aguardando a qualquer momento o chamado para o serviço durante o período de descanso.",
     "tema": "SOBREAVISO. APLICAÇÃO ANALÓGICA DO ART. 244, § 2º DA CLT",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 477"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -3475,7 +3595,9 @@
     "numero": "437",
     "texto": "I - Após a edição da Lei nº 8.923/94, a não concessão ou a concessão parcial do intervalo intrajornada mínimo, para repouso e alimentação, a empregados urbanos e rurais, implica o pagamento total do período correspondente, e não apenas daquele suprimido, com acréscimo de, no mínimo, 50% sobre o valor da remuneração da hora normal de trabalho (art. 71 da CLT), sem prejuízo do cômputo da efetiva jornada de labor para efeito de remuneração. \nII - É inválida cláusula de acordo ou convenção coletiva de trabalho contemplando a supressão ou redução do intervalo intrajornada porque este constitui medida de higiene, saúde e segurança do trabalho, garantido por norma de ordem pública (art. 71 da CLT e art. 7º, XXII, da CF/1988), infenso à negociação coletiva. \nIII - Possui natureza salarial a parcela prevista no art. 71, § 4º, da CLT, com redação introduzida pela Lei nº 8.923, de 27 de julho de 1994, quando não concedido ou reduzido pelo empregador o intervalo mínimo intrajornada para repouso e alimentação, repercutindo, assim, no cálculo de outras parcelas salariais.\nIV - Ultrapassada habitualmente a jornada de seis horas de trabalho, é devido o gozo do intervalo intrajornada mínimo de uma hora, obrigando o empregador a remunerar o período para descanso e alimentação não usufruído como extra, acrescido do respectivo adicional, na forma prevista no art. 71, caput e § 4º da CLT.",
     "tema": "INTERVALO INTRAJORNADA PARA REPOUSO E ALIMENTAÇÃO. APLICAÇÃO DO ART. 71 DA CLT.",
-    "base_legal": [],
+    "base_legal": [
+      "CF Art. 114 II"
+    ],
     "situacao": "cancelada",
     "data_aprovacao": ""
   },
@@ -3499,7 +3621,9 @@
     "numero": "440",
     "texto": "Assegura-se o direito à manutenção de plano de saúde ou de assistência médica oferecido pela empresa ao empregado, não obstante suspenso o contrato de trabalho em virtude de auxílio-doença acidentário ou de aposentadoria por invalidez.\nIRR-220 AUXÍLIO-DOENÇA ACIDENTÁRIO. APOSENTADORIA POR INVALIDEZ. SUSPENSÃO DO CONTRATO DE TRABALHO. RECONHECIMENTO DO DIREITO À MANUTENÇÃO DE PLANO DE SAÚDE OU DE ASSISTÊNCIA MÉDICA. (RR-0000103-05.2024.5.05.0421, Tribunal Pleno, publicado em 05.09.2025, rel. Min. Aloysio Silva Corrêa da Veiga)\nAssegura-se o direito à manutenção de plano de saúde ou de assistência médica oferecido pela empresa ao empregado, não obstante suspenso o contrato de trabalho em razão de auxílio-doença acidentário ou de aposentadoria por invalidez, nas mesmas condições em que usufruída a vantagem no período anterior à suspensão contratual.",
     "tema": "AUXÍLIO-DOENÇA ACIDENTÁRIO. APOSENTADORIA POR INVALIDEZ. SUSPENSÃO DO CONTRATO DE TRABALHO. RECONHECIMENTO DO DIREITO À MANUTENÇÃO DE PLANO DE SAÚDE OU DE ASSISTÊNCIA MÉDICA",
-    "base_legal": [],
+    "base_legal": [
+      "Lei 8.213/91 Art. 118"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -3523,7 +3647,10 @@
     "numero": "443",
     "texto": "Presume-se discriminatória a despedida de empregado portador do vírus HIV ou de outra doença grave que suscite estigma ou preconceito. Inválido o ato, o empregado tem direito à reintegração no emprego.\nIRR-254 DISPENSA DISCRIMINATÓRIA. PRESUNÇÃO. EMPREGADO PORTADOR DE DOENÇA GRAVE. ESTIGMA OU PRECONCEITO. DIREITO À REINTEGRAÇÃO. (RR-0011349-11.2022.5.15.0026, Tribunal Pleno, publicado em 05.09.2025, rel. Min. Aloysio Silva Corrêa da Veiga)\nPresume-se discriminatória a despedida de empregado portador do vírus HIV ou de outra doença grave que suscite estigma ou preconceito. Inválido o ato, o empregado tem direito à reintegração no emprego.",
     "tema": "DISPENSA DISCRIMINATÓRIA. PRESUNÇÃO. EMPREGADO PORTADOR DE DOENÇA GRAVE. ESTIGMA OU PRECONCEITO. DIREITO À REINTEGRAÇÃO",
-    "base_legal": [],
+    "base_legal": [
+      "CF Art. 7º I",
+      "Lei 9.029/95"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -3531,7 +3658,9 @@
     "numero": "444",
     "texto": "É valida, em caráter excepcional, a jornada de doze horas de trabalho por trinta e seis de descanso, prevista em lei ou ajustada exclusivamente mediante acordo coletivo de trabalho ou convenção coletiva de trabalho, assegurada a remuneração em dobro dos feriados trabalhados. O empregado não tem direito ao pagamento de adicional referente ao labor prestado na décima primeira e décima segunda horas.",
     "tema": "JORNADA DE TRABALHO. NORMA COLETIVA. LEI. ESCALA DE 12 POR 36. VALIDADE.",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 59-A"
+    ],
     "situacao": "cancelada",
     "data_aprovacao": ""
   },
@@ -3579,7 +3708,9 @@
     "numero": "450",
     "texto": "É devido o pagamento em dobro da remuneração de férias, incluído o terço constitucional, com base no art. 137 da CLT, quando, ainda que gozadas na época própria, o empregador tenha descumprido o prazo previsto no art. 145 do mesmo diploma legal.",
     "tema": "FÉRIAS. GOZO NA ÉPOCA PRÓPRIA. PAGAMENTO FORA DO PRAZO. DOBRA DEVIDA. ARTS. 137 E 145 DA CLT.",
-    "base_legal": [],
+    "base_legal": [
+      "Lei 12.506/2011"
+    ],
     "situacao": "cancelada",
     "data_aprovacao": ""
   },
@@ -3587,7 +3718,9 @@
     "numero": "451",
     "texto": "Fere o princípio da isonomia instituir vantagem mediante acordo coletivo ou norma regulamentar que condiciona a percepção da parcela participação nos lucros e resultados ao fato de estar o contrato de trabalho em vigor na data prevista para a distribuição dos lucros. Assim, inclusive na rescisão contratual antecipada, é devido o pagamento da parcela de forma proporcional aos meses trabalhados, pois o ex-empregado concorreu para os resultados positivos da empresa.",
     "tema": "PARTICIPAÇÃO NOS LUCROS E RESULTADOS. RESCISÃO CONTRATUAL ANTERIOR À DATA DA DISTRIBUIÇÃO DOS LUCROS. PAGAMENTO PROPORCIONAL AOS MESES TRABALHADOS. PRINCÍPIO DA ISONOMIA.",
-    "base_legal": [],
+    "base_legal": [
+      "CF Art. 7º XXVI"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -3595,7 +3728,10 @@
     "numero": "452",
     "texto": "Tratando-se de pedido de pagamento de diferenças salariais decorrentes da inobservância dos critérios de promoção estabelecidos em Plano de Cargos e Salários criado pela empresa, a prescrição aplicável é a parcial, pois a lesão é sucessiva e se renova mês a mês.",
     "tema": "DIFERENÇAS SALARIAIS. PLANO DE CARGOS E SALÁRIOS. DESCUMPRIMENTO. CRITÉRIOS DE PROMOÇÃO NÃO OBSERVADOS. PRESCRIÇÃO PARCIAL.",
-    "base_legal": [],
+    "base_legal": [
+      "CF Art. 5º V e X",
+      "CC Art. 186"
+    ],
     "situacao": "cancelada",
     "data_aprovacao": ""
   },
@@ -3611,7 +3747,9 @@
     "numero": "454",
     "texto": "Compete à Justiça do Trabalho a execução, de ofício, da contribuição referente ao Seguro de Acidente de Trabalho (SAT), que tem natureza de contribuição para a seguridade social (arts. 114, VIII, e 195, I, “a”, da CF), pois se destina ao financiamento de benefícios relativos à incapacidade do empregado decorrente de infortúnio no trabalho (arts. 11 e 22 da Lei nº 8.212/1991).\nIRR-229 COMPETÊNCIA DA JUSTIÇA DO TRABALHO. EXECUÇÃO DE OFÍCIO. CONTRIBUIÇÃO SOCIAL REFERENTE AO SEGURO DE ACIDENTE DE TRABALHO (SAT). ARTS. 114, VIII, E 195, I, “A”, DA CONSTITUIÇÃO DA REPÚBLICA DE 1988. (RR-0000420-65.2024.5.13.0005, Tribunal Pleno, publicado em 09.09.2025, rel. Min. Aloysio Silva Corrêa da Veiga)\nCompete à Justiça do Trabalho a execução, de ofício, da contribuição referente ao Seguro de Acidente de Trabalho (SAT),que tem natureza de contribuição para a seguridade social (arts.114, VIII, e 195, I, “a\", da Constituição da República de 1988), pois se destina ao financiamento de benefícios relativos à incapacidade do empregado decorrente de infortúnio no trabalho (arts. 11 e 22 da Lei nº 8.212/1991).",
     "tema": "COMPETÊNCIA DA JUSTIÇA DO TRABALHO. EXECUÇÃO DE OFÍCIO. CONTRIBUIÇÃO SOCIAL REFERENTE AO SEGURO DE ACIDENTE DE TRABALHO",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 193"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -3659,7 +3797,9 @@
     "numero": "460",
     "texto": "É do empregador o ônus de comprovar que o empregado não satisfaz os requisitos indispensáveis para a concessão do vale-transporte ou não pretenda fazer uso do benefício.\nIRR-232 VALE-TRANSPORTE. ÔNUS DA PROVA. (RR-0000517-12.2024.5.19.0001, Tribunal Pleno, publicado em 02.09.2025, rel. Min. Aloysio Silva Corrêa da Veiga)\n É do empregador o ônus de comprovar que o empregado não satisfaz os requisitos indispensáveis para a concessão do vale-transporte ou não pretenda fazer uso do benefício.",
     "tema": "VALE-TRANSPORTE. ÔNUS DA PROVA",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 459"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -3667,7 +3807,9 @@
     "numero": "461",
     "texto": "É do empregador o ônus da prova em relação à regularidade dos depósitos do FGTS, pois o pagamento é fato extintivo do direito do autor (art. 373, II, do CPC de 2015).\nIRR-273 FGTS. DIFERENÇAS. RECOLHIMENTO. (RR-1001992-22.2023.5.02.0606, Tribunal Pleno, publicado em 02.09.2025, rel. Min. Aloysio Silva Corrêa da Veiga)\nÉ do empregador o ônus da prova em relação à regularidade dos depósitos do FGTS, pois o pagamento é fato extintivo do direito do autor (art. 373, II, do CPC de 2015).",
     "tema": "FGTS. DIFERENÇAS. RECOLHIMENTO. ÔNUS DA PROVA",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 775"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   },
@@ -3683,7 +3825,9 @@
     "numero": "463",
     "texto": "I – A partir de 26.06.2017, para a concessão da assistência judiciária gratuita à pessoa natural, basta a declaração de hipossuficiência econômica firmada pela parte ou por seu advogado, desde que munido de procuração com poderes específicos para esse fim (art. 105 do CPC de 2015);\nII – No caso de pessoa jurídica, não basta a mera declaração: é necessária a demonstração cabal de impossibilidade de a parte arcar com as despesas do processo.\n\n\n\n\n\n\n\nOrientação Jurisprudencial \n\ndo\n\nTribunal Superior do Trabalho\n\nTribunal Pleno/Órgão Especial",
     "tema": "aSSISTÊNCIA JUDICIÁRIA GRATUITA. COMPROVAÇÃO",
-    "base_legal": [],
+    "base_legal": [
+      "CLT Art. 461"
+    ],
     "situacao": "vigente",
     "data_aprovacao": ""
   }
