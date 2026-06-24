@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from juris import __version__
 from juris.web.demo_service import DemoRunError, WebDemoRunRequest, execute_demo_run
+from juris.web.processos_service import list_processos
 
 app = FastAPI(
     title="Juris Web",
@@ -41,6 +42,12 @@ class DemoRunPayload(BaseModel):
 async def health() -> dict[str, str]:
     """Health check for the local web UI."""
     return {"status": "ok", "version": __version__}
+
+
+@app.get("/api/processos")
+async def get_processos() -> dict[str, object]:
+    """List the lawyer's imported processos with their nearest pending prazo."""
+    return {"processos": [v.to_dict() for v in list_processos()]}
 
 
 @app.get("/", response_class=HTMLResponse)

@@ -20,6 +20,31 @@ def test_index_renders_local_ui() -> None:
     assert response.status_code == 200
     assert "Novo caso" in response.text
     assert "Gerar artefatos" in response.text
+    assert "Meus processos" in response.text
+
+
+def test_list_processos_endpoint_returns_views(monkeypatch) -> None:
+    app_module = importlib.import_module("juris.web.app")
+    from juris.web.processos_service import ProcessoView
+
+    view = ProcessoView(
+        numero_cnj="5082351-40.2017.8.13.0024",
+        tribunal="tjmg",
+        classe="Procedimento Comum",
+        assunto="Cobrança",
+        last_sync_at=None,
+        prazos_pendentes=1,
+        proximo_prazo=None,
+        proximo_prazo_urgencia="alta",
+    )
+    monkeypatch.setattr(app_module, "list_processos", lambda: [view])
+
+    response = client.get("/api/processos")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["processos"][0]["numero_cnj"] == "5082351-40.2017.8.13.0024"
+    assert body["processos"][0]["prazos_pendentes"] == 1
 
 
 def test_create_demo_run_returns_artifact_previews(monkeypatch) -> None:

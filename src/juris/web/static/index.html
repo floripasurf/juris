@@ -188,6 +188,27 @@
       .tabs { border-right: 0; border-bottom: 1px solid var(--line); }
       .row { grid-template-columns: 1fr; }
     }
+    .processos-panel { grid-column: 1 / -1; padding: 24px; }
+    .proc-list { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+    .proc-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) auto auto;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+    }
+    .proc-cnj { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: var(--text); }
+    .proc-meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .proc-prazo { font-size: 13px; text-align: right; }
+    .proc-prazo .badge { font-weight: 720; }
+    .urg-alta { color: var(--danger); }
+    .urg-media { color: #b54708; }
+    .urg-baixa { color: var(--muted); }
+    .proc-row button { padding: 7px 14px; font-size: 13px; }
+    .proc-empty { color: var(--muted); font-size: 14px; margin-top: 12px; }
   </style>
 </head>
 <body>
@@ -197,6 +218,12 @@
   </header>
 
   <main>
+    <section class="processos-panel">
+      <h1>Meus processos</h1>
+      <p class="lede">Acervo importado do seu token. Conecte (<code>juris connect --cpf …</code>) para importar e manter atualizado; clique em "minuta" para redigir a partir de um processo.</p>
+      <div id="processos" class="proc-empty">Carregando…</div>
+    </section>
+
     <section class="form-panel">
       <h1>Novo caso</h1>
       <p class="lede">Gere rascunho de pesquisa ou minuta sugerida a partir do pipeline atual.</p>
@@ -351,6 +378,67 @@
         if (index === 0) preview.textContent = artifact.preview || "(sem prévia)";
       });
     }
+
+    const processosEl = document.querySelector("#processos");
+
+    const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString("pt-BR") : "—");
+
+    function useProcesso(cnj, tribunal) {
+      document.querySelector("#numero_cnj").value = cnj;
+      document.querySelector("#tribunal").value = tribunal;
+      document.querySelector("#source").value = "mni";
+      const target = document.querySelector("#numero_cnj");
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      target.focus();
+    }
+
+    function renderProcessos(items) {
+      if (!items.length) {
+        processosEl.className = "proc-empty";
+        processosEl.textContent =
+          "Nenhum processo importado ainda. Rode 'juris connect --cpf …' para importar seu acervo.";
+        return;
+      }
+      processosEl.className = "proc-list";
+      processosEl.innerHTML = "";
+      items.forEach((p) => {
+        const row = document.createElement("div");
+        row.className = "proc-row";
+        const urg = p.proximo_prazo_urgencia ? `urg-${p.proximo_prazo_urgencia}` : "urg-baixa";
+        const prazo = p.proximo_prazo
+          ? `<span class="badge ${urg}">${fmtDate(p.proximo_prazo)}</span>`
+          : '<span class="urg-baixa">sem prazo</span>';
+        const left = document.createElement("div");
+        left.innerHTML = `<div class="proc-cnj">${p.numero_cnj}</div><div class="proc-meta">${p.classe || "—"} · ${(p.tribunal || "").toUpperCase()}</div>`;
+        const mid = document.createElement("div");
+        mid.className = "proc-meta";
+        mid.textContent = p.assunto || "";
+        const right = document.createElement("div");
+        right.className = "proc-prazo";
+        right.innerHTML = `${prazo}<div class="proc-meta">${p.prazos_pendentes} prazo(s)</div>`;
+        const action = document.createElement("div");
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = "minuta";
+        btn.addEventListener("click", () => useProcesso(p.numero_cnj, p.tribunal));
+        action.appendChild(btn);
+        row.append(left, mid, right, action);
+        processosEl.appendChild(row);
+      });
+    }
+
+    async function loadProcessos() {
+      try {
+        const response = await fetch("/api/processos");
+        const data = await response.json();
+        renderProcessos(data.processos || []);
+      } catch (error) {
+        processosEl.className = "proc-empty";
+        processosEl.textContent = "Não foi possível carregar os processos.";
+      }
+    }
+
+    loadProcessos();
   </script>
 </body>
 </html>
