@@ -16,28 +16,12 @@ from juris.busca.models import (
     ResultadoBusca,
     ResultadoConsolidado,
 )
+from juris.busca.providers import get_profile
 from juris.busca.registry import ChannelRegistry
 from juris.core.observability import get_logger
 from juris.datajud.safety import ensure_batch_allowed
 
 logger = get_logger(__name__)
-
-# Channels considered reliable for party search (vs DataJud best-effort).
-_RELIABLE_SOURCES: frozenset[FonteOrigem] = frozenset({
-    FonteOrigem.ESAJ,
-    FonteOrigem.EPROC,
-    FonteOrigem.EJEF,
-    FonteOrigem.PROJUDI,
-})
-
-# Priority for field merging when the same CNJ appears in multiple channels.
-_SOURCE_PRIORITY: dict[FonteOrigem, int] = {
-    FonteOrigem.ESAJ: 5,
-    FonteOrigem.EPROC: 4,
-    FonteOrigem.EJEF: 3,
-    FonteOrigem.PROJUDI: 2,
-    FonteOrigem.DATAJUD: 1,
-}
 
 
 class SearchOrchestrator:
@@ -218,9 +202,9 @@ class SearchOrchestrator:
 
         consolidated: list[ResultadoConsolidado] = []
         for cnj, group in groups.items():
-            # Sort by priority (highest first)
+            # Sort by provider merge_priority (highest first)
             group.sort(
-                key=lambda r: _SOURCE_PRIORITY.get(r.fonte, 0),
+                key=lambda r: get_profile(r.fonte).merge_priority,
                 reverse=True,
             )
             best = group[0]
@@ -265,16 +249,14 @@ class SearchOrchestrator:
     ) -> ResultadoConsolidado:
         """Compute corroboration confidence score.
 
-        Scoring:
-        - Base 0.5 if found in a reliable channel (ESAJ/eProc/EJEF/PROJUDI)
-        - Base 0.3 if found only in DataJud
+        Scoring (ADR-0017 — trust/posture come from the provider profiles):
+        - Base = the best contributing source's trust (0.5 reliable, 0.3 DataJud)
         - +0.15 per additional corroborating source (capped at 1.0)
         - +0.1 if DataJud enrichment succeeded
         - +0.05 if CPF was used in the search
         """
         fontes = resultado.fontes
-        has_reliable = any(f in _RELIABLE_SOURCES for f in fontes)
-        base = 0.5 if has_reliable else 0.3
+        base = max((get_profile(f).base_confidence for f in fontes), default=0.3)
 
         extra_sources = max(0, len(fontes) - 1)
         score = base + (extra_sources * 0.15)
