@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import getpass
+from pathlib import Path
 
 import typer
 from rich.console import Console
@@ -451,18 +452,51 @@ def consulta_cert(
 
 @app.command()
 def track(
-    numero_cnj: str = typer.Argument(..., help="Case number to track"),
-    tribunal: str = typer.Option("tjmg", "--tribunal", "-t", help="Tribunal ID"),
+    numero_cnj: str = typer.Argument(None, help="Case number to track (omit when using --file)"),
+    tribunal: str = typer.Option("tjmg", "--tribunal", "-t", help="Tribunal ID (default if CNJ court unknown)"),
+    seed: str = typer.Option(None, "--file", "-f", help="Seed file: one CNJ per line (# comments ok)"),
 ) -> None:
-    """Add a processo to the tracked list for overnight sync."""
+    """Add processos to the tracked list for overnight sync.
+
+    Single:  juris track <numero_cnj>
+    Bulk:    juris track --file acervo.txt   (tribunal derived per CNJ)
+
+    The seed import is the manual half of process discovery: the lawyer's
+    historical acervo is imported once; from then on the differential sync and
+    'juris avisos --track' keep it current.
+    """
     import json
 
     from juris.core.credentials import store_credential
 
     tracked = _get_tracked_processos()
-    key = f"{tribunal}:{numero_cnj}"
+    existing_keys = {f"{p['tribunal']}:{p['numero_cnj']}" for p in tracked}
 
-    if key in {f"{p['tribunal']}:{p['numero_cnj']}" for p in tracked}:
+    if seed is not None:
+        entries, errors = _parse_cnj_seed(Path(seed).read_text(encoding="utf-8"), default_tribunal=tribunal)
+        added = 0
+        for entry in entries:
+            key = f"{entry['tribunal']}:{entry['numero_cnj']}"
+            if key in existing_keys:
+                continue
+            existing_keys.add(key)
+            tracked.append(entry)
+            added += 1
+        store_credential("tracked_processos", json.dumps(tracked))
+        console.print(f"[green]Seed import:[/green] {added} novo(s), {len(entries) - added} já rastreado(s).")
+        if errors:
+            console.print(f"[yellow]{len(errors)} linha(s) ignorada(s):[/yellow]")
+            for err in errors[:10]:
+                console.print(f"  - {err}")
+        console.print(f"[dim]Total tracked: {len(tracked)}[/dim]")
+        return
+
+    if not numero_cnj:
+        console.print("[red]Informe um numero_cnj ou use --file.[/red]")
+        raise typer.Exit(code=1)
+
+    key = f"{tribunal}:{numero_cnj}"
+    if key in existing_keys:
         console.print(f"[yellow]Already tracking:[/yellow] {numero_cnj} ({tribunal})")
         return
 
@@ -655,6 +689,39 @@ def _get_tracked_processos() -> list[dict]:
         return json.loads(raw)
     except json.JSONDecodeError:
         return []
+
+
+def _parse_cnj_seed(text: str, default_tribunal: str) -> tuple[list[dict], list[str]]:
+    """Parse a seed list of CNJs (one per line) into tracked-processo entries.
+
+    Blank lines and ``#`` comments are skipped. The tribunal is derived from
+    each CNJ via :func:`cnj_to_court` when possible, falling back to
+    ``default_tribunal``. Invalid CNJs are collected as error strings rather
+    than raising, so one bad line never aborts the whole import.
+
+    Args:
+        text: Raw seed text (one CNJ per line).
+        default_tribunal: Tribunal id used when the CNJ's court can't be derived.
+
+    Returns:
+        Tuple ``(entries, errors)`` — entries are ``{"numero_cnj", "tribunal"}``.
+    """
+    from juris.core.types import NumeroCNJ
+    from juris.search.cnj_router import cnj_to_court
+
+    entries: list[dict] = []
+    errors: list[str] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        try:
+            NumeroCNJ(line)
+        except ValueError:
+            errors.append(f"CNJ inválido: {line}")
+            continue
+        entries.append({"numero_cnj": line, "tribunal": cnj_to_court(line) or default_tribunal})
+    return entries, errors
 
 
 @app.command()
