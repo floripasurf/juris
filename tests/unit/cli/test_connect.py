@@ -1,17 +1,15 @@
-"""`juris connect` — the unified first-connection / sync flow (process discovery)."""
+"""`juris connect` CLI — resolves credentials at the edge and delegates to run_connect."""
 
 from __future__ import annotations
 
-import json
 from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
 from juris.cli.main import _merge_tracked, app
-from juris.mni.operations.intimacoes import Aviso, AvisosResult
+from juris.jobs.connect import ConnectResult
 
 runner = CliRunner()
-_CNJ = "5082351-40.2017.8.13.0024"
 
 
 class TestMergeTracked:
@@ -27,46 +25,42 @@ class TestMergeTracked:
         assert len(tracked) == 1  # input not mutated
 
 
-def test_connect_seeds_from_avisos_and_runs_sync() -> None:
-    avisos = AvisosResult(
-        sucesso=True,
-        mensagem="ok",
-        avisos=[Aviso(id_aviso="1", tipo_comunicacao="intimacao", numero_processo=_CNJ)],
-    )
-    stored: dict[str, str] = {}
+def _result(*, sync) -> ConnectResult:
+    return ConnectResult(avisos_added=1, seed_added=0, total_tracked=1, first_time=True, sync=sync)
+
+
+def test_connect_resolves_creds_and_runs_full_sync() -> None:
     captured: dict[str, object] = {}
 
-    async def fake_nightly(processos, **kwargs):
-        captured["processos"] = processos
-        return MagicMock(succeeded=len(processos), total=len(processos), total_critical_alerts=2)
+    async def fake_run_connect(tribunal_cfg, cpf, senha, **kwargs):
+        captured.update(kwargs)
+        captured["cpf"] = cpf
+        return _result(sync=MagicMock(succeeded=1, total=1, total_critical_alerts=2))
 
     with (
         patch("juris.cli.main._mtls_session", return_value=(MagicMock(), "senha", "1234")),
-        patch("juris.mni.service.InProcessMNIReadService.consultar_avisos", return_value=avisos),
-        patch("juris.cli.main._get_tracked_processos", return_value=[]),
-        patch("juris.core.credentials.store_credential", side_effect=lambda k, v: stored.__setitem__(k, v)),
-        patch("juris.jobs.nightly.run_nightly", side_effect=fake_nightly),
+        patch("juris.jobs.connect.run_connect", side_effect=fake_run_connect),
     ):
         result = runner.invoke(app, ["connect", "--cpf", "07671039632", "--pin", "1234"])
 
     assert result.exit_code == 0, result.output
-    saved = json.loads(stored["tracked_processos"])
-    assert {"numero_cnj": _CNJ, "tribunal": "tjmg"} in saved
-    # the differential sync ran over the seeded tracked list
-    assert any(p["numero_cnj"] == _CNJ for p in captured["processos"])
+    assert captured["cpf"] == "07671039632"
+    assert captured["token_pin"] == "1234"
+    assert captured["do_sync"] is True
 
 
-def test_connect_no_sync_only_updates_list() -> None:
-    avisos = AvisosResult(sucesso=True, mensagem="ok", avisos=[])
-    stored: dict[str, str] = {}
+def test_connect_no_sync_passes_do_sync_false() -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_run_connect(tribunal_cfg, cpf, senha, **kwargs):
+        captured.update(kwargs)
+        return _result(sync=None)
 
     with (
         patch("juris.cli.main._mtls_session", return_value=(MagicMock(), "senha", "1234")),
-        patch("juris.mni.service.InProcessMNIReadService.consultar_avisos", return_value=avisos),
-        patch("juris.cli.main._get_tracked_processos", return_value=[]),
-        patch("juris.core.credentials.store_credential", side_effect=lambda k, v: stored.__setitem__(k, v)),
-        patch("juris.jobs.nightly.run_nightly", side_effect=AssertionError("sync must not run")),
+        patch("juris.jobs.connect.run_connect", side_effect=fake_run_connect),
     ):
         result = runner.invoke(app, ["connect", "--cpf", "07671039632", "--pin", "1234", "--no-sync"])
 
     assert result.exit_code == 0, result.output
+    assert captured["do_sync"] is False
