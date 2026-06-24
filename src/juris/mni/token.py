@@ -13,6 +13,7 @@ from __future__ import annotations
 import base64
 import contextlib
 import tempfile
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
@@ -189,3 +190,34 @@ def build_pkcs11_config(
         chain_pem_path=material.chain_pem_path,
         key_uri=key_uri,
     )
+
+
+class TokenService(ABC):
+    """Reads the connected A3 token's public material (ADR-0015 boundary).
+
+    Abstracts *where* the token lives: in-process today, the lawyer's local
+    agent in Phase 2. Reading the certificate needs no PIN, so this is also the
+    primitive behind the local agent's health/``token_connected`` check.
+    """
+
+    @abstractmethod
+    def read_material(self) -> TokenMaterial:
+        """Return the connected token's public material.
+
+        Raises:
+            TokenError: If no token or no usable certificate is present.
+        """
+        ...
+
+
+class InProcessTokenService(TokenService):
+    """Reads the token plugged into the current machine (Phase 1)."""
+
+    def __init__(self, pkcs11_module: str | None = None) -> None:
+        self._pkcs11_module = pkcs11_module
+
+    def read_material(self) -> TokenMaterial:
+        from juris.config import get_settings
+
+        module = self._pkcs11_module or get_settings().pkcs11_module
+        return extract_token_material(module)
