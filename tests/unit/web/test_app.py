@@ -47,6 +47,43 @@ def test_list_processos_endpoint_returns_views(monkeypatch) -> None:
     assert body["processos"][0]["prazos_pendentes"] == 1
 
 
+def test_connect_endpoint_imports_and_syncs(monkeypatch) -> None:
+    app_module = importlib.import_module("juris.web.app")
+    from juris.jobs.connect import ConnectResult
+
+    async def fake_run_connect(tribunal_cfg, cpf, senha, **kwargs):
+        fake_run_connect.kwargs = kwargs
+        return ConnectResult(
+            avisos_added=2,
+            seed_added=3,
+            total_tracked=5,
+            first_time=True,
+            sync=SimpleNamespace(total=5, succeeded=5, failed=0, total_critical_alerts=1),
+        )
+
+    monkeypatch.setattr(app_module, "run_connect", fake_run_connect)
+
+    response = client.post(
+        "/api/connect",
+        json={"cpf": "07671039632", "tribunal": "tjmg", "pin": "1234", "sync": True},
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["total_tracked"] == 5
+    assert body["sync"]["critical_alerts"] == 1
+    assert fake_run_connect.kwargs["token_pin"] == "1234"  # noqa: S105
+
+
+def test_connect_endpoint_rejects_non_mtls_tribunal() -> None:
+    response = client.post(
+        "/api/connect",
+        json={"cpf": "07671039632", "tribunal": "tjes", "pin": "1234"},
+    )
+    assert response.status_code == 400
+    assert "mTLS" in response.json()["detail"]
+
+
 def test_create_demo_run_returns_artifact_previews(monkeypatch) -> None:
     app_module = importlib.import_module("juris.web.app")
 

@@ -209,6 +209,10 @@
     .urg-baixa { color: var(--muted); }
     .proc-row button { padding: 7px 14px; font-size: 13px; }
     .proc-empty { color: var(--muted); font-size: 14px; margin-top: 12px; }
+    .connect-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 4px 0 16px; }
+    .connect-bar input { width: auto; flex: 0 1 180px; margin: 0; }
+    .connect-bar button { width: auto; flex: 0 0 auto; }
+    #connect-status { color: var(--muted); font-size: 13px; }
   </style>
 </head>
 <body>
@@ -220,7 +224,13 @@
   <main>
     <section class="processos-panel">
       <h1>Meus processos</h1>
-      <p class="lede">Acervo importado do seu token. Conecte (<code>juris connect --cpf …</code>) para importar e manter atualizado; clique em "minuta" para redigir a partir de um processo.</p>
+      <p class="lede">Acervo importado do seu token. Conecte para importar e manter atualizado; clique em "minuta" para redigir a partir de um processo.</p>
+      <form id="connect-form" class="connect-bar">
+        <input id="c_cpf" placeholder="CPF do advogado" autocomplete="off" />
+        <input id="c_pin" placeholder="PIN do token A3" type="password" autocomplete="off" />
+        <button id="connect-btn" type="submit">Conectar / sincronizar</button>
+        <span id="connect-status"></span>
+      </form>
       <div id="processos" class="proc-empty">Carregando…</div>
     </section>
 
@@ -437,6 +447,41 @@
         processosEl.textContent = "Não foi possível carregar os processos.";
       }
     }
+
+    const connectForm = document.querySelector("#connect-form");
+    const connectBtn = document.querySelector("#connect-btn");
+    const connectStatus = document.querySelector("#connect-status");
+
+    connectForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const cpf = document.querySelector("#c_cpf").value.trim();
+      const pin = document.querySelector("#c_pin").value;
+      if (!cpf || !pin) {
+        connectStatus.textContent = "Informe CPF e PIN.";
+        return;
+      }
+      connectBtn.disabled = true;
+      connectBtn.textContent = "Conectando…";
+      connectStatus.textContent = "Lendo token e sincronizando (pode levar alguns minutos)…";
+      try {
+        const response = await fetch("/api/connect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cpf, pin, tribunal: "tjmg" }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || "Falha ao conectar");
+        const sync = data.sync ? `, ${data.sync.succeeded}/${data.sync.total} sincronizados` : "";
+        connectStatus.textContent = `+${data.avisos_added} via avisos, +${data.seed_added} via seed (total ${data.total_tracked})${sync}.`;
+        document.querySelector("#c_pin").value = "";
+        loadProcessos();
+      } catch (error) {
+        connectStatus.textContent = error.message;
+      } finally {
+        connectBtn.disabled = false;
+        connectBtn.textContent = "Conectar / sincronizar";
+      }
+    });
 
     loadProcessos();
   </script>

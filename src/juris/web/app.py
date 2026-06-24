@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from juris import __version__
+from juris.jobs.connect import run_connect
 from juris.web.demo_service import DemoRunError, WebDemoRunRequest, execute_demo_run
 from juris.web.processos_service import list_processos
 
@@ -48,6 +49,57 @@ async def health() -> dict[str, str]:
 async def get_processos() -> dict[str, object]:
     """List the lawyer's imported processos with their nearest pending prazo."""
     return {"processos": [v.to_dict() for v in list_processos()]}
+
+
+class ConnectPayload(BaseModel):
+    """Connect request — co-located Phase 1: the token PIN is entered locally."""
+
+    cpf: str = Field(min_length=1)
+    tribunal: str = "tjmg"
+    pin: str = Field(min_length=1)
+    senha: str | None = None
+    seed_text: str | None = None
+    sync: bool = True
+
+
+@app.post("/api/connect")
+async def create_connect(payload: ConnectPayload) -> dict[str, object]:
+    """Import/update the acervo from the connected token (avisos + seed + sync)."""
+    from juris.mni.tribunais import get_tribunal
+
+    try:
+        tribunal_cfg = get_tribunal(payload.tribunal)
+    except KeyError as exc:
+        raise HTTPException(status_code=400, detail=f"Tribunal desconhecido: {payload.tribunal}") from exc
+    if not tribunal_cfg.requires_mtls:
+        raise HTTPException(status_code=400, detail="connect suporta apenas tribunais mTLS (ex.: tjmg).")
+
+    try:
+        result = await run_connect(
+            tribunal_cfg,
+            payload.cpf,
+            payload.senha or payload.cpf,
+            token_pin=payload.pin,
+            seed_text=payload.seed_text,
+            do_sync=payload.sync,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        "avisos_added": result.avisos_added,
+        "seed_added": result.seed_added,
+        "total_tracked": result.total_tracked,
+        "first_time": result.first_time,
+        "sync": None
+        if result.sync is None
+        else {
+            "total": result.sync.total,
+            "succeeded": result.sync.succeeded,
+            "failed": result.sync.failed,
+            "critical_alerts": result.sync.total_critical_alerts,
+        },
+    }
 
 
 @app.get("/", response_class=HTMLResponse)
