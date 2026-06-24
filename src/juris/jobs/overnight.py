@@ -153,10 +153,12 @@ def _fetch_mni_mtls(
 ) -> ProcessoDomain:
     """Fetch a processo from an mTLS tribunal via the A3 token (PKCS#11).
 
-    The token PIN comes from ``token_pin`` (passed by an interactive caller)
-    or, for unattended runs, from ``settings.token_pin``. If neither is set
-    the token can't be unlocked and a clear error is raised so the caller
-    records a per-processo failure rather than crashing.
+    Thin adapter over :func:`juris.mni.fetch.fetch_processo_mni` — the shared
+    helper the demo pipeline also uses, so both paths read mTLS tribunals
+    through the same validated code. The token PIN comes from ``token_pin``
+    (interactive caller) or, unattended, from ``settings.token_pin``; if
+    neither is set the helper raises so the caller records a per-processo
+    failure rather than crashing.
 
     Args:
         numero_cnj: Case number.
@@ -169,41 +171,11 @@ def _fetch_mni_mtls(
         The fetched :class:`ProcessoDomain`.
 
     Raises:
-        RuntimeError: If no token PIN is available.
+        RuntimeError: If no token PIN is available or MNI returns an error.
     """
-    from urllib.parse import urlparse
+    from juris.mni.fetch import fetch_processo_mni
 
-    from juris.config import get_settings
-    from juris.mni.operations.consulta_pkcs11 import consultar_processo_pkcs11
-    from juris.mni.token import build_pkcs11_config, extract_token_material
-
-    settings = get_settings()
-    pin = token_pin or (settings.token_pin.get_secret_value() if settings.token_pin else None)
-    if not pin:
-        msg = "mTLS tribunal requires a token PIN (pass --pin or set TOKEN_PIN)."
-        raise RuntimeError(msg)
-
-    material = extract_token_material(settings.pkcs11_module)
-    pkcs11_config = build_pkcs11_config(material, pin, settings.pkcs11_module)
-
-    service_url = tribunal_cfg.service_url_override or tribunal_cfg.wsdl_url.replace("?wsdl", "")
-    parsed = urlparse(service_url)
-
-    result = consultar_processo_pkcs11(
-        host=parsed.hostname or "",
-        path=parsed.path or "/pje/intercomunicacao",
-        pkcs11_config=pkcs11_config,
-        id_consultante=cpf,
-        senha_consultante=senha,
-        numero_cnj=numero_cnj,
-        mni_version=tribunal_cfg.mni_version,
-        com_documentos=False,
-    )
-    if not result.sucesso:
-        msg = f"MNI error: {result.mensagem}"
-        raise RuntimeError(msg)
-
-    return result.to_processo_domain(tribunal_id=tribunal_cfg.id, numero_cnj=numero_cnj)
+    return fetch_processo_mni(numero_cnj, tribunal_cfg, cpf, senha, token_pin=token_pin)
 
 
 async def sync_processo_datajud(
