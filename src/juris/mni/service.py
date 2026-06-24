@@ -18,13 +18,17 @@ Swapping implementations is configuration, not a rewrite of the orchestrator.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
 from juris.mni.parsers.processo import ProcessoDomain
 from juris.mni.tribunais import TribunalConfig
 
+if TYPE_CHECKING:
+    from juris.mni.operations.intimacoes import AvisosResult
+
 
 class MNIReadService(ABC):
-    """Reads a processo via MNI, abstracting away where the token lives."""
+    """Reads from MNI (processos + avisos), abstracting where the token lives."""
 
     @abstractmethod
     def consultar_processo(
@@ -55,6 +59,31 @@ class MNIReadService(ABC):
         """
         ...
 
+    @abstractmethod
+    def consultar_avisos(
+        self,
+        tribunal_cfg: TribunalConfig,
+        cpf: str,
+        senha: str,
+        *,
+        token_pin: str | None = None,
+    ) -> AvisosResult:
+        """Read pending avisos (intimações) — the live-deadline feed.
+
+        Args:
+            tribunal_cfg: Tribunal configuration (decides the auth path).
+            cpf: Consultant CPF (idConsultante).
+            senha: PJe application password (senhaConsultante).
+            token_pin: A3 token PIN (mTLS tribunals); resolved by the caller.
+
+        Returns:
+            An ``AvisosResult`` (``sucesso=False`` on MNI-level error).
+
+        Raises:
+            RuntimeError: On missing token PIN for an mTLS tribunal.
+        """
+        ...
+
 
 class InProcessMNIReadService(MNIReadService):
     """Runs the MNI read in the current process (Phase 1, co-located token)."""
@@ -81,3 +110,15 @@ class InProcessMNIReadService(MNIReadService):
             token_pin=token_pin,
             com_documentos=com_documentos,
         )
+
+    def consultar_avisos(
+        self,
+        tribunal_cfg: TribunalConfig,
+        cpf: str,
+        senha: str,
+        *,
+        token_pin: str | None = None,
+    ) -> AvisosResult:
+        from juris.mni.fetch import fetch_avisos_mni
+
+        return fetch_avisos_mni(tribunal_cfg, cpf, senha, token_pin=token_pin)

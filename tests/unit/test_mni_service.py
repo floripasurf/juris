@@ -24,6 +24,22 @@ def test_inprocess_is_a_mni_read_service() -> None:
     assert isinstance(InProcessMNIReadService(), MNIReadService)
 
 
+def test_inprocess_consultar_avisos_delegates_to_fetch() -> None:
+    from juris.mni.operations.intimacoes import AvisosResult
+
+    avisos = AvisosResult(sucesso=True, mensagem="ok")
+    with patch("juris.mni.fetch.fetch_avisos_mni", return_value=avisos) as mock_fetch:
+        out = InProcessMNIReadService().consultar_avisos(
+            get_tribunal("tjmg"),
+            "07671039632",
+            "senha",
+            token_pin="1234",  # noqa: S106
+        )
+
+    assert out is avisos
+    mock_fetch.assert_called_once()
+
+
 def test_inprocess_delegates_to_fetch() -> None:
     domain = _domain()
     with patch("juris.mni.fetch.fetch_processo_mni", return_value=domain) as mock_fetch:

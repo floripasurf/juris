@@ -7,7 +7,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from juris.mni.fetch import fetch_processo_mni
+from juris.mni.fetch import fetch_avisos_mni, fetch_processo_mni
+from juris.mni.operations.intimacoes import AvisosResult
 from juris.mni.parsers.processo import Movimento, ProcessoDomain
 from juris.mni.tribunais import get_tribunal
 
@@ -92,6 +93,51 @@ class TestFetchMtls:
                 senha="senha",
                 token_pin=None,
             )
+
+
+class TestFetchAvisos:
+    def test_mtls_avisos_uses_token_path(self) -> None:
+        avisos = AvisosResult(sucesso=True, mensagem="ok")
+        with (
+            patch("juris.config.get_settings", return_value=_settings()),
+            patch("juris.mni.token.extract_token_material", return_value=MagicMock()),
+            patch("juris.mni.token.build_pkcs11_config", return_value=MagicMock()),
+            patch(
+                "juris.mni.operations.intimacoes.consultar_avisos_pendentes_pkcs11",
+                return_value=avisos,
+            ) as mock_call,
+        ):
+            out = fetch_avisos_mni(
+                get_tribunal("tjmg"),
+                cpf="07671039632",
+                senha="senha",
+                token_pin="1234",  # noqa: S106
+            )
+
+        assert out is avisos
+        mock_call.assert_called_once()
+
+    def test_mtls_avisos_requires_pin(self) -> None:
+        with (
+            patch("juris.config.get_settings", return_value=_settings(token_pin=None)),
+            pytest.raises(RuntimeError, match="PIN"),
+        ):
+            fetch_avisos_mni(get_tribunal("tjmg"), cpf="07671039632", senha="senha", token_pin=None)
+
+    def test_password_avisos_uses_zeep_path(self) -> None:
+        avisos = AvisosResult(sucesso=True, mensagem="ok")
+        with (
+            patch("juris.mni.auth.PasswordAuth"),
+            patch("juris.mni.client.get_mni_client"),
+            patch(
+                "juris.mni.operations.intimacoes.consultar_avisos_pendentes",
+                return_value=avisos,
+            ) as mock_call,
+        ):
+            out = fetch_avisos_mni(get_tribunal("tjes"), cpf="07671039632", senha="senha")
+
+        assert out is avisos
+        mock_call.assert_called_once()
 
 
 class TestFetchPassword:
