@@ -18,8 +18,10 @@ from juris.busca.models import (
 )
 from juris.busca.providers import get_profile
 from juris.busca.registry import ChannelRegistry
+from juris.busca.retry import busca_circuit_breaker
 from juris.core.observability import get_logger
 from juris.datajud.safety import ensure_batch_allowed
+from juris.mni.retry import CircuitBreaker
 
 logger = get_logger(__name__)
 
@@ -42,12 +44,26 @@ class SearchOrchestrator:
         enrich: bool = True,
         max_concurrent_channels: int = 20,
         confirm_datajud_batch: bool = False,
+        circuit_breaker: CircuitBreaker | None = None,
     ) -> None:
         self._registry = registry or ChannelRegistry()
         self._cache = cache
         self._enrich = enrich
         self._confirm_datajud_batch = confirm_datajud_batch
+        self._breaker = circuit_breaker or busca_circuit_breaker
         self._semaphore = asyncio.Semaphore(max_concurrent_channels)
+
+    @staticmethod
+    def _provider_key(fonte: FonteOrigem, tribunal_id: str) -> str:
+        return f"{fonte.value}:{tribunal_id}"
+
+    def _circuit_open(self, key: str) -> bool:
+        """True when the provider's circuit is open (recently failed → skip)."""
+        try:
+            self._breaker.check(key)
+            return False
+        except RuntimeError:
+            return True
 
     async def search(self, request: BuscaRequest) -> RelatoriosBusca:
         """Execute a full multi-channel search.
@@ -79,6 +95,20 @@ class SearchOrchestrator:
             for ch in self._registry.get_channels(tid):
                 pairs.append((tid, ch))
 
+        # Health-aware resolution: skip providers whose circuit is open (recently
+        # dead) so we don't waste a request or pile up failures.
+        provedores_pulados: list[str] = []
+        available_pairs: list[tuple[str, SearchChannel]] = []
+        for tid, ch in pairs:
+            key = self._provider_key(ch.channel_name, tid)
+            if self._circuit_open(key):
+                provedores_pulados.append(key)
+            else:
+                available_pairs.append((tid, ch))
+        if provedores_pulados:
+            logger.info("search_skipped_dead_providers", skipped=provedores_pulados)
+        pairs = available_pairs
+
         datajud_pairs = sum(1 for _, ch in pairs if ch.channel_name == FonteOrigem.DATAJUD)
         if datajud_pairs:
             ensure_batch_allowed(
@@ -100,12 +130,15 @@ class SearchOrchestrator:
         canais_set: set[FonteOrigem] = set()
 
         async def _query(tid: str, ch: SearchChannel) -> list[ResultadoBusca]:
+            key = self._provider_key(ch.channel_name, tid)
             async with self._semaphore:
                 try:
                     results = await self._dispatch_search(ch, tid, request)
+                    self._breaker.record_success(key)
                     canais_set.add(ch.channel_name)
                     return results
                 except Exception:
+                    self._breaker.record_failure(key)
                     logger.exception("channel_error", tribunal=tid, channel=ch.channel_name.value)
                     if tid not in tribunais_com_erro:
                         tribunais_com_erro.append(tid)
@@ -144,6 +177,7 @@ class SearchOrchestrator:
             tribunais_com_erro=tribunais_com_erro,
             canais_usados=sorted(canais_set, key=lambda f: f.value),
             duracao_segundos=round(elapsed, 2),
+            provedores_pulados=provedores_pulados,
         )
 
         # 9. Cache

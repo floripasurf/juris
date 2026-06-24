@@ -85,3 +85,4 @@ class RelatoriosBusca:
     canais_usados: list[FonteOrigem]
     duracao_segundos: float
     do_cache: bool = False
+    provedores_pulados: list[str] = field(default_factory=list)
