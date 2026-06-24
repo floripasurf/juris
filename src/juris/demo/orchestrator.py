@@ -33,6 +33,7 @@ from juris.defesas.context import ProcessoContext
 from juris.demo.output_mode import OutputMode
 from juris.llm.base import AbstractLLM
 from juris.mni.parsers.processo import ProcessoDomain
+from juris.mni.service import InProcessMNIReadService, MNIReadService
 from juris.persistence.audit import AuditLog
 from juris.prazo.engine import PrazoReport, compute_prazos
 from juris.repertory.peticoes.models import TipoPeticao
@@ -361,17 +362,20 @@ def load_processo(
     cpf: str | None = None,
     senha: str | None = None,
     token_pin: str | None = None,
+    mni_service: MNIReadService | None = None,
 ) -> ProcessoDomain:
     """Resolve a ProcessoDomain from the configured source.
 
     DATAJUD: live lookup via DataJud public API.
     FIXTURE: synthetic in-memory processo for offline demos.
-    MNI:     live read via the lawyer's ICP-Brasil credentials. mTLS tribunals
-             (e.g. TJMG) use the A3 token; others use CPF + PJe password. The
-             caller resolves ``cpf``/``senha``/``token_pin`` (this function
-             never prompts) and a failure surfaces as ``RuntimeError`` rather
-             than a silent fallback to DataJud — in a lawyer-facing demo the
-             real read either works or is reported.
+    MNI:     live read via the lawyer's ICP-Brasil credentials, through the
+             :class:`MNIReadService` boundary (ADR-0015). mTLS tribunals (e.g.
+             TJMG) use the A3 token; others use CPF + PJe password. The caller
+             resolves ``cpf``/``senha``/``token_pin`` (this function never
+             prompts) and a failure surfaces as ``RuntimeError`` rather than a
+             silent fallback to DataJud — in a lawyer-facing demo the real read
+             either works or is reported. ``mni_service`` defaults to the
+             in-process implementation; Phase 2 injects a remote one.
     """
     if source is SourceMode.DATAJUD:
         from juris.datajud.client import consultar_processo as datajud_consulta
@@ -387,14 +391,14 @@ def load_processo(
         return _build_fixture_processo(numero_cnj, tribunal)
 
     if source is SourceMode.MNI:
-        from juris.mni.fetch import fetch_processo_mni
         from juris.mni.tribunais import get_tribunal
 
         if not cpf:
             msg = "Source 'mni' requer o cpf do advogado constituído (--cpf)."
             raise ValueError(msg)
+        service = mni_service or InProcessMNIReadService()
         tribunal_cfg = get_tribunal(tribunal)
-        processo = fetch_processo_mni(
+        processo = service.consultar_processo(
             numero_cnj,
             tribunal_cfg,
             cpf,

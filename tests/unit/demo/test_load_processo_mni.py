@@ -66,6 +66,39 @@ def test_mni_source_audits_the_read(tmp_path) -> None:
     assert consulta.details["mtls"] is True
 
 
+def test_load_processo_uses_injected_mni_service() -> None:
+    """The demo layer depends on the MNIReadService abstraction, not fetch directly."""
+    from juris.mni.service import MNIReadService
+
+    domain = _domain()
+
+    class FakeMNI(MNIReadService):
+        def __init__(self) -> None:
+            self.calls: list[tuple] = []
+
+        def consultar_processo(
+            self, numero_cnj, tribunal_cfg, cpf, senha, *, token_pin=None, com_documentos=False
+        ):
+            self.calls.append((numero_cnj, tribunal_cfg.id, cpf, senha, token_pin))
+            return domain
+
+    fake = FakeMNI()
+    with patch("juris.mni.fetch.fetch_processo_mni") as mock_fetch:
+        out = load_processo(
+            _CNJ,
+            "tjmg",
+            SourceMode.MNI,
+            cpf="07671039632",
+            senha="senha",
+            token_pin="1234",  # noqa: S106
+            mni_service=fake,
+        )
+
+    assert out is domain
+    mock_fetch.assert_not_called()  # injected service is used, not the direct fetch
+    assert fake.calls[0][1] == "tjmg"
+
+
 def test_mni_source_requires_cpf() -> None:
     with pytest.raises(ValueError, match="cpf"):
         load_processo(_CNJ, "tjmg", SourceMode.MNI, cpf=None)
