@@ -43,6 +43,7 @@ def consulta(
     com_documentos: bool = typer.Option(False, "--com-documentos", "-d", help="Include full documents"),
     cpf: str = typer.Option(..., "--cpf", help="CPF do consultante"),
     senha: str = typer.Option(None, "--senha", "-s", help="Senha PJe (prompted + saved if omitted)"),
+    pin: str = typer.Option(None, "--pin", help="PIN do token A3 (mTLS; senão TOKEN_PIN/prompt)"),
 ) -> None:
     """Fetch a case from a tribunal via MNI consultarProcesso."""
     from juris.core.types import NumeroCNJ
@@ -62,7 +63,7 @@ def consulta(
 
     # mTLS tribunals (e.g. TJMG) need the A3 hardware token, not zeep+password.
     if tribunal_cfg.requires_mtls:
-        _consulta_mtls(cnj, tribunal_cfg, cpf, senha, com_documentos)
+        _consulta_mtls(cnj, tribunal_cfg, cpf, senha, com_documentos, pin)
         return
 
     from juris.mni.auth import PasswordAuth
@@ -176,60 +177,54 @@ def _print_processo(processo) -> None:
             console.print(f"  [{d.id_documento}] {d.tipo_documento}: {d.descricao or ''}")
 
 
-def _consulta_mtls(cnj, tribunal_cfg, cpf: str, senha: str | None, com_documentos: bool) -> None:
-    """consultarProcesso against an mTLS tribunal using the A3 hardware token."""
-    from juris.mni.operations.consulta_pkcs11 import consultar_processo_pkcs11
+def _consulta_mtls(cnj, tribunal_cfg, cpf: str, senha: str | None, com_documentos: bool, pin: str | None = None) -> None:
+    """consultarProcesso against an mTLS tribunal, through the MNIReadService boundary."""
+    from juris.mni.service import InProcessMNIReadService
 
     console.print(f"[bold]Fetching case (mTLS):[/bold] {cnj}")
     console.print(f"  Tribunal: {tribunal_cfg.id} ({tribunal_cfg.nome})")
 
-    pkcs11_config, host, path, resolved_senha, _material = _mtls_session(tribunal_cfg, cpf, senha)
+    _material, resolved_senha, resolved_pin = _mtls_session(tribunal_cfg, cpf, senha, pin)
 
     try:
-        result = consultar_processo_pkcs11(
-            host=host,
-            path=path,
-            pkcs11_config=pkcs11_config,
-            id_consultante=cpf,
-            senha_consultante=resolved_senha,
-            numero_cnj=str(cnj),
-            mni_version=tribunal_cfg.mni_version,
+        processo = InProcessMNIReadService().consultar_processo(
+            str(cnj),
+            tribunal_cfg,
+            cpf,
+            resolved_senha,
+            token_pin=resolved_pin,
             com_documentos=com_documentos,
         )
-    except Exception as e:
-        console.print(f"[red]MNI Error:[/red] {type(e).__name__}: {e}")
-        raise typer.Exit(code=1) from e
-
-    if not result.sucesso:
-        console.print(f"[red]MNI returned error:[/red] {result.mensagem}")
-        if "login" in result.mensagem.lower() or "autenticação" in result.mensagem.lower():
+    except RuntimeError as e:
+        msg = str(e)
+        console.print(f"[red]MNI returned error:[/red] {msg}")
+        if "login" in msg.lower() or "autenticação" in msg.lower():
             from juris.core.credentials import delete_credential
 
             delete_credential(f"mni_{tribunal_cfg.id}_{cpf}")
             console.print("[yellow]Senha PJe limpa do Keychain. Rode de novo para reinserir.[/yellow]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
-    _print_consulta_result(result)
+    _print_processo(processo)
 
 
 def _mtls_session(tribunal_cfg, cpf: str, senha: str | None, pin: str | None = None):
-    """Build the PKCS#11 mTLS session pieces shared by consulta and avisos.
+    """Resolve mTLS credentials at the CLI edge, shared by consulta and avisos.
 
-    Reads the token cert (no PIN), resolves the token PIN (arg → env → prompt)
-    and the PJe password (arg → Keychain → prompt), and derives host/path.
+    Reads the token cert via :class:`TokenService` (no PIN), resolves the token
+    PIN (arg → env → prompt) and the PJe password (arg → Keychain → prompt). The
+    transport (host/path/PKCS#11 config) is built inside ``MNIReadService``, not
+    here — the CLI only owns credential resolution.
 
     Returns:
-        Tuple (pkcs11_config, host, path, resolved_senha, material).
+        Tuple (material, resolved_senha, resolved_pin).
     """
-    from urllib.parse import urlparse
-
     from juris.config import get_settings
-    from juris.mni.token import TokenError, build_pkcs11_config, extract_token_material
+    from juris.mni.token import InProcessTokenService, TokenError
 
-    settings = get_settings()
     try:
         console.print("[dim]Lendo certificado do token…[/dim]")
-        material = extract_token_material(settings.pkcs11_module)
+        material = InProcessTokenService().read_material()
     except TokenError as e:
         console.print(f"[red]Token:[/red] {e}")
         raise typer.Exit(code=1) from e
@@ -239,6 +234,7 @@ def _mtls_session(tribunal_cfg, cpf: str, senha: str | None, pin: str | None = N
     if material.cpf and material.cpf != cpf:
         console.print(f"[yellow]Aviso:[/yellow] CPF do token ({material.cpf}) ≠ --cpf ({cpf}).")
 
+    settings = get_settings()
     resolved_pin = pin or (settings.token_pin.get_secret_value() if settings.token_pin else None)
     if not resolved_pin:
         resolved_pin = getpass.getpass("PIN do token A3: ")
@@ -247,17 +243,7 @@ def _mtls_session(tribunal_cfg, cpf: str, senha: str | None, pin: str | None = N
         raise typer.Exit(code=1)
 
     resolved_senha = _get_senha(tribunal_cfg.id, cpf, senha)
-
-    service_url = tribunal_cfg.service_url_override or tribunal_cfg.wsdl_url.replace("?wsdl", "")
-    parsed = urlparse(service_url)
-    pkcs11_config = build_pkcs11_config(material, resolved_pin, settings.pkcs11_module)
-    return (
-        pkcs11_config,
-        parsed.hostname or "",
-        parsed.path or "/pje/intercomunicacao",
-        resolved_senha,
-        material,
-    )
+    return material, resolved_senha, resolved_pin
 
 
 @app.command()
@@ -274,7 +260,7 @@ def avisos(
     With --track, every processo with a pending aviso is added to the tracked
     list so 'juris overnight' computes its deadlines.
     """
-    from juris.mni.operations.intimacoes import consultar_avisos_pendentes_pkcs11
+    from juris.mni.service import InProcessMNIReadService
     from juris.mni.tribunais import get_tribunal
 
     try:
@@ -291,16 +277,15 @@ def avisos(
         raise typer.Exit(code=1)
 
     console.print(f"[bold]Avisos pendentes (mTLS):[/bold] {tribunal_cfg.nome}")
-    pkcs11_config, host, path, resolved_senha, _material = _mtls_session(tribunal_cfg, cpf, senha, pin)
+    _material, resolved_senha, resolved_pin = _mtls_session(tribunal_cfg, cpf, senha, pin)
 
-    result = consultar_avisos_pendentes_pkcs11(
-        host=host,
-        path=path,
-        pkcs11_config=pkcs11_config,
-        id_consultante=cpf,
-        senha_consultante=resolved_senha,
-        mni_version=tribunal_cfg.mni_version,
-    )
+    try:
+        result = InProcessMNIReadService().consultar_avisos(
+            tribunal_cfg, cpf, resolved_senha, token_pin=resolved_pin
+        )
+    except RuntimeError as e:
+        console.print(f"[red]MNI Error:[/red] {e}")
+        raise typer.Exit(code=1) from e
 
     if not result.sucesso:
         console.print(f"[red]MNI returned error:[/red] {result.mensagem}")
@@ -341,43 +326,6 @@ def avisos(
         console.print("[dim]Rode 'juris overnight --cpf " + cpf + "' para calcular os prazos.[/dim]")
 
 
-def _print_consulta_result(result) -> None:
-    """Pretty-print a ConsultaResult (PKCS#11 mTLS path) to the console."""
-    console.print(f"\n[bold green]Processo: {result.numero or 'N/A'}[/bold green]")
-    console.print(f"  [dim]{result.mensagem}[/dim]")
-    console.print(f"  Classe: {result.classe or 'N/A'}")
-    if result.orgao_julgador:
-        console.print(f"  Órgão: {result.orgao_julgador}")
-
-    if result.partes:
-        console.print("\n[bold]Partes:[/bold]")
-        for p in result.partes:
-            advs = f" (Advs: {', '.join(p['advogados'])})" if p.get("advogados") else ""
-            console.print(f"  [{p['tipo']}] {p['nome']}{advs}")
-
-    if result.movimentos:
-        console.print(f"\n[bold]Movimentos ({len(result.movimentos)}):[/bold]")
-        ordered = sorted(result.movimentos, key=lambda m: m.get("data", ""))
-        table = Table()
-        table.add_column("Data", style="cyan", width=16)
-        table.add_column("Código", width=7)
-        table.add_column("Descrição")
-        table.add_column("Complemento")
-        for m in ordered[-15:]:
-            table.add_row(
-                _fmt_mni_datetime(m.get("data", "")),
-                str(m.get("codigo") or ""),
-                (m.get("descricao") or "")[:40],
-                (m.get("complemento") or "")[:40],
-            )
-        console.print(table)
-
-    if result.documentos:
-        console.print(f"\n[bold]Documentos ({len(result.documentos)}):[/bold]")
-        for d in result.documentos:
-            console.print(f"  [{d['id']}] {d['tipo']}: {d.get('descricao') or ''}")
-
-
 def _safe_get_tribunal(tribunal_id: str):
     """Return the TribunalConfig for an id, or None if unknown."""
     from juris.mni.tribunais import get_tribunal
@@ -386,15 +334,6 @@ def _safe_get_tribunal(tribunal_id: str):
         return get_tribunal(tribunal_id)
     except KeyError:
         return None
-
-
-def _fmt_mni_datetime(raw: str) -> str:
-    """Format an MNI timestamp (YYYYMMDDHHMMSS[ms]) as YYYY-MM-DD HH:MM."""
-    if len(raw) >= 12 and raw[:12].isdigit():
-        return f"{raw[0:4]}-{raw[4:6]}-{raw[6:8]} {raw[8:10]}:{raw[10:12]}"
-    if len(raw) >= 8 and raw[:8].isdigit():
-        return f"{raw[0:4]}-{raw[4:6]}-{raw[6:8]}"
-    return raw
 
 
 @app.command()
@@ -454,8 +393,7 @@ def consulta_cert(
     """Fetch a case using ICP-Brasil A3 token (mTLS via PKCS#11)."""
     from juris.core.credentials import get_credential, store_credential
     from juris.core.types import NumeroCNJ
-    from juris.mni.operations.consulta_pkcs11 import consultar_processo_pkcs11
-    from juris.mni.pkcs11_transport import PKCS11Config
+    from juris.mni.service import InProcessMNIReadService
     from juris.mni.tribunais import get_tribunal
 
     try:
@@ -484,139 +422,31 @@ def consulta_cert(
         console.print("[red]Token PIN is required.[/red]")
         raise typer.Exit(code=1)
 
-    # Detect cert/key paths
-
-    cert_pem = "/tmp/juris_user_cert.pem"
-    chain_pem = "/tmp/juris_chain.pem"
-    key_uri = "pkcs11:token=TOKEN%20CERTDATA;object=p11%23e835efffba274fac;type=private"
-
-    # Auto-export cert if not present
-    if not __import__("os").path.exists(cert_pem):
-        console.print("[yellow]Exporting certificate from token...[/yellow]")
-        _export_token_cert(cert_pem, chain_pem, resolved_pin)
-
-    pkcs11_config = PKCS11Config(
-        pin=resolved_pin,
-        cert_pem_path=cert_pem,
-        chain_pem_path=chain_pem,
-        key_uri=key_uri,
-    )
-
-    # Determine host/path from tribunal config
-    from urllib.parse import urlparse
-
-    endpoint = tribunal_cfg.service_url_override or tribunal_cfg.wsdl_url.replace("?wsdl", "")
-    parsed = urlparse(endpoint)
-    host = parsed.hostname or ""
-    path = parsed.path or "/pje/intercomunicacao"
-
     console.print(f"[bold]Fetching case (cert auth):[/bold] {cnj}")
-    console.print(f"  Tribunal: {tribunal} ({host})")
+    console.print(f"  Tribunal: {tribunal_cfg.id} ({tribunal_cfg.nome})")
 
+    # The MNIReadService extracts the token material itself — no hardcoded cert
+    # paths or key URI. senha_consultante defaults to the CPF for this command.
     try:
-        result = consultar_processo_pkcs11(
-            host=host,
-            path=path,
-            pkcs11_config=pkcs11_config,
-            id_consultante=cpf,
-            senha_consultante=cpf,
-            numero_cnj=str(cnj),
-            mni_version=tribunal_cfg.mni_version,
+        processo = InProcessMNIReadService().consultar_processo(
+            str(cnj),
+            tribunal_cfg,
+            cpf,
+            cpf,
+            token_pin=resolved_pin,
             com_documentos=com_documentos,
         )
-    except Exception as e:
-        console.print(f"[red]MNI Error:[/red] {type(e).__name__}: {e}")
-        raise typer.Exit(code=1) from e
-
-    if not result.sucesso:
-        console.print(f"[red]MNI returned error:[/red] {result.mensagem}")
-        if "login" in result.mensagem.lower() or "autorizado" in result.mensagem.lower():
+    except RuntimeError as e:
+        msg = str(e)
+        console.print(f"[red]MNI returned error:[/red] {msg}")
+        if "login" in msg.lower() or "autorizado" in msg.lower():
             from juris.core.credentials import delete_credential
 
             delete_credential("token_pin")
             console.print("[yellow]Stored PIN cleared. Re-run to enter new PIN.[/yellow]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
-    # Print results
-    console.print(f"\n[bold green]Processo: {result.numero or str(cnj)}[/bold green]")
-    console.print(f"  Classe: {result.classe or 'N/A'}")
-    console.print(f"  Assunto: {result.assunto or 'N/A'}")
-    if result.valor_causa:
-        console.print(f"  Valor: R$ {result.valor_causa:,.2f}")
-    console.print(f"  Órgão: {result.orgao_julgador or 'N/A'}")
-
-    if result.partes:
-        console.print(f"\n[bold]Partes ({len(result.partes)}):[/bold]")
-        for p in result.partes:
-            advs = f" (Advs: {', '.join(p['advogados'])})" if p.get("advogados") else ""
-            console.print(f"  [{p.get('tipo', '?')}] {p.get('nome', '?')}{advs}")
-
-    if result.movimentos:
-        console.print(f"\n[bold]Movimentos ({len(result.movimentos)}):[/bold]")
-        table = Table()
-        table.add_column("Data", style="cyan", width=20)
-        table.add_column("Código", width=8)
-        table.add_column("Complemento")
-        for m in result.movimentos[-10:]:
-            table.add_row(m.get("data", ""), m.get("codigo", ""), (m.get("complemento", ""))[:80])
-        console.print(table)
-
-    if result.documentos:
-        console.print(f"\n[bold]Documentos ({len(result.documentos)}):[/bold]")
-        for d in result.documentos:
-            console.print(f"  [{d.get('id', '')}] {d.get('tipo', '')}: {d.get('descricao', '')}")
-
-    console.print(f"\n[dim]Raw XML: {len(result.raw_xml)} bytes[/dim]")
-
-
-def _export_token_cert(cert_path: str, chain_path: str, pin: str) -> None:
-    """Export user certificate and CA chain from the PKCS#11 token."""
-    import subprocess
-
-    pkcs11_module = "/usr/local/lib/libeTPkcs11.dylib"
-
-    # Export all certs from token
-    result = subprocess.run(
-        [
-            "p11tool",
-            f"--provider={pkcs11_module}",
-            "--list-all-certs",
-            "pkcs11:token=TOKEN%20CERTDATA",
-            "--outder",
-        ],
-        capture_output=True,
-        env={**__import__("os").environ, "GNUTLS_PIN": pin},
-    )
-
-    # Use p11tool to export the specific user cert
-    user_cert_uri = (
-        "pkcs11:token=TOKEN%20CERTDATA;"
-        "id=%79%70%44%5A%2D%53%6B%39%42%54%79%42%53%51%56%42%49%51%55%56%4D%49%45%31%42%55%6C%52%4A;"
-        "object=p11%23e835efffba274fac;type=cert"
-    )
-    result = subprocess.run(
-        ["p11tool", f"--provider={pkcs11_module}", "--export", user_cert_uri],
-        capture_output=True,
-        env={**__import__("os").environ, "GNUTLS_PIN": pin},
-    )
-    if result.returncode == 0 and result.stdout:
-        with open(cert_path, "wb") as f:
-            f.write(result.stdout)
-
-    # Export CA chain (all certs except user cert)
-    result = subprocess.run(
-        [
-            "p11tool",
-            f"--provider={pkcs11_module}",
-            "--export-chain",
-            user_cert_uri,
-        ],
-        capture_output=True,
-        env={**__import__("os").environ, "GNUTLS_PIN": pin},
-    )
-    if result.returncode == 0 and result.stdout:
-        with open(chain_path, "wb") as f:
-            f.write(result.stdout)
+    _print_processo(processo)
 
 
 @app.command()

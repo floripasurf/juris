@@ -82,6 +82,9 @@ def test_load_processo_uses_injected_mni_service() -> None:
             self.calls.append((numero_cnj, tribunal_cfg.id, cpf, senha, token_pin))
             return domain
 
+        def consultar_avisos(self, tribunal_cfg, cpf, senha, *, token_pin=None):
+            raise NotImplementedError
+
     fake = FakeMNI()
     with patch("juris.mni.fetch.fetch_processo_mni") as mock_fetch:
         out = load_processo(
