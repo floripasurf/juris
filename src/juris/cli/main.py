@@ -312,16 +312,10 @@ def avisos(
         from juris.core.credentials import store_credential
 
         tracked = _get_tracked_processos()
-        existing = {f"{p['tribunal']}:{p['numero_cnj']}" for p in tracked}
-        added = 0
-        for a in result.avisos:
-            if not a.numero_processo:
-                continue
-            key = f"{tribunal}:{a.numero_processo}"
-            if key not in existing:
-                tracked.append({"numero_cnj": a.numero_processo, "tribunal": tribunal})
-                existing.add(key)
-                added += 1
+        entries = [
+            {"numero_cnj": a.numero_processo, "tribunal": tribunal} for a in result.avisos if a.numero_processo
+        ]
+        tracked, added = _merge_tracked(tracked, entries)
         store_credential("tracked_processos", json.dumps(tracked))
         console.print(f"[green]Rastreando +{added} processo(s)[/green] [dim](total: {len(tracked)})[/dim]")
         console.print("[dim]Rode 'juris overnight --cpf " + cpf + "' para calcular os prazos.[/dim]")
@@ -474,14 +468,7 @@ def track(
 
     if seed is not None:
         entries, errors = _parse_cnj_seed(Path(seed).read_text(encoding="utf-8"), default_tribunal=tribunal)
-        added = 0
-        for entry in entries:
-            key = f"{entry['tribunal']}:{entry['numero_cnj']}"
-            if key in existing_keys:
-                continue
-            existing_keys.add(key)
-            tracked.append(entry)
-            added += 1
+        tracked, added = _merge_tracked(tracked, entries)
         store_credential("tracked_processos", json.dumps(tracked))
         console.print(f"[green]Seed import:[/green] {added} novo(s), {len(entries) - added} já rastreado(s).")
         if errors:
@@ -545,6 +532,86 @@ def tracked() -> None:
         table.add_row(str(i), p.get("tribunal", "?"), p.get("numero_cnj", "?"))
 
     console.print(table)
+
+
+@app.command()
+def connect(
+    cpf: str = typer.Option(..., "--cpf", help="CPF do advogado constituído"),
+    tribunal: str = typer.Option("tjmg", "--tribunal", "-t", help="Tribunal ID (mTLS)"),
+    seed: str = typer.Option(None, "--file", "-f", help="Seed inicial: arquivo com 1 CNJ por linha"),
+    senha: str = typer.Option(None, "--senha", "-s", help="Senha PJe (senão Keychain/prompt)"),
+    pin: str = typer.Option(None, "--pin", help="PIN do token A3 (senão TOKEN_PIN/prompt)"),
+    no_sync: bool = typer.Option(False, "--no-sync", help="Só atualizar a lista; não buscar agora"),
+) -> None:
+    """Conectar o token: importar/atualizar o acervo e calcular prazos.
+
+    1ª conexão: importa os processos com intimação pendente (avisos) + o seed
+    opcional (--file) do acervo histórico, e faz a leitura inicial completa.
+    Conexões seguintes: adiciona processos novos (avisos) e busca só os
+    andamentos posteriores ao último carregamento (diferencial).
+    """
+    import asyncio
+    import json
+
+    from juris.core.credentials import store_credential
+    from juris.mni.service import InProcessMNIReadService
+    from juris.mni.tribunais import get_tribunal
+
+    try:
+        tribunal_cfg = get_tribunal(tribunal)
+    except KeyError as e:
+        console.print(f"[red]Tribunal não encontrado:[/red] {tribunal}")
+        raise typer.Exit(code=1) from e
+    if not tribunal_cfg.requires_mtls:
+        console.print(f"[yellow]connect hoje suporta apenas tribunais mTLS (ex.: tjmg), não {tribunal}.[/yellow]")
+        raise typer.Exit(code=1)
+
+    console.print(f"[bold]Conectando ao {tribunal_cfg.nome}…[/bold]")
+    _material, resolved_senha, resolved_pin = _mtls_session(tribunal_cfg, cpf, senha, pin)
+
+    tracked = _get_tracked_processos()
+    first_time = not tracked
+
+    # 1) Avisos pendentes → lista (a metade que cresce sozinha).
+    try:
+        avisos = InProcessMNIReadService().consultar_avisos(tribunal_cfg, cpf, resolved_senha, token_pin=resolved_pin)
+    except RuntimeError as e:
+        console.print(f"[red]Falha ao ler avisos:[/red] {e}")
+        raise typer.Exit(code=1) from e
+    avisos_entries = (
+        [{"numero_cnj": a.numero_processo, "tribunal": tribunal} for a in avisos.avisos if a.numero_processo]
+        if avisos.sucesso
+        else []
+    )
+    tracked, avisos_added = _merge_tracked(tracked, avisos_entries)
+
+    # 2) Seed opcional do acervo histórico.
+    seed_added = 0
+    if seed:
+        entries, errors = _parse_cnj_seed(Path(seed).read_text(encoding="utf-8"), default_tribunal=tribunal)
+        tracked, seed_added = _merge_tracked(tracked, entries)
+        if errors:
+            console.print(f"[yellow]{len(errors)} linha(s) de seed ignorada(s).[/yellow]")
+
+    store_credential("tracked_processos", json.dumps(tracked))
+    console.print(f"[green]Lista:[/green] +{avisos_added} via avisos, +{seed_added} via seed (total {len(tracked)}).")
+
+    # 3) Importar/atualizar — o diferencial trata 1ª vez (full) vs. seguintes (delta).
+    if no_sync or not tracked:
+        if not tracked:
+            console.print("[yellow]Nada rastreado ainda.[/yellow] Use --file para semear o acervo.")
+        else:
+            console.print("[dim]Sync pulado (--no-sync). Rode 'juris connect' sem --no-sync para buscar.[/dim]")
+        return
+
+    from juris.jobs.nightly import run_nightly
+
+    console.print(f"[bold]{'Importando' if first_time else 'Atualizando'} {len(tracked)} processo(s)…[/bold]")
+    summary = asyncio.run(run_nightly(tracked, cpf=cpf, senha=resolved_senha, token_pin=resolved_pin))
+    console.print(
+        f"[green]Concluído:[/green] {summary.succeeded}/{summary.total} ok, "
+        f"{summary.total_critical_alerts} alerta(s) crítico(s)."
+    )
 
 
 @app.command()
@@ -722,6 +789,27 @@ def _parse_cnj_seed(text: str, default_tribunal: str) -> tuple[list[dict], list[
             continue
         entries.append({"numero_cnj": line, "tribunal": cnj_to_court(line) or default_tribunal})
     return entries, errors
+
+
+def _merge_tracked(tracked: list[dict], entries: list[dict]) -> tuple[list[dict], int]:
+    """Add ``entries`` to a tracked-processo list, deduping by (tribunal, cnj).
+
+    The input list is not mutated.
+
+    Returns:
+        Tuple ``(merged, added_count)``.
+    """
+    merged = list(tracked)
+    existing = {f"{p['tribunal']}:{p['numero_cnj']}" for p in merged}
+    added = 0
+    for entry in entries:
+        key = f"{entry['tribunal']}:{entry['numero_cnj']}"
+        if key in existing:
+            continue
+        existing.add(key)
+        merged.append(entry)
+        added += 1
+    return merged, added
 
 
 @app.command()
