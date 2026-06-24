@@ -394,13 +394,30 @@ def load_processo(
             msg = "Source 'mni' requer o cpf do advogado constituído (--cpf)."
             raise ValueError(msg)
         tribunal_cfg = get_tribunal(tribunal)
-        return fetch_processo_mni(
+        processo = fetch_processo_mni(
             numero_cnj,
             tribunal_cfg,
             cpf,
             senha or cpf,
             token_pin=token_pin,
         )
+        # Record the privileged read in the demo's hashed audit chain. The
+        # ProcessoDomain itself never reaches the log — only the metadata of
+        # the call (audit everything; never leak case content here).
+        if audit_path is not None:
+            from juris.persistence.audit import AuditLog
+
+            AuditLog(audit_path).log(
+                event_type="mni.consulta",
+                actor=f"user:{cpf}",
+                processo_cnj=processo.numero_cnj,
+                details={
+                    "tribunal": tribunal_cfg.id,
+                    "mtls": tribunal_cfg.requires_mtls,
+                    "movimentos": len(processo.movimentos),
+                },
+            )
+        return processo
 
     raise ValueError(f"Source desconhecido: {source}")
 

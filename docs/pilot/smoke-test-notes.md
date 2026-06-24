@@ -51,12 +51,28 @@ Caminho canônico do corpus: `~/.juris/repertory.db`. Override via
 `JURIS_MIN_REPERTORY_CHUNKS` / `JURIS_MIN_REPERTORY_SOURCE_TYPES` ou
 flags `--min-chunks`/`--min-source-types` em `juris repertory status`.
 
-### L2 · MNI ainda não implementado
+### L2 · MNI requer o token A3 conectado
 
-`--source mni` lança `NotImplementedError`. Para a 1ª sessão use
-`--source datajud` (consulta pública pelo CNJ) ou `--source fixture`
-(offline). MNI entra em rotação assim que o token A3 for testado em
-ambiente isolado.
+`--source mni` faz a leitura real via MNI com as credenciais ICP-Brasil
+do(a) advogado(a): tribunais mTLS (ex.: TJMG) autenticam pelo token A3,
+os demais por CPF + senha PJe. É obrigatório passar `--cpf` (do advogado
+constituído); a senha PJe vem de `--senha`/Keychain/prompt e o PIN do
+token de `--pin`/`TOKEN_PIN`/prompt.
+
+```bash
+uv run juris demo <NUMERO_CNJ_REAL> contestacao \
+  --tribunal tjmg --source mni --cpf <CPF> --pin <PIN> --cloud
+```
+
+⚠️ **PIN errado bloqueia o token** (o código recusa retry). Confira o PIN
+num site da Receita antes da sessão (passo do pré-flight). Se a leitura
+MNI falhar, o CLI sugere cair para `--source datajud` (consulta pública,
+sem token) ou `--source fixture` (offline) — **não há fallback silencioso**:
+em modo MNI a leitura real funciona ou é reportada.
+
+Para a 1ª sessão, se preferir evitar o hardware, comece em `--source
+datajud`; use `--source mni` quando quiser exercitar a leitura real
+ponta a ponta.
 
 ### L3 · Audit log acumula entre execuções
 
@@ -317,9 +333,10 @@ descobrir do zero.
   warning sobre `HF_TOKEN` aparece). Pré-cachear antes da sessão.
 - **`run-manifest.json` não inclui a si mesmo na lista de `artifacts`.**
   Por design — é o próprio manifest. Não é bug.
-- **`MNI source ainda não implementado.`** Use `datajud` (pública) ou
-  `fixture` (offline). Quando o token A3 entrar em rotação, o source
-  `mni` será habilitado.
+- **`--source mni` exige o token A3 + `--cpf`** (ver §L2). A consulta MNI
+  é auditada como evento `mni.consulta` na cadeia de `audit.jsonl`. PIN
+  errado bloqueia o token; em falha de MNI não há fallback silencioso — o
+  CLI orienta usar `datajud`/`fixture`.
 - **DataJud batch não é parte desta smoke test.** Um CNJ real via
   `--source datajud` é consulta pública read-only. Listas de CNJs entram em
   Sprint posterior e exigem confirmação explícita, rate limit, cache/auditoria

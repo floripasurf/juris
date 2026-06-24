@@ -42,6 +42,30 @@ def test_mni_source_returns_domain_via_fetch() -> None:
     assert kwargs.get("token_pin") == "1234"
 
 
+def test_mni_source_audits_the_read(tmp_path) -> None:
+    """A real MNI read must be recorded in the demo's hashed audit chain."""
+    from juris.persistence.audit import AuditLog
+
+    audit_path = tmp_path / "audit.jsonl"
+    with patch("juris.mni.fetch.fetch_processo_mni", return_value=_domain()):
+        load_processo(
+            _CNJ,
+            "tjmg",
+            SourceMode.MNI,
+            audit_path=audit_path,
+            cpf="07671039632",
+            senha="senha",
+            token_pin="1234",  # noqa: S106
+        )
+
+    entries = AuditLog(audit_path).read_all()
+    consulta = next(e for e in entries if e.event_type == "mni.consulta")
+    assert consulta.processo_cnj == _CNJ
+    assert consulta.actor == "user:07671039632"
+    assert consulta.details["tribunal"] == "tjmg"
+    assert consulta.details["mtls"] is True
+
+
 def test_mni_source_requires_cpf() -> None:
     with pytest.raises(ValueError, match="cpf"):
         load_processo(_CNJ, "tjmg", SourceMode.MNI, cpf=None)
