@@ -358,12 +358,20 @@ def load_processo(
     *,
     use_cache: bool = True,
     audit_path: Path | None = None,
+    cpf: str | None = None,
+    senha: str | None = None,
+    token_pin: str | None = None,
 ) -> ProcessoDomain:
     """Resolve a ProcessoDomain from the configured source.
 
     DATAJUD: live lookup via DataJud public API.
     FIXTURE: synthetic in-memory processo for offline demos.
-    MNI:     not implemented — raises NotImplementedError.
+    MNI:     live read via the lawyer's ICP-Brasil credentials. mTLS tribunals
+             (e.g. TJMG) use the A3 token; others use CPF + PJe password. The
+             caller resolves ``cpf``/``senha``/``token_pin`` (this function
+             never prompts) and a failure surfaces as ``RuntimeError`` rather
+             than a silent fallback to DataJud — in a lawyer-facing demo the
+             real read either works or is reported.
     """
     if source is SourceMode.DATAJUD:
         from juris.datajud.client import consultar_processo as datajud_consulta
@@ -379,10 +387,20 @@ def load_processo(
         return _build_fixture_processo(numero_cnj, tribunal)
 
     if source is SourceMode.MNI:
-        msg = (
-            "Source 'mni' ainda não implementado para o demo. Use 'datajud' (default) ou 'fixture' para teste offline."
+        from juris.mni.fetch import fetch_processo_mni
+        from juris.mni.tribunais import get_tribunal
+
+        if not cpf:
+            msg = "Source 'mni' requer o cpf do advogado constituído (--cpf)."
+            raise ValueError(msg)
+        tribunal_cfg = get_tribunal(tribunal)
+        return fetch_processo_mni(
+            numero_cnj,
+            tribunal_cfg,
+            cpf,
+            senha or cpf,
+            token_pin=token_pin,
         )
-        raise NotImplementedError(msg)
 
     raise ValueError(f"Source desconhecido: {source}")
 

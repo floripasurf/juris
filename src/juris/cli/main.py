@@ -2612,7 +2612,9 @@ def demo(
     numero_cnj: str = typer.Argument(..., help="Número CNJ do processo"),
     tipo: str = typer.Argument(..., help="Tipo de petição (contestacao, inicial, apelacao, ...)"),
     tribunal: str = typer.Option("tjmg", "--tribunal", "-t", help="ID do tribunal"),
-    cpf: str | None = typer.Option(None, "--cpf", help="CPF do advogado (futuro: MNI)"),
+    cpf: str | None = typer.Option(None, "--cpf", help="CPF do advogado constituído (obrigatório p/ --source mni)"),
+    senha: str | None = typer.Option(None, "--senha", "-s", help="Senha PJe (MNI; senão Keychain/prompt)"),
+    pin: str | None = typer.Option(None, "--pin", help="PIN do token A3 (MNI mTLS; senão TOKEN_PIN/prompt)"),
     source: str = typer.Option("datajud", "--source", help="Origem do processo: datajud | mni | fixture"),
     out_root: str = typer.Option("juris-out", "--out", "-o", help="Diretório raiz para artefatos"),
     thesis: str | None = typer.Option(None, "--thesis", "-T", help="Tese explícita"),
@@ -2710,6 +2712,13 @@ def demo(
             )
             raise typer.Exit(code=1)
 
+    # MNI needs the constituted lawyer's CPF. Checked after the corpus gate so
+    # the corpus safety invariant always reports first (see demo safety-gate
+    # tests), but before any model/retrieval setup.
+    if source_mode is SourceMode.MNI and not cpf:
+        console.print("[red]Source 'mni' requer --cpf do advogado constituído.[/red]")
+        raise typer.Exit(code=1)
+
     # Resolve output paths
     out_root_path = FilePath(out_root)
     case_dir = out_root_path / output_dir_name(numero_cnj, demo_mode=is_demo_mode)
@@ -2778,11 +2787,51 @@ def demo(
         console.print(f"[red]Falha ao inicializar retrieval: {exc}[/red]")
         raise typer.Exit(code=1) from exc
 
+    # For MNI, resolve the lawyer's credentials at the CLI edge (the library
+    # never prompts): PJe password via arg → Keychain → prompt, and the A3
+    # token PIN via arg → TOKEN_PIN → prompt. mTLS tribunals (e.g. TJMG) need
+    # the PIN; password tribunals ignore it.
+    resolved_senha = senha
+    resolved_pin = pin
+    if source_mode is SourceMode.MNI:
+        from juris.config import get_settings
+        from juris.mni.tribunais import get_tribunal
+
+        resolved_senha = _get_senha(tribunal, cpf or "", senha)
+        try:
+            tribunal_cfg = get_tribunal(tribunal)
+        except KeyError as exc:
+            console.print(f"[red]Tribunal '{tribunal}' não encontrado.[/red]")
+            raise typer.Exit(code=1) from exc
+        if tribunal_cfg.requires_mtls and not resolved_pin:
+            settings = get_settings()
+            resolved_pin = settings.token_pin.get_secret_value() if settings.token_pin else None
+            if not resolved_pin:
+                resolved_pin = getpass.getpass("PIN do token A3: ")
+            if not resolved_pin:
+                console.print("[red]PIN do token A3 vazio.[/red]")
+                raise typer.Exit(code=1)
+
     # Load processo
     try:
-        processo = load_processo(numero_cnj, tribunal, source_mode, use_cache=use_cache, audit_path=audit_path)
-    except (LookupError, NotImplementedError) as exc:
+        processo = load_processo(
+            numero_cnj,
+            tribunal,
+            source_mode,
+            use_cache=use_cache,
+            audit_path=audit_path,
+            cpf=cpf,
+            senha=resolved_senha,
+            token_pin=resolved_pin,
+        )
+    except (LookupError, NotImplementedError, ValueError, KeyError, RuntimeError) as exc:
         console.print(f"[red]{exc}[/red]")
+        if source_mode is SourceMode.MNI:
+            console.print(
+                "[yellow]Leitura via MNI falhou. Para um teste sem token, use "
+                "[bold]--source datajud[/bold] (consulta pública) ou "
+                "[bold]--source fixture[/bold] (offline).[/yellow]"
+            )
         raise typer.Exit(code=1) from exc
 
     # Build request
