@@ -18,7 +18,7 @@ import json
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Literal, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol, cast
 
 from juris.core.observability import get_logger
 
@@ -52,18 +52,38 @@ class LinhaArgumentativa:
 
 
 @dataclass(frozen=True, slots=True)
+class ElementoCaso:
+    """Módulo A — one classified element of the case."""
+
+    texto: str
+    tipo: Literal["fato", "prova", "inferencia", "lacuna", "risco"]
+
+
+@dataclass(frozen=True, slots=True)
+class ItemMatriz:
+    """Módulo B — one claim mapped to existing evidence and gaps."""
+
+    alegacao: str
+    provas: list[str] = field(default_factory=list)  # existing evidence
+    lacunas: list[str] = field(default_factory=list)  # missing evidence
+
+
+@dataclass(frozen=True, slots=True)
 class EstrategiaResult:
-    """The recommended line plus the runners-up (transparency).
+    """The recommended line plus the runners-up (transparency) — the Relatório.
 
     ``avisos_deontologicos`` (Módulo I) flags conduct vedada pelo CED/EOAB in the
     chosen line; ``revisao_humana_obrigatoria`` (auditor §6.14) is set when there
-    are such flags or confidence is low — the human always has the final say.
+    are such flags, confidence is low, or the evidentiary support is weak (Módulo
+    B). ``classificacao`` (A) and ``matriz_probatoria`` (B) enrich the Relatório.
     """
 
     escolhida: LinhaArgumentativa
     alternativas: list[LinhaArgumentativa]
     avisos_deontologicos: list[str] = field(default_factory=list)
     revisao_humana_obrigatoria: bool = False
+    classificacao: list[ElementoCaso] = field(default_factory=list)
+    matriz_probatoria: list[ItemMatriz] = field(default_factory=list)
 
 
 # Módulo I — deontological veto. High-precision patterns for conduct the CED/EOAB
@@ -204,6 +224,93 @@ def _parse_candidatas(content: str) -> list[LinhaArgumentativa]:
     return linhas
 
 
+# ── Módulo A: classificação de elementos ──────────────────────────────────────
+_TIPOS_ELEMENTO = frozenset({"fato", "prova", "inferencia", "lacuna", "risco"})
+
+_SYSTEM_CLASSIFICACAO = (
+    "Classifique cada elemento do caso FORNECIDO como fato, prova, inferencia, "
+    "lacuna ou risco. Não invente fatos nem provas; o que faltar é lacuna."
+)
+
+
+def _parse_classificacao(content: str) -> list[ElementoCaso]:
+    try:
+        raw = json.loads(content)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    elementos: list[ElementoCaso] = []
+    for item in raw if isinstance(raw, list) else []:
+        if not isinstance(item, dict):
+            continue
+        tipo = str(item.get("tipo", "")).lower()
+        texto = str(item.get("texto", "")).strip()
+        if tipo in _TIPOS_ELEMENTO and texto:
+            elementos.append(
+                ElementoCaso(texto=texto, tipo=cast('Literal["fato", "prova", "inferencia", "lacuna", "risco"]', tipo))
+            )
+    return elementos
+
+
+async def classificar_elementos(llm: AbstractLLM, contexto: str) -> list[ElementoCaso]:
+    """Módulo A — classify the case into fato/prova/inferência/lacuna/risco."""
+    response = await llm.complete(
+        f'Caso:\n{contexto}\n\nRetorne JSON: lista de {{"texto", "tipo"}} '
+        "(tipo ∈ fato|prova|inferencia|lacuna|risco).",
+        system=_SYSTEM_CLASSIFICACAO,
+        max_tokens=1000,
+    )
+    return _parse_classificacao(response.content)
+
+
+# ── Módulo B: matriz probatória ───────────────────────────────────────────────
+_SYSTEM_MATRIZ = (
+    "Para cada alegação do caso FORNECIDO, liste as provas existentes e as "
+    "lacunas (provas faltantes). Não invente provas; sem prova é lacuna."
+)
+
+
+def _parse_matriz(content: str) -> list[ItemMatriz]:
+    try:
+        raw = json.loads(content)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    itens: list[ItemMatriz] = []
+    for item in raw if isinstance(raw, list) else []:
+        if not isinstance(item, dict) or not str(item.get("alegacao", "")).strip():
+            continue
+        itens.append(
+            ItemMatriz(
+                alegacao=str(item["alegacao"]).strip(),
+                provas=[str(p) for p in item.get("provas", [])],
+                lacunas=[str(value) for value in item.get("lacunas", [])],
+            )
+        )
+    return itens
+
+
+async def montar_matriz(llm: AbstractLLM, contexto: str) -> list[ItemMatriz]:
+    """Módulo B — map each claim to existing evidence and gaps."""
+    response = await llm.complete(
+        f'Caso:\n{contexto}\n\nRetorne JSON: lista de {{"alegacao", "provas": [...], '
+        '"lacunas": [...]}}.',
+        system=_SYSTEM_MATRIZ,
+        max_tokens=1200,
+    )
+    return _parse_matriz(response.content)
+
+
+def lastro_probatorio(matriz: list[ItemMatriz]) -> float:
+    """Evidentiary support: fraction of claims backed by at least one prova.
+
+    Empty matriz → 1.0 (nothing asserted, nothing to doubt). A low lastro means
+    claims rest on gaps — the strategy needs mandatory human review (Módulo B).
+    """
+    if not matriz:
+        return 1.0
+    com_prova = sum(1 for item in matriz if item.provas)
+    return round(com_prova / len(matriz), 4)
+
+
 class EstrategiaAgent:
     """Generates candidate lines via the LLM, then selects deterministically."""
 
@@ -211,9 +318,25 @@ class EstrategiaAgent:
         self._llm = llm
 
     async def propor(
-        self, *, contexto: str, precedentes: Sequence[_Precedente], n: int = 3
+        self,
+        *,
+        contexto: str,
+        precedentes: Sequence[_Precedente],
+        n: int = 3,
+        auditar: bool = True,
     ) -> EstrategiaResult:
-        """Propose and select the best-grounded argumentative line."""
+        """Propose and select the best-grounded argumentative line.
+
+        When ``auditar`` (default), runs the pre-steps that build the Relatório:
+        Módulo A (classify elements) and Módulo B (evidence matrix); a weak
+        evidentiary lastro forces mandatory human review.
+        """
+        classificacao: list[ElementoCaso] = []
+        matriz: list[ItemMatriz] = []
+        if auditar:
+            classificacao = await classificar_elementos(self._llm, contexto)
+            matriz = await montar_matriz(self._llm, contexto)
+
         response = await self._llm.complete(
             _build_prompt(contexto, precedentes, n),
             system=_SYSTEM,
@@ -221,10 +344,20 @@ class EstrategiaAgent:
         )
         candidatas = _parse_candidatas(response.content)
         result = selecionar_linha(candidatas, precedentes)
+
+        lastro = lastro_probatorio(matriz)
+        result = replace(
+            result,
+            classificacao=classificacao,
+            matriz_probatoria=matriz,
+            revisao_humana_obrigatoria=result.revisao_humana_obrigatoria or lastro < 0.5,
+        )
         logger.info(
             "estrategia_selecionada",
             candidatas=len(candidatas),
             score=result.escolhida.score,
             citacoes=len(result.escolhida.citacoes),
+            elementos=len(classificacao),
+            lastro=lastro,
         )
         return result

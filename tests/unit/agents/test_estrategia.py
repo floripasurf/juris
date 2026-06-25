@@ -9,7 +9,11 @@ import pytest
 
 from juris.agents.estrategia import (
     EstrategiaAgent,
+    ItemMatriz,
     LinhaArgumentativa,
+    _parse_classificacao,
+    _parse_matriz,
+    lastro_probatorio,
     score_linha,
     selecionar_linha,
     verificar_deontologia,
@@ -111,6 +115,27 @@ class TestDeontologia:
         assert verificar_deontologia(linha) == []
 
 
+class TestClassificacaoMatriz:
+    def test_lastro_high_when_claims_have_evidence(self) -> None:
+        matriz = [ItemMatriz(alegacao="x", provas=["doc1"]), ItemMatriz(alegacao="y", provas=["doc2"])]
+        assert lastro_probatorio(matriz) == 1.0
+
+    def test_lastro_half_when_one_claim_lacks_evidence(self) -> None:
+        matriz = [ItemMatriz(alegacao="x", lacunas=["sem prova"]), ItemMatriz(alegacao="y", provas=["doc"])]
+        assert lastro_probatorio(matriz) == 0.5
+
+    def test_lastro_neutral_for_empty_matriz(self) -> None:
+        assert lastro_probatorio([]) == 1.0
+
+    def test_parse_classificacao_keeps_only_valid_tipos(self) -> None:
+        content = '[{"texto":"contrato assinado","tipo":"prova"},{"texto":"x","tipo":"invalido"}]'
+        elementos = _parse_classificacao(content)
+        assert [e.tipo for e in elementos] == ["prova"]
+
+    def test_parse_matriz_resilient_to_bad_json(self) -> None:
+        assert _parse_matriz("not json at all") == []
+
+
 @pytest.mark.asyncio
 async def test_agent_generates_candidates_then_selects_the_grounded_one() -> None:
     precs = [_prec("A", 1)]
@@ -125,4 +150,36 @@ async def test_agent_generates_candidates_then_selects_the_grounded_one() -> Non
     result = await EstrategiaAgent(llm).propor(contexto="Caso de cobrança", precedentes=precs)
 
     assert result.escolhida.tese == "forte"
-    llm.complete.assert_awaited_once()
+    assert llm.complete.await_count == 3  # A (classificar) + B (matriz) + C (linhas)
+
+
+@pytest.mark.asyncio
+async def test_propor_attaches_classificacao_matriz_and_folds_lastro() -> None:
+    precs = [_prec("A", 1)]
+    llm = MagicMock()
+    llm.complete = AsyncMock(
+        side_effect=[
+            SimpleNamespace(content='[{"texto":"contrato","tipo":"prova"}]'),  # A
+            SimpleNamespace(content='[{"alegacao":"mora","lacunas":["sem prova"]}]'),  # B → lastro 0
+            SimpleNamespace(content='[{"tese":"forte","citacoes":["A"]}]'),  # C
+        ]
+    )
+
+    result = await EstrategiaAgent(llm).propor(contexto="Caso", precedentes=precs)
+
+    assert result.classificacao[0].tipo == "prova"
+    assert result.matriz_probatoria[0].alegacao == "mora"
+    assert result.revisao_humana_obrigatoria is True  # lastro 0 < 0.5 forces review
+
+
+@pytest.mark.asyncio
+async def test_propor_auditar_false_skips_a_and_b() -> None:
+    precs = [_prec("A", 1)]
+    llm = MagicMock()
+    llm.complete = AsyncMock(return_value=SimpleNamespace(content='[{"tese":"forte","citacoes":["A"]}]'))
+
+    result = await EstrategiaAgent(llm).propor(contexto="Caso", precedentes=precs, auditar=False)
+
+    assert result.classificacao == []
+    assert result.matriz_probatoria == []
+    assert llm.complete.await_count == 1
