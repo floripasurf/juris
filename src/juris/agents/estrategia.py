@@ -16,11 +16,11 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Literal, Protocol, cast
 
-from juris.core.deid import deidentify, reidentify
+from juris.core.deid import deidentify, ensure_cloud_safe, reidentify
 from juris.core.observability import get_logger
 
 if TYPE_CHECKING:
@@ -385,6 +385,8 @@ class EstrategiaAgent:
         modo: Literal["completo", "abreviado"] = "completo",
         analise_adversario: str | None = None,
         deidentificar: bool = False,
+        ner_redactor: Callable[[str], list[str]] | None = None,
+        allow_partial_deid: bool = False,
     ) -> EstrategiaResult:
         """Propose and select the best-grounded argumentative line.
 
@@ -396,12 +398,19 @@ class EstrategiaAgent:
                 fed to the line generation so lines anticipate the opponent.
             deidentificar: Strip PII (CPF/CNPJ/CNJ/OAB) from the context before
                 any LLM call and restore it in the output (ADR-0016).
+            ner_redactor: Optional NER (e.g. LeNER-Br) that also redacts free-text
+                names — makes the de-id complete (cloud-safe).
+            allow_partial_deid: Opt in to a partial (structured-only) de-id. Off
+                by default: the agent **fails closed** before any cloud/browser
+                call when names may remain — the gate isn't only in the router.
         """
-        # Módulo 1 (ADR-0016) — de-identify before any LLM sees the case.
+        # Módulo 1 (ADR-0016) — de-identify before any LLM sees the case, and
+        # enforce the cloud-safety gate here too (callers may use a cloud LLM).
         mapping: dict[str, str] = {}
         if deidentificar:
             sep = "\n###ADVERSARIO###\n"
-            deid = deidentify(contexto + sep + (analise_adversario or ""))
+            deid = deidentify(contexto + sep + (analise_adversario or ""), ner_redactor=ner_redactor)
+            ensure_cloud_safe(deid, allow_partial=allow_partial_deid)
             mapping = deid.mapping
             contexto, _, adversario_deid = deid.text.partition(sep)
             analise_adversario = adversario_deid if analise_adversario else None

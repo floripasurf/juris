@@ -233,6 +233,7 @@ async def test_deidentificar_keeps_pii_out_of_the_llm_prompt() -> None:
         precedentes=precs,
         modo="abreviado",
         deidentificar=True,
+        allow_partial_deid=True,
     )
 
     prompt = llm.complete.call_args_list[-1].args[0]
@@ -253,7 +254,43 @@ async def test_deidentificar_reidentifies_the_output() -> None:
         precedentes=precs,
         modo="abreviado",
         deidentificar=True,
+        allow_partial_deid=True,
     )
 
     # placeholders in the model output are restored for the lawyer
     assert result.escolhida.tese == "O réu 123.456.789-09 deve pagar"
+
+
+@pytest.mark.asyncio
+async def test_deidentificar_fails_closed_on_partial_deid_without_optin() -> None:
+    # Structured-only de-id (no NER) is partial — propor must not silently send
+    # names to a cloud/browser model. Gate enforced at the agent, not just the router.
+    precs = [_prec("A", 1)]
+    llm = MagicMock()
+    llm.complete = AsyncMock(return_value=SimpleNamespace(content='[{"tese":"t","citacoes":["A"]}]'))
+
+    with pytest.raises(ValueError, match="parcial"):
+        await EstrategiaAgent(llm).propor(
+            contexto="Autor João, CPF 123.456.789-09",
+            precedentes=precs,
+            modo="abreviado",
+            deidentificar=True,  # allow_partial_deid defaults False → fail closed
+        )
+    llm.complete.assert_not_awaited()  # nothing left for the model
+
+
+@pytest.mark.asyncio
+async def test_deidentificar_complete_with_ner_redactor_passes_gate() -> None:
+    precs = [_prec("A", 1)]
+    llm = MagicMock()
+    llm.complete = AsyncMock(return_value=SimpleNamespace(content='[{"tese":"t","citacoes":["A"]}]'))
+
+    # A NER redactor makes the de-id complete → no opt-in needed.
+    await EstrategiaAgent(llm).propor(
+        contexto="Autor João da Silva, CPF 123.456.789-09",
+        precedentes=precs,
+        modo="abreviado",
+        deidentificar=True,
+        ner_redactor=lambda _t: ["João da Silva"],
+    )
+    llm.complete.assert_awaited()
