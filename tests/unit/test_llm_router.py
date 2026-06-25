@@ -92,3 +92,11 @@ class TestPIIModesAndDeid:
         text, mapping = router.prepare_payload(route, "Autor CPF 123.456.789-09")
         assert text == "Autor CPF 123.456.789-09"
         assert mapping == {}
+
+    def test_browser_deid_routes_to_browser_session_with_deid(self) -> None:
+        # Lawyer's own Claude/ChatGPT subscription via the browser extension.
+        # De-id stays ON (consumer plans may train) — defense in depth.
+        router = LLMRouter(_make_settings(has_api_key=False))  # no API key needed
+        route = router.route(LLMTask.DRAFT, contains_pii=True, pii_mode=PIIMode.BROWSER_DEID)
+        assert route.provider == LLMProvider.CLAUDE_BROWSER
+        assert route.deidentify is True

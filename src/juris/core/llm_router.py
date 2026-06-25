@@ -17,14 +17,16 @@ if TYPE_CHECKING:
 class LLMProvider(str, Enum):
     ANTHROPIC = "anthropic"
     OLLAMA = "ollama"
+    CLAUDE_BROWSER = "claude_browser"  # lawyer's own subscription via browser extension
 
 
 class PIIMode(str, Enum):
     """How PII-bearing tasks are handled (ADR-0016)."""
 
     LOCAL_RAW = "local_raw"  # default — keep on the local model, raw
-    CLOUD_DEID = "cloud_deid"  # de-identify, then use the cloud model
-    CLOUD_RAW = "cloud_raw"  # cloud, raw — explicit opt-in (consent + DPA)
+    CLOUD_DEID = "cloud_deid"  # de-identify, then use the cloud API
+    CLOUD_RAW = "cloud_raw"  # cloud API, raw — explicit opt-in (consent + DPA)
+    BROWSER_DEID = "browser_deid"  # de-identify, then the lawyer's browser session
 
 
 class LLMTask(str, Enum):
@@ -67,6 +69,7 @@ class LLMRouter:
     MODELS: dict[LLMProvider, str] = {
         LLMProvider.ANTHROPIC: "claude-sonnet-4-6",
         LLMProvider.OLLAMA: "qwen3:latest",
+        LLMProvider.CLAUDE_BROWSER: "claude.ai (browser session)",
     }
 
     def __init__(self, settings: Settings) -> None:
@@ -96,6 +99,11 @@ class LLMRouter:
                 deidentify = True
             elif pii_mode is PIIMode.CLOUD_RAW:
                 provider = LLMProvider.ANTHROPIC
+            elif pii_mode is PIIMode.BROWSER_DEID:
+                # Lawyer's own subscription, locally via the extension; de-id
+                # stays on as defense in depth (consumer plans may train).
+                provider = LLMProvider.CLAUDE_BROWSER
+                deidentify = True
             else:  # LOCAL_RAW
                 provider = LLMProvider.OLLAMA
         else:
