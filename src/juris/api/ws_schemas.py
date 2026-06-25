@@ -47,3 +47,23 @@ class HealthResponse(BaseModel):
     token_connected: bool
     cert_valid_until: date | None = None
     version: str = "0.1.0"
+
+
+class CompletionRequest(BaseModel):
+    """Request relayed to the lawyer's browser LLM session (ADR-0018).
+
+    Carries a (de-identified) prompt across the Native Messaging bridge to the
+    Chrome extension driving Claude.ai/ChatGPT.
+    """
+    request_id: str
+    prompt: str
+    system: str | None = None
+    model: str = "claude.ai (browser session)"
+
+
+class CompletionResponse(BaseModel):
+    """Reply from the browser LLM session."""
+    request_id: str
+    success: bool
+    content: str | None = None
+    error: str | None = None
