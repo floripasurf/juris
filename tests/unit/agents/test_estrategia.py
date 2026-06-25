@@ -164,7 +164,7 @@ async def test_propor_attaches_and_uses_adversary_analysis() -> None:
     llm.complete = AsyncMock(return_value=SimpleNamespace(content='[{"tese":"forte","citacoes":["A"]}]'))
 
     result = await EstrategiaAgent(llm).propor(
-        contexto="Caso", precedentes=precs, auditar=False, analise_adversario="Réu alega prescrição"
+        contexto="Caso", precedentes=precs, modo="abreviado", analise_adversario="Réu alega prescrição"
     )
 
     assert result.analise_adversario == "Réu alega prescrição"
@@ -210,13 +210,50 @@ async def test_propor_attaches_classificacao_matriz_and_folds_lastro() -> None:
 
 
 @pytest.mark.asyncio
-async def test_propor_auditar_false_skips_a_and_b() -> None:
+async def test_modo_abreviado_skips_a_and_b() -> None:
     precs = [_prec("A", 1)]
     llm = MagicMock()
     llm.complete = AsyncMock(return_value=SimpleNamespace(content='[{"tese":"forte","citacoes":["A"]}]'))
 
-    result = await EstrategiaAgent(llm).propor(contexto="Caso", precedentes=precs, auditar=False)
+    result = await EstrategiaAgent(llm).propor(contexto="Caso", precedentes=precs, modo="abreviado")
 
     assert result.classificacao == []
     assert result.matriz_probatoria == []
-    assert llm.complete.await_count == 1
+    assert llm.complete.await_count == 1  # only line generation, no A/B pre-steps
+
+
+@pytest.mark.asyncio
+async def test_deidentificar_keeps_pii_out_of_the_llm_prompt() -> None:
+    precs = [_prec("A", 1)]
+    llm = MagicMock()
+    llm.complete = AsyncMock(return_value=SimpleNamespace(content='[{"tese":"t","citacoes":["A"]}]'))
+
+    await EstrategiaAgent(llm).propor(
+        contexto="Autor João, CPF 123.456.789-09",
+        precedentes=precs,
+        modo="abreviado",
+        deidentificar=True,
+    )
+
+    prompt = llm.complete.call_args_list[-1].args[0]
+    assert "123.456.789-09" not in prompt  # raw PII never reaches the model
+    assert "[CPF_1]" in prompt
+
+
+@pytest.mark.asyncio
+async def test_deidentificar_reidentifies_the_output() -> None:
+    precs = [_prec("A", 1)]
+    llm = MagicMock()
+    llm.complete = AsyncMock(
+        return_value=SimpleNamespace(content='[{"tese":"O réu [CPF_1] deve pagar","citacoes":["A"]}]')
+    )
+
+    result = await EstrategiaAgent(llm).propor(
+        contexto="Réu, CPF 123.456.789-09",
+        precedentes=precs,
+        modo="abreviado",
+        deidentificar=True,
+    )
+
+    # placeholders in the model output are restored for the lawyer
+    assert result.escolhida.tese == "O réu 123.456.789-09 deve pagar"

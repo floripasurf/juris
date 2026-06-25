@@ -20,6 +20,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Literal, Protocol, cast
 
+from juris.core.deid import deidentify, reidentify
 from juris.core.observability import get_logger
 
 if TYPE_CHECKING:
@@ -329,6 +330,46 @@ def lastro_probatorio(matriz: list[ItemMatriz]) -> float:
     return round(com_prova / len(matriz), 4)
 
 
+def _reid_linha(linha: LinhaArgumentativa, mapping: dict[str, str]) -> LinhaArgumentativa:
+    return replace(
+        linha,
+        tese=reidentify(linha.tese, mapping),
+        fundamentos=[reidentify(f, mapping) for f in linha.fundamentos],
+        riscos=[reidentify(r, mapping) for r in linha.riscos],
+        fundamento_consequencialista=(
+            reidentify(linha.fundamento_consequencialista, mapping)
+            if linha.fundamento_consequencialista
+            else None
+        ),
+        # citacoes are precedent source_ids, not PII — left untouched.
+    )
+
+
+def _reidentificar_resultado(result: EstrategiaResult, mapping: dict[str, str]) -> EstrategiaResult:
+    """Restore PII placeholders in every text field of the Relatório (ADR-0016)."""
+    if not mapping:
+        return result
+    return replace(
+        result,
+        escolhida=_reid_linha(result.escolhida, mapping),
+        alternativas=[_reid_linha(a, mapping) for a in result.alternativas],
+        avisos_deontologicos=[reidentify(a, mapping) for a in result.avisos_deontologicos],
+        classificacao=[replace(e, texto=reidentify(e.texto, mapping)) for e in result.classificacao],
+        matriz_probatoria=[
+            replace(
+                m,
+                alegacao=reidentify(m.alegacao, mapping),
+                provas=[reidentify(p, mapping) for p in m.provas],
+                lacunas=[reidentify(value, mapping) for value in m.lacunas],
+            )
+            for m in result.matriz_probatoria
+        ],
+        analise_adversario=(
+            reidentify(result.analise_adversario, mapping) if result.analise_adversario else None
+        ),
+    )
+
+
 class EstrategiaAgent:
     """Generates candidate lines via the LLM, then selects deterministically."""
 
@@ -341,20 +382,33 @@ class EstrategiaAgent:
         contexto: str,
         precedentes: Sequence[_Precedente],
         n: int = 3,
-        auditar: bool = True,
+        modo: Literal["completo", "abreviado"] = "completo",
         analise_adversario: str | None = None,
+        deidentificar: bool = False,
     ) -> EstrategiaResult:
         """Propose and select the best-grounded argumentative line.
 
-        When ``auditar`` (default), runs the pre-steps that build the Relatório:
-        Módulo A (classify elements) and Módulo B (evidence matrix); a weak
-        evidentiary lastro forces mandatory human review. ``analise_adversario``
-        (Módulo D — reuses the drafter's defesa_analyzer) is fed to the line
-        generation so the lines anticipate the opponent.
+        Args:
+            modo: ``"completo"`` runs the full Relatório pipeline (Módulo A
+                classify + Módulo B evidence matrix + line generation);
+                ``"abreviado"`` skips A/B for a quick, single-call validation.
+            analise_adversario: Módulo D — reuses the drafter's defesa_analyzer;
+                fed to the line generation so lines anticipate the opponent.
+            deidentificar: Strip PII (CPF/CNPJ/CNJ/OAB) from the context before
+                any LLM call and restore it in the output (ADR-0016).
         """
+        # Módulo 1 (ADR-0016) — de-identify before any LLM sees the case.
+        mapping: dict[str, str] = {}
+        if deidentificar:
+            sep = "\n###ADVERSARIO###\n"
+            deid = deidentify(contexto + sep + (analise_adversario or ""))
+            mapping = deid.mapping
+            contexto, _, adversario_deid = deid.text.partition(sep)
+            analise_adversario = adversario_deid if analise_adversario else None
+
         classificacao: list[ElementoCaso] = []
         matriz: list[ItemMatriz] = []
-        if auditar:
+        if modo == "completo":
             classificacao = await classificar_elementos(self._llm, contexto)
             matriz = await montar_matriz(self._llm, contexto)
 
@@ -374,12 +428,15 @@ class EstrategiaAgent:
             analise_adversario=analise_adversario,
             revisao_humana_obrigatoria=result.revisao_humana_obrigatoria or lastro < 0.5,
         )
+        result = _reidentificar_resultado(result, mapping)  # restore PII for the lawyer
         logger.info(
             "estrategia_selecionada",
+            modo=modo,
             candidatas=len(candidatas),
             score=result.escolhida.score,
             citacoes=len(result.escolhida.citacoes),
             elementos=len(classificacao),
             lastro=lastro,
+            deidentificado=bool(mapping),
         )
         return result
