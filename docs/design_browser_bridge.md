@@ -29,9 +29,14 @@ Claude.ai / ChatGPT tab  (lawyer logged in, training disabled)
 | `CompletionRequest` / `CompletionResponse` (`api/ws_schemas.py`) | ✅ done, tracked | The wire contract |
 | `NativeBridgeTransport` (`api/browser_bridge.py`) | ✅ done, tracked | Serialise request → `BridgeChannel.request` → unwrap reply; satisfies `BrowserTransport` |
 | `BrowserSessionLLM` (`llm/browser_session.py`) | ✅ done (local) | `AbstractLLM` over the transport |
-| `BridgeChannel` impl (WS client to the local agent, or stdio) | ⏳ next | Carry the JSON to/from the host |
-| Native Messaging Host | ⏳ next | Registered manifest; relays stdio ↔ extension |
-| Chrome extension content script | ⏳ next | Inject prompt into the tab, extract the (streamed) reply |
+| `WebSocketBridgeChannel` (`api/browser_bridge.py`) | ✅ done, tracked | WS client to the host: open → send JSON → await reply → close; injectable `connect` |
+| Native Messaging Host | ⏳ next (OS glue) | Registered manifest; localhost WS server ↔ stdio to the extension |
+| Chrome extension content script | ⏳ next (OS glue) | Inject prompt into the tab, extract the (streamed) reply |
+
+The **entire juris (Python) side is built and tested**:
+`BrowserSessionLLM → NativeBridgeTransport → WebSocketBridgeChannel → (host WS)`.
+What remains is OS/Chrome-level: the native host (a small WS server that Chrome
+launches and that relays to the extension over stdio) and the content script.
 
 ## Protocol
 

@@ -11,11 +11,16 @@ This satisfies the ``BrowserTransport`` protocol structurally, so a
 
 from __future__ import annotations
 
+import asyncio
+import json
 import uuid
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from juris.api.ws_schemas import CompletionRequest, CompletionResponse
 from juris.core.observability import get_logger
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 logger = get_logger(__name__)
 
@@ -25,6 +30,51 @@ class BridgeChannel(Protocol):
     """Sends a JSON message over the bridge and awaits the reply."""
 
     async def request(self, message: dict[str, object]) -> dict[str, object]: ...
+
+
+class _WSConnection(Protocol):
+    async def send(self, data: str) -> None: ...
+    async def recv(self) -> str: ...
+    async def close(self) -> None: ...
+
+
+class WebSocketBridgeChannel:
+    """BridgeChannel over a localhost WS to the Native Messaging host.
+
+    One request per connection (no correlation needed): open → send JSON →
+    await one reply → close. The ``connect`` factory is injected so the
+    websockets dependency stays at the edge and the channel is testable.
+    """
+
+    def __init__(
+        self,
+        connect: Callable[[], Awaitable[_WSConnection]],
+        *,
+        timeout: float = 60.0,
+    ) -> None:
+        self._connect = connect
+        self._timeout = timeout
+
+    @classmethod
+    def to_localhost(cls, url: str, *, timeout: float = 60.0) -> WebSocketBridgeChannel:
+        """Build a channel that dials ``url`` (e.g. ws://127.0.0.1:8765) via websockets."""
+
+        async def _connect() -> _WSConnection:
+            import websockets
+
+            return await websockets.connect(url)  # type: ignore[return-value]
+
+        return cls(_connect, timeout=timeout)
+
+    async def request(self, message: dict[str, object]) -> dict[str, object]:
+        conn = await self._connect()
+        try:
+            await conn.send(json.dumps(message))
+            raw = await asyncio.wait_for(conn.recv(), self._timeout)
+        finally:
+            await conn.close()
+        parsed: dict[str, object] = json.loads(raw)
+        return parsed
 
 
 class NativeBridgeTransport:
