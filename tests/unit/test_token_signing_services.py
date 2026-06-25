@@ -32,6 +32,21 @@ class TestSigningService:
     def test_inprocess_is_a_signing_service(self) -> None:
         assert isinstance(InProcessSigningService(), SigningService)
 
+    def test_open_signer_yields_session_scoped_pades(self) -> None:
+        signer_cls = MagicMock()
+        pades_instance = signer_cls.return_value.__enter__.return_value
+        with (
+            patch("juris.config.get_settings", return_value=_settings()),
+            patch(
+                "juris.mni.token.extract_token_material",
+                return_value=MagicMock(token_label="TOKEN CERTDATA"),  # noqa: S106
+            ),
+            patch("juris.signing.pades.PAdESSigner", signer_cls),
+            InProcessSigningService().open_signer(pin="1234") as signer,  # noqa: S106
+        ):
+            assert signer is pades_instance
+        signer_cls.assert_called_once()
+
     def test_sign_pdf_drives_pades_signer(self) -> None:
         result = MagicMock()
         signer_cls = MagicMock()

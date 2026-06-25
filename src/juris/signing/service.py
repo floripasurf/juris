@@ -16,10 +16,12 @@ directly. Two implementations are foreseen:
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from juris.signing.pades import SigningResult
+    from juris.signing.pades import PAdESSigner, SigningResult
 
 
 class SigningService(ABC):
@@ -76,3 +78,22 @@ class InProcessSigningService(SigningService):
         label = token_label or extract_token_material(settings.pkcs11_module).token_label
         with PAdESSigner(settings.pkcs11_module, label, pin, use_timestamp=use_timestamp) as signer:
             return signer.sign(pdf_bytes, field_name=field_name)
+
+    @contextmanager
+    def open_signer(
+        self, *, pin: str, token_label: str | None = None, use_timestamp: bool = False
+    ) -> Iterator[PAdESSigner]:
+        """Yield a session-scoped :class:`PAdESSigner` (multi-step filing pipeline).
+
+        Resolves the PKCS#11 module + token label itself (no hardcoded paths), so
+        callers like ``juris file`` / ``FilingOrchestrator`` use an open signer
+        without importing PKCS#11 machinery directly.
+        """
+        from juris.config import get_settings
+        from juris.mni.token import extract_token_material
+        from juris.signing.pades import PAdESSigner
+
+        settings = get_settings()
+        label = token_label or extract_token_material(settings.pkcs11_module).token_label
+        with PAdESSigner(settings.pkcs11_module, label, pin, use_timestamp=use_timestamp) as signer:
+            yield signer

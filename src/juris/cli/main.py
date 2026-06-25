@@ -2408,20 +2408,18 @@ def file_petition(
         prazo_override=prazo_override,
     )
 
-    # 7. Initialize signer and run pipeline
-    from juris.signing.pades import PAdESSigner
-
-    pkcs11_module = "/usr/local/lib/libeTPkcs11.dylib"
-    token_label = "TOKEN CERTDATA"
+    # 7. Initialize signer (via SigningService — no direct PKCS#11) and run pipeline
+    from juris.signing.service import InProcessSigningService
 
     try:
         if dry_run and skip_preflight:
             # Dry-run without preflight doesn't need the hardware token
             from unittest.mock import MagicMock
 
-            mock_signer = MagicMock(spec=PAdESSigner)
+            from juris.signing.pades import PAdESSigner
+
             orchestrator = FilingOrchestrator(
-                signer=mock_signer,
+                signer=MagicMock(spec=PAdESSigner),
                 audit=audit,
                 receipt_store=receipt_store,
                 mni_client_factory=mni_client_factory,
@@ -2429,7 +2427,7 @@ def file_petition(
             )
             result = asyncio.run(orchestrator.file(filing_request))
         else:
-            with PAdESSigner(pkcs11_module, token_label, resolved_pin) as signer:
+            with InProcessSigningService().open_signer(pin=resolved_pin) as signer:
                 orchestrator = FilingOrchestrator(
                     signer=signer,
                     audit=audit,
