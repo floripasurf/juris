@@ -1,6 +1,6 @@
 # Design — portar os 9 módulos do "Auditor Estratégico" para o EstrategiaAgent
 
-**Data:** 2026-06-25 · **Status:** desenho (pré-implementação)
+**Data:** 2026-06-25 · **Status:** 7 de 9 módulos implementados (A,B,C,D,E,G,I + regimes/de-id). Falta o Módulo H (consolidação multi-instância), bloqueado pelo dado da escavação/fit-ao-decisor.
 
 **Fonte:** metodologia adaptada de `pizaniadv/auditor-estrategico-juridico`
 (SKILL.md, **CC BY 4.0** — uso permitido com atribuição). Não copiamos o texto da
