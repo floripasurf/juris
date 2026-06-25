@@ -108,6 +108,7 @@ tests/unit/test_embeddings.py
 tests/unit/test_chunking.py
 tests/unit/test_hybrid_retrieval.py
 tests/unit/test_llm.py
+tests/unit/test_browser_session_llm.py
 tests/unit/test_preliminary*.py
 # Engine-agent tests stay local (mirror the src/ ignores); the public
 # EstrategiaAgent (tests/unit/agents/test_estrategia.py) is tracked for CI.
