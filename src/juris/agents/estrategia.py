@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 
 from juris.core.observability import get_logger
 
@@ -44,6 +44,10 @@ class LinhaArgumentativa:
     citacoes: list[str] = field(default_factory=list)  # claimed precedent source_ids
     riscos: list[str] = field(default_factory=list)
     score: float = 0.0
+    # Módulo C (hierarquização) + Módulo G (calibração de confiança), set by
+    # selecionar_linha: principal > subsidiária > eventual; tom ∝ solidez.
+    ordem: Literal["principal", "subsidiaria", "eventual"] = "subsidiaria"
+    confianca: Literal["alta", "media", "baixa"] = "media"
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,10 +81,32 @@ def score_linha(linha: LinhaArgumentativa, precedentes: Sequence[_Precedente]) -
     return round(max(0.0, 0.6 * grounding + 0.4 * autoridade - risco), 4)
 
 
+def _ordem(rank: int) -> Literal["principal", "subsidiaria", "eventual"]:
+    """Módulo C — rank → argument hierarchy."""
+    if rank == 0:
+        return "principal"
+    if rank == 1:
+        return "subsidiaria"
+    return "eventual"
+
+
+def _confianca(score: float) -> Literal["alta", "media", "baixa"]:
+    """Módulo G — firmeza do tom proporcional à solidez (score → confiança)."""
+    if score >= 0.66:
+        return "alta"
+    if score >= 0.4:
+        return "media"
+    return "baixa"
+
+
 def selecionar_linha(
     candidatas: list[LinhaArgumentativa], precedentes: Sequence[_Precedente]
 ) -> EstrategiaResult:
-    """Score every candidate, return the best as ``escolhida`` + the rest."""
+    """Score every candidate, return the best as ``escolhida`` + the rest.
+
+    Each line is also labelled with its place in the argument hierarchy (Módulo
+    C) and a confidence calibrated from the score (Módulo G).
+    """
     if not candidatas:
         msg = "Nenhuma linha argumentativa candidata para selecionar."
         raise ValueError(msg)
@@ -89,7 +115,8 @@ def selecionar_linha(
         key=lambda linha: linha.score,
         reverse=True,
     )
-    return EstrategiaResult(escolhida=scored[0], alternativas=scored[1:])
+    ranked = [replace(c, ordem=_ordem(i), confianca=_confianca(c.score)) for i, c in enumerate(scored)]
+    return EstrategiaResult(escolhida=ranked[0], alternativas=ranked[1:])
 
 
 _SYSTEM = (

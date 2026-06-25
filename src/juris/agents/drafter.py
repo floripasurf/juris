@@ -160,6 +160,8 @@ class DrafterAgent:
                     {
                         "tese": estrategia.escolhida.tese,
                         "score": estrategia.escolhida.score,
+                        "ordem": estrategia.escolhida.ordem,
+                        "confianca": estrategia.escolhida.confianca,
                         "alternativas": len(estrategia.alternativas),
                     },
                     result,
