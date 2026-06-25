@@ -15,6 +15,7 @@ the score degrades to grounding + authority.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Literal, Protocol
@@ -52,10 +53,55 @@ class LinhaArgumentativa:
 
 @dataclass(frozen=True, slots=True)
 class EstrategiaResult:
-    """The recommended line plus the runners-up (transparency)."""
+    """The recommended line plus the runners-up (transparency).
+
+    ``avisos_deontologicos`` (Módulo I) flags conduct vedada pelo CED/EOAB in the
+    chosen line; ``revisao_humana_obrigatoria`` (auditor §6.14) is set when there
+    are such flags or confidence is low — the human always has the final say.
+    """
 
     escolhida: LinhaArgumentativa
     alternativas: list[LinhaArgumentativa]
+    avisos_deontologicos: list[str] = field(default_factory=list)
+    revisao_humana_obrigatoria: bool = False
+
+
+# Módulo I — deontological veto. High-precision patterns for conduct the CED/EOAB
+# forbids in a thesis: claiming guaranteed success / inevitability of the outcome
+# (firmeza do tom deve ser proporcional à solidez, never absolute).
+_DEONTOLOGIA: list[tuple[re.Pattern[str], str]] = [
+    (
+        re.compile(r"êxito\s+garantid|garantia\s+de\s+êxito", re.IGNORECASE),
+        "Afirma êxito garantido — vedado pelo CED (o tom deve ser proporcional à solidez).",
+    ),
+    (
+        re.compile(r"(vitória|ganho|procedência|resultado)\s+(cert[oa]|garantid)", re.IGNORECASE),
+        "Afirma resultado certo/garantido — vedado pelo CED.",
+    ),
+    (
+        re.compile(r"inevitá(vel|veis)", re.IGNORECASE),
+        "Afirma inevitabilidade do desfecho — vedado pelo CED.",
+    ),
+    (
+        re.compile(r"sem\s+risco\s+algum|risco\s+zero|100\s*%\s+de\s+(êxito|chance)", re.IGNORECASE),
+        "Linguagem de garantia de resultado (sem risco) — vedada pelo CED.",
+    ),
+]
+
+
+def verificar_deontologia(linha: LinhaArgumentativa) -> list[str]:
+    """Deterministic CED/EOAB guardrail over a line's tese + fundamentos.
+
+    Returns human-readable avisos for forbidden conduct found (guaranteed
+    success / inevitability). Empty when the line is sober. Flags, never silently
+    suppresses — the lawyer decides (Módulo I).
+    """
+    texto = " ".join([linha.tese, *linha.fundamentos])
+    avisos: list[str] = []
+    for pattern, aviso in _DEONTOLOGIA:
+        if pattern.search(texto) and aviso not in avisos:
+            avisos.append(aviso)
+    return avisos
 
 
 def _autoridade(hierarchy: int) -> float:
@@ -116,7 +162,14 @@ def selecionar_linha(
         reverse=True,
     )
     ranked = [replace(c, ordem=_ordem(i), confianca=_confianca(c.score)) for i, c in enumerate(scored)]
-    return EstrategiaResult(escolhida=ranked[0], alternativas=ranked[1:])
+    escolhida = ranked[0]
+    avisos = verificar_deontologia(escolhida)  # Módulo I — deontological veto
+    return EstrategiaResult(
+        escolhida=escolhida,
+        alternativas=ranked[1:],
+        avisos_deontologicos=avisos,
+        revisao_humana_obrigatoria=bool(avisos) or escolhida.confianca == "baixa",
+    )
 
 
 _SYSTEM = (

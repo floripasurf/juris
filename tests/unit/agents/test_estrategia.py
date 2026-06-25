@@ -12,6 +12,7 @@ from juris.agents.estrategia import (
     LinhaArgumentativa,
     score_linha,
     selecionar_linha,
+    verificar_deontologia,
 )
 
 
@@ -74,6 +75,40 @@ class TestSelecionarLinha:
         # Citação alucinada (Z não existe) → score 0 → baixa.
         fraca = selecionar_linha([LinhaArgumentativa(tese="fraca", citacoes=["Z"])], precs)
         assert fraca.escolhida.confianca == "baixa"
+
+    def test_deontological_veto_flags_and_forces_review(self) -> None:
+        # Módulo I: linha que afirma resultado garantido → vedação CED.
+        precs = [_prec("A", 1)]
+        cands = [LinhaArgumentativa(tese="A procedência é certa, êxito garantido.", citacoes=["A"])]
+        result = selecionar_linha(cands, precs)
+        assert result.avisos_deontologicos  # flagged, not silently kept
+        assert result.revisao_humana_obrigatoria is True
+
+    def test_clean_high_confidence_line_needs_no_mandatory_review(self) -> None:
+        precs = [_prec("A", 1)]
+        cands = [LinhaArgumentativa(tese="Há fundamento sólido para a tese.", citacoes=["A"])]
+        result = selecionar_linha(cands, precs)
+        assert result.avisos_deontologicos == []
+        assert result.revisao_humana_obrigatoria is False
+
+
+class TestDeontologia:
+    def test_flags_guaranteed_result_language(self) -> None:
+        # CED: tom proporcional à solidez; vedado afirmar êxito garantido.
+        linha = LinhaArgumentativa(tese="Vitória garantida, sem risco algum.")
+        avisos = verificar_deontologia(linha)
+        assert avisos
+        assert all(isinstance(a, str) for a in avisos)
+
+    def test_flags_inevitability_in_fundamentos(self) -> None:
+        linha = LinhaArgumentativa(tese="Tese X", fundamentos=["O desfecho é inevitável."])
+        assert verificar_deontologia(linha)
+
+    def test_sober_line_has_no_avisos(self) -> None:
+        linha = LinhaArgumentativa(
+            tese="Há fundamento para a tese, com risco moderado de improcedência."
+        )
+        assert verificar_deontologia(linha) == []
 
 
 @pytest.mark.asyncio
