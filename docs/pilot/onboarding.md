@@ -31,13 +31,51 @@ advogado(a) parceiro(a). Prepare estes itens com antecedência — o objetivo
   docker compose -f docker/docker-compose.yml up -d
   ```
 - [ ] Variáveis de ambiente em `.env`:
-  - `ANTHROPIC_API_KEY=` (se for usar `--cloud` para tarefas sem PII).
+  - `ANTHROPIC_API_KEY=` (opcional — só para o caminho de API sem PII).
   - `DATAJUD_API_KEY=` (se a chave do CNJ for exigida).
-- [ ] Ollama rodando localmente (`ollama serve`) caso o demo use LLM local.
+- [ ] Ollama rodando localmente (`ollama serve`) como **fallback** — o modelo de
+  fronteira vem da sessão de IA do(a) advogado(a) (ver §3.5).
 - [ ] Repertório indexado: arquivo `data/repertory.db` presente; senão:
   ```bash
   uv run juris repertory ingest
   ```
+
+## 3.5 Sessão de IA (modelo de fronteira via assinatura)
+
+O juris usa a **assinatura de IA do(a) próprio(a) advogado(a)** (Claude ou
+ChatGPT) através de uma extensão de navegador na máquina dele(a) — o modelo de
+fronteira faz a análise/estratégia/minuta, e a sessão **nunca sai do perímetro
+do(a) advogado(a)** (ADR-0018). Passo a passo, **na ordem**:
+
+- [ ] **Assinatura paga ativa**: Claude (Pro/Max) **ou** ChatGPT (Plus/Pro).
+  O plano que o(a) advogado(a) já usa serve — sem custo adicional de API.
+
+- [ ] **⚠️ DESLIGAR o treino / coleta de dados** (passo crítico — sigilo da OAB +
+  LGPD: o conteúdo do processo **não pode** treinar o modelo de um terceiro):
+  - **Claude.ai:** *Configurações → Privacidade* → desligue a opção de **ajudar a
+    melhorar o Claude** / uso de conversas para treino.
+  - **ChatGPT:** *Configurações → Controles de dados (Data Controls)* → **"Melhorar
+    o modelo para todos" = DESLIGADO**.
+  - Os rótulos exatos mudam com o tempo — confirme que **nenhuma** opção de uso de
+    dados para treinamento esteja ativa. Em caso de dúvida, use também o modo de
+    chat temporário/não salvo.
+  - *Defesa em profundidade:* mesmo com o treino desligado, o juris **de-identifica**
+    (CPF/CNPJ/CNJ/OAB) o que sai para a sessão e re-identifica a resposta.
+
+- [ ] **Instalar a extensão juris + o host de mensagens nativas** e autorizá-la no
+  navegador. *(Status: a cola de extensão/host está em construção — o lado juris
+  do bridge já está pronto; ver `docs/design_browser_bridge.md`.)*
+
+- [ ] **Logar no Claude.ai / ChatGPT** na mesma janela do navegador e deixar a aba
+  aberta (a extensão usa a sessão autenticada).
+
+- [ ] **Conectar e verificar**: o agente local detecta a sessão; faça um prompt de
+  teste curto e confirme que a resposta volta ao juris. Se a sessão falhar (não
+  logado, layout mudou, timeout), o juris **cai no modelo local** e avisa.
+
+> **Escopo:** para o uso do **próprio escritório** este caminho é apropriado. Para
+> revenda multi-tenant, revisitar os termos de uso do provedor e a base de DPA
+> (ADR-0018).
 
 ## 4. Sessão de smoke test (1 hora)
 
