@@ -2,7 +2,9 @@
 
 from unittest.mock import MagicMock
 
-from juris.core.llm_router import LLMProvider, LLMRouter, LLMTask
+import pytest
+
+from juris.core.llm_router import LLMProvider, LLMRouter, LLMTask, PIIMode
 
 
 def _make_settings(has_api_key: bool = True) -> MagicMock:
@@ -44,3 +46,49 @@ class TestLLMRouter:
         router.override(LLMTask.DRAFT, LLMProvider.ANTHROPIC)
         route = router.route(LLMTask.DRAFT, contains_pii=True)
         assert route.provider == LLMProvider.OLLAMA
+
+
+class TestPIIModesAndDeid:
+    def test_local_raw_is_default_and_stays_local(self) -> None:
+        router = LLMRouter(_make_settings())
+        route = router.route(LLMTask.DRAFT, contains_pii=True)  # default LOCAL_RAW
+        assert route.provider == LLMProvider.OLLAMA
+        assert route.deidentify is False
+
+    def test_cloud_deid_routes_cloud_with_deidentify_flag(self) -> None:
+        router = LLMRouter(_make_settings())
+        route = router.route(LLMTask.DRAFT, contains_pii=True, pii_mode=PIIMode.CLOUD_DEID)
+        assert route.provider == LLMProvider.ANTHROPIC
+        assert route.deidentify is True
+
+    def test_cloud_raw_routes_cloud_without_deidentify(self) -> None:
+        router = LLMRouter(_make_settings())
+        route = router.route(LLMTask.DRAFT, contains_pii=True, pii_mode=PIIMode.CLOUD_RAW)
+        assert route.provider == LLMProvider.ANTHROPIC
+        assert route.deidentify is False
+
+    def test_cloud_deid_without_key_falls_back_local(self) -> None:
+        router = LLMRouter(_make_settings(has_api_key=False))
+        route = router.route(LLMTask.DRAFT, contains_pii=True, pii_mode=PIIMode.CLOUD_DEID)
+        assert route.provider == LLMProvider.OLLAMA
+        assert route.deidentify is False  # local — no de-id needed
+
+    def test_prepare_payload_deidentifies_when_route_demands_it(self) -> None:
+        router = LLMRouter(_make_settings())
+        route = router.route(LLMTask.DRAFT, contains_pii=True, pii_mode=PIIMode.CLOUD_DEID)
+        text, mapping = router.prepare_payload(route, "Autor CPF 123.456.789-09", allow_partial=True)
+        assert "123.456.789-09" not in text
+        assert mapping  # re-id map for the caller
+
+    def test_prepare_payload_blocks_partial_deid_without_optin(self) -> None:
+        router = LLMRouter(_make_settings())
+        route = router.route(LLMTask.DRAFT, contains_pii=True, pii_mode=PIIMode.CLOUD_DEID)
+        with pytest.raises(ValueError, match="parcial"):
+            router.prepare_payload(route, "Autor CPF 123.456.789-09")  # no NER, no opt-in → fail closed
+
+    def test_prepare_payload_passthrough_when_not_deidentify(self) -> None:
+        router = LLMRouter(_make_settings())
+        route = router.route(LLMTask.DRAFT, contains_pii=True)  # LOCAL_RAW
+        text, mapping = router.prepare_payload(route, "Autor CPF 123.456.789-09")
+        assert text == "Autor CPF 123.456.789-09"
+        assert mapping == {}
