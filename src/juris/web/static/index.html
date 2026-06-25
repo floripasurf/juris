@@ -234,6 +234,12 @@
       <div id="processos" class="proc-empty">Carregando…</div>
     </section>
 
+    <section class="processos-panel">
+      <h1>Agenda de prazos</h1>
+      <p class="lede">Prazos pendentes do acervo, mais próximos primeiro.</p>
+      <div id="prazos" class="proc-empty">Carregando…</div>
+    </section>
+
     <section class="form-panel">
       <h1>Novo caso</h1>
       <p class="lede">Gere rascunho de pesquisa ou minuta sugerida a partir do pipeline atual.</p>
@@ -462,7 +468,7 @@
       }
       connectBtn.disabled = true;
       connectBtn.textContent = "Conectando…";
-      connectStatus.textContent = "Lendo token e sincronizando (pode levar alguns minutos)…";
+      connectStatus.textContent = "Lendo token e sincronizando (em segundo plano)…";
       try {
         const response = await fetch("/api/connect", {
           method: "POST",
@@ -471,10 +477,8 @@
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || "Falha ao conectar");
-        const sync = data.sync ? `, ${data.sync.succeeded}/${data.sync.total} sincronizados` : "";
-        connectStatus.textContent = `+${data.avisos_added} via avisos, +${data.seed_added} via seed (total ${data.total_tracked})${sync}.`;
         document.querySelector("#c_pin").value = "";
-        loadProcessos();
+        await pollConnect(data.job_id);
       } catch (error) {
         connectStatus.textContent = error.message;
       } finally {
@@ -483,7 +487,74 @@
       }
     });
 
+    async function pollConnect(jobId) {
+      for (let i = 0; i < 600; i++) {
+        const r = await fetch(`/api/connect/${jobId}`);
+        const job = await r.json();
+        if (job.status === "running") {
+          await new Promise((res) => setTimeout(res, 2000));
+          continue;
+        }
+        if (job.status === "error") {
+          connectStatus.textContent = `Falha: ${job.error}`;
+          return;
+        }
+        const d = job.result;
+        const sync = d.sync ? `, ${d.sync.succeeded}/${d.sync.total} sincronizados` : "";
+        connectStatus.textContent = `+${d.avisos_added} via avisos, +${d.seed_added} via seed (total ${d.total_tracked})${sync}.`;
+        loadProcessos();
+        loadPrazos();
+        return;
+      }
+      connectStatus.textContent = "Tempo limite aguardando a sincronização.";
+    }
+
+    const prazosEl = document.querySelector("#prazos");
+
+    function renderPrazos(items) {
+      if (!items.length) {
+        prazosEl.className = "proc-empty";
+        prazosEl.textContent = "Nenhum prazo pendente.";
+        return;
+      }
+      prazosEl.className = "proc-list";
+      prazosEl.innerHTML = "";
+      items.forEach((p) => {
+        const row = document.createElement("div");
+        row.className = "proc-row";
+        const urg = p.urgencia ? `urg-${p.urgencia}` : "urg-baixa";
+        const left = document.createElement("div");
+        left.innerHTML = `<div class="proc-cnj">${p.numero_cnj}</div><div class="proc-meta">${p.rule_nome || "—"}</div>`;
+        const mid = document.createElement("div");
+        mid.className = "proc-meta";
+        mid.textContent = p.tipo_acao || "";
+        const right = document.createElement("div");
+        right.className = "proc-prazo";
+        right.innerHTML = `<span class="badge ${urg}">${fmtDate(p.data_limite)}</span>`;
+        const action = document.createElement("div");
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = "minuta";
+        btn.addEventListener("click", () => useProcesso(p.numero_cnj, "tjmg"));
+        action.appendChild(btn);
+        row.append(left, mid, right, action);
+        prazosEl.appendChild(row);
+      });
+    }
+
+    async function loadPrazos() {
+      try {
+        const response = await fetch("/api/prazos");
+        const data = await response.json();
+        renderPrazos(data.prazos || []);
+      } catch (error) {
+        prazosEl.className = "proc-empty";
+        prazosEl.textContent = "Não foi possível carregar a agenda.";
+      }
+    }
+
     loadProcessos();
+    loadPrazos();
   </script>
 </body>
 </html>

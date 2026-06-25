@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
@@ -11,7 +12,10 @@ from pydantic import BaseModel, Field
 from juris import __version__
 from juris.jobs.connect import run_connect
 from juris.web.demo_service import DemoRunError, WebDemoRunRequest, execute_demo_run
-from juris.web.processos_service import list_processos
+from juris.web.processos_service import list_prazos, list_processos
+
+if TYPE_CHECKING:
+    from juris.mni.tribunais import TribunalConfig
 
 app = FastAPI(
     title="Juris Web",
@@ -62,30 +66,7 @@ class ConnectPayload(BaseModel):
     sync: bool = True
 
 
-@app.post("/api/connect")
-async def create_connect(payload: ConnectPayload) -> dict[str, object]:
-    """Import/update the acervo from the connected token (avisos + seed + sync)."""
-    from juris.mni.tribunais import get_tribunal
-
-    try:
-        tribunal_cfg = get_tribunal(payload.tribunal)
-    except KeyError as exc:
-        raise HTTPException(status_code=400, detail=f"Tribunal desconhecido: {payload.tribunal}") from exc
-    if not tribunal_cfg.requires_mtls:
-        raise HTTPException(status_code=400, detail="connect suporta apenas tribunais mTLS (ex.: tjmg).")
-
-    try:
-        result = await run_connect(
-            tribunal_cfg,
-            payload.cpf,
-            payload.senha or payload.cpf,
-            token_pin=payload.pin,
-            seed_text=payload.seed_text,
-            do_sync=payload.sync,
-        )
-    except RuntimeError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
+def _serialize_connect(result: Any) -> dict[str, object]:
     return {
         "avisos_added": result.avisos_added,
         "seed_added": result.seed_added,
@@ -100,6 +81,62 @@ async def create_connect(payload: ConnectPayload) -> dict[str, object]:
             "critical_alerts": result.sync.total_critical_alerts,
         },
     }
+
+
+# In-memory connect jobs (co-located Phase 1, single process). Phase 2: a real queue.
+_CONNECT_JOBS: dict[str, dict[str, object]] = {}
+
+
+async def _run_connect_job(job_id: str, tribunal_cfg: TribunalConfig, payload: ConnectPayload) -> None:
+    """Background worker: run the (possibly slow) connect and record the outcome."""
+    try:
+        result = await run_connect(
+            tribunal_cfg,
+            payload.cpf,
+            payload.senha or payload.cpf,
+            token_pin=payload.pin,
+            seed_text=payload.seed_text,
+            do_sync=payload.sync,
+        )
+        _CONNECT_JOBS[job_id] = {"status": "done", "result": _serialize_connect(result), "error": None}
+    except Exception as exc:  # noqa: BLE001 — surfaced to the client via the job
+        _CONNECT_JOBS[job_id] = {"status": "error", "result": None, "error": str(exc)}
+
+
+@app.post("/api/connect", status_code=202)
+async def create_connect(payload: ConnectPayload) -> dict[str, object]:
+    """Start an async import/update; returns a job id to poll (connect can take minutes)."""
+    import asyncio
+    import uuid
+
+    from juris.mni.tribunais import get_tribunal
+
+    try:
+        tribunal_cfg = get_tribunal(payload.tribunal)
+    except KeyError as exc:
+        raise HTTPException(status_code=400, detail=f"Tribunal desconhecido: {payload.tribunal}") from exc
+    if not tribunal_cfg.requires_mtls:
+        raise HTTPException(status_code=400, detail="connect suporta apenas tribunais mTLS (ex.: tjmg).")
+
+    job_id = uuid.uuid4().hex
+    _CONNECT_JOBS[job_id] = {"status": "running", "result": None, "error": None}
+    asyncio.get_event_loop().create_task(_run_connect_job(job_id, tribunal_cfg, payload))
+    return {"job_id": job_id, "status": "running"}
+
+
+@app.get("/api/connect/{job_id}")
+async def get_connect(job_id: str) -> dict[str, object]:
+    """Poll a connect job started by POST /api/connect."""
+    job = _CONNECT_JOBS.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="job não encontrado")
+    return job
+
+
+@app.get("/api/prazos")
+async def get_prazos() -> dict[str, object]:
+    """Deadline agenda: pending prazos across the acervo, soonest first."""
+    return {"prazos": [v.to_dict() for v in list_prazos()]}
 
 
 @app.get("/", response_class=HTMLResponse)

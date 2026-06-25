@@ -41,6 +41,48 @@ class ProcessoView:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class PrazoView:
+    """One row of the deadline agenda."""
+
+    numero_cnj: str
+    data_limite: datetime | None
+    urgencia: str | None
+    status: str | None
+    rule_nome: str | None
+    tipo_acao: str | None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "numero_cnj": self.numero_cnj,
+            "data_limite": self.data_limite.isoformat() if self.data_limite else None,
+            "urgencia": self.urgencia,
+            "status": self.status,
+            "rule_nome": self.rule_nome,
+            "tipo_acao": self.tipo_acao,
+        }
+
+
+def list_prazos(db: LocalDB | None = None) -> list[PrazoView]:
+    """Deadline agenda: pending prazos across the acervo, soonest first."""
+    if db is None:
+        from juris.persistence.local_db import LocalDB as _LocalDB
+
+        db = _LocalDB()
+
+    return [
+        PrazoView(
+            numero_cnj=cast(str, p.numero_cnj),
+            data_limite=cast("datetime | None", p.data_limite),
+            urgencia=cast("str | None", p.urgencia),
+            status=cast("str | None", p.status),
+            rule_nome=cast("str | None", p.rule_nome),
+            tipo_acao=cast("str | None", getattr(p, "tipo_acao", None)),
+        )
+        for p in db.get_pending_prazos()
+    ]
+
+
 def list_processos(db: LocalDB | None = None) -> list[ProcessoView]:
     """Build the processos list: each imported processo + its nearest pending prazo."""
     if db is None:

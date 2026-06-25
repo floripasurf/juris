@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
-from juris.web.processos_service import list_processos
+from juris.web.processos_service import list_prazos, list_processos
 
 
 def _proc(cnj: str, classe: str = "Procedimento Comum") -> SimpleNamespace:
@@ -56,3 +56,31 @@ def test_to_dict_serializes_datetimes() -> None:
     assert payload["numero_cnj"] == "A"
     assert payload["last_sync_at"] == "2026-06-24T00:00:00+00:00"
     assert payload["proximo_prazo"] is None
+
+
+def _prazo_local(cnj: str, data_limite: datetime, urgencia: str) -> SimpleNamespace:
+    return SimpleNamespace(
+        numero_cnj=cnj,
+        data_limite=data_limite,
+        urgencia=urgencia,
+        status="aberto",
+        rule_nome="Contestação",
+        tipo_acao="contestar",
+    )
+
+
+def test_list_prazos_returns_pending_sorted_by_deadline() -> None:
+    prazos = [
+        _prazo_local("A", datetime(2026, 7, 10, tzinfo=UTC), "media"),
+        _prazo_local("B", datetime(2026, 7, 1, tzinfo=UTC), "alta"),
+    ]
+    db = SimpleNamespace(get_pending_prazos=lambda: prazos)
+
+    views = list_prazos(db=db)
+
+    assert len(views) == 2
+    payload = views[0].to_dict()
+    assert payload["numero_cnj"] == "A"
+    assert payload["urgencia"] == "media"
+    assert payload["data_limite"] == "2026-07-10T00:00:00+00:00"
+    assert payload["rule_nome"] == "Contestação"
