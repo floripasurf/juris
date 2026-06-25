@@ -79,11 +79,35 @@ do(a) advogado(a)** (ADR-0018). Passo a passo, **na ordem**:
 
 ## 4. Sessão de smoke test (1 hora)
 
-Estrutura sugerida:
+### Sequência de comandos (no Mac Mini, com o token conectado)
+
+```bash
+# 0. Atualize a cópia local (a do Mac Mini pode estar atrás)
+git fetch && git pull && uv sync
+
+# 1. Pré-voo ÚNICO — token A3 + corpus + embeddings + Ollama num comando.
+#    --live também valida o certificado do token (sem PIN). Qualquer FAIL aborta.
+uv run juris pilot preflight --live
+
+# 2. Primeira conexão: importa o acervo (avisos + seed) e calcula prazos.
+uv run juris connect --cpf <CPF> --file acervo.txt   # nas próximas vezes: só o diferencial
+
+# 3. Lê o processo, analisa, e gera a minuta com a linha estratégica selecionada.
+uv run juris demo <NUMERO_CNJ> contestacao --source mni
+
+# 4. Verifica a íntegra da cadeia de auditoria.
+uv run juris audit verify juris-out/<NUMERO_CNJ>/audit.jsonl
+```
+
+> Se o `preflight --live` acusar **token_a3 FAIL**, o token não está conectado ou
+> o certificado expirou — resolva antes de seguir. **Ollama indisponível** é WARN
+> (cai no fallback); na arquitetura nova, o modelo de fronteira vem da §3.5.
+
+### Estrutura sugerida
 
 | Tempo | Atividade |
 | ---: | --- |
-| 0:00–0:05 | Revisão dos limites do piloto (§2 dos termos). |
+| 0:00–0:05 | Revisão dos limites do piloto (§2 dos termos) + `juris pilot preflight --live`. |
 | 0:05–0:15 | Demo em **modo fixture** para mostrar o pipeline sem pressão: `uv run juris demo 0000000-00.0000.0.00.0000 contestacao --source fixture` |
 | 0:15–0:35 | Demo em modo real (DataJud) sobre o caso escolhido pelo(a) advogado(a). |
 | 0:35–0:50 | Revisão conjunta de `draft.md`, `reviewer-report.md`, `prazos.md`. Capturar fricções em `docs/pilot/smoke-test-notes.md`. |
