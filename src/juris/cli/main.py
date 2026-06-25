@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import getpass
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.console import Console
@@ -1597,9 +1598,10 @@ def repertory_search(
     query: str = typer.Argument(..., help="Search query"),
     top_k: int = typer.Option(10, "--top-k", "-k", help="Number of results"),
 ) -> None:
-    """Search the jurisprudence corpus."""
+    """Search the jurisprudence corpus (composite-ranked, with score breakdown)."""
     from rich.table import Table as RichTable
 
+    from juris.cli.formatting import format_score_components
     from juris.repertory.readiness import resolve_repertory_path
     from juris.repertory.vector_store import LocalFTSStore
 
@@ -1607,8 +1609,21 @@ def repertory_search(
     if not fts_path.exists():
         console.print("[yellow]No corpus ingested yet. Run 'juris repertory ingest' first.[/yellow]")
         raise typer.Exit(code=1)
+
+    # Prefer the composite-ranked service (ADR-0017) so results carry the
+    # auditable score breakdown; fall back to plain FTS if embeddings are absent.
     store = LocalFTSStore(db_path=fts_path)
-    results = store.search_text(query, top_k=top_k)
+    try:
+        from juris.repertory.embeddings import LegalEmbedder
+        from juris.repertory.retrieval.hybrid import HybridRetriever
+        from juris.repertory.retrieval.service import RepertoryService
+
+        retriever = HybridRetriever(dense_store=store, sparse_store=store, embedder=LegalEmbedder())
+        results: list[Any] = list(
+            RepertoryService(retriever=retriever).search_jurisprudencia(query=query, top_k=top_k)
+        )
+    except Exception:
+        results = list(store.search_text(query, top_k=top_k))
 
     if not results:
         console.print("[yellow]No results found.[/yellow]")
@@ -1617,15 +1632,19 @@ def repertory_search(
     table = RichTable(title=f"Results for: {query}")
     table.add_column("#", style="dim", width=3)
     table.add_column("Score", width=8)
-    table.add_column("Source", width=30)
-    table.add_column("Text", width=60)
+    table.add_column("Por quê", width=30)  # composite-score breakdown
+    table.add_column("Source", width=28)
+    table.add_column("Text", width=50)
 
     for i, r in enumerate(results, 1):
+        texto = str(getattr(r, "texto", "") or getattr(r, "text", ""))
+        why = format_score_components(getattr(r, "score_components", None))
         table.add_row(
             str(i),
             f"{r.score:.4f}",
-            r.source_id[:30],
-            r.text[:60] + "..." if len(r.text) > 60 else r.text,
+            why or "—",
+            r.source_id[:28],
+            texto[:50] + "..." if len(texto) > 50 else texto,
         )
 
     console.print(table)
