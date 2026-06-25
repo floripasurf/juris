@@ -70,3 +70,21 @@ def test_seed_text_adds_to_tracked() -> None:
 
     assert result.seed_added == 1
     assert {"numero_cnj": _CNJ, "tribunal": "tjmg"} in stored["t"]
+    assert result.seed_errors == []
+
+
+def test_invalid_seed_lines_are_surfaced_not_dropped_silently() -> None:
+    avisos = AvisosResult(sucesso=True, mensagem="ok", avisos=[])
+    with (
+        patch("juris.jobs.connect.get_tracked", return_value=[]),
+        patch("juris.jobs.connect.set_tracked"),
+    ):
+        result = _run(
+            token_pin="1234",  # noqa: S106
+            seed_text=f"{_CNJ}\nnão-é-um-cnj\n",
+            do_sync=False,
+            mni_service=_FakeMNI(avisos),
+        )
+
+    assert result.seed_added == 1  # the valid one
+    assert any("não-é-um-cnj" in e for e in result.seed_errors)  # the invalid one surfaced

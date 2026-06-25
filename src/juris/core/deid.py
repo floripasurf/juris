@@ -33,6 +33,10 @@ class DeidResult:
 
     text: str
     mapping: dict[str, str] = field(default_factory=dict)  # placeholder → original
+    complete: bool = False
+    """True only when free-text entities were also handled (a ``ner_redactor``
+    ran). Structured-only de-id leaves names/addresses in place — partial, and
+    not cloud-safe by default."""
 
 
 def deidentify(text: str, *, ner_redactor: Callable[[str], list[str]] | None = None) -> DeidResult:
@@ -74,7 +78,26 @@ def deidentify(text: str, *, ner_redactor: Callable[[str], list[str]] | None = N
             if entity and entity in out:
                 out = out.replace(entity, _placeholder("NOME", entity))
 
-    return DeidResult(text=out, mapping=mapping)
+    # "Complete" only when free-text entities were processed; structured-only
+    # de-id leaves names in place and must not be assumed cloud-safe.
+    return DeidResult(text=out, mapping=mapping, complete=ner_redactor is not None)
+
+
+def ensure_cloud_safe(result: DeidResult, *, allow_partial: bool = False) -> None:
+    """Gate before sending de-identified text to a cloud LLM (ADR-0016).
+
+    Raises:
+        ValueError: if the de-identification is partial (structured-only, names
+            may remain) and the caller did not explicitly opt in via
+            ``allow_partial`` (which requires a documented consent/DPA path).
+    """
+    if not result.complete and not allow_partial:
+        msg = (
+            "De-identificação parcial (apenas identificadores estruturados; "
+            "nomes podem permanecer). Forneça um ner_redactor (LeNER-Br) ou "
+            "use allow_partial=True com consentimento/DPA explícito."
+        )
+        raise ValueError(msg)
 
 
 def reidentify(text: str, mapping: dict[str, str]) -> str:

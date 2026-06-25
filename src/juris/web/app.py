@@ -72,6 +72,7 @@ def _serialize_connect(result: Any) -> dict[str, object]:
         "seed_added": result.seed_added,
         "total_tracked": result.total_tracked,
         "first_time": result.first_time,
+        "seed_errors": result.seed_errors,
         "sync": None
         if result.sync is None
         else {

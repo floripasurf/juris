@@ -15,9 +15,10 @@ Flow:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from juris.core.observability import get_logger
 from juris.jobs.nightly import run_nightly
 from juris.jobs.tracking import get_tracked, merge_tracked, parse_cnj_seed, set_tracked
 from juris.mni.tribunais import TribunalConfig
@@ -25,6 +26,8 @@ from juris.mni.tribunais import TribunalConfig
 if TYPE_CHECKING:
     from juris.jobs.nightly import NightlySummary
     from juris.mni.service import MNIReadService
+
+logger = get_logger(__name__)
 
 
 @dataclass(slots=True)
@@ -36,6 +39,7 @@ class ConnectResult:
     total_tracked: int
     first_time: bool
     sync: NightlySummary | None = None
+    seed_errors: list[str] = field(default_factory=list)
 
 
 async def run_connect(
@@ -68,9 +72,16 @@ async def run_connect(
 
     # 2) Optional seed of the historical acervo.
     seed_added = 0
+    seed_errors: list[str] = []
     if seed_text:
-        entries, _errors = parse_cnj_seed(seed_text, default_tribunal=tribunal_cfg.id)
+        entries, seed_errors = parse_cnj_seed(seed_text, default_tribunal=tribunal_cfg.id)
         tracked, seed_added = merge_tracked(tracked, entries)
+        if seed_errors:
+            logger.warning(
+                "connect_seed_invalid_lines",
+                count=len(seed_errors),
+                lines=seed_errors,
+            )
 
     set_tracked(tracked)
 
@@ -85,4 +96,5 @@ async def run_connect(
         total_tracked=len(tracked),
         first_time=first_time,
         sync=summary,
+        seed_errors=seed_errors,
     )

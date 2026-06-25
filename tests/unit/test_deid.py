@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from juris.core.deid import deidentify, reidentify
+import pytest
+
+from juris.core.deid import deidentify, ensure_cloud_safe, reidentify
 
 
 def test_strips_structured_identifiers() -> None:
@@ -38,3 +40,31 @@ def test_no_identifiers_is_noop() -> None:
     result = deidentify(text)
     assert result.text == text
     assert result.mapping == {}
+
+
+def test_structured_only_is_flagged_incomplete() -> None:
+    # Names in free text are NOT handled without a NER redactor → partial de-id.
+    result = deidentify("Autor João da Silva, CPF 123.456.789-09.")
+    assert result.complete is False
+    assert "João da Silva" in result.text  # name leaks — must not be cloud-safe
+
+
+def test_ner_redactor_completes_deid() -> None:
+    result = deidentify(
+        "Autor João da Silva.", ner_redactor=lambda _t: ["João da Silva"]
+    )
+    assert result.complete is True
+    assert "João da Silva" not in result.text
+
+
+def test_ensure_cloud_safe_blocks_partial_deid() -> None:
+    partial = deidentify("Autor João da Silva, CPF 123.456.789-09.")
+    with pytest.raises(ValueError, match="parcial"):
+        ensure_cloud_safe(partial)
+
+
+def test_ensure_cloud_safe_allows_complete_or_explicit_override() -> None:
+    complete = deidentify("Autor X.", ner_redactor=lambda _t: [])
+    ensure_cloud_safe(complete)  # does not raise
+    partial = deidentify("CPF 123.456.789-09.")
+    ensure_cloud_safe(partial, allow_partial=True)  # explicit opt-in, no raise

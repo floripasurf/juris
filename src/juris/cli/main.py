@@ -593,6 +593,11 @@ def connect(
         f"[green]Lista:[/green] +{result.avisos_added} via avisos, "
         f"+{result.seed_added} via seed (total {result.total_tracked})."
     )
+    if result.seed_errors:
+        console.print(
+            f"[yellow]{len(result.seed_errors)} linha(s) de seed inválida(s) ignorada(s):[/yellow] "
+            f"{', '.join(result.seed_errors)}"
+        )
     if result.sync is None:
         if not result.total_tracked:
             console.print("[yellow]Nada rastreado ainda.[/yellow] Use --file para semear o acervo.")
