@@ -24,9 +24,12 @@ from __future__ import annotations
 
 import os
 import shutil
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import date
 from enum import Enum
 from pathlib import Path
+from typing import Protocol
 
 from juris.repertory.readiness import (
     detect_legacy_path,
@@ -404,6 +407,86 @@ def check_disk_space(
 
 
 # ---------------------------------------------------------------------------
+# check_token (A3) — only exercised for a live MNI session
+# ---------------------------------------------------------------------------
+
+
+class _TokenCert(Protocol):
+    @property
+    def token_label(self) -> str: ...
+
+    @property
+    def not_valid_after(self) -> str: ...
+
+
+def _default_token_reader() -> _TokenCert:
+    # No PIN: certificates are public objects on the token.
+    from juris.config import get_settings
+    from juris.mni.token import extract_token_material
+
+    return extract_token_material(get_settings().pkcs11_module)
+
+
+def check_token(
+    *,
+    probe: bool = False,
+    reader: Callable[[], _TokenCert] | None = None,
+    today: date | None = None,
+) -> CheckResult:
+    """Verify the A3 token is connected and its certificate is valid (live MNI).
+
+    Read-only and PIN-free. ``SKIP`` unless ``probe`` (the demo/draft pipeline
+    doesn't need the token; a live ``juris connect`` does). A missing token or an
+    expired certificate is ``FAIL``; expiring-soon is ``WARN``.
+    """
+    if not probe:
+        return CheckResult(
+            name="token_a3",
+            status=CheckStatus.SKIP,
+            message="probe do token A3 não solicitado (use --live para a sessão real)",
+        )
+    read = reader or _default_token_reader
+    try:
+        material = read()
+    except Exception as exc:  # noqa: BLE001 — any failure means the token isn't ready
+        return CheckResult(
+            name="token_a3",
+            status=CheckStatus.FAIL,
+            message="token A3 não detectado",
+            remediation="Conecte o e-CPF A3 e confira o módulo PKCS#11.",
+            details={"error": str(exc)},
+        )
+    ref = today or date.today()
+    try:
+        expiry = date.fromisoformat(str(material.not_valid_after))
+    except ValueError:
+        return CheckResult(
+            name="token_a3",
+            status=CheckStatus.WARN,
+            message=f"validade do certificado ilegível: {material.not_valid_after}",
+        )
+    dias = (expiry - ref).days
+    if dias < 0:
+        return CheckResult(
+            name="token_a3",
+            status=CheckStatus.FAIL,
+            message=f"certificado EXPIRADO em {expiry.isoformat()}",
+            remediation="Renove o e-CPF A3 antes da sessão.",
+        )
+    if dias < 30:
+        return CheckResult(
+            name="token_a3",
+            status=CheckStatus.WARN,
+            message=f"certificado '{material.token_label}' expira em {dias} dias ({expiry.isoformat()})",
+        )
+    return CheckResult(
+        name="token_a3",
+        status=CheckStatus.PASS,
+        message=f"token '{material.token_label}' detectado, certificado válido até {expiry.isoformat()}",
+    )
+
+
+# ---------------------------------------------------------------------------
 # orchestrator
 # ---------------------------------------------------------------------------
 
@@ -414,6 +497,7 @@ def run_preflight(
     real_source_required: bool = True,
     embedding_model: str = "BAAI/bge-m3",
     probe_ollama: bool = True,
+    probe_token: bool = False,
 ) -> PreflightReport:
     """Run all preflight checks and aggregate into a report.
 
@@ -428,6 +512,7 @@ def run_preflight(
         check_repertory(real_source_required=real_source_required),
         check_embeddings_cache(model_name=embedding_model),
         check_llm_availability(probe_ollama=probe_ollama),
+        check_token(probe=probe_token),
         check_output_dir_clean(out_root),
         check_disk_space(out_root),
     )

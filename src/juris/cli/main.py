@@ -2899,6 +2899,11 @@ def pilot_preflight(
         "--skip-ollama-probe",
         help="Não tenta conectar ao Ollama (útil em CI/offline).",
     ),
+    live: bool = typer.Option(
+        False,
+        "--live",
+        help="Sessão real: também verifica o token A3 conectado (cert válida, sem PIN).",
+    ),
     json_output: bool = typer.Option(False, "--json", help="Saída em JSON, sem cores ou tabela."),
 ) -> None:
     """Roda checks de readiness antes de uma sessão real com advogado(a).
@@ -2921,6 +2926,7 @@ def pilot_preflight(
         real_source_required=not fixture_only,
         embedding_model=embedding_model,
         probe_ollama=not skip_ollama_probe,
+        probe_token=live,
     )
 
     if json_output:

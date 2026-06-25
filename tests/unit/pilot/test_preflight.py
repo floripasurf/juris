@@ -7,7 +7,9 @@ deterministic. Network probes (Ollama) are stubbed via dependency injection.
 from __future__ import annotations
 
 import sqlite3
+from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -18,6 +20,7 @@ from juris.pilot.preflight import (
     check_llm_availability,
     check_output_dir_clean,
     check_repertory,
+    check_token,
     run_preflight,
 )
 from juris.repertory.readiness import (
@@ -282,3 +285,44 @@ def test_run_preflight_to_dict_shape(tmp_path, monkeypatch):
     assert isinstance(payload["checks"], list)
     first = payload["checks"][0]
     assert set(first) >= {"name", "status", "message", "remediation", "details"}
+
+
+class TestCheckToken:
+    """Token A3 probe for the live MNI session (gated, no PIN needed)."""
+
+    @staticmethod
+    def _material(not_valid_after: str, label: str = "TOKEN CERTDATA"):
+        return SimpleNamespace(token_label=label, not_valid_after=not_valid_after)
+
+    def test_skip_when_not_probed(self) -> None:
+        assert check_token(probe=False).status is CheckStatus.SKIP
+
+    def test_pass_for_valid_cert(self) -> None:
+        result = check_token(
+            probe=True, reader=lambda: self._material("2099-01-01"), today=date(2026, 6, 25)
+        )
+        assert result.status is CheckStatus.PASS
+
+    def test_warn_when_expiring_soon(self) -> None:
+        result = check_token(
+            probe=True, reader=lambda: self._material("2026-07-05"), today=date(2026, 6, 25)
+        )
+        assert result.status is CheckStatus.WARN
+
+    def test_fail_for_expired_cert(self) -> None:
+        result = check_token(
+            probe=True, reader=lambda: self._material("2020-01-01"), today=date(2026, 6, 25)
+        )
+        assert result.status is CheckStatus.FAIL
+
+    def test_fail_when_token_absent(self) -> None:
+        def _raise() -> SimpleNamespace:
+            raise RuntimeError("no token detected")
+
+        assert check_token(probe=True, reader=_raise).status is CheckStatus.FAIL
+
+    def test_run_preflight_skips_token_by_default(self) -> None:
+        report = run_preflight(real_source_required=False, probe_ollama=False)
+        token = next((c for c in report.checks if c.name == "token_a3"), None)
+        assert token is not None
+        assert token.status is CheckStatus.SKIP
