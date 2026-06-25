@@ -241,6 +241,8 @@ class DemoOrchestrator:
         if not request.skip_review:
             reviewer = ReviewerAgent(llm=self._llm, retriever=self._repertory, audit_log=self._audit)
 
+        from juris.agents.estrategia import EstrategiaAgent
+
         agent = DrafterAgent(
             llm=self._llm,
             repertory=self._repertory,
@@ -249,6 +251,7 @@ class DemoOrchestrator:
             reviewer=reviewer,
             audit=self._audit,
             defesa_analyzer=defesa_analyzer,
+            estrategia=EstrategiaAgent(self._llm),
         )
 
         context = ProcessoContext(

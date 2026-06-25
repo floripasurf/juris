@@ -11,6 +11,7 @@ from juris.agents.citation_verifier import (
     MarkerCitationVerifier,
     VerificationResult,
 )
+from juris.agents.estrategia import EstrategiaAgent, EstrategiaResult
 from juris.agents.researcher import Researcher, ResearchQuery, ResearchResult
 from juris.core.observability import get_logger
 from juris.defesas.context import ProcessoContext
@@ -56,6 +57,7 @@ class DraftResult:
     revisions: int = 0
     total_duration_seconds: float = 0.0
     audit_entry_ids: list[str] = field(default_factory=list)
+    estrategia: EstrategiaResult | None = None
 
 
 class DrafterAgent:
@@ -82,6 +84,7 @@ class DrafterAgent:
         reviewer: Any | None = None,
         audit: AuditLog | None = None,
         defesa_analyzer: Any | None = None,
+        estrategia: EstrategiaAgent | None = None,
     ) -> None:
         self._llm = llm
         self._repertory = repertory
@@ -90,6 +93,7 @@ class DrafterAgent:
         self._reviewer = reviewer
         self._audit = audit
         self._defesa_analyzer = defesa_analyzer
+        self._estrategia = estrategia
 
     async def draft(
         self,
@@ -137,6 +141,31 @@ class DrafterAgent:
             ResearchQuery(thesis=thesis, case_context=case_ctx)
         )
         result.research_summary = research.coverage_note
+
+        # Step 4.5: Strategy (ADR-0017 Stage 2) — pick the best-grounded
+        # argumentative line from the retrieved precedents and let it drive the
+        # draft. Only refines the thesis when one wasn't explicitly given.
+        if self._estrategia and research.supporting:
+            try:
+                estrategia = await self._estrategia.propor(
+                    contexto=f"{thesis}\n{case_ctx}",
+                    precedentes=research.supporting,
+                )
+                result.estrategia = estrategia
+                if not request.thesis and estrategia.escolhida.tese:
+                    thesis = estrategia.escolhida.tese
+                self._log_audit(
+                    "draft.estrategia_selected",
+                    request.numero_cnj,
+                    {
+                        "tese": estrategia.escolhida.tese,
+                        "score": estrategia.escolhida.score,
+                        "alternativas": len(estrategia.alternativas),
+                    },
+                    result,
+                )
+            except Exception:
+                logger.warning("estrategia_failed", numero_cnj=request.numero_cnj)
 
         # Step 5: Style retrieval (from petition templates if available)
         style_text = ""

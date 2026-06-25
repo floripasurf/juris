@@ -15,6 +15,7 @@ the score degrades to grounding + authority.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Protocol
 
@@ -58,7 +59,7 @@ def _autoridade(hierarchy: int) -> float:
     return (6 - h) / 5
 
 
-def score_linha(linha: LinhaArgumentativa, precedentes: list[_Precedente]) -> float:
+def score_linha(linha: LinhaArgumentativa, precedentes: Sequence[_Precedente]) -> float:
     """Deterministic score: grounding + authority of citations − risk.
 
     Grounding is the fraction of claimed citations that are *real* verified
@@ -77,7 +78,7 @@ def score_linha(linha: LinhaArgumentativa, precedentes: list[_Precedente]) -> fl
 
 
 def selecionar_linha(
-    candidatas: list[LinhaArgumentativa], precedentes: list[_Precedente]
+    candidatas: list[LinhaArgumentativa], precedentes: Sequence[_Precedente]
 ) -> EstrategiaResult:
     """Score every candidate, return the best as ``escolhida`` + the rest."""
     if not candidatas:
@@ -99,7 +100,7 @@ _SYSTEM = (
 )
 
 
-def _build_prompt(contexto: str, precedentes: list[_Precedente], n: int) -> str:
+def _build_prompt(contexto: str, precedentes: Sequence[_Precedente], n: int) -> str:
     fontes = "\n".join(f"- {p.source_id} (nível {p.hierarchy})" for p in precedentes)
     return (
         f"Caso:\n{contexto}\n\nPrecedentes disponíveis (use os ids em 'citacoes'):\n{fontes}\n\n"
@@ -130,7 +131,7 @@ class EstrategiaAgent:
         self._llm = llm
 
     async def propor(
-        self, *, contexto: str, precedentes: list[_Precedente], n: int = 3
+        self, *, contexto: str, precedentes: Sequence[_Precedente], n: int = 3
     ) -> EstrategiaResult:
         """Propose and select the best-grounded argumentative line."""
         response = await self._llm.complete(
