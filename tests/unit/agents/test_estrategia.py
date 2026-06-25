@@ -11,6 +11,8 @@ from juris.agents.estrategia import (
     EstrategiaAgent,
     ItemMatriz,
     LinhaArgumentativa,
+    _build_prompt,
+    _parse_candidatas,
     _parse_classificacao,
     _parse_matriz,
     lastro_probatorio,
@@ -134,6 +136,41 @@ class TestClassificacaoMatriz:
 
     def test_parse_matriz_resilient_to_bad_json(self) -> None:
         assert _parse_matriz("not json at all") == []
+
+
+class TestConsequencialistaEAdversario:
+    def test_parse_reads_consequentialist_framing(self) -> None:
+        content = '[{"tese":"t","citacoes":[],"fundamento_consequencialista":"reduz o custo decisório"}]'
+        linha = _parse_candidatas(content)[0]
+        assert linha.fundamento_consequencialista == "reduz o custo decisório"
+
+    def test_parse_consequentialist_defaults_none(self) -> None:
+        linha = _parse_candidatas('[{"tese":"t","citacoes":[]}]')[0]
+        assert linha.fundamento_consequencialista is None
+
+    def test_build_prompt_requests_consequentialist_framing(self) -> None:
+        prompt = _build_prompt("Caso", [_prec("A", 1)], 3)
+        assert "consequencialista" in prompt.lower() or "custo decisório" in prompt.lower()
+
+    def test_build_prompt_injects_adversary_analysis(self) -> None:
+        prompt = _build_prompt("Caso", [_prec("A", 1)], 3, analise_adversario="Réu alega prescrição")
+        assert "Réu alega prescrição" in prompt
+
+
+@pytest.mark.asyncio
+async def test_propor_attaches_and_uses_adversary_analysis() -> None:
+    precs = [_prec("A", 1)]
+    llm = MagicMock()
+    llm.complete = AsyncMock(return_value=SimpleNamespace(content='[{"tese":"forte","citacoes":["A"]}]'))
+
+    result = await EstrategiaAgent(llm).propor(
+        contexto="Caso", precedentes=precs, auditar=False, analise_adversario="Réu alega prescrição"
+    )
+
+    assert result.analise_adversario == "Réu alega prescrição"
+    # the adversary analysis reached the line-generation prompt (anticipate/neutralise)
+    line_prompt = llm.complete.call_args_list[-1].args[0]
+    assert "Réu alega prescrição" in line_prompt
 
 
 @pytest.mark.asyncio

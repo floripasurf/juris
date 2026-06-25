@@ -49,6 +49,8 @@ class LinhaArgumentativa:
     # selecionar_linha: principal > subsidiária > eventual; tom ∝ solidez.
     ordem: Literal["principal", "subsidiaria", "eventual"] = "subsidiaria"
     confianca: Literal["alta", "media", "baixa"] = "media"
+    # Módulo E — why ruling this way lowers the judge's decision cost (LLM text).
+    fundamento_consequencialista: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +86,7 @@ class EstrategiaResult:
     revisao_humana_obrigatoria: bool = False
     classificacao: list[ElementoCaso] = field(default_factory=list)
     matriz_probatoria: list[ItemMatriz] = field(default_factory=list)
+    analise_adversario: str | None = None  # Módulo D (reuso do defesa_analyzer)
 
 
 # Módulo I — deontological veto. High-precision patterns for conduct the CED/EOAB
@@ -200,12 +203,25 @@ _SYSTEM = (
 )
 
 
-def _build_prompt(contexto: str, precedentes: Sequence[_Precedente], n: int) -> str:
+def _build_prompt(
+    contexto: str,
+    precedentes: Sequence[_Precedente],
+    n: int,
+    *,
+    analise_adversario: str | None = None,
+) -> str:
     fontes = "\n".join(f"- {p.source_id} (nível {p.hierarchy})" for p in precedentes)
+    # Módulo D — give the adversary analysis so lines anticipate/neutralise it.
+    adversario = (
+        f"\nAnálise do adversário (antecipe e neutralize nos riscos/fundamentos):\n{analise_adversario}\n"
+        if analise_adversario
+        else ""
+    )
     return (
-        f"Caso:\n{contexto}\n\nPrecedentes disponíveis (use os ids em 'citacoes'):\n{fontes}\n\n"
+        f"Caso:\n{contexto}\n{adversario}\nPrecedentes disponíveis (use os ids em 'citacoes'):\n{fontes}\n\n"
         f"Proponha {n} linhas argumentativas distintas como JSON: lista de objetos "
-        '{"tese", "fundamentos": [...], "citacoes": [ids], "riscos": [...]}.'
+        '{"tese", "fundamentos": [...], "citacoes": [ids], "riscos": [...], '
+        '"fundamento_consequencialista": "por que decidir assim reduz o custo decisório do julgador"}.'
     )
 
 
@@ -213,12 +229,14 @@ def _parse_candidatas(content: str) -> list[LinhaArgumentativa]:
     raw = json.loads(content)
     linhas: list[LinhaArgumentativa] = []
     for item in raw:
+        consequencialista = item.get("fundamento_consequencialista")
         linhas.append(
             LinhaArgumentativa(
                 tese=str(item.get("tese", "")),
                 fundamentos=list(item.get("fundamentos", [])),
                 citacoes=[str(c) for c in item.get("citacoes", [])],
                 riscos=list(item.get("riscos", [])),
+                fundamento_consequencialista=str(consequencialista) if consequencialista else None,
             )
         )
     return linhas
@@ -324,12 +342,15 @@ class EstrategiaAgent:
         precedentes: Sequence[_Precedente],
         n: int = 3,
         auditar: bool = True,
+        analise_adversario: str | None = None,
     ) -> EstrategiaResult:
         """Propose and select the best-grounded argumentative line.
 
         When ``auditar`` (default), runs the pre-steps that build the Relatório:
         Módulo A (classify elements) and Módulo B (evidence matrix); a weak
-        evidentiary lastro forces mandatory human review.
+        evidentiary lastro forces mandatory human review. ``analise_adversario``
+        (Módulo D — reuses the drafter's defesa_analyzer) is fed to the line
+        generation so the lines anticipate the opponent.
         """
         classificacao: list[ElementoCaso] = []
         matriz: list[ItemMatriz] = []
@@ -338,7 +359,7 @@ class EstrategiaAgent:
             matriz = await montar_matriz(self._llm, contexto)
 
         response = await self._llm.complete(
-            _build_prompt(contexto, precedentes, n),
+            _build_prompt(contexto, precedentes, n, analise_adversario=analise_adversario),
             system=_SYSTEM,
             max_tokens=1500,
         )
@@ -350,6 +371,7 @@ class EstrategiaAgent:
             result,
             classificacao=classificacao,
             matriz_probatoria=matriz,
+            analise_adversario=analise_adversario,
             revisao_humana_obrigatoria=result.revisao_humana_obrigatoria or lastro < 0.5,
         )
         logger.info(
