@@ -60,6 +60,38 @@ class WebDemoRun:
     duration_seconds: float
     output_dir: str
     artifacts: tuple[WebDemoArtifact, ...]
+    estrategia: dict[str, object] | None = None  # the selected argumentative line (Relatório)
+
+
+def estrategia_payload(draft: object) -> dict[str, object] | None:
+    """Extract the UI-facing strategy from a DraftResult (or None).
+
+    Surfaces the chosen argumentative line, the runners-up, the deontological
+    flags and the mandatory-review flag — the structured intelligence the
+    operator console renders instead of burying it in markdown.
+    """
+    est = getattr(draft, "estrategia", None)
+    if est is None:
+        return None
+
+    def _linha(linha: object) -> dict[str, object]:
+        return {
+            "tese": getattr(linha, "tese", ""),
+            "ordem": getattr(linha, "ordem", ""),
+            "confianca": getattr(linha, "confianca", ""),
+            "score": getattr(linha, "score", 0.0),
+            "fundamentos": list(getattr(linha, "fundamentos", [])),
+            "citacoes": list(getattr(linha, "citacoes", [])),
+            "riscos": list(getattr(linha, "riscos", [])),
+            "fundamento_consequencialista": getattr(linha, "fundamento_consequencialista", None),
+        }
+
+    return {
+        "escolhida": _linha(est.escolhida),
+        "alternativas": [_linha(a) for a in getattr(est, "alternativas", [])],
+        "avisos_deontologicos": list(getattr(est, "avisos_deontologicos", [])),
+        "revisao_humana_obrigatoria": bool(getattr(est, "revisao_humana_obrigatoria", False)),
+    }
 
 
 async def execute_demo_run(request: WebDemoRunRequest) -> WebDemoRun:
@@ -122,6 +154,7 @@ async def execute_demo_run(request: WebDemoRunRequest) -> WebDemoRun:
         duration_seconds=result.duration_seconds,
         output_dir=str(case_dir),
         artifacts=artifacts,
+        estrategia=estrategia_payload(getattr(result, "draft", None)),
     )
 
 

@@ -23,6 +23,7 @@ def test_index_renders_local_ui() -> None:
     assert "Gerar artefatos" in response.text
     assert "Meus processos" in response.text
     assert "Agenda de prazos" in response.text
+    assert "renderEstrategia" in response.text  # strategy panel wired into the console
 
 
 def test_list_processos_endpoint_returns_views(monkeypatch) -> None:
@@ -132,6 +133,7 @@ def test_create_demo_run_returns_artifact_previews(monkeypatch) -> None:
                     preview="# Rascunho",
                 ),
             ),
+            estrategia={"escolhida": {"tese": "forte", "confianca": "alta"}, "revisao_humana_obrigatoria": False},
         )
 
     monkeypatch.setattr(app_module, "execute_demo_run", fake_execute)
@@ -151,6 +153,7 @@ def test_create_demo_run_returns_artifact_previews(monkeypatch) -> None:
     assert body["succeeded"] is True
     assert body["artifacts"][0]["name"] == "rascunho-pesquisa.md"
     assert body["artifacts"][0]["preview"] == "# Rascunho"
+    assert body["estrategia"]["escolhida"]["tese"] == "forte"  # strategy surfaced to the console
 
 
 def test_create_demo_run_executes_real_service_path(monkeypatch, tmp_path: Path) -> None:
