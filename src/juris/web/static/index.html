@@ -306,6 +306,14 @@
     .issue-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .review-issues p { margin: 6px 0 0; font-size: 0.88rem; }
     .review-issues .sugg { color: var(--accent-dark); }
+
+    /* Audit viewer */
+    .audit-verdict { margin: 12px 0; padding: 10px 14px; border-radius: 8px; font-weight: 600; }
+    .audit-verdict.ok { background: #dcfce7; color: #166534; }
+    .audit-verdict.bad { background: #fee2e2; color: #991b1b; }
+    .audit-timeline .badge.audit-ev { background: #e2e8f0; color: #334155; }
+    .audit-timeline li.audit-bad::before { background: var(--danger); }
+    #output-dir { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
   </style>
 </head>
 <body>
@@ -462,6 +470,34 @@
       estrategiaEl.appendChild(card);
     }
 
+    async function openAudit(dir) {
+      procModalBody.innerHTML = "<p class='muted'>Verificando cadeia…</p>";
+      procModal.hidden = false;
+      try {
+        const r = await fetch(`/api/audit?dir=${encodeURIComponent(dir)}`);
+        if (!r.ok) throw new Error(r.status === 404 ? "audit.jsonl não encontrado" : "Falha ao verificar");
+        renderAudit(await r.json());
+      } catch (err) {
+        procModalBody.innerHTML = `<p class="notice error" style="position:static">${err.message}</p>`;
+      }
+    }
+
+    function renderAudit(a) {
+      const verdict = a.intact
+        ? `<div class="audit-verdict ok">✓ Cadeia íntegra · ${a.total} eventos</div>`
+        : `<div class="audit-verdict bad">✗ Cadeia adulterada · ${a.corrupted.length} de ${a.total} comprometidos</div>`;
+      const rows = (a.entries || [])
+        .map((e) => `<li class="${e.corrupted ? "audit-bad" : ""}">
+            <span class="mov-date">${e.timestamp ? new Date(e.timestamp).toLocaleString("pt-BR") : "—"}</span>
+            <span class="badge audit-ev">${e.event_type}</span>
+            <span class="mov-desc">${e.actor}${e.processo_cnj ? " · " + e.processo_cnj : ""}</span>
+            ${e.corrupted ? '<span class="badge sev-critical">adulterado</span>' : ""}
+          </li>`)
+        .join("");
+      procModalBody.innerHTML = `<h2>Auditoria</h2>${verdict}
+        <h4>Cadeia de eventos</h4><ul class="timeline audit-timeline">${rows}</ul>`;
+    }
+
     const reviewEl = document.querySelector("#review");
     const SEV_LABEL = { critical: "Crítico", important: "Importante", suggestion: "Sugestão" };
 
@@ -544,7 +580,15 @@
     function renderRun(data) {
       titleEl.textContent = data.succeeded ? "Execução concluída" : "Execução parcial";
       summaryEl.textContent = `${data.artifacts.length} artefatos · ${data.duration_seconds.toFixed(1)}s`;
-      outputDirEl.textContent = data.output_dir;
+      outputDirEl.innerHTML = `<span class="muted">${data.output_dir}</span>`;
+      if (data.output_dir) {
+        const auditBtn = document.createElement("button");
+        auditBtn.type = "button";
+        auditBtn.className = "ghost";
+        auditBtn.textContent = "ver auditoria";
+        auditBtn.addEventListener("click", () => openAudit(data.output_dir));
+        outputDirEl.appendChild(auditBtn);
+      }
       notice.textContent = data.degraded ? `Execução degradada: ${data.degradation_reason}` : "Artefatos gerados.";
       notice.className = data.succeeded ? "notice" : "notice error";
       notice.hidden = false;

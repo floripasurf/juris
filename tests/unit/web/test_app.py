@@ -26,6 +26,7 @@ def test_index_renders_local_ui() -> None:
     assert "renderEstrategia" in response.text  # strategy panel wired into the console
     assert "openProcessoDetail" in response.text  # per-process detail wired
     assert "renderReview" in response.text  # structured review panel wired
+    assert "openAudit" in response.text  # audit viewer wired
 
 
 def test_list_processos_endpoint_returns_views(monkeypatch) -> None:
@@ -94,6 +95,27 @@ async def test_connect_job_runner_records_result(monkeypatch) -> None:
     job = app_module._CONNECT_JOBS["job-x"]
     assert job["status"] == "done"
     assert job["result"]["total_tracked"] == 5
+
+
+def test_audit_endpoint_returns_chain(monkeypatch) -> None:
+    app_module = importlib.import_module("juris.web.app")
+    view = {"total": 2, "intact": True, "corrupted": [], "entries": [{"event_type": "draft"}]}
+    import juris.web.audit_service as audit_service
+
+    monkeypatch.setattr(audit_service, "audit_view", lambda path: view)
+    response = client.get("/api/audit", params={"dir": "juris-out/CASO-1"})
+    assert response.status_code == 200
+    assert response.json()["intact"] is True
+
+
+def test_audit_endpoint_404_when_missing(monkeypatch) -> None:
+    import juris.web.audit_service as audit_service
+
+    def _raise(path):
+        raise FileNotFoundError(path)
+
+    monkeypatch.setattr(audit_service, "audit_view", _raise)
+    assert client.get("/api/audit", params={"dir": "nope"}).status_code == 404
 
 
 def test_processo_detail_endpoint_returns_detail(monkeypatch) -> None:

@@ -149,6 +149,21 @@ async def get_prazos() -> dict[str, object]:
     return {"prazos": [v.to_dict() for v in list_prazos()]}
 
 
+@app.get("/api/audit")
+async def get_audit(dir: str) -> dict[str, object]:
+    """The audit chain + integrity verdict for a demo run's output dir.
+
+    Phase 1 (co-located, single-user): reads ``<dir>/audit.jsonl`` directly.
+    Multi-tenant (Phase 2) must scope this to the tenant's own output root.
+    """
+    from juris.web.audit_service import audit_view
+
+    try:
+        return audit_view(Path(dir) / "audit.jsonl")
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="audit.jsonl não encontrado") from exc
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index() -> str:
     """Render the local operator UI."""
