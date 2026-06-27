@@ -27,6 +27,8 @@ def test_index_renders_local_ui() -> None:
     assert "openProcessoDetail" in response.text  # per-process detail wired
     assert "renderReview" in response.text  # structured review panel wired
     assert "openAudit" in response.text  # audit viewer wired
+    assert "showView" in response.text  # section navigation wired
+    assert 'data-nav="acervo"' in response.text
 
 
 def test_list_processos_endpoint_returns_views(monkeypatch) -> None:

@@ -314,16 +314,32 @@
     .audit-timeline .badge.audit-ev { background: #e2e8f0; color: #334155; }
     .audit-timeline li.audit-bad::before { background: var(--danger); }
     #output-dir { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+
+    /* Top navigation */
+    header { display: flex; align-items: center; gap: 20px; }
+    #nav { display: flex; gap: 6px; margin-left: 8px; }
+    #nav button {
+      width: auto; background: transparent; color: #cfe6e2; border: 1px solid transparent;
+      padding: 7px 16px; font-size: 14px; font-weight: 600;
+    }
+    #nav button:hover { background: rgba(255, 255, 255, 0.12); }
+    #nav button.active { background: #fff; color: var(--accent-dark); }
+    header .status { margin-left: auto; text-align: right; }
   </style>
 </head>
 <body>
   <header>
     <div class="brand"><div class="mark">J</div><div>Juris</div></div>
-    <div class="status">Interface local do piloto<br>artefatos auditáveis em Markdown</div>
+    <nav id="nav">
+      <button type="button" data-nav="acervo" class="active">Acervo</button>
+      <button type="button" data-nav="agenda">Agenda</button>
+      <button type="button" data-nav="caso">Novo caso</button>
+    </nav>
+    <div class="status">Interface local do piloto</div>
   </header>
 
   <main>
-    <section class="processos-panel">
+    <section class="processos-panel" data-view="acervo">
       <h1>Meus processos</h1>
       <p class="lede">Acervo importado do seu token. Conecte para importar e manter atualizado; clique em "minuta" para redigir a partir de um processo.</p>
       <form id="connect-form" class="connect-bar">
@@ -335,13 +351,13 @@
       <div id="processos" class="proc-empty">Carregando…</div>
     </section>
 
-    <section class="processos-panel">
+    <section class="processos-panel" data-view="agenda" hidden>
       <h1>Agenda de prazos</h1>
       <p class="lede">Prazos pendentes do acervo, mais próximos primeiro.</p>
       <div id="prazos" class="proc-empty">Carregando…</div>
     </section>
 
-    <section class="form-panel">
+    <section class="form-panel" data-view="caso" hidden>
       <h1>Novo caso</h1>
       <p class="lede">Gere rascunho de pesquisa ou minuta sugerida a partir do pipeline atual.</p>
       <form id="demo-form">
@@ -394,7 +410,7 @@
       </form>
     </section>
 
-    <section class="results">
+    <section class="results" data-view="caso" hidden>
       <div class="results-head">
         <div>
           <h2 id="result-title">Artefatos</h2>
@@ -531,6 +547,19 @@
     }
 
     const value = (id) => document.querySelector(`#${id}`).value;
+
+    // View navigation — show one section group at a time.
+    function showView(name) {
+      document.querySelectorAll("main [data-view]").forEach((el) => {
+        el.hidden = el.dataset.view !== name;
+      });
+      document.querySelectorAll("#nav button").forEach((b) => {
+        b.classList.toggle("active", b.dataset.nav === name);
+      });
+    }
+    document.querySelectorAll("#nav button").forEach((b) => {
+      b.addEventListener("click", () => showView(b.dataset.nav));
+    });
     const checked = (id) => document.querySelector(`#${id}`).checked;
 
     form.addEventListener("submit", async (event) => {
@@ -627,6 +656,7 @@
     const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString("pt-BR") : "—");
 
     function useProcesso(cnj, tribunal) {
+      showView("caso");
       document.querySelector("#numero_cnj").value = cnj;
       document.querySelector("#tribunal").value = tribunal;
       document.querySelector("#source").value = "mni";
