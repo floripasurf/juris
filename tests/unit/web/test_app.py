@@ -24,6 +24,7 @@ def test_index_renders_local_ui() -> None:
     assert "Meus processos" in response.text
     assert "Agenda de prazos" in response.text
     assert "renderEstrategia" in response.text  # strategy panel wired into the console
+    assert "openProcessoDetail" in response.text  # per-process detail wired
 
 
 def test_list_processos_endpoint_returns_views(monkeypatch) -> None:
@@ -92,6 +93,24 @@ async def test_connect_job_runner_records_result(monkeypatch) -> None:
     job = app_module._CONNECT_JOBS["job-x"]
     assert job["status"] == "done"
     assert job["result"]["total_tracked"] == 5
+
+
+def test_processo_detail_endpoint_returns_detail(monkeypatch) -> None:
+    app_module = importlib.import_module("juris.web.app")
+    from juris.web.processos_service import MovimentoView, ProcessoDetailView
+
+    detail = ProcessoDetailView(
+        numero_cnj="A", tribunal="tjmg", classe="Apelação", assunto="Dano",
+        orgao_julgador="3ª Câmara", valor_causa=1000.0, last_sync_at=None,
+        movimentos=[MovimentoView(data_hora=None, descricao="Julgamento", tipo="m", categoria="decisao")],
+        prazos=[],
+    )
+    monkeypatch.setattr(app_module, "get_processo_detail", lambda cnj: detail if cnj == "A" else None)
+
+    ok = client.get("/api/processos/A")
+    assert ok.status_code == 200
+    assert ok.json()["movimentos"][0]["descricao"] == "Julgamento"
+    assert client.get("/api/processos/MISSING").status_code == 404
 
 
 def test_prazos_endpoint_returns_agenda(monkeypatch) -> None:

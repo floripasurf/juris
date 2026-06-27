@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from juris import __version__
 from juris.jobs.connect import run_connect
 from juris.web.demo_service import DemoRunError, WebDemoRunRequest, execute_demo_run
-from juris.web.processos_service import list_prazos, list_processos
+from juris.web.processos_service import get_processo_detail, list_prazos, list_processos
 
 if TYPE_CHECKING:
     from juris.mni.tribunais import TribunalConfig
@@ -53,6 +53,15 @@ async def health() -> dict[str, str]:
 async def get_processos() -> dict[str, object]:
     """List the lawyer's imported processos with their nearest pending prazo."""
     return {"processos": [v.to_dict() for v in list_processos()]}
+
+
+@app.get("/api/processos/{numero_cnj}")
+async def get_processo(numero_cnj: str) -> dict[str, object]:
+    """Detail for one processo: metadata + movements + pending prazos."""
+    detail = get_processo_detail(numero_cnj)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="processo não encontrado")
+    return detail.to_dict()
 
 
 class ConnectPayload(BaseModel):

@@ -294,6 +294,19 @@ class LocalDB:
         with self.session() as s:
             return s.query(ProcessoLocal).filter_by(numero_cnj=numero_cnj).first()
 
+    def get_movimentos_by_cnj(self, numero_cnj: str) -> list[MovimentoLocal]:
+        """Get a processo's movimentos, most recent first."""
+        with self.session() as s:
+            proc = s.query(ProcessoLocal).filter_by(numero_cnj=numero_cnj).first()
+            if proc is None:
+                return []
+            return list(
+                s.query(MovimentoLocal)
+                .filter_by(processo_id=proc.id)
+                .order_by(MovimentoLocal.data_hora.desc())
+                .all()
+            )
+
     def get_pending_prazos(self, numero_cnj: str | None = None) -> list[PrazoLocal]:
         """Get pending (non-cumprido) prazos."""
         with self.session() as s:

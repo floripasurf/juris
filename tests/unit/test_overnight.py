@@ -271,7 +271,7 @@ class TestSyncSummary:
         assert s.finished_at is None
         s.finish()
         assert s.finished_at is not None
-        assert s.duration_seconds > 0
+        assert s.duration_seconds >= 0  # can be 0.0 on a sub-millisecond run
 
 
 class TestMtlsRouting:

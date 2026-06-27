@@ -115,3 +115,93 @@ def list_processos(db: LocalDB | None = None) -> list[ProcessoView]:
             )
         )
     return views
+
+
+@dataclass(frozen=True, slots=True)
+class MovimentoView:
+    """One movement in a processo's history."""
+
+    data_hora: datetime | None
+    descricao: str | None
+    tipo: str | None
+    categoria: str | None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "data_hora": self.data_hora.isoformat() if self.data_hora else None,
+            "descricao": self.descricao,
+            "tipo": self.tipo,
+            "categoria": self.categoria,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ProcessoDetailView:
+    """Full detail for one processo: metadata + movements + pending prazos."""
+
+    numero_cnj: str
+    tribunal: str | None
+    classe: str | None
+    assunto: str | None
+    orgao_julgador: str | None
+    valor_causa: float | None
+    last_sync_at: datetime | None
+    movimentos: list[MovimentoView]
+    prazos: list[PrazoView]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "numero_cnj": self.numero_cnj,
+            "tribunal": self.tribunal,
+            "classe": self.classe,
+            "assunto": self.assunto,
+            "orgao_julgador": self.orgao_julgador,
+            "valor_causa": self.valor_causa,
+            "last_sync_at": self.last_sync_at.isoformat() if self.last_sync_at else None,
+            "movimentos": [m.to_dict() for m in self.movimentos],
+            "prazos": [p.to_dict() for p in self.prazos],
+        }
+
+
+def get_processo_detail(numero_cnj: str, db: LocalDB | None = None) -> ProcessoDetailView | None:
+    """Assemble one processo's detail: metadata + movements + pending prazos."""
+    if db is None:
+        from juris.persistence.local_db import LocalDB as _LocalDB
+
+        db = _LocalDB()
+
+    proc = db.get_processo_by_cnj(numero_cnj)
+    if proc is None:
+        return None
+
+    movimentos = [
+        MovimentoView(
+            data_hora=cast("datetime | None", m.data_hora),
+            descricao=cast("str | None", m.descricao),
+            tipo=cast("str | None", m.tipo),
+            categoria=cast("str | None", getattr(m, "categoria_semantica", None)),
+        )
+        for m in db.get_movimentos_by_cnj(numero_cnj)
+    ]
+    prazos = [
+        PrazoView(
+            numero_cnj=cast(str, p.numero_cnj),
+            data_limite=cast("datetime | None", p.data_limite),
+            urgencia=cast("str | None", p.urgencia),
+            status=cast("str | None", p.status),
+            rule_nome=cast("str | None", p.rule_nome),
+            tipo_acao=cast("str | None", getattr(p, "tipo_acao", None)),
+        )
+        for p in db.get_pending_prazos(numero_cnj=numero_cnj)
+    ]
+    return ProcessoDetailView(
+        numero_cnj=cast(str, proc.numero_cnj),
+        tribunal=cast("str | None", proc.tribunal_id),
+        classe=cast("str | None", proc.classe),
+        assunto=cast("str | None", proc.assunto),
+        orgao_julgador=cast("str | None", getattr(proc, "orgao_julgador", None)),
+        valor_causa=cast("float | None", getattr(proc, "valor_causa", None)),
+        last_sync_at=cast("datetime | None", proc.last_sync_at),
+        movimentos=movimentos,
+        prazos=prazos,
+    )

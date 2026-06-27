@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
-from juris.web.processos_service import list_prazos, list_processos
+from juris.web.processos_service import get_processo_detail, list_prazos, list_processos
 
 
 def _proc(cnj: str, classe: str = "Procedimento Comum") -> SimpleNamespace:
@@ -14,6 +14,8 @@ def _proc(cnj: str, classe: str = "Procedimento Comum") -> SimpleNamespace:
         tribunal_id="tjmg",
         classe=classe,
         assunto="Cobrança",
+        orgao_julgador="3ª Câmara Cível",
+        valor_causa=10000.0,
         last_sync_at=datetime(2026, 6, 24, tzinfo=UTC),
     )
 
@@ -84,3 +86,39 @@ def test_list_prazos_returns_pending_sorted_by_deadline() -> None:
     assert payload["urgencia"] == "media"
     assert payload["data_limite"] == "2026-07-10T00:00:00+00:00"
     assert payload["rule_nome"] == "Contestação"
+
+
+def _mov(data_hora: datetime, descricao: str) -> SimpleNamespace:
+    return SimpleNamespace(
+        data_hora=data_hora, descricao=descricao, tipo="movimento", categoria_semantica="decisao"
+    )
+
+
+def test_get_processo_detail_returns_none_when_not_found() -> None:
+    db = SimpleNamespace(
+        get_processo_by_cnj=lambda cnj: None,
+        get_movimentos_by_cnj=lambda cnj: [],
+        get_pending_prazos=lambda numero_cnj=None: [],
+    )
+    assert get_processo_detail("X", db=db) is None
+
+
+def test_get_processo_detail_assembles_movimentos_and_prazos() -> None:
+    proc = _proc("A")
+    movs = [_mov(datetime(2021, 6, 1, tzinfo=UTC), "Julgamento")]
+    prazos = [_prazo_local("A", datetime(2026, 7, 1, tzinfo=UTC), "alta")]
+    db = SimpleNamespace(
+        get_processo_by_cnj=lambda cnj: proc if cnj == "A" else None,
+        get_movimentos_by_cnj=lambda cnj: movs,
+        get_pending_prazos=lambda numero_cnj=None: prazos,
+    )
+
+    detail = get_processo_detail("A", db=db)
+
+    assert detail is not None
+    payload = detail.to_dict()
+    assert payload["numero_cnj"] == "A"
+    assert payload["classe"] == "Procedimento Comum"
+    assert payload["orgao_julgador"] == "3ª Câmara Cível"
+    assert payload["movimentos"][0]["descricao"] == "Julgamento"
+    assert payload["prazos"][0]["urgencia"] == "alta"
