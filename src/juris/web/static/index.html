@@ -283,6 +283,29 @@
     .mov-date { color: var(--muted); font-variant-numeric: tabular-nums; flex: 0 0 90px; }
     .mov-desc { flex: 1; }
     .mov-cat { background: #eef2ff; color: #4338ca; }
+
+    /* Review panel */
+    .review-card {
+      border: 1px solid #d7e3ee; border-radius: 12px; padding: 16px 18px;
+      margin-bottom: 16px; background: #fff;
+    }
+    .review-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .review-head h3 { margin: 0; font-size: 1rem; }
+    .sev-chips { display: flex; gap: 6px; }
+    .sev-chip, .sev-tag {
+      font-size: 0.72rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; white-space: nowrap;
+    }
+    .sev-critical { background: #fee2e2; color: #991b1b; }
+    .sev-important { background: #fef3c7; color: #92400e; }
+    .sev-suggestion { background: #e0f2fe; color: #075985; }
+    .review-issues { list-style: none; margin: 14px 0 0; padding: 0; }
+    .review-issues li { padding: 10px 12px; border-radius: 8px; margin-bottom: 8px; background: #f8fafc; border-left: 4px solid #cbd5e1; }
+    .review-issues li.sev-critical { border-left-color: #ef4444; }
+    .review-issues li.sev-important { border-left-color: #f59e0b; }
+    .review-issues li.sev-suggestion { border-left-color: #38bdf8; }
+    .issue-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .review-issues p { margin: 6px 0 0; font-size: 0.88rem; }
+    .review-issues .sugg { color: var(--accent-dark); }
   </style>
 </head>
 <body>
@@ -372,6 +395,7 @@
         <div id="output-dir" class="out"></div>
       </div>
       <div id="estrategia"></div>
+      <div id="review"></div>
       <div id="artifacts" class="empty">Os documentos gerados aparecerão aqui.</div>
     </section>
   </main>
@@ -438,6 +462,38 @@
       estrategiaEl.appendChild(card);
     }
 
+    const reviewEl = document.querySelector("#review");
+    const SEV_LABEL = { critical: "Crítico", important: "Importante", suggestion: "Sugestão" };
+
+    function renderReview(rev) {
+      reviewEl.innerHTML = "";
+      if (!rev) return;
+      const c = rev.counts || {};
+      const card = document.createElement("div");
+      card.className = "review-card";
+      const chips = ["critical", "important", "suggestion"]
+        .map((s) => `<span class="sev-chip sev-${s}">${c[s] || 0} ${SEV_LABEL[s].toLowerCase()}</span>`)
+        .join("");
+      const verifiedCites = (rev.citations || []).filter((x) => x.found).length;
+      const totalCites = (rev.citations || []).length;
+
+      const issues = (rev.issues || []).length
+        ? rev.issues
+            .map((i) => `<li class="sev-row sev-${i.severity}">
+                <div class="issue-head"><span class="sev-tag sev-${i.severity}">${SEV_LABEL[i.severity] || i.severity}</span>
+                <strong>${i.title || ""}</strong> <span class="muted">${i.dimension || ""}</span></div>
+                <p>${i.description || ""}</p>
+                ${i.suggestion ? `<p class="sugg">↳ ${i.suggestion}</p>` : ""}
+              </li>`)
+            .join("")
+        : "<li class='muted'>Nenhum apontamento — revisão limpa.</li>";
+
+      card.innerHTML = `<div class="review-head"><h3>Revisão automática</h3><div class="sev-chips">${chips}</div></div>
+        <div class="proc-meta">Citações verificadas: ${verifiedCites}/${totalCites}</div>
+        <ul class="review-issues">${issues}</ul>`;
+      reviewEl.appendChild(card);
+    }
+
     const value = (id) => document.querySelector(`#${id}`).value;
     const checked = (id) => document.querySelector(`#${id}`).checked;
 
@@ -494,6 +550,7 @@
       notice.hidden = false;
 
       renderEstrategia(data.estrategia);
+      renderReview(data.review);
 
       if (!data.artifacts.length) {
         artifactsEl.className = "empty";

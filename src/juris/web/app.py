@@ -193,4 +193,5 @@ async def create_demo_run(payload: DemoRunPayload) -> dict[str, object]:
             for artifact in result.artifacts
         ],
         "estrategia": result.estrategia,
+        "review": result.review,
     }

@@ -61,6 +61,7 @@ class WebDemoRun:
     output_dir: str
     artifacts: tuple[WebDemoArtifact, ...]
     estrategia: dict[str, object] | None = None  # the selected argumentative line (Relatório)
+    review: dict[str, object] | None = None  # structured reviewer report
 
 
 def estrategia_payload(draft: object) -> dict[str, object] | None:
@@ -92,6 +93,47 @@ def estrategia_payload(draft: object) -> dict[str, object] | None:
         "avisos_deontologicos": list(getattr(est, "avisos_deontologicos", [])),
         "revisao_humana_obrigatoria": bool(getattr(est, "revisao_humana_obrigatoria", False)),
     }
+
+
+def _enum_value(value: object) -> str:
+    return value.value if hasattr(value, "value") else str(value)
+
+
+def review_payload(draft: object) -> dict[str, object] | None:
+    """Extract the structured reviewer report from a DraftResult (or None).
+
+    Surfaces the issues (by dimension/severity), the per-severity counts, and the
+    verified citations — so the console shows the review as UI, not markdown.
+    """
+    rep = getattr(draft, "reviewer_report", None)
+    if rep is None:
+        return None
+
+    issues = [
+        {
+            "dimension": _enum_value(getattr(i, "dimension", "")),
+            "severity": _enum_value(getattr(i, "severity", "")),
+            "title": getattr(i, "title", ""),
+            "description": getattr(i, "description", ""),
+            "suggestion": getattr(i, "suggestion", None),
+            "line_anchor": getattr(i, "line_anchor", None),
+            "citations": list(getattr(i, "citations", [])),
+        }
+        for i in getattr(rep, "issues", [])
+    ]
+    counts = {
+        sev: sum(1 for i in issues if i["severity"] == sev)
+        for sev in ("critical", "important", "suggestion")
+    }
+    citations = [
+        {
+            "raw": getattr(c, "raw_text", ""),
+            "normalized": getattr(c, "normalized", ""),
+            "found": bool(getattr(c, "found_in_repertory", False)),
+        }
+        for c in getattr(rep, "citations_found", [])
+    ]
+    return {"issues": issues, "counts": counts, "citations": citations}
 
 
 async def execute_demo_run(request: WebDemoRunRequest) -> WebDemoRun:
@@ -155,6 +197,7 @@ async def execute_demo_run(request: WebDemoRunRequest) -> WebDemoRun:
         output_dir=str(case_dir),
         artifacts=artifacts,
         estrategia=estrategia_payload(getattr(result, "draft", None)),
+        review=review_payload(getattr(result, "draft", None)),
     )
 
 
