@@ -15,23 +15,43 @@ class _FakeConn:
         self.reply = reply
         self.sent: str | None = None
         self.closed = False
+        self._req_id: str | None = None
 
     async def send(self, data: str) -> None:
         self.sent = data
+        try:
+            self._req_id = json.loads(data).get("request_id")
+        except (json.JSONDecodeError, AttributeError):
+            self._req_id = None
 
     async def recv(self) -> str:
-        return self.reply
+        # Echo the request_id into the reply, as the real host correlates it.
+        try:
+            obj = json.loads(self.reply)
+        except json.JSONDecodeError:
+            return self.reply
+        if self._req_id is not None:
+            obj["request_id"] = self._req_id
+        return json.dumps(obj)
 
     async def close(self) -> None:
         self.closed = True
 
 
+def _echo_channel(*, success: bool = True, content: str = "A resposta", error: str | None = None) -> AsyncMock:
+    """A channel whose reply echoes the request_id (as the real host does)."""
+
+    async def _request(message: dict) -> dict:
+        return {"request_id": message["request_id"], "success": success, "content": content, "error": error}
+
+    channel = AsyncMock()
+    channel.request = AsyncMock(side_effect=_request)
+    return channel
+
+
 @pytest.mark.asyncio
 async def test_send_relays_completion_request_and_returns_content() -> None:
-    channel = AsyncMock()
-    channel.request = AsyncMock(
-        return_value={"request_id": "x", "success": True, "content": "A resposta"}
-    )
+    channel = _echo_channel(content="A resposta")
     transport = NativeBridgeTransport(channel)
 
     result = await transport.send(prompt="Tese?", system="Sys")
@@ -45,14 +65,22 @@ async def test_send_relays_completion_request_and_returns_content() -> None:
 
 @pytest.mark.asyncio
 async def test_send_raises_on_failure() -> None:
-    channel = AsyncMock()
-    channel.request = AsyncMock(
-        return_value={"request_id": "x", "success": False, "error": "sessão expirada"}
-    )
-    transport = NativeBridgeTransport(channel)
+    transport = NativeBridgeTransport(_echo_channel(success=False, error="sessão expirada"))
 
     with pytest.raises(RuntimeError, match="sessão expirada"):
         await transport.send(prompt="x", system=None)
+
+
+@pytest.mark.asyncio
+async def test_send_rejects_mismatched_request_id() -> None:
+    channel = AsyncMock()
+    channel.request = AsyncMock(
+        return_value={"request_id": "OUTRO", "success": True, "content": "x"}
+    )
+    transport = NativeBridgeTransport(channel)
+
+    with pytest.raises(RuntimeError, match="pedido errado"):
+        await transport.send(prompt="Tese?", system=None)
 
 
 @pytest.mark.asyncio

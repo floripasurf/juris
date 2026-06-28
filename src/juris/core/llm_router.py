@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from juris.core.deid import deidentify, ensure_cloud_safe
@@ -14,13 +14,13 @@ if TYPE_CHECKING:
     from juris.config import Settings
 
 
-class LLMProvider(str, Enum):
+class LLMProvider(StrEnum):
     ANTHROPIC = "anthropic"
     OLLAMA = "ollama"
     CLAUDE_BROWSER = "claude_browser"  # lawyer's own subscription via browser extension
 
 
-class PIIMode(str, Enum):
+class PIIMode(StrEnum):
     """How PII-bearing tasks are handled (ADR-0016)."""
 
     LOCAL_RAW = "local_raw"  # default — keep on the local model, raw
@@ -29,7 +29,7 @@ class PIIMode(str, Enum):
     BROWSER_DEID = "browser_deid"  # de-identify, then the lawyer's browser session
 
 
-class LLMTask(str, Enum):
+class LLMTask(StrEnum):
     ANALYZE = "analyze"       # PII — default local
     DRAFT = "draft"           # PII — default local (cloud with de-identified context)
     RESEARCH = "research"     # Public corpus — cloud OK

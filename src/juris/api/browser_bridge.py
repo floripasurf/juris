@@ -97,6 +97,12 @@ class NativeBridgeTransport:
         )
         raw = await self._channel.request(request.model_dump())
         response = CompletionResponse(**raw)
+        if response.request_id != request.request_id:
+            msg = (
+                f"resposta correlaciona com pedido errado "
+                f"(esperado {request.request_id}, veio {response.request_id})"
+            )
+            raise RuntimeError(msg)
         if not response.success:
             msg = response.error or "browser session completion failed"
             raise RuntimeError(msg)
