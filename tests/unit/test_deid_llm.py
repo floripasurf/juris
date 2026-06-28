@@ -53,3 +53,19 @@ async def test_fails_closed_on_partial_deid_without_optin() -> None:
 
 def test_model_name_passthrough() -> None:
     assert DeidentifyingLLM(_Delegate("x")).model_name == "claude-test"
+
+
+def test_cloud_safe_llm_uses_ner_and_fails_closed_by_default() -> None:
+    from juris.core.deid_llm import cloud_safe_llm
+
+    llm = cloud_safe_llm(_Delegate("x"))
+    assert llm._allow_partial is False  # names handled → gate closed
+    assert llm._ner is not None
+
+
+def test_cloud_safe_llm_structured_only_when_ner_disabled() -> None:
+    from juris.core.deid_llm import cloud_safe_llm
+
+    llm = cloud_safe_llm(_Delegate("x"), require_ner=False)
+    assert llm._allow_partial is True  # structured-only fallback (names may remain)
+    assert llm._ner is None

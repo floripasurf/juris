@@ -1843,7 +1843,7 @@ def review(
     if cloud:
         try:
             from juris.config import get_settings
-            from juris.core.deid_llm import DeidentifyingLLM
+            from juris.core.deid_llm import cloud_safe_llm
             from juris.llm.claude import ClaudeLLM
 
             settings = get_settings()
@@ -1851,7 +1851,7 @@ def review(
                 console.print("[red]ANTHROPIC_API_KEY not configured. Set it in .env or environment.[/red]")
                 raise typer.Exit(code=1)
             # ADR-0016: de-identify case PII before it reaches the cloud model.
-            llm = DeidentifyingLLM(ClaudeLLM(api_key=settings.anthropic_api_key.get_secret_value()))
+            llm = cloud_safe_llm(ClaudeLLM(api_key=settings.anthropic_api_key.get_secret_value()))
             console.print("[dim]LLM: Claude (cloud, de-identificado)[/dim]")
         except typer.Exit:
             raise
@@ -2000,7 +2000,7 @@ def draft(
         )
         try:
             from juris.config import get_settings
-            from juris.core.deid_llm import DeidentifyingLLM
+            from juris.core.deid_llm import cloud_safe_llm
             from juris.llm.claude import ClaudeLLM
 
             settings = get_settings()
@@ -2008,7 +2008,7 @@ def draft(
                 console.print("[red]ANTHROPIC_API_KEY not configured. Set it in .env or environment.[/red]")
                 raise typer.Exit(code=1)
             # ADR-0016: de-identify case PII before it reaches the cloud model.
-            llm = DeidentifyingLLM(ClaudeLLM(api_key=settings.anthropic_api_key.get_secret_value()))
+            llm = cloud_safe_llm(ClaudeLLM(api_key=settings.anthropic_api_key.get_secret_value()))
             console.print("[dim]LLM: Claude (cloud, de-identificado)[/dim]")
         except typer.Exit:
             raise
@@ -2674,7 +2674,7 @@ def demo(
         )
         try:
             from juris.config import get_settings
-            from juris.core.deid_llm import DeidentifyingLLM
+            from juris.core.deid_llm import cloud_safe_llm
             from juris.llm.claude import ClaudeLLM
 
             settings = get_settings()
@@ -2682,7 +2682,7 @@ def demo(
                 console.print("[red]ANTHROPIC_API_KEY não configurada (.env ou ambiente).[/red]")
                 raise typer.Exit(code=1)
             # ADR-0016: de-identify case PII before it reaches the cloud model.
-            llm = DeidentifyingLLM(ClaudeLLM(api_key=settings.anthropic_api_key.get_secret_value()))
+            llm = cloud_safe_llm(ClaudeLLM(api_key=settings.anthropic_api_key.get_secret_value()))
             console.print("[dim]LLM: Claude (cloud, de-identificado)[/dim]")
         except typer.Exit:
             raise

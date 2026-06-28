@@ -247,15 +247,16 @@ def _resolve_repertory_for_source(is_demo_mode: bool) -> Path:
 def _build_llm(*, use_cloud: bool) -> AbstractLLM:
     if use_cloud:
         from juris.config import get_settings
-        from juris.core.deid_llm import DeidentifyingLLM
+        from juris.core.deid_llm import cloud_safe_llm
         from juris.llm.claude import ClaudeLLM
 
         settings = get_settings()
         if not settings.anthropic_api_key:
             raise DemoRunError("ANTHROPIC_API_KEY não configurada.")
-        # ADR-0016: case PII never leaves de-identified — wrap the cloud model.
-        # DeidentifyingLLM is structurally an AbstractLLM (complete + model_name).
-        wrapped = DeidentifyingLLM(ClaudeLLM(api_key=settings.anthropic_api_key.get_secret_value()))
+        # ADR-0016: case PII (incl. names, via LeNER-Br) is removed before the
+        # cloud model sees it; the gate fails closed. cloud_safe_llm is
+        # structurally an AbstractLLM (complete + model_name).
+        wrapped = cloud_safe_llm(ClaudeLLM(api_key=settings.anthropic_api_key.get_secret_value()))
         return cast("AbstractLLM", wrapped)
 
     from juris.llm.ollama import OllamaLLM

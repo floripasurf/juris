@@ -60,7 +60,12 @@ do(a) advogado(a)** (ADR-0018). Passo a passo, **na ordem**:
     dados para treinamento esteja ativa. Em caso de dúvida, use também o modo de
     chat temporário/não salvo.
   - *Defesa em profundidade:* mesmo com o treino desligado, o juris **de-identifica**
-    (CPF/CNPJ/CNJ/OAB) o que sai para a sessão e re-identifica a resposta.
+    o que sai para a sessão e re-identifica a resposta — **identificadores estruturados**
+    (CPF/CNPJ/CNJ/OAB) por regex e **nomes** via NER LeNER-Br.
+  - **Pré-baixar o modelo NER** (uma vez, para o caminho cloud/sessão):
+    `uv run python -c "from juris.core.ner import LegalNER; LegalNER().redact_entities('teste')"`.
+    Sem o modelo, o caminho cloud **falha fechado** (não envia nomes) — é o
+    comportamento seguro do ADR-0016.
 
 - [ ] **Instalar a extensão juris + o host de mensagens nativas** e autorizá-la no
   navegador. *(Status: a cola de extensão/host está em construção — o lado juris

@@ -14,6 +14,7 @@ import of the (local, gitignored) LLM engine.
 from __future__ import annotations
 
 from dataclasses import replace
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
 from juris.core.deid import deidentify, ensure_cloud_safe, reidentify
@@ -62,3 +63,29 @@ class DeidentifyingLLM:
     @property
     def model_name(self) -> str:
         return str(self._delegate.model_name)
+
+
+@lru_cache(maxsize=1)
+def _legal_ner() -> Any:
+    """The shared LeNER-Br NER (loaded once)."""
+    from juris.core.ner import LegalNER
+
+    return LegalNER()
+
+
+def default_ner_redactor() -> Callable[[str], list[str]]:
+    """The LeNER-Br name redactor for de-identification (lazy, cached)."""
+    return _legal_ner().redact_entities  # type: ignore[no-any-return]
+
+
+def cloud_safe_llm(delegate: Any, *, require_ner: bool = True) -> DeidentifyingLLM:
+    """Wrap a cloud LLM so case PII — including names — is removed before it leaves.
+
+    With ``require_ner`` (default), names go through the LeNER-Br redactor and the
+    gate fails closed (``allow_partial=False``) — genuinely cloud-safe, but the
+    model must be available. Set ``require_ner=False`` to fall back to structured-
+    only de-id (CPF/CNPJ/CNJ/OAB), accepting that names may remain.
+    """
+    if require_ner:
+        return DeidentifyingLLM(delegate, ner_redactor=default_ner_redactor(), allow_partial=False)
+    return DeidentifyingLLM(delegate, allow_partial=True)
