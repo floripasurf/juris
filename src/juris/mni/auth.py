@@ -7,7 +7,6 @@ import tempfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 from requests import Session
 from requests_pkcs12 import Pkcs12Adapter

@@ -84,6 +84,16 @@ src = ["src"]
 select = ["E", "F", "I", "N", "B", "UP", "S", "A", "C4", "RET", "SIM"]
 ignore = ["S101"]  # allow assert in tests
 
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI/Typer require call-in-default for dependency/option injection (not a B008 bug).
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Header",
+    "fastapi.Query",
+    "typer.Option",
+    "typer.Argument",
+]
+
 [tool.ruff.lint.isort]
 known-first-party = ["juris"]
 

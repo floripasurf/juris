@@ -11,8 +11,8 @@ from pydantic import BaseModel, Field
 
 from juris import __version__
 from juris.jobs.connect import run_connect
-from juris.web.demo_service import DemoRunError, WebDemoRunRequest, execute_demo_run
 from juris.web.auth import Tenant, current_tenant, tenant_db_path
+from juris.web.demo_service import DemoRunError, WebDemoRunRequest, execute_demo_run
 from juris.web.processos_service import get_processo_detail, list_prazos, list_processos
 
 if TYPE_CHECKING:

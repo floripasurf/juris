@@ -8,10 +8,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
 
 from juris.core.observability import get_logger
-from juris.mni.parsers.processo import Movimento, ProcessoDomain, parse_processo
+from juris.mni.parsers.processo import Movimento, ProcessoDomain
 
 logger = get_logger(__name__)
 
@@ -74,13 +73,11 @@ def detect_new_movements(
         mov_time = mov.data_hora
         if mov_time.tzinfo is None:
             # Treat naive as UTC for comparison
-            from datetime import timezone
-            mov_time = mov_time.replace(tzinfo=timezone.utc)
+            mov_time = mov_time.replace(tzinfo=UTC)
 
         last_sync_aware = last_sync_at
         if last_sync_aware.tzinfo is None:
-            from datetime import timezone
-            last_sync_aware = last_sync_aware.replace(tzinfo=timezone.utc)
+            last_sync_aware = last_sync_aware.replace(tzinfo=UTC)
 
         if mov_time < last_sync_aware:
             continue

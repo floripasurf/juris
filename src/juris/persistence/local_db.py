@@ -160,19 +160,18 @@ class LocalDB:
                 existing.updated_at = datetime.now(UTC)
                 s.commit()
                 return existing.id
-            else:
-                proc = ProcessoLocal(
-                    numero_cnj=numero_cnj,
-                    tribunal_id=tribunal_id,
-                    classe=classe,
-                    assunto=assunto,
-                    valor_causa=valor_causa,
-                    orgao_julgador=orgao_julgador,
-                    last_sync_at=datetime.now(UTC),
-                )
-                s.add(proc)
-                s.commit()
-                return proc.id
+            proc = ProcessoLocal(
+                numero_cnj=numero_cnj,
+                tribunal_id=tribunal_id,
+                classe=classe,
+                assunto=assunto,
+                valor_causa=valor_causa,
+                orgao_julgador=orgao_julgador,
+                last_sync_at=datetime.now(UTC),
+            )
+            s.add(proc)
+            s.commit()
+            return proc.id
 
     def insert_movimentos(
         self,
@@ -225,18 +224,17 @@ class LocalDB:
                 existing.updated_at = datetime.now(UTC)
                 s.commit()
                 return existing.id
-            else:
-                prazo = PrazoLocal(
-                    processo_id=processo_id,
-                    numero_cnj=numero_cnj,
-                    rule_nome=rule_nome,
-                    data_inicio=data_inicio,
-                    data_limite=data_limite,
-                    **kwargs,
-                )
-                s.add(prazo)
-                s.commit()
-                return prazo.id
+            prazo = PrazoLocal(
+                processo_id=processo_id,
+                numero_cnj=numero_cnj,
+                rule_nome=rule_nome,
+                data_inicio=data_inicio,
+                data_limite=data_limite,
+                **kwargs,
+            )
+            s.add(prazo)
+            s.commit()
+            return prazo.id
 
     def log_sync(
         self,

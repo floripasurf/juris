@@ -7,7 +7,7 @@ import hashlib
 from dataclasses import dataclass
 
 from juris.core.observability import get_logger
-from juris.core.storage import StorageBackend, StoredObject
+from juris.core.storage import StorageBackend
 
 logger = get_logger(__name__)
 

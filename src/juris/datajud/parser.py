@@ -6,9 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from juris.mni.parsers.processo import (
-    Documento,
     Movimento,
-    Parte,
     ProcessoDomain,
 )
 

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
-from typing import Any
 
 from juris.agents.analyzer import ProcessoAnalysis, analyze_processo
 from juris.alerts.deadline_alerts import AlertBatch, generate_alerts

@@ -6,7 +6,6 @@ import base64
 import hashlib
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
 
 from zeep import Client
 
