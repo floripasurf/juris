@@ -450,16 +450,17 @@
       const card = document.createElement("div");
       card.className = "estrategia-card";
 
-      const conf = esc.confianca || "media";
-      const list = (arr) => (arr && arr.length ? arr.map((x) => `<li>${x}</li>`).join("") : "<li class='muted'>—</li>");
+      const conf = escHtml(esc.confianca || "media");
+      const ordem = escHtml(esc.ordem || "principal");
+      const list = (arr) => (arr && arr.length ? arr.map((x) => `<li>${escHtml(x)}</li>`).join("") : "<li class='muted'>—</li>");
 
       let html = `<div class="estrategia-head">
-          <h3>Linha argumentativa <span class="badge ordem-${esc.ordem}">${esc.ordem || "principal"}</span></h3>
-          <span class="badge conf-${conf}">${CONF_LABEL[conf] || conf}</span>
+          <h3>Linha argumentativa <span class="badge ordem-${ordem}">${ordem}</span></h3>
+          <span class="badge conf-${conf}">${escHtml(CONF_LABEL[conf] || conf)}</span>
         </div>
-        <p class="tese">${esc.tese || ""}</p>`;
+        <p class="tese">${escHtml(esc.tese || "")}</p>`;
       if (esc.fundamento_consequencialista) {
-        html += `<p class="conseq"><strong>Argumento consequencialista:</strong> ${esc.fundamento_consequencialista}</p>`;
+        html += `<p class="conseq"><strong>Argumento consequencialista:</strong> ${escHtml(esc.fundamento_consequencialista)}</p>`;
       }
       html += `<div class="estrategia-cols">
           <div><h4>Fundamentos</h4><ul>${list(esc.fundamentos)}</ul></div>
@@ -468,7 +469,7 @@
         </div>`;
 
       if (est.revisao_humana_obrigatoria || (est.avisos_deontologicos && est.avisos_deontologicos.length)) {
-        const avisos = (est.avisos_deontologicos || []).map((a) => `<li>${a}</li>`).join("");
+        const avisos = (est.avisos_deontologicos || []).map((a) => `<li>${escHtml(a)}</li>`).join("");
         html += `<div class="estrategia-alert">
             <strong>⚠ Revisão humana obrigatória</strong>
             ${avisos ? `<ul>${avisos}</ul>` : "<p>Confiança baixa ou lastro probatório fraco.</p>"}
@@ -477,7 +478,7 @@
 
       if (est.alternativas && est.alternativas.length) {
         const alts = est.alternativas
-          .map((a) => `<li><span class="badge ordem-${a.ordem}">${a.ordem}</span> ${a.tese} <span class="muted">(${(a.score ?? 0).toFixed(2)})</span></li>`)
+          .map((a) => `<li><span class="badge ordem-${escHtml(a.ordem)}">${escHtml(a.ordem)}</span> ${escHtml(a.tese)} <span class="muted">(${(a.score ?? 0).toFixed(2)})</span></li>`)
           .join("");
         html += `<details class="estrategia-alts"><summary>Vice-campeãs (${est.alternativas.length})</summary><ul>${alts}</ul></details>`;
       }
@@ -490,11 +491,11 @@
       procModalBody.innerHTML = "<p class='muted'>Verificando cadeia…</p>";
       procModal.hidden = false;
       try {
-        const r = await fetch(`/api/audit?dir=${encodeURIComponent(dir)}`);
+        const r = await fetch(`/api/audit?output_dir=${encodeURIComponent(dir)}`);
         if (!r.ok) throw new Error(r.status === 404 ? "audit.jsonl não encontrado" : "Falha ao verificar");
         renderAudit(await r.json());
       } catch (err) {
-        procModalBody.innerHTML = `<p class="notice error" style="position:static">${err.message}</p>`;
+        procModalBody.innerHTML = `<p class="notice error" style="position:static">${escHtml(err.message)}</p>`;
       }
     }
 
@@ -505,8 +506,8 @@
       const rows = (a.entries || [])
         .map((e) => `<li class="${e.corrupted ? "audit-bad" : ""}">
             <span class="mov-date">${e.timestamp ? new Date(e.timestamp).toLocaleString("pt-BR") : "—"}</span>
-            <span class="badge audit-ev">${e.event_type}</span>
-            <span class="mov-desc">${e.actor}${e.processo_cnj ? " · " + e.processo_cnj : ""}</span>
+            <span class="badge audit-ev">${escHtml(e.event_type)}</span>
+            <span class="mov-desc">${escHtml(e.actor)}${e.processo_cnj ? " · " + escHtml(e.processo_cnj) : ""}</span>
             ${e.corrupted ? '<span class="badge sev-critical">adulterado</span>' : ""}
           </li>`)
         .join("");
@@ -531,11 +532,11 @@
 
       const issues = (rev.issues || []).length
         ? rev.issues
-            .map((i) => `<li class="sev-row sev-${i.severity}">
-                <div class="issue-head"><span class="sev-tag sev-${i.severity}">${SEV_LABEL[i.severity] || i.severity}</span>
-                <strong>${i.title || ""}</strong> <span class="muted">${i.dimension || ""}</span></div>
-                <p>${i.description || ""}</p>
-                ${i.suggestion ? `<p class="sugg">↳ ${i.suggestion}</p>` : ""}
+            .map((i) => `<li class="sev-row sev-${escHtml(i.severity)}">
+                <div class="issue-head"><span class="sev-tag sev-${escHtml(i.severity)}">${escHtml(SEV_LABEL[i.severity] || i.severity)}</span>
+                <strong>${escHtml(i.title || "")}</strong> <span class="muted">${escHtml(i.dimension || "")}</span></div>
+                <p>${escHtml(i.description || "")}</p>
+                ${i.suggestion ? `<p class="sugg">↳ ${escHtml(i.suggestion)}</p>` : ""}
               </li>`)
             .join("")
         : "<li class='muted'>Nenhum apontamento — revisão limpa.</li>";
@@ -547,6 +548,10 @@
     }
 
     const value = (id) => document.querySelector(`#${id}`).value;
+
+    // Escape untrusted text (LLM output, court/process data) before innerHTML.
+    const ESC_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+    const escHtml = (v) => (v == null ? "" : String(v).replace(/[&<>"']/g, (c) => ESC_MAP[c]));
 
     // View navigation — show one section group at a time.
     function showView(name) {
@@ -609,7 +614,7 @@
     function renderRun(data) {
       titleEl.textContent = data.succeeded ? "Execução concluída" : "Execução parcial";
       summaryEl.textContent = `${data.artifacts.length} artefatos · ${data.duration_seconds.toFixed(1)}s`;
-      outputDirEl.innerHTML = `<span class="muted">${data.output_dir}</span>`;
+      outputDirEl.innerHTML = `<span class="muted">${escHtml(data.output_dir)}</span>`;
       if (data.output_dir) {
         const auditBtn = document.createElement("button");
         auditBtn.type = "button";
@@ -679,7 +684,7 @@
         if (!r.ok) throw new Error(r.status === 404 ? "Processo não encontrado" : "Falha ao carregar");
         renderProcDetail(await r.json());
       } catch (err) {
-        procModalBody.innerHTML = `<p class="notice error" style="position:static">${err.message}</p>`;
+        procModalBody.innerHTML = `<p class="notice error" style="position:static">${escHtml(err.message)}</p>`;
       }
     }
 
@@ -688,19 +693,19 @@
         ["Classe", d.classe], ["Assunto", d.assunto], ["Órgão", d.orgao_julgador],
         ["Valor da causa", d.valor_causa != null ? `R$ ${d.valor_causa.toLocaleString("pt-BR")}` : null],
         ["Última sinc.", fmtDate(d.last_sync_at)],
-      ].filter(([, v]) => v).map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("");
+      ].filter(([, v]) => v).map(([k, v]) => `<div><dt>${k}</dt><dd>${escHtml(v)}</dd></div>`).join("");
 
       const prazos = d.prazos.length
-        ? d.prazos.map((p) => `<li><span class="badge ${p.urgencia ? "urg-" + p.urgencia : "urg-baixa"}">${fmtDate(p.data_limite)}</span> ${p.rule_nome || "—"} <span class="muted">${p.tipo_acao || ""}</span></li>`).join("")
+        ? d.prazos.map((p) => `<li><span class="badge ${p.urgencia ? "urg-" + escHtml(p.urgencia) : "urg-baixa"}">${fmtDate(p.data_limite)}</span> ${escHtml(p.rule_nome || "—")} <span class="muted">${escHtml(p.tipo_acao || "")}</span></li>`).join("")
         : "<li class='muted'>Nenhum prazo pendente.</li>";
 
       const movs = d.movimentos.length
-        ? d.movimentos.map((m) => `<li><span class="mov-date">${fmtDate(m.data_hora)}</span><span class="mov-desc">${m.descricao || "—"}</span>${m.categoria ? `<span class="badge mov-cat">${m.categoria}</span>` : ""}</li>`).join("")
+        ? d.movimentos.map((m) => `<li><span class="mov-date">${fmtDate(m.data_hora)}</span><span class="mov-desc">${escHtml(m.descricao || "—")}</span>${m.categoria ? `<span class="badge mov-cat">${escHtml(m.categoria)}</span>` : ""}</li>`).join("")
         : "<li class='muted'>Sem movimentos sincronizados.</li>";
 
       procModalBody.innerHTML = `
-        <h2>${d.numero_cnj}</h2>
-        <div class="proc-meta">${(d.tribunal || "").toUpperCase()}</div>
+        <h2>${escHtml(d.numero_cnj)}</h2>
+        <div class="proc-meta">${escHtml((d.tribunal || "").toUpperCase())}</div>
         <dl class="detail-meta">${meta}</dl>
         <h4>Prazos pendentes</h4>
         <ul class="detail-prazos">${prazos}</ul>
@@ -725,7 +730,7 @@
           ? `<span class="badge ${urg}">${fmtDate(p.proximo_prazo)}</span>`
           : '<span class="urg-baixa">sem prazo</span>';
         const left = document.createElement("div");
-        left.innerHTML = `<div class="proc-cnj">${p.numero_cnj}</div><div class="proc-meta">${p.classe || "—"} · ${(p.tribunal || "").toUpperCase()}</div>`;
+        left.innerHTML = `<div class="proc-cnj">${escHtml(p.numero_cnj)}</div><div class="proc-meta">${escHtml(p.classe || "—")} · ${escHtml((p.tribunal || "").toUpperCase())}</div>`;
         const mid = document.createElement("div");
         mid.className = "proc-meta";
         mid.textContent = p.assunto || "";
@@ -828,9 +833,9 @@
       items.forEach((p) => {
         const row = document.createElement("div");
         row.className = "proc-row";
-        const urg = p.urgencia ? `urg-${p.urgencia}` : "urg-baixa";
+        const urg = p.urgencia ? `urg-${escHtml(p.urgencia)}` : "urg-baixa";
         const left = document.createElement("div");
-        left.innerHTML = `<div class="proc-cnj">${p.numero_cnj}</div><div class="proc-meta">${p.rule_nome || "—"}</div>`;
+        left.innerHTML = `<div class="proc-cnj">${escHtml(p.numero_cnj)}</div><div class="proc-meta">${escHtml(p.rule_nome || "—")}</div>`;
         const mid = document.createElement("div");
         mid.className = "proc-meta";
         mid.textContent = p.tipo_acao || "";

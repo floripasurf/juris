@@ -7,13 +7,29 @@ so the lawyer can confirm on screen that nothing was tampered with.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import os
+from pathlib import Path
 
 from juris.demo.audit_verify import verify_audit_file
 from juris.persistence.audit import AuditLog
 
-if TYPE_CHECKING:
-    from pathlib import Path
+
+def resolve_audit_path(output_dir: str, *, root: Path | None = None) -> Path:
+    """Resolve ``<output_dir>/audit.jsonl``, confined to the output root.
+
+    Prevents the audit endpoint from reading arbitrary local files: the resolved
+    path must live under ``root`` (default ``$JURIS_OUT_ROOT`` or ``juris-out``).
+
+    Raises:
+        ValueError: if the path escapes the root (traversal).
+    """
+    base = (root or Path(os.environ.get("JURIS_OUT_ROOT", "juris-out"))).resolve()
+    raw = Path(output_dir)
+    candidate = (raw if raw.is_absolute() else base / raw).resolve()
+    if not candidate.is_relative_to(base):
+        msg = "caminho de auditoria fora do diretório de saída permitido"
+        raise ValueError(msg)
+    return candidate / "audit.jsonl"
 
 
 def audit_view(path: Path) -> dict[str, object]:

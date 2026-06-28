@@ -294,3 +294,20 @@ async def test_deidentificar_complete_with_ner_redactor_passes_gate() -> None:
         ner_redactor=lambda _t: ["João da Silva"],
     )
     llm.complete.assert_awaited()
+
+
+class TestParserResilience:
+    def test_parses_json_inside_markdown_fences(self) -> None:
+        content = '```json\n[{"tese":"forte","citacoes":["A"]}]\n```'
+        linhas = _parse_candidatas(content)
+        assert linhas[0].tese == "forte"
+
+    def test_parses_json_with_surrounding_prose(self) -> None:
+        content = 'Aqui estão as linhas:\n[{"tese":"x","citacoes":[]}]\nEspero que ajude.'
+        linhas = _parse_candidatas(content)
+        assert linhas[0].tese == "x"
+
+    def test_classificacao_resilient_to_fences(self) -> None:
+        content = '```json\n[{"texto":"contrato","tipo":"prova"}]\n```'
+        elementos = _parse_classificacao(content)
+        assert elementos[0].tipo == "prova"

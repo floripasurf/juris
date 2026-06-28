@@ -43,3 +43,31 @@ def test_audit_view_flags_a_tampered_chain(tmp_path) -> None:
 def test_audit_view_raises_when_missing(tmp_path) -> None:
     with pytest.raises(FileNotFoundError):
         audit_view(tmp_path / "nope.jsonl")
+
+
+def test_resolve_audit_path_confines_to_root(tmp_path) -> None:
+    from juris.web.audit_service import resolve_audit_path
+
+    root = tmp_path / "juris-out"
+    (root / "CASO-1").mkdir(parents=True)
+    assert resolve_audit_path("CASO-1", root=root) == root / "CASO-1" / "audit.jsonl"
+
+
+def test_resolve_audit_path_accepts_absolute_under_root(tmp_path) -> None:
+    from juris.web.audit_service import resolve_audit_path
+
+    root = tmp_path / "juris-out"
+    case = root / "CASO-1"
+    case.mkdir(parents=True)
+    assert resolve_audit_path(str(case), root=root) == case / "audit.jsonl"
+
+
+def test_resolve_audit_path_rejects_traversal(tmp_path) -> None:
+    import pytest
+
+    from juris.web.audit_service import resolve_audit_path
+
+    root = tmp_path / "juris-out"
+    root.mkdir(parents=True)
+    with pytest.raises(ValueError, match="fora"):
+        resolve_audit_path("../../etc", root=root)

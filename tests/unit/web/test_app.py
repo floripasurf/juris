@@ -29,6 +29,7 @@ def test_index_renders_local_ui() -> None:
     assert "openAudit" in response.text  # audit viewer wired
     assert "showView" in response.text  # section navigation wired
     assert 'data-nav="acervo"' in response.text
+    assert "escHtml" in response.text  # untrusted data escaped before innerHTML (XSS)
 
 
 def test_list_processos_endpoint_returns_views(monkeypatch) -> None:
@@ -80,6 +81,15 @@ def test_connect_job_get_unknown_returns_404() -> None:
     assert client.get("/api/connect/does-not-exist").status_code == 404
 
 
+def test_connect_jobs_are_bounded() -> None:
+    app_module = importlib.import_module("juris.web.app")
+    app_module._CONNECT_JOBS.clear()
+    for i in range(app_module._MAX_CONNECT_JOBS + 10):
+        app_module._evict_old_connect_jobs()
+        app_module._CONNECT_JOBS[f"job-{i}"] = {"status": "done"}
+    assert len(app_module._CONNECT_JOBS) <= app_module._MAX_CONNECT_JOBS
+
+
 @pytest.mark.asyncio
 async def test_connect_job_runner_records_result(monkeypatch) -> None:
     app_module = importlib.import_module("juris.web.app")
@@ -105,7 +115,7 @@ def test_audit_endpoint_returns_chain(monkeypatch) -> None:
     import juris.web.audit_service as audit_service
 
     monkeypatch.setattr(audit_service, "audit_view", lambda path: view)
-    response = client.get("/api/audit", params={"dir": "juris-out/CASO-1"})
+    response = client.get("/api/audit", params={"output_dir": "CASO-1"})
     assert response.status_code == 200
     assert response.json()["intact"] is True
 
@@ -117,7 +127,11 @@ def test_audit_endpoint_404_when_missing(monkeypatch) -> None:
         raise FileNotFoundError(path)
 
     monkeypatch.setattr(audit_service, "audit_view", _raise)
-    assert client.get("/api/audit", params={"dir": "nope"}).status_code == 404
+    assert client.get("/api/audit", params={"output_dir": "nope"}).status_code == 404
+
+
+def test_audit_endpoint_rejects_path_traversal() -> None:
+    assert client.get("/api/audit", params={"output_dir": "../../etc"}).status_code == 400
 
 
 def test_processo_detail_endpoint_returns_detail(monkeypatch) -> None:

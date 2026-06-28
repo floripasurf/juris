@@ -18,7 +18,7 @@ import json
 import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Literal, Protocol, cast
+from typing import TYPE_CHECKING, Any, Literal, Protocol, cast
 
 from juris.core.deid import deidentify, ensure_cloud_safe, reidentify
 from juris.core.observability import get_logger
@@ -226,8 +226,27 @@ def _build_prompt(
     )
 
 
+def _loads_json_block(content: str) -> Any:
+    """Parse JSON even when the model wraps it in markdown fences or prose.
+
+    Strips ```json fences, then falls back to extracting the first [...]/{...}
+    block — LLMs frequently add explanation around the JSON.
+    """
+    text = content.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```[a-zA-Z]*\n?", "", text)
+        text = re.sub(r"\n?```\s*$", "", text).strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        match = re.search(r"(\[.*\]|\{.*\})", text, re.DOTALL)
+        if match is None:
+            raise
+        return json.loads(match.group(0))
+
+
 def _parse_candidatas(content: str) -> list[LinhaArgumentativa]:
-    raw = json.loads(content)
+    raw = _loads_json_block(content)
     linhas: list[LinhaArgumentativa] = []
     for item in raw:
         consequencialista = item.get("fundamento_consequencialista")
@@ -254,7 +273,7 @@ _SYSTEM_CLASSIFICACAO = (
 
 def _parse_classificacao(content: str) -> list[ElementoCaso]:
     try:
-        raw = json.loads(content)
+        raw = _loads_json_block(content)
     except (json.JSONDecodeError, TypeError):
         return []
     elementos: list[ElementoCaso] = []
@@ -290,7 +309,7 @@ _SYSTEM_MATRIZ = (
 
 def _parse_matriz(content: str) -> list[ItemMatriz]:
     try:
-        raw = json.loads(content)
+        raw = _loads_json_block(content)
     except (json.JSONDecodeError, TypeError):
         return []
     itens: list[ItemMatriz] = []

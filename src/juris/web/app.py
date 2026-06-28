@@ -94,7 +94,16 @@ def _serialize_connect(result: Any) -> dict[str, object]:
 
 
 # In-memory connect jobs (co-located Phase 1, single process). Phase 2: a real queue.
+# Bounded (FIFO) so completed jobs don't accumulate; the PIN is never stored here
+# (it lives only in the transient background-task closure, then is GC'd).
 _CONNECT_JOBS: dict[str, dict[str, object]] = {}
+_MAX_CONNECT_JOBS = 50
+
+
+def _evict_old_connect_jobs() -> None:
+    """Drop the oldest jobs once the cap is reached (FIFO; dicts keep order)."""
+    while len(_CONNECT_JOBS) >= _MAX_CONNECT_JOBS:
+        _CONNECT_JOBS.pop(next(iter(_CONNECT_JOBS)))
 
 
 async def _run_connect_job(job_id: str, tribunal_cfg: TribunalConfig, payload: ConnectPayload) -> None:
@@ -129,6 +138,7 @@ async def create_connect(payload: ConnectPayload) -> dict[str, object]:
         raise HTTPException(status_code=400, detail="connect suporta apenas tribunais mTLS (ex.: tjmg).")
 
     job_id = uuid.uuid4().hex
+    _evict_old_connect_jobs()
     _CONNECT_JOBS[job_id] = {"status": "running", "result": None, "error": None}
     asyncio.get_event_loop().create_task(_run_connect_job(job_id, tribunal_cfg, payload))
     return {"job_id": job_id, "status": "running"}
@@ -150,16 +160,20 @@ async def get_prazos() -> dict[str, object]:
 
 
 @app.get("/api/audit")
-async def get_audit(dir: str) -> dict[str, object]:
+async def get_audit(output_dir: str) -> dict[str, object]:
     """The audit chain + integrity verdict for a demo run's output dir.
 
-    Phase 1 (co-located, single-user): reads ``<dir>/audit.jsonl`` directly.
-    Multi-tenant (Phase 2) must scope this to the tenant's own output root.
+    The path is resolved and confined to the configured output root so the
+    endpoint can't read arbitrary local files (Phase 2 multi-tenant hardening).
     """
-    from juris.web.audit_service import audit_view
+    from juris.web.audit_service import audit_view, resolve_audit_path
 
     try:
-        return audit_view(Path(dir) / "audit.jsonl")
+        audit_path = resolve_audit_path(output_dir)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    try:
+        return audit_view(audit_path)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="audit.jsonl não encontrado") from exc
 
