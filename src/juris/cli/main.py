@@ -1650,6 +1650,41 @@ def repertory_search(
     console.print(table)
 
 
+@repertory_app.command("consolidate")
+def repertory_consolidate(
+    archive: bool = typer.Option(
+        False, "--archive", help="Após consolidar, arquiva o banco legado como .bak."
+    ),
+) -> None:
+    """Consolida o banco legado (data/repertory.db) no canônico (~/.juris/repertory.db)."""
+    from juris.repertory.consolidate import consolidate_repertory
+
+    result = consolidate_repertory()
+    if result.merged == 0 and not result.copied_whole:
+        console.print(
+            "[green]Nada a consolidar.[/green] O canônico já está atualizado (ou não há banco legado)."
+        )
+        return
+
+    if result.copied_whole:
+        console.print(f"[green]Banco legado copiado[/green] ({result.merged} chunks) → {result.canonical}")
+        return
+
+    console.print(
+        f"[green]Consolidado:[/green] +{result.merged} chunks "
+        f"({result.skipped} já presentes) → {result.canonical}"
+    )
+    if archive and result.legacy.exists():
+        bak = result.legacy.with_suffix(".db.bak")
+        result.legacy.rename(bak)
+        console.print(f"[dim]Banco legado arquivado em {bak}[/dim]")
+    elif result.legacy.exists():
+        console.print(
+            f"[yellow]Remova ou arquive o banco legado[/yellow] ({result.legacy}) "
+            "para silenciar o aviso do preflight — use --archive."
+        )
+
+
 @repertory_app.command("poll-noticias")
 def repertory_poll_noticias() -> None:
     """Poll court RSS feeds for new noticias (placeholder — wired in Phase 6)."""
