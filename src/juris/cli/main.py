@@ -2171,6 +2171,54 @@ def draft(
             console.print(f"[green]Contraponto saved to {contra_path}[/green]")
 
 
+escavacao_app = typer.Typer(name="escavacao", help="Escavação — coleta o inteiro teor dos casos-líderes (o fosso).")
+app.add_typer(escavacao_app)
+
+
+@escavacao_app.command("run")
+def escavacao_run(
+    seed: str = typer.Option(
+        ..., "--seed", help="JSON com a espinha: lista de {id, hierarquia, precedentes_processos}."
+    ),
+    out: str = typer.Option("escavacao-out", "--out", "-o", help="Diretório de saída do inteiro teor."),
+    max_alvos: int | None = typer.Option(None, "--max", help="Máximo de alvos por execução."),
+) -> None:
+    """Constrói a fila priorizada da espinha e coleta o inteiro teor via DataJud."""
+    import asyncio
+    import json as _json
+    from pathlib import Path as FilePath
+    from types import SimpleNamespace
+
+    from juris.escavacao.executor import executar_escavacao, write_inteiro_teor
+    from juris.escavacao.fetchers import DataJudEscavacaoFetcher
+    from juris.escavacao.queue import construir_fila
+
+    raw = _json.loads(FilePath(seed).read_text(encoding="utf-8"))
+    precedentes = [
+        SimpleNamespace(
+            id=str(e["id"]),
+            hierarquia=int(e.get("hierarquia", 6)),
+            precedentes_processos=list(e.get("precedentes_processos", [])),
+        )
+        for e in raw
+    ]
+    fila = construir_fila(precedentes, max_alvos=max_alvos)
+    console.print(f"Fila priorizada: {len(fila)} alvos de inteiro teor.")
+    if not fila:
+        console.print("[yellow]Nada a escavar — a espinha não trouxe precedentes_processos.[/yellow]")
+        return
+
+    result = asyncio.run(executar_escavacao(fila, DataJudEscavacaoFetcher()))
+    paths = write_inteiro_teor(result.coletados, FilePath(out))
+    console.print(
+        f"[green]Coletados:[/green] {len(paths)} inteiros teores "
+        f"({len(result.falhas)} falhas) → {out}/"
+    )
+    if result.falhas:
+        amostra = ", ".join(result.falhas[:5])
+        console.print(f"[yellow]Falhas:[/yellow] {amostra}{'…' if len(result.falhas) > 5 else ''}")
+
+
 alerts_app = typer.Typer(name="alerts", help="Deadline alert management.")
 app.add_typer(alerts_app)
 

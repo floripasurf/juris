@@ -79,3 +79,22 @@ async def test_empty_queue() -> None:
     result = await executar_escavacao([], _Fetcher({}))
     assert result.coletados == []
     assert result.falhas == []
+
+
+def test_write_inteiro_teor_writes_one_json_per_record(tmp_path) -> None:
+    from juris.escavacao.executor import write_inteiro_teor
+
+    coletados = [
+        InteiroTeor(numero_cnj="5082351-40.2017.8.13.0024", texto="acórdão A", fonte="datajud", origem_tema="STJ-1"),
+        InteiroTeor(numero_cnj="0001234-56.2024.8.26.0001", texto="acórdão B", fonte="datajud", origem_tema="STJ-1"),
+    ]
+    paths = write_inteiro_teor(coletados, tmp_path)
+
+    assert len(paths) == 2
+    assert all(p.exists() for p in paths)
+    import json
+
+    data = json.loads(paths[0].read_text(encoding="utf-8"))
+    assert data["numero_cnj"] == "5082351-40.2017.8.13.0024"
+    assert data["texto"] == "acórdão A"
+    assert data["fonte"] == "datajud"

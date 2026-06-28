@@ -13,12 +13,16 @@ caller's concern (kept out of this orchestration).
 
 from __future__ import annotations
 
+import json
+import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
 from juris.core.observability import get_logger
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from juris.escavacao.queue import AlvoEscavacao
 
 logger = get_logger(__name__)
@@ -88,3 +92,31 @@ async def executar_escavacao(
         pulados=len(fila) - len(alvos),
     )
     return EscavacaoResult(coletados=coletados, falhas=falhas, pulados=len(fila) - len(alvos))
+
+
+def write_inteiro_teor(coletados: list[InteiroTeor], out_dir: Path) -> list[Path]:
+    """Write each harvested full text as one JSON file (the engine then ingests).
+
+    Returns the written paths. The directory is created if needed.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    for teor in coletados:
+        safe = re.sub(r"[^0-9A-Za-z]", "_", teor.numero_cnj)
+        path = out_dir / f"{safe}.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "numero_cnj": teor.numero_cnj,
+                    "texto": teor.texto,
+                    "fonte": teor.fonte,
+                    "origem_tema": teor.origem_tema,
+                    "metadata": teor.metadata,
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        written.append(path)
+    return written
