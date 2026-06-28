@@ -47,3 +47,22 @@ def test_tenant_scoped_dir_isolates_non_public(tmp_path) -> None:
 
     assert tenant_scoped_dir(Tenant("public"), tmp_path) == tmp_path
     assert tenant_scoped_dir(Tenant("escritorio-a"), tmp_path) == tmp_path / "tenants" / "escritorio-a"
+
+
+def test_tenant_db_path_isolates(tmp_path) -> None:
+    from juris.web.auth import tenant_db_path
+
+    assert tenant_db_path(Tenant("public"), base=tmp_path) == tmp_path / "juris.db"
+    assert (
+        tenant_db_path(Tenant("escritorio-a"), base=tmp_path)
+        == tmp_path / "tenants" / "escritorio-a" / "juris.db"
+    )
+
+
+def test_authenticates_hashed_keys_for_production() -> None:
+    from juris.web.auth import hash_api_key
+
+    registry = TenantRegistry({"escritorio-a": hash_api_key("raw-key")})
+    assert resolve_tenant(registry, api_key="raw-key") == Tenant("escritorio-a")
+    with pytest.raises(PermissionError):
+        resolve_tenant(registry, api_key="wrong")

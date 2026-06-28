@@ -5,17 +5,26 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from juris import __version__
 from juris.jobs.connect import run_connect
 from juris.web.demo_service import DemoRunError, WebDemoRunRequest, execute_demo_run
+from juris.web.auth import Tenant, current_tenant, tenant_db_path
 from juris.web.processos_service import get_processo_detail, list_prazos, list_processos
 
 if TYPE_CHECKING:
     from juris.mni.tribunais import TribunalConfig
+    from juris.persistence.local_db import LocalDB
+
+
+def _tenant_db(tenant: Tenant) -> LocalDB:
+    """A LocalDB scoped to the tenant's storage (isolated per firm; shared for public)."""
+    from juris.persistence.local_db import LocalDB
+
+    return LocalDB(tenant_db_path(tenant))
 
 app = FastAPI(
     title="Juris Web",
@@ -50,15 +59,17 @@ async def health() -> dict[str, str]:
 
 
 @app.get("/api/processos")
-async def get_processos() -> dict[str, object]:
+async def get_processos(tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
     """List the lawyer's imported processos with their nearest pending prazo."""
-    return {"processos": [v.to_dict() for v in list_processos()]}
+    return {"processos": [v.to_dict() for v in list_processos(db=_tenant_db(tenant))]}
 
 
 @app.get("/api/processos/{numero_cnj}")
-async def get_processo(numero_cnj: str) -> dict[str, object]:
+async def get_processo(
+    numero_cnj: str, tenant: Tenant = Depends(current_tenant)
+) -> dict[str, object]:
     """Detail for one processo: metadata + movements + pending prazos."""
-    detail = get_processo_detail(numero_cnj)
+    detail = get_processo_detail(numero_cnj, db=_tenant_db(tenant))
     if detail is None:
         raise HTTPException(status_code=404, detail="processo não encontrado")
     return detail.to_dict()
@@ -123,7 +134,9 @@ async def _run_connect_job(job_id: str, tribunal_cfg: TribunalConfig, payload: C
 
 
 @app.post("/api/connect", status_code=202)
-async def create_connect(payload: ConnectPayload) -> dict[str, object]:
+async def create_connect(
+    payload: ConnectPayload, tenant: Tenant = Depends(current_tenant)
+) -> dict[str, object]:
     """Start an async import/update; returns a job id to poll (connect can take minutes)."""
     import asyncio
     import uuid
@@ -145,7 +158,9 @@ async def create_connect(payload: ConnectPayload) -> dict[str, object]:
 
 
 @app.get("/api/connect/{job_id}")
-async def get_connect(job_id: str) -> dict[str, object]:
+async def get_connect(
+    job_id: str, tenant: Tenant = Depends(current_tenant)
+) -> dict[str, object]:
     """Poll a connect job started by POST /api/connect."""
     job = _CONNECT_JOBS.get(job_id)
     if job is None:
@@ -154,22 +169,26 @@ async def get_connect(job_id: str) -> dict[str, object]:
 
 
 @app.get("/api/prazos")
-async def get_prazos() -> dict[str, object]:
+async def get_prazos(tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
     """Deadline agenda: pending prazos across the acervo, soonest first."""
-    return {"prazos": [v.to_dict() for v in list_prazos()]}
+    return {"prazos": [v.to_dict() for v in list_prazos(db=_tenant_db(tenant))]}
 
 
 @app.get("/api/audit")
-async def get_audit(output_dir: str) -> dict[str, object]:
+async def get_audit(
+    output_dir: str, tenant: Tenant = Depends(current_tenant)
+) -> dict[str, object]:
     """The audit chain + integrity verdict for a demo run's output dir.
 
-    The path is resolved and confined to the configured output root so the
-    endpoint can't read arbitrary local files (Phase 2 multi-tenant hardening).
+    The path is resolved and confined to the tenant's output root, so the endpoint
+    can't read arbitrary local files or another tenant's audit log.
     """
     from juris.web.audit_service import audit_view, resolve_audit_path
+    from juris.web.auth import tenant_scoped_dir
 
+    root = tenant_scoped_dir(tenant, Path("juris-out"))
     try:
-        audit_path = resolve_audit_path(output_dir)
+        audit_path = resolve_audit_path(output_dir, root=root)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     try:
@@ -185,15 +204,19 @@ async def index() -> str:
 
 
 @app.post("/api/demo-runs")
-async def create_demo_run(payload: DemoRunPayload) -> dict[str, object]:
+async def create_demo_run(
+    payload: DemoRunPayload, tenant: Tenant = Depends(current_tenant)
+) -> dict[str, object]:
     """Run the demo pipeline from a browser request."""
+    from juris.web.auth import tenant_scoped_dir
+
     request = WebDemoRunRequest(
         numero_cnj=payload.numero_cnj.strip(),
         tipo=payload.tipo,
         tribunal=payload.tribunal.strip() or "tjmg",
         source=payload.source,
         modo=payload.modo,
-        out_root=Path(payload.out_root),
+        out_root=tenant_scoped_dir(tenant, Path(payload.out_root)),
         thesis=payload.thesis.strip() if payload.thesis else None,
         instructions=payload.instructions,
         cloud=payload.cloud,

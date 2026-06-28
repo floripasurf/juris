@@ -11,6 +11,8 @@ on top of the Tenant resolved here.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import os
 from dataclasses import dataclass
@@ -20,6 +22,11 @@ from pathlib import Path
 from fastapi import Header, HTTPException
 
 PUBLIC_TENANT_ID = "public"
+
+
+def hash_api_key(api_key: str) -> str:
+    """SHA-256 of an API key — store these in production, never the raw key."""
+    return hashlib.sha256(api_key.encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,9 +58,18 @@ class TenantRegistry:
         return not self._by_key
 
     def authenticate(self, api_key: str | None) -> Tenant | None:
+        """Match a key against stored values — plaintext (dev) or sha256 (prod).
+
+        Constant-time comparison; a stored value is treated as a hash when it's
+        the incoming key's sha256, else as a plaintext key.
+        """
         if api_key is None:
             return None
-        return self._by_key.get(api_key)
+        incoming_hash = hash_api_key(api_key)
+        for stored, tenant in self._by_key.items():
+            if hmac.compare_digest(stored, api_key) or hmac.compare_digest(stored, incoming_hash):
+                return tenant
+        return None
 
 
 def resolve_tenant(registry: TenantRegistry, *, api_key: str | None) -> Tenant:
@@ -90,3 +106,9 @@ def tenant_scoped_dir(tenant: Tenant, base: Path) -> Path:
     if tenant.tenant_id == PUBLIC_TENANT_ID:
         return base
     return base / "tenants" / tenant.tenant_id
+
+
+def tenant_db_path(tenant: Tenant, *, base: Path | None = None) -> Path:
+    """The tenant's LocalDB path — shared ``~/.juris/juris.db`` for public, isolated otherwise."""
+    base = base or Path.home() / ".juris"
+    return tenant_scoped_dir(tenant, base) / "juris.db"

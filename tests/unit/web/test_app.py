@@ -46,7 +46,7 @@ def test_list_processos_endpoint_returns_views(monkeypatch) -> None:
         proximo_prazo=None,
         proximo_prazo_urgencia="alta",
     )
-    monkeypatch.setattr(app_module, "list_processos", lambda: [view])
+    monkeypatch.setattr(app_module, "list_processos", lambda db=None: [view])
 
     response = client.get("/api/processos")
 
@@ -144,7 +144,7 @@ def test_processo_detail_endpoint_returns_detail(monkeypatch) -> None:
         movimentos=[MovimentoView(data_hora=None, descricao="Julgamento", tipo="m", categoria="decisao")],
         prazos=[],
     )
-    monkeypatch.setattr(app_module, "get_processo_detail", lambda cnj: detail if cnj == "A" else None)
+    monkeypatch.setattr(app_module, "get_processo_detail", lambda cnj, db=None: detail if cnj == "A" else None)
 
     ok = client.get("/api/processos/A")
     assert ok.status_code == 200
@@ -164,7 +164,7 @@ def test_prazos_endpoint_returns_agenda(monkeypatch) -> None:
         rule_nome="Contestação",
         tipo_acao="contestar",
     )
-    monkeypatch.setattr(app_module, "list_prazos", lambda: [view])
+    monkeypatch.setattr(app_module, "list_prazos", lambda db=None: [view])
 
     response = client.get("/api/prazos")
 
@@ -257,3 +257,22 @@ def test_create_demo_run_executes_real_service_path(monkeypatch, tmp_path: Path)
     assert body["succeeded"] is True
     assert body["artifacts"][0]["name"] == "rascunho-pesquisa.md"
     assert body["artifacts"][0]["preview"].startswith("# Rascunho real")
+
+
+def test_endpoints_enforce_api_key_when_tenants_configured(tmp_path, monkeypatch) -> None:
+    import json
+
+    from juris.web import auth
+
+    app_module = importlib.import_module("juris.web.app")
+    tenants = tmp_path / "tenants.json"
+    tenants.write_text(json.dumps({"escritorio-a": "secret-key"}), encoding="utf-8")
+    monkeypatch.setenv("JURIS_TENANTS_FILE", str(tenants))
+    auth.default_registry.cache_clear()  # pick up the configured registry
+    monkeypatch.setattr(app_module, "list_prazos", lambda db=None: [])
+    try:
+        assert client.get("/api/prazos").status_code == 401  # no key → rejected
+        ok = client.get("/api/prazos", headers={"X-API-Key": "secret-key"})
+        assert ok.status_code == 200  # valid key → allowed
+    finally:
+        auth.default_registry.cache_clear()  # reset to open for other tests

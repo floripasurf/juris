@@ -24,17 +24,21 @@ SaaS. Implemented in `web/auth.py`:
 
 ## Consequences
 
-**Done (this ADR):** the auth + storage-scoping primitives, tested, open by
-default. Ready to wire as a dependency on the API without breaking Phase 1.
+**Done (activated):**
+- `Depends(current_tenant)` on every API endpoint (processos, prazos, detail,
+  connect, audit, demo-runs) — auth enforced (401 on a bad key) when configured,
+  open ⇒ `public` otherwise (Phase 1 unchanged).
+- Tenant-scoped storage: the read endpoints use a per-tenant `LocalDB`
+  (`tenant_db_path`); demo runs write under the tenant's `juris-out`; the audit
+  endpoint is confined to the tenant's output root (no cross-tenant reads).
+- API keys: `hash_api_key` (sha256) + constant-time auth accepting **plaintext
+  (dev) or hashed (production)** stored values. **Rotation** = update the tenants
+  file and reload (`default_registry.cache_clear`).
 
-**Next (Phase 2 activation):**
-1. Add `Depends(current_tenant)` to the API and thread the `Tenant` through.
-2. Scope every store by `tenant_scoped_dir` — the LocalDB, the repertory, the
-   `juris-out` output root, the audit log — so no tenant reads another's data.
-3. Per ADR-0015, swap the InProcess services for `Remote*` clients talking to each
+**Next (Phase 2):**
+1. Scope the *write* paths fully — the connect job's LocalDB + tracking still use
+   the default store; thread the `Tenant` through `run_connect`.
+2. Per ADR-0015, swap the InProcess services for `Remote*` clients talking to each
    firm's local agent (the token never co-locates with the cloud orchestrator).
-4. Rate limiting + a durable audit sink (the sibling SaaS uses Redis + Cloud
-   Logging) for production operation.
-
-**Risk:** API keys in a JSON file suit the pilot; a real deployment needs hashed
-keys + rotation + a secrets store. Flagged for Phase 2.
+3. Rate limiting + a durable audit sink (Redis + Cloud Logging) + a secrets store
+   for the keys file.
