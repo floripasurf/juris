@@ -53,3 +53,54 @@ async def test_skips_target_without_tribunal() -> None:
 
     fetcher = DataJudEscavacaoFetcher(consultar=_boom)
     assert await fetcher.fetch(_alvo("X", tribunal=None)) is None
+
+
+class _Fixed:
+    """A fetcher that returns a fixed InteiroTeor (or None)."""
+
+    def __init__(self, teor) -> None:
+        self._teor = teor
+
+    async def fetch(self, alvo):
+        return self._teor
+
+
+def _teor(cnj: str, fonte: str, *, parcial: bool):
+    from juris.escavacao.executor import InteiroTeor
+
+    return InteiroTeor(
+        numero_cnj=cnj, texto=f"texto {fonte}", fonte=fonte, origem_tema="STJ-1",
+        metadata={"parcial": parcial},
+    )
+
+
+@pytest.mark.asyncio
+async def test_failover_prefers_complete_source_over_partial() -> None:
+    from juris.escavacao.fetchers import FailoverFetcher
+
+    partial = _Fixed(_teor("A", "datajud", parcial=True))
+    full = _Fixed(_teor("A", "esaj-cjsg", parcial=False))
+    # partial source listed first, but the complete acórdão must win
+    fetcher = FailoverFetcher([partial, full])
+
+    teor = await fetcher.fetch(_alvo("A"))
+    assert teor is not None
+    assert teor.fonte == "esaj-cjsg"  # provenance of the winning source
+    assert teor.metadata["parcial"] is False
+
+
+@pytest.mark.asyncio
+async def test_failover_falls_back_to_partial_trail() -> None:
+    from juris.escavacao.fetchers import FailoverFetcher
+
+    fetcher = FailoverFetcher([_Fixed(None), _Fixed(_teor("A", "datajud", parcial=True))])
+    teor = await fetcher.fetch(_alvo("A"))
+    assert teor is not None
+    assert teor.fonte == "datajud"  # the trail, when no complete source answered
+
+
+@pytest.mark.asyncio
+async def test_failover_returns_none_when_all_fail() -> None:
+    from juris.escavacao.fetchers import FailoverFetcher
+
+    assert await FailoverFetcher([_Fixed(None), _Fixed(None)]).fetch(_alvo("A")) is None

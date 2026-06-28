@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 from juris.escavacao.executor import InteiroTeor
 
 if TYPE_CHECKING:
+    from juris.escavacao.executor import EscavacaoFetcher
     from juris.escavacao.queue import AlvoEscavacao
 
 _Consultar = Callable[..., "dict[str, Any] | None"]
@@ -56,3 +57,29 @@ class DataJudEscavacaoFetcher:
                 "parcial": True,  # movimentos trail, not the full acórdão
             },
         )
+
+
+class FailoverFetcher:
+    """Source Mesh for escavação — tries fetchers in order, best provenance wins.
+
+    A **complete** full text (a source that doesn't set ``metadata["parcial"]``,
+    e.g. a real acórdão database) wins immediately; otherwise the first **partial**
+    result (e.g. the DataJud movements trail) is the fallback. The winning
+    InteiroTeor carries its source's ``fonte`` as provenance. Plug richer
+    full-text sources ahead of DataJud as they become available.
+    """
+
+    def __init__(self, fetchers: list[EscavacaoFetcher]) -> None:
+        self._fetchers = fetchers
+
+    async def fetch(self, alvo: AlvoEscavacao) -> InteiroTeor | None:
+        fallback: InteiroTeor | None = None
+        for fetcher in self._fetchers:
+            teor = await fetcher.fetch(alvo)
+            if teor is None:
+                continue
+            if not teor.metadata.get("parcial", False):
+                return teor  # a complete source wins over any partial trail
+            if fallback is None:
+                fallback = teor
+        return fallback
