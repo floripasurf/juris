@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from juris.core.types import NumeroCNJ
 from juris.demo import DemoRequest, OutputMode, SourceMode, run_demo
@@ -247,12 +247,16 @@ def _resolve_repertory_for_source(is_demo_mode: bool) -> Path:
 def _build_llm(*, use_cloud: bool) -> AbstractLLM:
     if use_cloud:
         from juris.config import get_settings
+        from juris.core.deid_llm import DeidentifyingLLM
         from juris.llm.claude import ClaudeLLM
 
         settings = get_settings()
         if not settings.anthropic_api_key:
             raise DemoRunError("ANTHROPIC_API_KEY não configurada.")
-        return ClaudeLLM(api_key=settings.anthropic_api_key.get_secret_value())
+        # ADR-0016: case PII never leaves de-identified — wrap the cloud model.
+        # DeidentifyingLLM is structurally an AbstractLLM (complete + model_name).
+        wrapped = DeidentifyingLLM(ClaudeLLM(api_key=settings.anthropic_api_key.get_secret_value()))
+        return cast("AbstractLLM", wrapped)
 
     from juris.llm.ollama import OllamaLLM
 
