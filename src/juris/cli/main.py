@@ -3016,6 +3016,7 @@ def pilot_preflight(
         embedding_model=embedding_model,
         probe_ollama=not skip_ollama_probe,
         probe_token=live,
+        probe_ner=live,
     )
 
     if json_output:

@@ -234,6 +234,50 @@ def check_embeddings_cache(
     )
 
 
+def check_ner_model(*, probe: bool = False, model_name: str | None = None) -> CheckResult:
+    """Verify the LeNER-Br de-id NER model is cached (cloud-de-id path, ADR-0016).
+
+    SKIP unless probed — only the cloud/browser de-id path needs it. Absent, the
+    cloud path fails closed (won't leak names), so this is a WARN with a pre-warm
+    hint rather than a hard FAIL.
+    """
+    if not probe:
+        return CheckResult(
+            name="ner_model",
+            status=CheckStatus.SKIP,
+            message="probe do modelo NER não solicitado (use --live para a sessão cloud)",
+        )
+    if model_name is None:
+        from juris.core.ner import LegalNER
+
+        model_name = LegalNER.DEFAULT_MODEL
+
+    cache_root = _huggingface_cache_root()
+    model_dir = cache_root / ("models--" + model_name.replace("/", "--"))
+    snapshots = model_dir / "snapshots"
+    cached = model_dir.exists() and snapshots.exists() and any(p.is_dir() for p in snapshots.iterdir())
+    details: dict[str, object] = {"model_name": model_name, "model_dir": str(model_dir), "cached": cached}
+
+    if cached:
+        return CheckResult(
+            name="ner_model",
+            status=CheckStatus.PASS,
+            message=f"modelo NER {model_name} em cache",
+            details=details,
+        )
+    return CheckResult(
+        name="ner_model",
+        status=CheckStatus.WARN,
+        message=f"modelo NER {model_name} não está em cache",
+        remediation=(
+            "pré-baixar: `uv run python -c \"from juris.core.ner import LegalNER; "
+            "LegalNER().redact_entities('x')\"`. Sem ele, o caminho cloud falha "
+            "fechado (não envia nomes)."
+        ),
+        details=details,
+    )
+
+
 def _ollama_reachable(url: str, *, timeout: float = 1.5) -> bool:
     """Probe Ollama ``/api/tags`` over HTTP. Returns False on any error."""
     try:
@@ -498,6 +542,7 @@ def run_preflight(
     embedding_model: str = "BAAI/bge-m3",
     probe_ollama: bool = True,
     probe_token: bool = False,
+    probe_ner: bool = False,
 ) -> PreflightReport:
     """Run all preflight checks and aggregate into a report.
 
@@ -513,6 +558,7 @@ def run_preflight(
         check_embeddings_cache(model_name=embedding_model),
         check_llm_availability(probe_ollama=probe_ollama),
         check_token(probe=probe_token),
+        check_ner_model(probe=probe_ner),
         check_output_dir_clean(out_root),
         check_disk_space(out_root),
     )

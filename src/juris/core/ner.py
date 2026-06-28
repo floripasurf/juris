@@ -42,12 +42,21 @@ class LegalNER:
 
     def _get_pipeline(self) -> Callable[[str], list[dict[str, Any]]]:
         if self._pipeline is None:
-            from transformers import pipeline as hf_pipeline
-
             logger.info("ner_model_loading", model=self._model)
-            self._pipeline = hf_pipeline(
-                "token-classification", model=self._model, aggregation_strategy="simple"
-            )
+            try:
+                from transformers import pipeline as hf_pipeline
+
+                self._pipeline = hf_pipeline(
+                    "token-classification", model=self._model, aggregation_strategy="simple"
+                )
+            except Exception as exc:
+                msg = (
+                    f"Modelo NER de de-id ({self._model}) indisponível: {exc}. "
+                    "Pré-baixe-o (ver onboarding §3.5) ou desligue o NER "
+                    "(cloud_safe_llm require_ner=False) — sem ele o caminho cloud "
+                    "falha fechado para não vazar nomes."
+                )
+                raise RuntimeError(msg) from exc
         return self._pipeline
 
     def _is_pii(self, entity: dict[str, Any]) -> bool:

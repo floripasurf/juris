@@ -19,6 +19,7 @@ from juris.pilot.preflight import (
     check_embeddings_cache,
     check_llm_availability,
     check_output_dir_clean,
+    check_ner_model,
     check_repertory,
     check_token,
     run_preflight,
@@ -326,3 +327,31 @@ class TestCheckToken:
         token = next((c for c in report.checks if c.name == "token_a3"), None)
         assert token is not None
         assert token.status is CheckStatus.SKIP
+
+
+class TestCheckNerModel:
+    """LeNER-Br de-id model probe for the cloud/browser session."""
+
+    def test_skip_when_not_probed(self) -> None:
+        assert check_ner_model(probe=False).status is CheckStatus.SKIP
+
+    def test_warn_when_model_missing(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("HF_HOME", str(tmp_path / "hf"))
+        result = check_ner_model(probe=True, model_name="acme/lenerbr")
+        assert result.status is CheckStatus.WARN
+        assert "acme/lenerbr" in result.message
+
+    def test_pass_when_cached(self, tmp_path, monkeypatch) -> None:
+        cache = tmp_path / "hf" / "hub"
+        snap = cache / "models--acme--lenerbr" / "snapshots" / "deadbeef"
+        snap.mkdir(parents=True)
+        (snap / "config.json").write_text("{}")
+        monkeypatch.setenv("HF_HOME", str(tmp_path / "hf"))
+        result = check_ner_model(probe=True, model_name="acme/lenerbr")
+        assert result.status is CheckStatus.PASS
+
+    def test_run_preflight_skips_ner_by_default(self) -> None:
+        report = run_preflight(real_source_required=False, probe_ollama=False)
+        ner = next((c for c in report.checks if c.name == "ner_model"), None)
+        assert ner is not None
+        assert ner.status is CheckStatus.SKIP
