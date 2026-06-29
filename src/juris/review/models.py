@@ -72,7 +72,7 @@ class ReviewReport:
     def to_markdown(self) -> str:
         """Render the review report as structured Markdown."""
         # Build header
-        lines = [f"# Revisao: petição"]
+        lines = ["# Revisao: petição"]
         if self.request.numero_cnj:
             lines[0] += f" — {self.request.numero_cnj}"
 
