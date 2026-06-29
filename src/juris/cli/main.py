@@ -2516,24 +2516,27 @@ def file_petition(
             console.print("[dim]Provide a path to a markdown file or run 'juris draft' first.[/dim]")
             raise typer.Exit(code=1)
 
-    # 2. Resolve PIN
-    resolved_pin = pin
-    if not resolved_pin:
-        resolved_pin = get_credential("token_pin")
-    if not resolved_pin:
-        import getpass
+    # 2-3. Resolve PIN + senha — ONLY when co-located. In remote (split-trust) mode
+    # the agent resolves the lawyer's own secrets; the orchestrator must never ask
+    # for or store them (ADR-0015).
+    from juris.api.agent_config import is_remote
 
-        resolved_pin = getpass.getpass("PIN do token A3: ")
-        if resolved_pin:
-            store_credential("token_pin", resolved_pin)
-            console.print("[dim]PIN salvo no Keychain.[/dim]")
+    remote = is_remote()
+    resolved_pin: str | None = None
+    resolved_senha = ""
+    if not remote:
+        resolved_pin = pin or get_credential("token_pin")
+        if not resolved_pin:
+            import getpass
 
-    if not resolved_pin:
-        console.print("[red]PIN do token é obrigatório.[/red]")
-        raise typer.Exit(code=1)
-
-    # 3. Resolve senha
-    resolved_senha = _get_senha(tribunal, cpf, senha)
+            resolved_pin = getpass.getpass("PIN do token A3: ")
+            if resolved_pin:
+                store_credential("token_pin", resolved_pin)
+                console.print("[dim]PIN salvo no Keychain.[/dim]")
+        if not resolved_pin:
+            console.print("[red]PIN do token é obrigatório.[/red]")
+            raise typer.Exit(code=1)
+        resolved_senha = _get_senha(tribunal, cpf, senha)
 
     # 4. Build the filing request. The service runs the whole pipeline where the
     # token lives — InProcess here, or Remote (/ws/file at the agent) when

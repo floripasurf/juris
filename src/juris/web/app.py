@@ -97,11 +97,16 @@ async def get_processo(
 
 
 class ConnectPayload(BaseModel):
-    """Connect request — co-located Phase 1: the token PIN is entered locally."""
+    """Connect request.
+
+    Co-located (Phase 1): the token PIN + PJe senha are entered locally and sent.
+    Remote (split-trust): they are **omitted** — the lawyer's agent resolves them;
+    the cloud orchestrator never receives the secret (ADR-0015).
+    """
 
     cpf: str = Field(min_length=1)
     tribunal: str = "tjmg"
-    pin: str = Field(min_length=1)
+    pin: str | None = None  # required only in co-located mode (see create_connect)
     senha: str | None = None
     seed_text: str | None = None
     sync: bool = True
@@ -188,6 +193,13 @@ async def create_connect(
         raise HTTPException(status_code=400, detail=f"Tribunal desconhecido: {payload.tribunal}") from exc
     if not tribunal_cfg.requires_mtls:
         raise HTTPException(status_code=400, detail="connect suporta apenas tribunais mTLS (ex.: tjmg).")
+
+    # Split-trust: the PIN/senha are required only co-located. In remote mode the
+    # agent resolves them — the cloud must not carry the lawyer's secret.
+    from juris.api.agent_config import is_remote
+
+    if not is_remote() and not payload.pin:
+        raise HTTPException(status_code=400, detail="PIN do token é obrigatório no modo co-localizado.")
 
     job_id = uuid.uuid4().hex
     _evict_old_connect_jobs()
