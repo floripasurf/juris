@@ -151,3 +151,35 @@ def test_validate_local_agent_host_rejects_non_loopback() -> None:
     """Non-loopback host bindings are rejected."""
     with pytest.raises(ValueError, match="must bind to 127.0.0.1"):
         validate_local_agent_host("192.168.1.10")
+
+
+def test_agent_health_reports_token_readiness() -> None:
+    from juris import __version__
+    from juris.api.local_agent import TokenStatus, agent_health
+
+    resp = agent_health(token_probe=lambda: TokenStatus(connected=True, cert_valid_until=date(2027, 1, 1)))
+    assert resp.status == "ok"
+    assert resp.token_connected is True
+    assert resp.cert_valid_until == date(2027, 1, 1)
+    assert resp.version == __version__  # the real package version, not the schema default
+
+
+def test_agent_health_degrades_when_token_absent() -> None:
+    from juris.api.local_agent import TokenStatus, agent_health
+
+    resp = agent_health(token_probe=lambda: TokenStatus(connected=False, cert_valid_until=None))
+    assert resp.token_connected is False
+    assert resp.cert_valid_until is None
+
+
+def test_health_endpoint_uses_agent_health(monkeypatch) -> None:
+    from juris.api import local_agent
+    from juris.api.local_agent import TokenStatus
+
+    monkeypatch.setattr(
+        local_agent, "_default_token_probe", lambda: TokenStatus(connected=True, cert_valid_until=date(2030, 5, 1))
+    )
+    client = TestClient(local_agent.app)
+    data = client.get("/health").json()
+    assert data["token_connected"] is True
+    assert data["cert_valid_until"] == "2030-05-01"

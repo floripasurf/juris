@@ -206,3 +206,39 @@ def test_tenant_id_is_carried_on_mni_requests() -> None:
     service.consultar_processo("123", get_tribunal("tjmg"), "cpf", "senha")
     assert transport.sent is not None
     assert transport.sent.tenant_id == "escritorio-b"
+
+
+def test_split_trust_end_to_end_no_credentials_cross_the_wire() -> None:
+    """The proof: orchestrator → (wire) → agent handler → fake MNI, and NO token/
+    credential ever crosses. The agent resolves them locally."""
+    from juris.api.local_agent import handle_mni_request
+
+    on_wire: list[str] = []
+
+    class _LoopbackTransport:
+        """Bridges client → agent handler in-process — the full path minus the socket."""
+
+        def send(self, request: AgentRequest) -> AgentResponse:
+            on_wire.append(request.model_dump_json())  # exactly what would cross the WS
+            return handle_mni_request(
+                request,
+                _FakeMNI(),
+                credentials_resolver=_creds,  # the agent's own credentials, resolved locally
+                tribunal_resolver=get_tribunal,
+            )
+
+    service = RemoteMNIReadService(_LoopbackTransport(), tenant_id="escritorio-x")
+    processo = service.consultar_processo(
+        "5082351-40.2017.8.13.0024",
+        get_tribunal("tjmg"),
+        "CLOUD-cpf",
+        "CLOUD-senha",
+        token_pin="CLOUD-pin",  # noqa: S106
+    )
+
+    assert processo.classe == "Apelação Cível"  # the read round-tripped
+    wire = on_wire[0]
+    assert "CLOUD-cpf" not in wire  # no PJe credentials crossed
+    assert "CLOUD-senha" not in wire
+    assert "CLOUD-pin" not in wire  # no token PIN crossed
+    assert "escritorio-x" in wire  # tenant tagged for audit/routing

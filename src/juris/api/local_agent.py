@@ -15,6 +15,8 @@ import base64
 import os
 import secrets
 from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import date
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
@@ -203,15 +205,44 @@ def validate_local_agent_host(host: str) -> str:
     return host
 
 
-@app.get("/health")
-async def health() -> HealthResponse:
-    """Health check — reports token connectivity and cert status."""
-    # In Sprint 11, this is a minimal implementation.
-    # Sprint 14+ will check actual PKCS#11 token connectivity.
+@dataclass(frozen=True, slots=True)
+class TokenStatus:
+    """Real readiness of the A3 token at the agent."""
+
+    connected: bool
+    cert_valid_until: date | None
+
+
+def _default_token_probe() -> TokenStatus:
+    """Best-effort read of the connected token's cert (no PIN needed). Errors ⇒ absent."""
+    try:
+        from juris.config import get_settings
+        from juris.mni.token import extract_token_material
+
+        material = extract_token_material(get_settings().pkcs11_module)
+        until = date.fromisoformat(material.not_valid_after) if material.not_valid_after else None
+        return TokenStatus(connected=True, cert_valid_until=until)
+    except Exception:  # noqa: BLE001 — no token / unreadable ⇒ report not-ready, never crash /health
+        return TokenStatus(connected=False, cert_valid_until=None)
+
+
+def agent_health(*, token_probe: Callable[[], TokenStatus] | None = None) -> HealthResponse:
+    """Build the agent's real readiness — token connectivity, cert validity, version."""
+    from juris import __version__
+
+    status = (token_probe or _default_token_probe)()
     return HealthResponse(
         status="ok",
-        token_connected=False,  # Will be dynamic in Sprint 14+
+        token_connected=status.connected,
+        cert_valid_until=status.cert_valid_until,
+        version=__version__,
     )
+
+
+@app.get("/health")
+async def health() -> HealthResponse:
+    """Health check — reports real token connectivity, cert validity, and version."""
+    return agent_health()
 
 
 @app.websocket("/ws/sign")
