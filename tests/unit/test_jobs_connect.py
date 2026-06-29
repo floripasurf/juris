@@ -105,3 +105,23 @@ def test_run_connect_scopes_tracking_to_tenant_db(tmp_path) -> None:
     assert result.total_tracked == 1
     # the tracked list landed in the tenant's own store, not the global Keychain
     assert db.get_tracked_list() == [{"numero_cnj": _CNJ, "tribunal": "tjmg"}]
+
+
+def test_run_connect_threads_same_mni_service_to_nightly() -> None:
+    avisos = AvisosResult(sucesso=True, mensagem="ok", avisos=[])
+    service = _FakeMNI(avisos)
+    captured: dict[str, object] = {}
+
+    async def fake_nightly(processos, **kwargs):
+        captured["mni_service"] = kwargs.get("mni_service")
+        return MagicMock(total=1, succeeded=1)
+
+    with (
+        patch("juris.jobs.connect.get_tracked", return_value=[{"numero_cnj": _CNJ, "tribunal": "tjmg"}]),
+        patch("juris.jobs.connect.set_tracked", side_effect=lambda e, db=None: None),
+        patch("juris.jobs.connect.run_nightly", side_effect=fake_nightly),
+    ):
+        _run(token_pin="1234", do_sync=True, mni_service=service)  # noqa: S106
+
+    # the exact service used for avisos must reach the nightly sync (split-trust)
+    assert captured["mni_service"] is service

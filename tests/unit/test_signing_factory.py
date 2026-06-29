@@ -16,7 +16,7 @@ def test_inprocess_by_default(monkeypatch) -> None:
 
 def test_remote_when_mode_is_remote(monkeypatch) -> None:
     monkeypatch.setenv("JURIS_AGENT_MODE", "remote")
-    monkeypatch.setenv("JURIS_LOCAL_AGENT_URL", "ws://127.0.0.1:8765/ws/sign")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_URL", "ws://127.0.0.1:8765")
     monkeypatch.setenv("JURIS_LOCAL_AGENT_TOKEN", "tok")
     assert isinstance(get_signing_service(), RemoteSigningService)
 
