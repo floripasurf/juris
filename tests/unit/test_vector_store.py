@@ -4,11 +4,9 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from juris.repertory.chunking import DocumentChunk
 from juris.repertory.corpus.models import TipoFonte
-from juris.repertory.vector_store import LocalFTSStore, QdrantVectorStore, SearchResult
+from juris.repertory.vector_store import LocalFTSStore, QdrantVectorStore
 
 
 def _make_chunk(

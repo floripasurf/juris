@@ -2,12 +2,7 @@
 
 from __future__ import annotations
 
-import uuid
-from datetime import UTC, datetime
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
+from datetime import datetime
 
 from juris.mni.parsers.processo import Documento, Movimento, Parte, ProcessoDomain
 
@@ -78,8 +73,8 @@ class TestUpsertProcesso:
 
     def test_domain_parses_from_fixture(self) -> None:
         """Verify domain objects from fixtures are well-formed."""
-        from tests.fixtures.mni_consulta_response import make_consulta_response_5082351
         from juris.mni.parsers.processo import parse_processo
+        from tests.fixtures.mni_consulta_response import make_consulta_response_5082351
 
         response = make_consulta_response_5082351()
         domain = parse_processo(response, tribunal_id="tjmg")
@@ -96,8 +91,8 @@ class TestUpsertProcesso:
 
     def test_domain_second_case(self) -> None:
         """Test domain creation from second fixture."""
-        from tests.fixtures.mni_consulta_response import make_consulta_response_5080938
         from juris.mni.parsers.processo import parse_processo
+        from tests.fixtures.mni_consulta_response import make_consulta_response_5080938
 
         response = make_consulta_response_5080938()
         domain = parse_processo(response, tribunal_id="tjmg")

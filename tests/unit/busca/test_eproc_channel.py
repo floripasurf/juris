@@ -54,7 +54,6 @@ class TestEprocChannel:
 
     @pytest.mark.asyncio
     async def test_trf4_json_search_by_name(self) -> None:
-        import json
 
         mock_response = MagicMock()
         mock_response.status_code = 200

@@ -5,11 +5,9 @@ from __future__ import annotations
 from datetime import datetime
 
 from juris.mni.parsers.processo import parse_processo
-
 from tests.fixtures.mni_consulta_response import (
     make_consulta_response_5080938,
     make_consulta_response_5082351,
-    make_consulta_response_empty,
 )
 
 

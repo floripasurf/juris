@@ -8,11 +8,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 from docx import Document
 
 from juris.repertory.chunking import chunk_fonte
-from juris.repertory.corpus.models import FonteJurisprudencia, TipoFonte, TIPO_HIERARQUIA
+from juris.repertory.corpus.models import TIPO_HIERARQUIA, FonteJurisprudencia, TipoFonte
 from juris.repertory.corpus.status import ACTIVE_SITUACOES, is_active
 
 

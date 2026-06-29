@@ -13,7 +13,7 @@ from juris.prazo.engine import (
     compute_prazo,
     compute_prazos,
 )
-from juris.prazo.rules import TipoAcao, shortest_deadline
+from juris.prazo.rules import shortest_deadline
 
 
 def _analysis(

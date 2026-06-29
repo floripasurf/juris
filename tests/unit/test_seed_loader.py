@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 import json
-import tempfile
 from pathlib import Path
 
-import pytest
-
-from juris.repertory.corpus.models import FonteJurisprudencia, TipoFonte
+from juris.repertory.corpus.models import TipoFonte
 from juris.repertory.ingestion.seed_loader import SeedLoader
 from juris.repertory.vector_store import LocalFTSStore
 

@@ -5,9 +5,9 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 
 from juris.agents.analyzer import AnalysisResult
-from juris.alerts.deadline_alerts import AlertBatch, AlertLevel, generate_alerts
+from juris.alerts.deadline_alerts import AlertLevel, generate_alerts
 from juris.mni.tpu import CategoriaSemantica, Urgencia
-from juris.prazo.engine import StatusPrazo, compute_prazos
+from juris.prazo.engine import compute_prazos
 
 
 def _analysis(

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from datetime import date
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from juris.jobs.pipeline import PipelineResult, PipelineSummary, run_pipeline, run_pipeline_single
 from juris.mni.parsers.processo import Movimento, ProcessoDomain
