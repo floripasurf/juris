@@ -35,3 +35,19 @@ def test_agent_serve_binds_loopback(monkeypatch) -> None:
     assert result.exit_code == 0
     assert captured["host"] == "127.0.0.1"
     assert captured["port"] == 9999
+
+
+def test_agent_serve_masks_the_token(monkeypatch) -> None:
+    import uvicorn
+
+    from juris.api import local_agent
+
+    monkeypatch.setenv("JURIS_AGENT_TOKEN", "super-secret-pairing-token-value")
+    local_agent._resolve_signing_token.cache_clear()
+    monkeypatch.setattr(uvicorn, "run", lambda _app, **kw: None)
+    try:
+        result = CliRunner().invoke(app, ["agent", "serve"])
+    finally:
+        local_agent._resolve_signing_token.cache_clear()
+    assert result.exit_code == 0
+    assert "super-secret-pairing-token-value" not in result.output  # masked, not echoed

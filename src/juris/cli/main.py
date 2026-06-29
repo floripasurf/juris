@@ -573,8 +573,15 @@ def connect(
         raise typer.Exit(code=1)
 
     console.print(f"[bold]Conectando ao {tribunal_cfg.nome}…[/bold]")
-    # Resolve credentials at the CLI edge; the orchestration lives in run_connect.
-    _material, resolved_senha, resolved_pin = _mtls_session(tribunal_cfg, cpf, senha, pin)
+    # Resolve credentials at the CLI edge ONLY when co-located. In remote
+    # (split-trust) mode the agent resolves the lawyer's own PIN/senha — the
+    # orchestrator must never touch the token (ADR-0015).
+    from juris.api.agent_config import is_remote
+
+    if is_remote():
+        resolved_senha, resolved_pin = "", None
+    else:
+        _material, resolved_senha, resolved_pin = _mtls_session(tribunal_cfg, cpf, senha, pin)
     seed_text = Path(seed).read_text(encoding="utf-8") if seed else None
 
     try:
@@ -2285,9 +2292,12 @@ def agent_serve(
         raise typer.Exit(code=2) from None
 
     token = get_signing_token()
+    masked = f"{token[:4]}…{token[-2:]}" if len(token) > 8 else "configurado"
     console.print(f"[bold]Agente local[/bold] em ws://{bind_host}:{port} (somente loopback)")
-    console.print(f"Token de pareamento: {token}")
-    console.print("Configure JURIS_LOCAL_AGENT_TOKEN com este valor no orquestrador. Ctrl-C para sair.")
+    # Never echo the full token in the long-running process (its stdout may go to a
+    # log file). The full value is shown only by `juris agent pair`.
+    console.print(f"Token de pareamento: {masked} (use 'juris agent pair' para o valor completo)")
+    console.print("Ctrl-C para sair.")
 
     import uvicorn
 

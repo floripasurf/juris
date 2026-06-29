@@ -64,3 +64,25 @@ def test_connect_no_sync_passes_do_sync_false() -> None:
 
     assert result.exit_code == 0, result.output
     assert captured["do_sync"] is False
+
+
+def test_connect_remote_mode_does_not_resolve_credentials(monkeypatch) -> None:
+    async def fake_run_connect(tribunal_cfg, cpf, senha, **kwargs):
+        # remote split-trust: no senha/pin resolved at the orchestrator
+        assert senha == ""
+        assert kwargs.get("token_pin") is None
+        return ConnectResult(avisos_added=0, seed_added=0, total_tracked=0, first_time=True, sync=None)
+
+    def _boom(*a, **k):
+        raise AssertionError("_mtls_session must not run in remote mode")
+
+    monkeypatch.setenv("JURIS_AGENT_MODE", "remote")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_URL", "ws://127.0.0.1:8765")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_TOKEN", "tok")
+    with (
+        patch("juris.cli.main._mtls_session", side_effect=_boom),
+        patch("juris.jobs.connect.run_connect", side_effect=fake_run_connect),
+    ):
+        result = runner.invoke(app, ["connect", "--cpf", "07671039632", "--no-sync"])
+
+    assert result.exit_code == 0, result.output
