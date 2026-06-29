@@ -28,3 +28,47 @@ def test_base_url_rejects_a_url_without_scheme(monkeypatch) -> None:
     monkeypatch.setenv("JURIS_LOCAL_AGENT_URL", "127.0.0.1:8765")
     with pytest.raises(RuntimeError, match="inválida"):
         local_agent_base_url()
+
+
+# --- per-tenant agent routing (multi-tenant keystone) ---
+
+
+def test_tenant_binding_from_agents_file(tmp_path, monkeypatch) -> None:
+    import json
+
+    from juris.api.agent_config import tenant_agent_binding
+
+    agents = tmp_path / "agents.json"
+    agents.write_text(
+        json.dumps(
+            {
+                "escritorio-a": {"url": "ws://a.local:8765/ws/sign", "token": "tok-a"},
+                "escritorio-b": {"url": "ws://b.local:8765", "token": "tok-b"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("JURIS_AGENTS_FILE", str(agents))
+    from juris.api.agent_config import _load_agent_bindings
+
+    _load_agent_bindings.cache_clear()
+
+    a = tenant_agent_binding("escritorio-a")
+    assert a.base_url == "ws://a.local:8765"  # path normalised
+    assert a.token == "tok-a"  # noqa: S105
+    b = tenant_agent_binding("escritorio-b")
+    assert b.base_url == "ws://b.local:8765"
+    assert b.token == "tok-b"  # noqa: S105
+
+
+def test_tenant_binding_falls_back_to_global_env(tmp_path, monkeypatch) -> None:
+    from juris.api.agent_config import _load_agent_bindings, tenant_agent_binding
+
+    monkeypatch.delenv("JURIS_AGENTS_FILE", raising=False)
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_URL", "ws://global:8765")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_TOKEN", "global-tok")
+    _load_agent_bindings.cache_clear()
+
+    binding = tenant_agent_binding("public")
+    assert binding.base_url == "ws://global:8765"
+    assert binding.token == "global-tok"  # noqa: S105

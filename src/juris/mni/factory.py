@@ -14,13 +14,13 @@ def get_mni_read_service(tenant_id: str = "public") -> MNIReadService:
 
     ``tenant_id`` tags the remote requests for the agent's audit log.
     """
-    from juris.api.agent_config import is_remote, local_agent_base_url, local_agent_token
+    from juris.api.agent_config import is_remote, tenant_agent_binding
 
     if is_remote():
         from juris.mni.remote import RemoteMNIReadService, WebSocketAgentTransport
 
-        url = local_agent_base_url() + "/ws/mni"
-        transport = WebSocketAgentTransport(url, token=local_agent_token())
+        binding = tenant_agent_binding(tenant_id)  # routes to THIS firm's agent
+        transport = WebSocketAgentTransport(binding.base_url + "/ws/mni", token=binding.token)
         return RemoteMNIReadService(transport, tenant_id=tenant_id)
 
     from juris.mni.service import InProcessMNIReadService

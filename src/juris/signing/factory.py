@@ -14,13 +14,13 @@ def get_signing_service(tenant_id: str = "public") -> SigningService:
 
     ``tenant_id`` tags the remote requests for the agent's audit log.
     """
-    from juris.api.agent_config import is_remote, local_agent_base_url, local_agent_token
+    from juris.api.agent_config import is_remote, tenant_agent_binding
 
     if is_remote():
         from juris.signing.remote import RemoteSigningService, WebSocketSignTransport
 
-        url = local_agent_base_url() + "/ws/sign"
-        transport = WebSocketSignTransport(url, token=local_agent_token())
+        binding = tenant_agent_binding(tenant_id)  # routes to THIS firm's agent
+        transport = WebSocketSignTransport(binding.base_url + "/ws/sign", token=binding.token)
         return RemoteSigningService(transport, tenant_id=tenant_id)
 
     from juris.signing.service import InProcessSigningService

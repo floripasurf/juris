@@ -99,13 +99,13 @@ class InProcessFilingService(FilingService):
 
 def get_filing_service(tenant_id: str = "public") -> FilingService:
     """Return the configured :class:`FilingService` (InProcess or Remote by config)."""
-    from juris.api.agent_config import is_remote, local_agent_base_url, local_agent_token
+    from juris.api.agent_config import is_remote, tenant_agent_binding
 
     if is_remote():
         from juris.mni.remote import WebSocketAgentTransport  # same /ws transport, /ws/file
 
-        url = local_agent_base_url() + "/ws/file"
-        transport = WebSocketAgentTransport(url, token=local_agent_token())
+        binding = tenant_agent_binding(tenant_id)  # routes to THIS firm's agent
+        transport = WebSocketAgentTransport(binding.base_url + "/ws/file", token=binding.token)
         return RemoteFilingService(transport, tenant_id=tenant_id)
 
     return InProcessFilingService()

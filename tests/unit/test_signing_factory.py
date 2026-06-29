@@ -45,3 +45,28 @@ def test_agent_token_comes_from_env_for_pairing(monkeypatch) -> None:
         assert local_agent.get_signing_token() == "shared-pairing-secret"
     finally:
         local_agent._resolve_signing_token.cache_clear()
+
+
+def test_factory_routes_each_tenant_to_its_own_agent(tmp_path, monkeypatch) -> None:
+    import json
+
+    from juris.api.agent_config import _load_agent_bindings
+
+    agents = tmp_path / "agents.json"
+    agents.write_text(
+        json.dumps({"escritorio-a": {"url": "ws://a.local:8765", "token": "tok-a"}}), encoding="utf-8"
+    )
+    monkeypatch.setenv("JURIS_AGENT_MODE", "remote")
+    monkeypatch.setenv("JURIS_AGENTS_FILE", str(agents))
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_URL", "ws://global:8765")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_TOKEN", "global-tok")
+    _load_agent_bindings.cache_clear()
+
+    svc_a = get_signing_service("escritorio-a")
+    assert svc_a._transport._url == "ws://a.local:8765/ws/sign"  # routed to its own agent
+    assert svc_a._transport._token == "tok-a"  # noqa: S105
+
+    # a tenant not in the map falls back to the global env
+    svc_pub = get_signing_service("public")
+    assert svc_pub._transport._url == "ws://global:8765/ws/sign"
+    assert svc_pub._transport._token == "global-tok"  # noqa: S105
