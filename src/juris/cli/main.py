@@ -2445,6 +2445,20 @@ def file_petition(
 
     Use --dry-run for a side-effect-free preview.
     """
+    # Filing is co-located only: signing AND peticionamento both need the A3 token,
+    # so the whole pipeline runs where the token lives. In remote (split-trust) mode
+    # that is a future agent-side `/ws/file` op (ADR-0015), not InProcess — fail
+    # loudly instead of signing on the wrong machine.
+    from juris.api.agent_config import is_remote
+
+    if is_remote():
+        console.print(
+            "[red]juris file não suporta modo remote ainda[/red] — assinatura + "
+            "peticionamento exigem o token local. Use JURIS_AGENT_MODE=inprocess no "
+            "agente (filing remoto = /ws/file, ADR-0015)."
+        )
+        raise typer.Exit(code=2)
+
     import asyncio
     from pathlib import Path as FilePath
 

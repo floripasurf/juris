@@ -23,9 +23,17 @@ The split-trust agent is implemented and swappable by config:
   rewrite. Agent-side secrets: `JURIS_AGENT_CPF` / `JURIS_AGENT_SENHA` /
   `JURIS_AGENT_PIN`.
 
-Remaining: a web filing endpoint that calls `get_signing_service()` (the CLI
-`juris file` keeps the InProcess `open_signer` multi-step flow); mTLS between
-orchestrator and agent beyond the shared token; per-tenant agent routing.
+Remaining:
+
+- **Remote filing (`/ws/file`).** `juris file` is co-located only: signing *and*
+  peticionamento both need the A3 token, so the whole `FilingOrchestrator` pipeline
+  (validate_cert → render → sign → peticionar) must run at the agent — it is **not**
+  a `get_signing_service()` swap. The remote path is a future `/ws/file` op that
+  forwards a `FilingRequest` and runs the InProcess orchestrator agent-side; the CLI
+  now fails loudly in remote mode instead of signing on the wrong machine.
+- mTLS between orchestrator and agent beyond the shared `JURIS_AGENT_TOKEN` pairing.
+- Per-tenant agent routing (one agent URL per firm).
+- Demo-path `tenant_id` threading (connect already tags it).
 
 ## Date
 2026-06-24
