@@ -103,3 +103,14 @@ async def test_failover_returns_none_when_all_fail() -> None:
     from juris.escavacao.fetchers import FailoverFetcher
 
     assert await FailoverFetcher([_Fixed(None), _Fixed(None)]).fetch(_alvo("A")) is None
+
+
+def test_build_escavacao_fetcher_orders_tst_before_datajud() -> None:
+    from juris.escavacao.fetchers import DataJudEscavacaoFetcher, FailoverFetcher, build_escavacao_fetcher
+    from juris.escavacao.tst import TSTEscavacaoFetcher
+
+    fetcher = build_escavacao_fetcher()
+    assert isinstance(fetcher, FailoverFetcher)
+    # TST (real acórdão) is tried before the DataJud trail
+    assert isinstance(fetcher._fetchers[0], TSTEscavacaoFetcher)
+    assert isinstance(fetcher._fetchers[-1], DataJudEscavacaoFetcher)

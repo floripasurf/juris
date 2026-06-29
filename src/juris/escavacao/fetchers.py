@@ -83,3 +83,15 @@ class FailoverFetcher:
             if fallback is None:
                 fallback = teor
         return fallback
+
+
+def build_escavacao_fetcher() -> FailoverFetcher:
+    """The default escavação source mesh — real acórdão sources before DataJud.
+
+    TST (full inteiro teor, the first real source) is tried first; the DataJud
+    movements trail (``parcial=True``) is the fallback. Add esaj/cjsg etc. ahead
+    of DataJud as access allows.
+    """
+    from juris.escavacao.tst import TSTEscavacaoFetcher
+
+    return FailoverFetcher([TSTEscavacaoFetcher(), DataJudEscavacaoFetcher()])

@@ -2190,7 +2190,7 @@ def escavacao_run(
     from types import SimpleNamespace
 
     from juris.escavacao.executor import executar_escavacao, write_inteiro_teor
-    from juris.escavacao.fetchers import DataJudEscavacaoFetcher
+    from juris.escavacao.fetchers import build_escavacao_fetcher
     from juris.escavacao.queue import construir_fila
 
     raw = _json.loads(FilePath(seed).read_text(encoding="utf-8"))
@@ -2208,7 +2208,7 @@ def escavacao_run(
         console.print("[yellow]Nada a escavar — a espinha não trouxe precedentes_processos.[/yellow]")
         return
 
-    result = asyncio.run(executar_escavacao(fila, DataJudEscavacaoFetcher()))
+    result = asyncio.run(executar_escavacao(fila, build_escavacao_fetcher()))
     paths = write_inteiro_teor(result.coletados, FilePath(out))
     console.print(
         f"[green]Coletados:[/green] {len(paths)} inteiros teores "
