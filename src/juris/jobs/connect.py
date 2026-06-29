@@ -60,9 +60,9 @@ async def run_connect(
     writes are scoped to it; otherwise they use the single-user defaults.
     """
     if mni_service is None:
-        from juris.mni.service import InProcessMNIReadService
+        from juris.mni.factory import get_mni_read_service
 
-        mni_service = InProcessMNIReadService()
+        mni_service = get_mni_read_service()
 
     tracked = get_tracked(db=db)
     first_time = not tracked

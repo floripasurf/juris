@@ -173,3 +173,28 @@ def test_ws_mni_round_trip_with_testclient(monkeypatch) -> None:
 
     assert resp.success
     assert resp.payload["classe"] == "Apelação Cível"
+
+
+def test_demo_load_processo_mni_routes_through_factory(monkeypatch) -> None:
+    """DoD: the demo MNI read goes through get_mni_read_service — config swaps it."""
+    from juris.demo import orchestrator
+    from juris.demo.orchestrator import SourceMode, load_processo
+
+    used = {"flag": False}
+
+    class _Svc:
+        def consultar_processo(self, numero_cnj, tribunal_cfg, cpf, senha, *, token_pin=None, com_documentos=False):  # noqa: ANN001, ANN201
+            used["flag"] = True
+            return _processo()
+
+        def consultar_avisos(self, *a, **k):  # noqa: ANN002, ANN003, ANN201
+            raise AssertionError
+
+    monkeypatch.setattr(orchestrator, "get_mni_read_service", lambda: _Svc())
+    result = load_processo(
+        "5082351-40.2017.8.13.0024", "tjmg", SourceMode.MNI,
+        cpf="07671039632", senha="x", token_pin="9999",  # noqa: S106
+    )
+
+    assert used["flag"] is True
+    assert result.classe == "Apelação Cível"

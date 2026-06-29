@@ -1,7 +1,31 @@
 # ADR-0015: Local Agent Boundary & Token Service Interfaces
 
 ## Status
-Proposed — becomes Accepted when Phase 2 (multi-tenant) work starts.
+Accepted — Remote implementation built (2026-06-29).
+
+The split-trust agent is implemented and swappable by config:
+
+- **Clients (orchestrator side):** `RemoteSigningService` (`signing/remote.py`) and
+  `RemoteMNIReadService` (`mni/remote.py`) implement the same ABCs as the InProcess
+  ones. They forward over sync WebSocket transports; **no token material travels**
+  — the PIN and PJe credentials are resolved at the agent. Signing never retries
+  (not idempotent); MNI reads retry briefly (idempotent).
+- **Agent (token side):** `api/local_agent.py` serves `/ws/sign` (PAdES) and
+  `/ws/mni` (`mni.consultar_processo` / `mni.consultar_avisos`), token-authenticated,
+  resolving credentials locally and auditing only non-sensitive metadata.
+- **Contract:** `SignRequest`/`SignResponse` + the `AgentRequest`/`AgentResponse`
+  envelope (`request_id`, `tenant_id`, `operation`, `payload`, `error`) in
+  `api/ws_schemas.py`. Domain objects round-trip via pydantic `TypeAdapter`.
+- **Factory:** `get_signing_service()` / `get_mni_read_service()` pick InProcess
+  (`JURIS_AGENT_MODE=inprocess`, default — CLI/pilot) vs Remote
+  (`=remote` + `JURIS_LOCAL_AGENT_URL` + `JURIS_LOCAL_AGENT_TOKEN`). The demo
+  pipeline + connect read through the factory, so multi-tenant is config, not a
+  rewrite. Agent-side secrets: `JURIS_AGENT_CPF` / `JURIS_AGENT_SENHA` /
+  `JURIS_AGENT_PIN`.
+
+Remaining: a web filing endpoint that calls `get_signing_service()` (the CLI
+`juris file` keeps the InProcess `open_signer` multi-step flow); mTLS between
+orchestrator and agent beyond the shared token; per-tenant agent routing.
 
 ## Date
 2026-06-24

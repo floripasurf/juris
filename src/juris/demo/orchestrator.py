@@ -32,8 +32,9 @@ from juris.defesas.analyzer import DefesaAnalyzer
 from juris.defesas.context import ProcessoContext
 from juris.demo.output_mode import OutputMode
 from juris.llm.base import AbstractLLM
+from juris.mni.factory import get_mni_read_service
 from juris.mni.parsers.processo import ProcessoDomain
-from juris.mni.service import InProcessMNIReadService, MNIReadService
+from juris.mni.service import MNIReadService
 from juris.persistence.audit import AuditLog
 from juris.prazo.engine import PrazoReport, compute_prazos
 from juris.repertory.peticoes.models import TipoPeticao
@@ -378,7 +379,9 @@ def load_processo(
              prompts) and a failure surfaces as ``RuntimeError`` rather than a
              silent fallback to DataJud — in a lawyer-facing demo the real read
              either works or is reported. ``mni_service`` defaults to the
-             in-process implementation; Phase 2 injects a remote one.
+             configured service (:func:`get_mni_read_service` — InProcess or
+             Remote by ``JURIS_AGENT_MODE``), so swapping to the split-trust
+             agent is config, not code.
     """
     if source is SourceMode.DATAJUD:
         from juris.datajud.client import consultar_processo as datajud_consulta
@@ -399,7 +402,7 @@ def load_processo(
         if not cpf:
             msg = "Source 'mni' requer o cpf do advogado constituído (--cpf)."
             raise ValueError(msg)
-        service = mni_service or InProcessMNIReadService()
+        service = mni_service or get_mni_read_service()
         tribunal_cfg = get_tribunal(tribunal)
         processo = service.consultar_processo(
             numero_cnj,
