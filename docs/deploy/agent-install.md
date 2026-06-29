@@ -22,8 +22,12 @@ uv run juris agent pair
 It prints a token. Use the **same value** on both sides:
 
 - **Agent** (this machine): `JURIS_AGENT_TOKEN=<token>`
-- **Orchestrator** (cloud): `JURIS_LOCAL_AGENT_TOKEN=<token>` + `JURIS_AGENT_MODE=remote`
-  + `JURIS_LOCAL_AGENT_URL=ws://<agent-host>:8765`
+- **Orchestrator**: `JURIS_LOCAL_AGENT_TOKEN=<token>` + `JURIS_AGENT_MODE=remote`
+  + `JURIS_LOCAL_AGENT_URL=ws://<reachable-agent-address>:8765`
+
+> **Reachability:** the agent binds **127.0.0.1 only**, so `<reachable-agent-address>`
+> is *not* the lawyer's public IP. See **§6 Connectivity** — co-located it's
+> `127.0.0.1`; for a real cloud orchestrator it's the local end of a secure tunnel.
 
 ## 2. Run the agent as a service (macOS launchd)
 
@@ -62,9 +66,33 @@ Log into Claude.ai/ChatGPT and disable training/history (onboarding §3.5).
 ## 5. Verify end to end
 
 From the orchestrator (remote mode), a `juris demo <cnj> --source mni` read — or the
-web "connect" — now flows: cloud → `ws://agent:8765` → token op → reply, with **no
-PIN/senha leaving the agent**. The `scripts/remote_smoke.py` proves the wiring over a
-real socket without a token.
+web "connect" (including the **nightly sync**) — now flows: orchestrator →
+`JURIS_LOCAL_AGENT_URL` (loopback or tunnel, §6) → token op at the agent → reply,
+with **no PIN/senha leaving the agent**. `scripts/remote_smoke.py` proves the wiring
+over a real socket without a token.
+
+## 6. Connectivity (cloud → agent)
+
+The agent binds **127.0.0.1 only** — never the public network. So a cloud
+orchestrator **cannot** reach `ws://<lawyer-public-ip>:8765` directly: the home
+machine is behind NAT/firewall, and exposing the port would defeat the loopback
+guarantee. Bridge the gap one of these ways:
+
+- **Co-located (Phase 1, today).** Orchestrator + agent on the same machine (the
+  firm's Mac Mini). `JURIS_LOCAL_AGENT_URL=ws://127.0.0.1:8765`. No tunnel needed —
+  this is the pilot setup and what `scripts/remote_smoke.py` exercises.
+- **Secure tunnel (multi-tenant).** Run a tunnel that maps a private cloud-side
+  hostname to the agent's loopback port, authenticated and encrypted — e.g.
+  **Cloudflare Tunnel** (the daemon runs on the lawyer's machine and dials *out*, so
+  no inbound port is opened). The orchestrator then uses the tunnel hostname as
+  `JURIS_LOCAL_AGENT_URL`. The pairing token still gates every request.
+- **Reverse channel (future).** Flip the direction so the **agent dials out** to a
+  cloud relay and the orchestrator routes through it — removes the inbound-NAT
+  problem entirely and is the cleanest multi-tenant model. Not built yet
+  (the transport is orchestrator-initiated today); tracked as Phase-2 work.
+
+In every case the security properties hold: loopback bind, paired token, secrets
+resolved at the agent.
 
 ## Security checklist
 
@@ -72,3 +100,5 @@ real socket without a token.
 - [ ] `JURIS_AGENT_TOKEN` set; orchestrator's `JURIS_LOCAL_AGENT_TOKEN` matches.
 - [ ] Token PIN / PJe senha only in the agent's env — never in the orchestrator.
 - [ ] `juris file` / `/api/connect` in remote mode do **not** prompt for or store PIN/senha.
+- [ ] Cloud → agent only via co-located loopback or a secure tunnel (§6) — never a
+      public-facing agent port.
