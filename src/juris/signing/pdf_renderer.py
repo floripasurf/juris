@@ -126,10 +126,7 @@ def _md_to_html(markdown_text: str) -> str:
     try:
         import markdown
 
-        return markdown.markdown(
-            markdown_text,
-            extensions=["tables", "fenced_code"],
-        )
+        return str(markdown.markdown(markdown_text, extensions=["tables", "fenced_code"]))
     except ImportError:  # pragma: no cover
         import re
 
@@ -169,7 +166,7 @@ def _render_with_weasyprint(html: str) -> tuple[bytes, int]:
             clear fix message instead of the cryptic ctypes error.
     """
     try:
-        from weasyprint import HTML  # type: ignore[import-untyped]
+        from weasyprint import HTML
     except OSError as exc:
         msg = str(exc)
         if "libgobject" in msg or "libpango" in msg or "cannot load library" in msg:

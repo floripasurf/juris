@@ -33,7 +33,8 @@ jobs:
         run: >
           uv run mypy
           src/juris/alerts src/juris/api src/juris/busca
-          src/juris/demo src/juris/escavacao src/juris/web
+          src/juris/demo src/juris/escavacao src/juris/mni
+          src/juris/signing src/juris/web
 
       - name: Mypy — full (informational, shrinking)
         run: uv run mypy src/juris || true

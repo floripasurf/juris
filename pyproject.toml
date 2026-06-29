@@ -110,6 +110,8 @@ module = [
     "requests_pkcs12.*",
     "signxml.*",
     "pyhanko.*",
+    "pyhanko_certvalidator.*",
+    "pkcs11.*",
     "pymupdf.*",
     "pdfplumber.*",
     "arq.*",
@@ -119,6 +121,19 @@ module = [
     "markdown.*",
 ]
 ignore_missing_imports = true
+
+# Thin wrappers over untyped native/SOAP libs (PKCS#11 token, pyhanko, zeep,
+# pymupdf) — calls into those libs are necessarily untyped, so don't enforce
+# typed-call strictness here. The wrappers' own signatures stay typed.
+[[tool.mypy.overrides]]
+module = [
+    "juris.signing.pades",
+    "juris.signing.pdf_renderer",
+    "juris.mni.client",
+    "juris.mni.parsers.documentos",
+    "juris.review.extractor",
+]
+disallow_untyped_calls = false
 
 # --- Pytest ---
 [tool.pytest.ini_options]
@@ -148,4 +163,5 @@ dev = [
     "pytest-asyncio>=1.3.0",
     "pytest-cov>=7.1.0",
     "ruff>=0.15.12",
+    "types-requests>=2.33.0.20260518",
 ]

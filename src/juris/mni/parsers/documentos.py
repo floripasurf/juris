@@ -90,7 +90,7 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> str | None:
 
         doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
         texts = []
-        for page in doc:
+        for page in doc:  # type: ignore[attr-defined]  # pymupdf stub: Document is iterable
             texts.append(page.get_text())
         doc.close()
         result = "\n".join(texts).strip()
