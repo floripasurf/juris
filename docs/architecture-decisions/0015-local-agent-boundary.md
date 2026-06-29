@@ -34,11 +34,19 @@ The split-trust agent is implemented and swappable by config:
   it (the old remote guard is gone). Unit-tested split-trust (no creds cross); live
   filing needs the real token (manual smoke).
 
+**Multi-tenant minimum — done:** per-tenant **routing** (`tenant_agent_binding` →
+each firm's agent URL+token from `$JURIS_AGENTS_FILE`, env fallback; all three
+factories route by tenant), **pairing** (`juris agent pair`/`serve`/`health`),
+**visible health** (`agent_health` real readiness), **durable jobs** (SQLite
+`ConnectJobStore`, survives restart, tenant-scoped), **per-tenant logs**
+(`bind_tenant_log_context` binds `tenant_id` to structlog per request/job).
+
 Remaining:
 
 - mTLS between orchestrator and agent beyond the shared `JURIS_AGENT_TOKEN` pairing.
-- Per-tenant agent routing (one agent URL per firm).
-- Demo-path `tenant_id` threading (connect already tags it).
+- Cloud→agent connectivity for non-co-located deploys (tunnel/reverse channel — see
+  `docs/deploy/agent-install.md §6`).
+- Demo-path `tenant_id` threading (connect already tags it; demo runs are sync).
 
 ## Date
 2026-06-24
