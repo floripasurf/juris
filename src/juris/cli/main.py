@@ -184,7 +184,9 @@ def _print_processo(processo) -> None:
             console.print(f"  [{d.id_documento}] {d.tipo_documento}: {d.descricao or ''}")
 
 
-def _consulta_mtls(cnj, tribunal_cfg, cpf: str, senha: str | None, com_documentos: bool, pin: str | None = None) -> None:
+def _consulta_mtls(
+    cnj, tribunal_cfg, cpf: str, senha: str | None, com_documentos: bool, pin: str | None = None
+) -> None:
     """consultarProcesso against an mTLS tribunal, through the MNIReadService boundary."""
     from juris.mni.service import InProcessMNIReadService
 
@@ -670,7 +672,8 @@ def pull_updates(
     console.print(f"[bold]Syncing {len(processos)} processos...[/bold]")
     if differential_count:
         console.print(
-            f"[dim]{differential_count} with prior sync (differential), {len(processos) - differential_count} full sync[/dim]"
+            f"[dim]{differential_count} with prior sync (differential), "
+            f"{len(processos) - differential_count} full sync[/dim]"
         )
     console.print()
 
@@ -687,10 +690,9 @@ def pull_updates(
         if not result.error and result.had_changes:
             # Persist new movimentos
             proc = db.get_processo_by_cnj(result.numero_cnj)
-            if proc is None:
-                proc_id = db.upsert_processo(result.numero_cnj, result.tribunal_id)
-            else:
-                proc_id = proc.id
+            proc_id = (
+                db.upsert_processo(result.numero_cnj, result.tribunal_id) if proc is None else proc.id
+            )
 
             mov_dicts = [
                 {
@@ -825,7 +827,8 @@ def analyze(
     console.print(table)
 
     console.print(
-        f"\n[dim]Rule: {analysis.rule_classified} | LLM: {analysis.llm_calls} | Total: {analysis.total_movimentos}[/dim]"
+        f"\n[dim]Rule: {analysis.rule_classified} | LLM: {analysis.llm_calls} | "
+        f"Total: {analysis.total_movimentos}[/dim]"
     )
 
 
@@ -1822,7 +1825,7 @@ def repertory_ingest_peticoes(
         llm = OllamaLLM()
     except Exception:
         console.print("[red]Ollama not available. LLM is required for extraction.[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     templates = asyncio.run(ingest_peticoes(directory=dir_path, llm=llm))
 
@@ -1892,7 +1895,7 @@ def review(
             raise
         except Exception:
             console.print("[red]Claude not available. Check ANTHROPIC_API_KEY.[/red]")
-            raise typer.Exit(code=1)
+            raise typer.Exit(code=1) from None
     else:
         try:
             from juris.llm.ollama import OllamaLLM
@@ -1901,7 +1904,7 @@ def review(
             console.print("[dim]LLM: Ollama (local)[/dim]")
         except Exception:
             console.print("[red]Ollama not available.[/red]")
-            raise typer.Exit(code=1)
+            raise typer.Exit(code=1) from None
 
     # Set up retriever
     from juris.repertory.embeddings import LegalEmbedder
@@ -1964,7 +1967,8 @@ def review(
     # Print summary
     console.print(f"\n[bold green]Review complete[/bold green] ({report.duration_seconds:.1f}s)")
     console.print(
-        f"  Critical: {report.critical_count} | Important: {report.important_count} | Suggestions: {report.suggestion_count}"
+        f"  Critical: {report.critical_count} | Important: {report.important_count} | "
+        f"Suggestions: {report.suggestion_count}"
     )
     console.print(f"  Citations: {len(report.citations_found)} | LLM calls: {report.llm_calls}")
 
@@ -2597,7 +2601,7 @@ def file_petition(
         raise typer.Exit(code=1)
 
 
-from juris.cli.search_cli import search_app
+from juris.cli.search_cli import search_app  # noqa: E402 — deferred to avoid a circular import
 
 app.add_typer(search_app, name="search")
 

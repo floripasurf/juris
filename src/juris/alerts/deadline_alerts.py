@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
-from enum import Enum
+from enum import StrEnum
 
 from juris.prazo.engine import Prazo, PrazoReport, StatusPrazo
 
 
-class AlertLevel(str, Enum):
+class AlertLevel(StrEnum):
     """Alert urgency level."""
 
     CRITICAL = "critical"  # Vencido or today

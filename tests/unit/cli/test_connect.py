@@ -45,7 +45,7 @@ def test_connect_resolves_creds_and_runs_full_sync() -> None:
 
     assert result.exit_code == 0, result.output
     assert captured["cpf"] == "07671039632"
-    assert captured["token_pin"] == "1234"
+    assert captured["token_pin"] == "1234"  # noqa: S105
     assert captured["do_sync"] is True
 
 

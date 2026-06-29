@@ -22,10 +22,10 @@ the first pilot run produces calibration data.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class OutputMode(str, Enum):
+class OutputMode(StrEnum):
     """Operator-selected output mode for ``juris demo``."""
 
     MINUTA_SUGERIDA = "minuta-sugerida"

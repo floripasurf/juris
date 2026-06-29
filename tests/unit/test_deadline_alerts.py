@@ -75,8 +75,10 @@ class TestGenerateAlerts:
         if len(alerts.alerts) >= 2:
             levels = [a.level for a in alerts.alerts]
             # Critical should come before non-critical
-            first_non_critical = next((i for i, l in enumerate(levels) if l != AlertLevel.CRITICAL), len(levels))
-            assert all(l == AlertLevel.CRITICAL for l in levels[:first_non_critical])
+            first_non_critical = next(
+                (i for i, lvl in enumerate(levels) if lvl != AlertLevel.CRITICAL), len(levels)
+            )
+            assert all(lvl == AlertLevel.CRITICAL for lvl in levels[:first_non_critical])
 
     def test_empty_report(self) -> None:
         report = compute_prazos("123", "tjmg", [], today=date(2026, 4, 30))

@@ -44,7 +44,9 @@ class Processo(Base):
     dados_extras: Mapped[dict | None] = mapped_column(JSONB)
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
     tribunal_rel: Mapped[Tribunal] = relationship(back_populates="processos")
     movimentos: Mapped[list[Movimento]] = relationship(back_populates="processo", order_by="Movimento.data_hora")
@@ -130,7 +132,9 @@ class PrazoComputed(Base):
     cumprido_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cumprido_por: Mapped[str | None] = mapped_column(String(100))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
     processo: Mapped[Processo] = relationship()
 
