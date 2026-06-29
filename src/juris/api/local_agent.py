@@ -19,10 +19,12 @@ from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
-from juris.api.ws_schemas import HealthResponse, SignRequest, SignResponse
+from juris.api.ws_schemas import AgentRequest, AgentResponse, HealthResponse, SignRequest, SignResponse
 from juris.core.observability import get_logger
 
 if TYPE_CHECKING:
+    from juris.mni.service import MNIReadService
+    from juris.mni.tribunais import TribunalConfig
     from juris.signing.service import SigningService
 
 logger = get_logger(__name__)
@@ -47,6 +49,13 @@ def agent_signer() -> SigningService:
     from juris.signing.service import InProcessSigningService
 
     return InProcessSigningService()
+
+
+def agent_mni_service() -> MNIReadService:
+    """The agent's MNI read service — InProcess (token is local here). Overridable in tests."""
+    from juris.mni.service import InProcessMNIReadService
+
+    return InProcessMNIReadService()
 
 
 def _default_pin_resolver() -> str:
@@ -106,6 +115,77 @@ def handle_sign_request(
     )
 
 
+def _default_credentials_resolver() -> tuple[str, str, str]:
+    """Resolve the lawyer's PJe credentials + token PIN locally at the agent.
+
+    Reads ``$JURIS_AGENT_CPF`` / ``$JURIS_AGENT_SENHA`` / ``$JURIS_AGENT_PIN`` (set
+    on the lawyer's machine). The orchestrator never sends these — split-trust.
+    """
+    cpf = os.environ.get("JURIS_AGENT_CPF")
+    senha = os.environ.get("JURIS_AGENT_SENHA")
+    pin = os.environ.get("JURIS_AGENT_PIN")
+    if not (cpf and senha and pin):
+        msg = "credenciais do advogado ausentes no agente (JURIS_AGENT_CPF/SENHA/PIN)."
+        raise RuntimeError(msg)
+    return cpf, senha, pin
+
+
+def handle_mni_request(
+    request: AgentRequest,
+    service: MNIReadService,
+    *,
+    credentials_resolver: Callable[[], tuple[str, str, str]],
+    tribunal_resolver: Callable[[str], TribunalConfig],
+) -> AgentResponse:
+    """Run an MNI read with locally-resolved credentials; serialise the result.
+
+    Dispatches on ``operation`` (``mni.consultar_processo`` / ``mni.consultar_avisos``).
+    Credentials are resolved *here* (never on the wire); audit logs omit them.
+    """
+    from pydantic import TypeAdapter
+
+    from juris.mni.operations.intimacoes import AvisosResult
+    from juris.mni.parsers.processo import ProcessoDomain
+
+    try:
+        cpf, senha, pin = credentials_resolver()
+        tribunal_cfg = tribunal_resolver(str(request.payload["tribunal_id"]))
+        op = request.operation
+        if op == "mni.consultar_processo":
+            processo = service.consultar_processo(
+                str(request.payload["numero_cnj"]),
+                tribunal_cfg,
+                cpf,
+                senha,
+                token_pin=pin,
+                com_documentos=bool(request.payload.get("com_documentos", False)),
+            )
+            payload = TypeAdapter(ProcessoDomain).dump_python(processo, mode="json")
+        elif op == "mni.consultar_avisos":
+            avisos = service.consultar_avisos(tribunal_cfg, cpf, senha, token_pin=pin)
+            payload = TypeAdapter(AvisosResult).dump_python(avisos, mode="json")
+        else:
+            msg = f"operação MNI desconhecida: {op}"
+            return AgentResponse(request_id=request.request_id, success=False, error=msg)
+    except Exception as exc:  # noqa: BLE001 — surfaced to the orchestrator as a typed error
+        logger.warning(
+            "agent_mni_failed",
+            request_id=request.request_id,
+            tenant_id=request.tenant_id,
+            operation=request.operation,
+            error=str(exc),
+        )
+        return AgentResponse(request_id=request.request_id, success=False, error=str(exc))
+
+    logger.info(
+        "agent_mni_ok",
+        request_id=request.request_id,
+        tenant_id=request.tenant_id,
+        operation=request.operation,
+    )
+    return AgentResponse(request_id=request.request_id, success=True, payload=payload)
+
+
 def validate_local_agent_host(host: str) -> str:
     """Only allow binding the local agent to localhost."""
     if host == "localhost":
@@ -156,6 +236,45 @@ async def signing_socket(ws: WebSocket) -> None:
 
             response = handle_sign_request(
                 request, agent_signer(), pin_resolver=_default_pin_resolver
+            )
+            await ws.send_text(response.model_dump_json())
+    except WebSocketDisconnect:
+        pass
+
+
+@app.websocket("/ws/mni")
+async def mni_socket(ws: WebSocket) -> None:
+    """WebSocket endpoint for MNI read operations (token-authenticated).
+
+    Client sends an ``AgentRequest`` (operation + params); the agent resolves the
+    lawyer's credentials locally, runs the mTLS read, and replies with an
+    ``AgentResponse`` carrying the serialised result.
+    """
+    token = ws.query_params.get("token")
+    if token is None or not secrets.compare_digest(token, _SIGNING_TOKEN):
+        await ws.close(code=4001, reason="Unauthorized")
+        return
+    await ws.accept()
+
+    from juris.mni.tribunais import get_tribunal
+
+    try:
+        while True:
+            data = await ws.receive_text()
+            try:
+                request = AgentRequest.model_validate_json(data)
+            except Exception as e:  # noqa: BLE001 — malformed input → typed error reply
+                await ws.send_text(
+                    AgentResponse(
+                        request_id="unknown", success=False, error=f"Invalid request: {e}"
+                    ).model_dump_json()
+                )
+                continue
+            response = handle_mni_request(
+                request,
+                agent_mni_service(),
+                credentials_resolver=_default_credentials_resolver,
+                tribunal_resolver=get_tribunal,
             )
             await ws.send_text(response.model_dump_json())
     except WebSocketDisconnect:
