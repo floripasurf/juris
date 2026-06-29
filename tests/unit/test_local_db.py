@@ -46,8 +46,10 @@ class TestLocalDB:
         db = LocalDB(tmp_path / "test.db")
         pid = db.upsert_processo("123", "tjmg")
         movs = [
-            {"data_hora": datetime(2026, 4, 1, tzinfo=UTC), "tipo": "nacional", "codigo_nacional": 132, "id_movimento": "m1"},
-            {"data_hora": datetime(2026, 4, 2, tzinfo=UTC), "tipo": "nacional", "codigo_nacional": 11, "id_movimento": "m2"},
+            {"data_hora": datetime(2026, 4, 1, tzinfo=UTC), "tipo": "nacional",
+             "codigo_nacional": 132, "id_movimento": "m1"},
+            {"data_hora": datetime(2026, 4, 2, tzinfo=UTC), "tipo": "nacional",
+             "codigo_nacional": 11, "id_movimento": "m2"},
         ]
         count = db.insert_movimentos(pid, movs)
         assert count == 2
