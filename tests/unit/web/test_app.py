@@ -81,21 +81,25 @@ def test_connect_job_get_unknown_returns_404() -> None:
     assert client.get("/api/connect/does-not-exist").status_code == 404
 
 
-def test_connect_jobs_are_bounded() -> None:
-    app_module = importlib.import_module("juris.web.app")
-    app_module._CONNECT_JOBS.clear()
-    for i in range(app_module._MAX_CONNECT_JOBS + 10):
-        app_module._evict_old_connect_jobs()
-        app_module._CONNECT_JOBS[f"job-{i}"] = {"status": "done"}
-    assert len(app_module._CONNECT_JOBS) <= app_module._MAX_CONNECT_JOBS
+def test_connect_jobs_are_bounded(tmp_path) -> None:
+    from juris.web.connect_jobs import ConnectJobStore
+
+    store = ConnectJobStore(tmp_path / "jobs.db")
+    for i in range(15):
+        store.create(f"job-{i}", "t")
+    store.evict_old(max_jobs=5)
+    survivors = sum(1 for i in range(15) if store.get(f"job-{i}") is not None)
+    assert survivors <= 5
 
 
 @pytest.mark.asyncio
-async def test_connect_job_runner_records_result(monkeypatch) -> None:
+async def test_connect_job_runner_records_result(monkeypatch, tmp_path) -> None:
     app_module = importlib.import_module("juris.web.app")
     from juris.jobs.connect import ConnectResult
     from juris.web.auth import Tenant
+    from juris.web.connect_jobs import ConnectJobStore
 
+    store = ConnectJobStore(tmp_path / "jobs.db")
     captured: dict[str, object] = {}
 
     async def fake_run_connect(tribunal_cfg, cpf, senha, **kwargs):
@@ -104,12 +108,13 @@ async def test_connect_job_runner_records_result(monkeypatch) -> None:
 
     monkeypatch.setattr(app_module, "run_connect", fake_run_connect)
     monkeypatch.setattr(app_module, "_tenant_db", lambda tenant: f"db::{tenant.tenant_id}")
+    monkeypatch.setattr(app_module, "_connect_job_store", lambda: store)
     payload = app_module.ConnectPayload(cpf="07671039632", tribunal="tjmg", pin="1234")
-    app_module._CONNECT_JOBS["job-x"] = {"status": "running", "result": None, "error": None}
+    store.create("job-x", "escritorio-a")
 
     await app_module._run_connect_job("job-x", object(), payload, Tenant("escritorio-a"))
 
-    job = app_module._CONNECT_JOBS["job-x"]
+    job = store.get("job-x")
     assert job["status"] == "done"
     assert job["result"]["total_tracked"] == 5
     assert job["tenant_id"] == "escritorio-a"  # job is owned by the tenant
@@ -284,12 +289,14 @@ def test_endpoints_enforce_api_key_when_tenants_configured(tmp_path, monkeypatch
         auth.default_registry.cache_clear()  # reset to open for other tests
 
 
-def test_connect_job_hidden_from_non_owner() -> None:
+def test_connect_job_hidden_from_non_owner(monkeypatch, tmp_path) -> None:
     app_module = importlib.import_module("juris.web.app")
-    # a job owned by escritorio-a is invisible to the public caller (open default)
-    app_module._CONNECT_JOBS["job-y"] = {
-        "status": "done", "result": {}, "error": None, "tenant_id": "escritorio-a",
-    }
+    from juris.web.connect_jobs import ConnectJobStore
+
+    store = ConnectJobStore(tmp_path / "jobs.db")
+    store.create("job-y", "escritorio-a")  # owned by escritorio-a
+    monkeypatch.setattr(app_module, "_connect_job_store", lambda: store)
+    # invisible to the public caller (open default)
     assert client.get("/api/connect/job-y").status_code == 404
 
 

@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from juris import __version__
 from juris.jobs.connect import run_connect
 from juris.web.auth import Tenant, current_tenant, tenant_db_path
+from juris.web.connect_jobs import ConnectJobStore
 from juris.web.demo_service import DemoRunError, WebDemoRunRequest, execute_demo_run
 from juris.web.processos_service import get_processo_detail, list_prazos, list_processos
 
@@ -130,17 +131,15 @@ def _serialize_connect(result: Any) -> dict[str, object]:
     }
 
 
-# In-memory connect jobs (co-located Phase 1, single process). Phase 2: a real queue.
-# Bounded (FIFO) so completed jobs don't accumulate; the PIN is never stored here
-# (it lives only in the transient background-task closure, then is GC'd).
-_CONNECT_JOBS: dict[str, dict[str, object]] = {}
-_MAX_CONNECT_JOBS = 50
+# Durable connect jobs — a SQLite-backed store survives restart/deploy and scopes
+# each job to its owning tenant (Phase 2). The PIN is never persisted (it lives only
+# in the transient background-task closure, then is GC'd).
+_MAX_CONNECT_JOBS = 200
 
 
-def _evict_old_connect_jobs() -> None:
-    """Drop the oldest jobs once the cap is reached (FIFO; dicts keep order)."""
-    while len(_CONNECT_JOBS) >= _MAX_CONNECT_JOBS:
-        _CONNECT_JOBS.pop(next(iter(_CONNECT_JOBS)))
+@lru_cache(maxsize=1)
+def _connect_job_store() -> ConnectJobStore:
+    return ConnectJobStore()
 
 
 async def _run_connect_job(
@@ -151,6 +150,7 @@ async def _run_connect_job(
     Writes go to the tenant's own store (isolation); the job carries its
     ``tenant_id`` so only the owning tenant can read it back.
     """
+    store = _connect_job_store()
     try:
         result = await run_connect(
             tribunal_cfg,
@@ -162,19 +162,9 @@ async def _run_connect_job(
             db=_tenant_db(tenant),
             tenant_id=tenant.tenant_id,
         )
-        _CONNECT_JOBS[job_id] = {
-            "status": "done",
-            "result": _serialize_connect(result),
-            "error": None,
-            "tenant_id": tenant.tenant_id,
-        }
+        store.mark_done(job_id, _serialize_connect(result))
     except Exception as exc:  # noqa: BLE001 — surfaced to the client via the job
-        _CONNECT_JOBS[job_id] = {
-            "status": "error",
-            "result": None,
-            "error": str(exc),
-            "tenant_id": tenant.tenant_id,
-        }
+        store.mark_error(job_id, str(exc))
 
 
 @app.post("/api/connect", status_code=202)
@@ -204,13 +194,9 @@ async def create_connect(
         )
 
     job_id = uuid.uuid4().hex
-    _evict_old_connect_jobs()
-    _CONNECT_JOBS[job_id] = {
-        "status": "running",
-        "result": None,
-        "error": None,
-        "tenant_id": tenant.tenant_id,
-    }
+    store = _connect_job_store()
+    store.create(job_id, tenant.tenant_id)
+    store.evict_old(_MAX_CONNECT_JOBS)
     asyncio.get_event_loop().create_task(_run_connect_job(job_id, tribunal_cfg, payload, tenant))
     return {"job_id": job_id, "status": "running"}
 
@@ -219,8 +205,8 @@ async def create_connect(
 async def get_connect(
     job_id: str, tenant: Tenant = Depends(current_tenant)
 ) -> dict[str, object]:
-    """Poll a connect job — only the tenant that started it can read it."""
-    job = _CONNECT_JOBS.get(job_id)
+    """Poll a connect job — only the tenant that started it can read it (durable store)."""
+    job = _connect_job_store().get(job_id)
     if job is None or job.get("tenant_id") != tenant.tenant_id:
         raise HTTPException(status_code=404, detail="job não encontrado")
     return job
