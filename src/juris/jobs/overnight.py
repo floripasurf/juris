@@ -14,10 +14,13 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from juris.core.observability import get_logger, new_correlation_id
 from juris.mni.operations.differential import DiffResult, diff_processo
+
+if TYPE_CHECKING:
+    from juris.mni.service import MNIReadService
 from juris.mni.parsers.processo import ProcessoDomain, parse_processo
 from juris.mni.retry import circuit_breaker
 
@@ -57,6 +60,7 @@ async def sync_processo_mni(
     known_movimento_keys: set[tuple] | None = None,
     known_doc_ids: set[str] | None = None,
     token_pin: str | None = None,
+    mni_service: MNIReadService | None = None,
 ) -> DiffResult:
     """Sync a single processo via MNI.
 
@@ -95,13 +99,25 @@ async def sync_processo_mni(
         # mTLS tribunals (e.g. TJMG) authenticate with the A3 hardware token,
         # not zeep+password. Route them through the PKCS#11 path.
         if tribunal_cfg is not None and tribunal_cfg.requires_mtls:
-            fetched = _fetch_mni_mtls(
-                numero_cnj=numero_cnj,
-                tribunal_cfg=tribunal_cfg,
-                cpf=cpf,
-                senha=senha,
-                token_pin=token_pin,
-            )
+            if mni_service is not None:
+                # Split-trust: the agent does the mTLS read (token stays remote).
+                # Run the (blocking) service off the event loop.
+                fetched = await asyncio.to_thread(
+                    mni_service.consultar_processo,
+                    numero_cnj,
+                    tribunal_cfg,
+                    cpf,
+                    senha,
+                    token_pin=token_pin,
+                )
+            else:
+                fetched = _fetch_mni_mtls(
+                    numero_cnj=numero_cnj,
+                    tribunal_cfg=tribunal_cfg,
+                    cpf=cpf,
+                    senha=senha,
+                    token_pin=token_pin,
+                )
         else:
             auth = PasswordAuth(cpf=cpf, senha=senha)
             client = get_mni_client(tribunal_id, auth)

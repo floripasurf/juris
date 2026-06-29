@@ -96,7 +96,11 @@ async def run_connect(
     # 3) Differential import/update (handles first-time vs. delta itself).
     summary: NightlySummary | None = None
     if do_sync and tracked:
-        summary = await run_nightly(tracked, cpf=cpf, senha=senha, token_pin=token_pin, db=db)
+        # Thread the same MNIReadService into the nightly sync so a remote service
+        # keeps the mTLS read at the agent — never a local read in the cloud (ADR-0015).
+        summary = await run_nightly(
+            tracked, cpf=cpf, senha=senha, token_pin=token_pin, db=db, mni_service=mni_service
+        )
 
     return ConnectResult(
         avisos_added=avisos_added,

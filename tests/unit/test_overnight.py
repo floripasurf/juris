@@ -322,3 +322,31 @@ class TestMtlsRouting:
             )
 
         mock_mtls.assert_not_called()
+
+
+def test_sync_processo_mni_uses_injected_service_keeping_mtls_at_agent() -> None:
+    """Split-trust: with an MNIReadService injected, the mTLS read goes through it
+    (the agent) — never a local _fetch_mni_mtls in the orchestrator/cloud."""
+    from juris.mni.parsers.processo import ProcessoDomain
+
+    used: dict[str, bool] = {}
+
+    class _FakeMNI:
+        def consultar_processo(self, numero_cnj, tribunal_cfg, cpf, senha, *, token_pin=None, com_documentos=False):  # noqa: ANN001, ANN201
+            used["flag"] = True
+            return ProcessoDomain(numero_cnj=numero_cnj, classe="Apelação Cível")
+
+        def consultar_avisos(self, *a, **k):  # noqa: ANN002, ANN003, ANN201
+            raise AssertionError
+
+    with patch(
+        "juris.jobs.overnight._fetch_mni_mtls", side_effect=AssertionError("must not do local mTLS")
+    ):
+        diff = asyncio.run(
+            sync_processo_mni(
+                "5082351-40.2017.8.13.0024", "tjmg", "cpf", "senha", mni_service=_FakeMNI()
+            )
+        )
+
+    assert used["flag"] is True
+    assert diff.error is None
