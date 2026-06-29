@@ -140,3 +140,18 @@ def test_remote_filing_carries_protocol_metadata_not_artifacts() -> None:
     assert rebuilt.receipt.protocolo == "PROTO-2026-123"
     assert rebuilt.receipt.data_recebimento.year == 2026
     assert rebuilt.signing_result is None  # the signed PDF never crosses
+
+
+def test_remote_filing_runs_blocking_transport_off_the_event_loop() -> None:
+    import threading
+
+    main_thread = threading.get_ident()
+    captured: dict[str, int] = {}
+
+    class _ThreadCheckTransport:
+        def send(self, agent_request: AgentRequest) -> AgentResponse:
+            captured["thread"] = threading.get_ident()
+            return AgentResponse(request_id=agent_request.request_id, success=True, payload={"success": True})
+
+    asyncio.run(RemoteFilingService(_ThreadCheckTransport()).file(_req()))
+    assert captured["thread"] != main_thread  # the sync transport ran in a worker thread

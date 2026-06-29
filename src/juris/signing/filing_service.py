@@ -14,6 +14,7 @@ whole :class:`FilingOrchestrator` pipeline runs where the token lives:
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Callable
@@ -214,7 +215,9 @@ class RemoteFilingService(FilingService):
         agent_request = AgentRequest(
             request_id=uuid.uuid4().hex, tenant_id=self._tenant_id, operation="file", payload=payload
         )
-        response = self._transport.send(agent_request)
+        # The transport is a blocking (sync) WebSocket; run it off the event loop so
+        # an async orchestrator isn't stalled while the agent files.
+        response = await asyncio.to_thread(self._transport.send, agent_request)
         if response.request_id != agent_request.request_id:
             msg = "resposta de filing não correlaciona com o pedido"
             raise RuntimeError(msg)
