@@ -333,3 +333,19 @@ def test_connect_inprocess_mode_requires_pin(monkeypatch) -> None:
     response = client.post("/api/connect", json={"cpf": "07671039632", "tribunal": "tjmg"})
     assert response.status_code == 400
     assert "PIN" in response.json()["detail"]
+
+
+def test_connect_remote_mode_accepts_no_cpf(monkeypatch) -> None:
+    app_module = importlib.import_module("juris.web.app")
+    from juris.jobs.connect import ConnectResult
+
+    async def fake_run_connect(*a, **k):
+        return ConnectResult(avisos_added=0, seed_added=0, total_tracked=0, first_time=True, sync=None)
+
+    monkeypatch.setattr(app_module, "run_connect", fake_run_connect)
+    monkeypatch.setenv("JURIS_AGENT_MODE", "remote")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_URL", "ws://127.0.0.1:8765")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_TOKEN", "tok")
+    # remote: neither cpf nor pin/senha needed — the agent resolves them
+    response = client.post("/api/connect", json={"tribunal": "tjmg", "sync": False})
+    assert response.status_code == 202, response.text

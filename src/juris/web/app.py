@@ -104,7 +104,7 @@ class ConnectPayload(BaseModel):
     the cloud orchestrator never receives the secret (ADR-0015).
     """
 
-    cpf: str = Field(min_length=1)
+    cpf: str | None = None  # required only co-located; remote agent resolves it
     tribunal: str = "tjmg"
     pin: str | None = None  # required only in co-located mode (see create_connect)
     senha: str | None = None
@@ -154,8 +154,8 @@ async def _run_connect_job(
     try:
         result = await run_connect(
             tribunal_cfg,
-            payload.cpf,
-            payload.senha or payload.cpf,
+            payload.cpf or "",  # remote: the agent resolves the lawyer's own CPF
+            payload.senha or payload.cpf or "",
             token_pin=payload.pin,
             seed_text=payload.seed_text,
             do_sync=payload.sync,
@@ -198,8 +198,10 @@ async def create_connect(
     # agent resolves them — the cloud must not carry the lawyer's secret.
     from juris.api.agent_config import is_remote
 
-    if not is_remote() and not payload.pin:
-        raise HTTPException(status_code=400, detail="PIN do token é obrigatório no modo co-localizado.")
+    if not is_remote() and not (payload.pin and payload.cpf):
+        raise HTTPException(
+            status_code=400, detail="CPF e PIN do token são obrigatórios no modo co-localizado."
+        )
 
     job_id = uuid.uuid4().hex
     _evict_old_connect_jobs()

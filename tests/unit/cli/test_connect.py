@@ -86,3 +86,37 @@ def test_connect_remote_mode_does_not_resolve_credentials(monkeypatch) -> None:
         result = runner.invoke(app, ["connect", "--cpf", "07671039632", "--no-sync"])
 
     assert result.exit_code == 0, result.output
+
+
+def test_connect_remote_warns_when_pin_or_senha_passed(monkeypatch) -> None:
+    async def fake_run_connect(tribunal_cfg, cpf, senha, **kwargs):
+        return ConnectResult(avisos_added=0, seed_added=0, total_tracked=0, first_time=True, sync=None)
+
+    monkeypatch.setenv("JURIS_AGENT_MODE", "remote")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_URL", "ws://127.0.0.1:8765")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_TOKEN", "tok")
+    with patch("juris.jobs.connect.run_connect", side_effect=fake_run_connect):
+        result = runner.invoke(app, ["connect", "--cpf", "07671039632", "--pin", "1234", "--no-sync"])
+
+    assert "ignorados no modo remoto" in result.output
+
+
+def test_connect_remote_mode_accepts_no_cpf(monkeypatch) -> None:
+    async def fake_run_connect(tribunal_cfg, cpf, senha, **kwargs):
+        assert cpf == ""  # the agent resolves the lawyer's own CPF
+        return ConnectResult(avisos_added=0, seed_added=0, total_tracked=0, first_time=True, sync=None)
+
+    monkeypatch.setenv("JURIS_AGENT_MODE", "remote")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_URL", "ws://127.0.0.1:8765")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_TOKEN", "tok")
+    with patch("juris.jobs.connect.run_connect", side_effect=fake_run_connect):
+        result = runner.invoke(app, ["connect", "--no-sync"])  # no --cpf
+
+    assert result.exit_code == 0, result.output
+
+
+def test_connect_inprocess_mode_requires_cpf(monkeypatch) -> None:
+    monkeypatch.delenv("JURIS_AGENT_MODE", raising=False)
+    result = runner.invoke(app, ["connect"])  # no --cpf, co-located
+    assert result.exit_code == 1
+    assert "cpf" in result.output.lower()

@@ -48,3 +48,15 @@ def test_file_remote_mode_does_not_collect_pin_or_senha(tmp_path, monkeypatch) -
 
     assert "PIN do token" not in result.output  # never prompted nor required
     assert "PIN salvo" not in result.output  # nothing stored in the Keychain
+
+
+def test_file_remote_warns_when_pin_passed(tmp_path, monkeypatch) -> None:
+    draft = tmp_path / "peca.md"
+    draft.write_text("# Contestação\n\nTexto.", encoding="utf-8")
+    monkeypatch.setenv("JURIS_AGENT_MODE", "remote")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_URL", "ws://127.0.0.1:59999")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_TOKEN", "tok")
+    result = CliRunner().invoke(
+        app, ["file", "5082351-40.2017.8.13.0024", str(draft), "--cpf", "07671039632", "--pin", "1234"]
+    )
+    assert "ignorados no modo remoto" in result.output

@@ -544,7 +544,7 @@ def tracked() -> None:
 
 @app.command()
 def connect(
-    cpf: str = typer.Option(..., "--cpf", help="CPF do advogado constituído"),
+    cpf: str | None = typer.Option(None, "--cpf", help="CPF do advogado (não exigido no modo remoto)"),
     tribunal: str = typer.Option("tjmg", "--tribunal", "-t", help="Tribunal ID (mTLS)"),
     seed: str = typer.Option(None, "--file", "-f", help="Seed inicial: arquivo com 1 CNJ por linha"),
     senha: str = typer.Option(None, "--senha", "-s", help="Senha PJe (senão Keychain/prompt)"),
@@ -579,8 +579,16 @@ def connect(
     from juris.api.agent_config import is_remote
 
     if is_remote():
+        if pin or senha:
+            console.print(
+                "[yellow]Aviso:[/yellow] --pin/--senha são ignorados no modo remoto (o "
+                "agente resolve) — evite passá-los: podem ficar no histórico do shell."
+            )
         resolved_senha, resolved_pin = "", None
     else:
+        if not cpf:
+            console.print("[red]--cpf é obrigatório no modo co-localizado.[/red]")
+            raise typer.Exit(code=1)
         _material, resolved_senha, resolved_pin = _mtls_session(tribunal_cfg, cpf, senha, pin)
     seed_text = Path(seed).read_text(encoding="utf-8") if seed else None
 
@@ -588,7 +596,7 @@ def connect(
         result = asyncio.run(
             run_connect(
                 tribunal_cfg,
-                cpf,
+                cpf or "",  # remote: the agent resolves the lawyer's own CPF
                 resolved_senha,
                 token_pin=resolved_pin,
                 seed_text=seed_text,
@@ -2511,7 +2519,7 @@ def file_petition(
         ..., help="Path to draft markdown file, or petition type (loads most recent draft)"
     ),
     tribunal: str = typer.Option("tjmg", "--tribunal", "-t", help="Tribunal ID"),
-    cpf: str = typer.Option(..., "--cpf", help="CPF do advogado"),
+    cpf: str | None = typer.Option(None, "--cpf", help="CPF do advogado (não exigido no modo remoto)"),
     tipo_doc: str = typer.Option("manifestacao", "--tipo-doc", help="Tipo de documento para protocolo"),
     skip_preflight: bool = typer.Option(False, "--skip-preflight", help="Skip pre-flight checks"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Render and check only — no signing or filing"),
@@ -2564,7 +2572,15 @@ def file_petition(
     remote = is_remote()
     resolved_pin: str | None = None
     resolved_senha = ""
+    if remote and (pin or senha):
+        console.print(
+            "[yellow]Aviso:[/yellow] --pin/--senha são ignorados no modo remoto (o "
+            "agente resolve) — evite passá-los: podem ficar no histórico do shell."
+        )
     if not remote:
+        if not cpf:
+            console.print("[red]--cpf é obrigatório no modo co-localizado.[/red]")
+            raise typer.Exit(code=1)
         resolved_pin = pin or get_credential("token_pin")
         if not resolved_pin:
             import getpass
@@ -2587,7 +2603,7 @@ def file_petition(
         tipo_documento=tipo_doc,
         draft_markdown=draft_markdown,
         tipo_peticao=tipo_peticao,
-        cpf=cpf,
+        cpf=cpf or "",  # remote: the agent resolves the lawyer's own CPF
         senha=resolved_senha,
         skip_preflight=skip_preflight,
         dry_run=dry_run,
