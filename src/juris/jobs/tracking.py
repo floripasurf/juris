@@ -1,19 +1,28 @@
 """Tracked-processo list — the lawyer's "my processes" set + seed parsing.
 
 Shared by the CLI (track/avisos/connect commands) and the web layer so neither
-reaches into the other. The list is persisted via the credential store (Keychain
-locally) as ``tracked_processos`` JSON; in Phase 2 (multi-tenant) this moves to a
-per-account table.
+reaches into the other. Single-user (Phase 1) persists via the credential store
+(Keychain) as ``tracked_processos`` JSON; pass a per-tenant ``db`` and the list
+lives in that tenant's store instead (multi-tenant isolation).
 """
 
 from __future__ import annotations
 
 import json
-from typing import cast
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from juris.persistence.local_db import LocalDB
 
 
-def get_tracked() -> list[dict[str, str]]:
-    """Load the tracked-processo list (``[{"numero_cnj", "tribunal"}, ...]``)."""
+def get_tracked(db: LocalDB | None = None) -> list[dict[str, str]]:
+    """Load the tracked-processo list (``[{"numero_cnj", "tribunal"}, ...]``).
+
+    From the tenant's ``db`` when given; otherwise the single-user Keychain.
+    """
+    if db is not None:
+        return db.get_tracked_list()
+
     from juris.core.credentials import get_credential
 
     raw = get_credential("tracked_processos")
@@ -25,8 +34,12 @@ def get_tracked() -> list[dict[str, str]]:
         return []
 
 
-def set_tracked(entries: list[dict[str, str]]) -> None:
-    """Persist the tracked-processo list."""
+def set_tracked(entries: list[dict[str, str]], db: LocalDB | None = None) -> None:
+    """Persist the tracked-processo list (to the tenant's ``db`` or the Keychain)."""
+    if db is not None:
+        db.set_tracked_list(entries)
+        return
+
     from juris.core.credentials import store_credential
 
     store_credential("tracked_processos", json.dumps(entries))

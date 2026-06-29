@@ -124,3 +124,29 @@ class TestLocalDB:
         pending = db.get_pending_prazos("123")
         assert len(pending) == 1
         assert pending[0].rule_nome == "A"
+
+
+def test_tracked_list_round_trips(tmp_path) -> None:
+    db = LocalDB(tmp_path / "t.db")
+    assert db.get_tracked_list() == []  # empty by default
+
+    entries = [
+        {"numero_cnj": "5082351-40.2017.8.13.0024", "tribunal": "tjmg"},
+        {"numero_cnj": "0001234-56.2024.8.26.0001", "tribunal": "tjsp"},
+    ]
+    db.set_tracked_list(entries)
+    assert db.get_tracked_list() == entries
+
+
+def test_tracked_list_replaces_not_appends(tmp_path) -> None:
+    db = LocalDB(tmp_path / "t.db")
+    db.set_tracked_list([{"numero_cnj": "A", "tribunal": "tjmg"}])
+    db.set_tracked_list([{"numero_cnj": "B", "tribunal": "tjsp"}])
+    assert db.get_tracked_list() == [{"numero_cnj": "B", "tribunal": "tjsp"}]
+
+
+def test_tracked_list_is_isolated_per_db(tmp_path) -> None:
+    db_a = LocalDB(tmp_path / "a.db")
+    db_b = LocalDB(tmp_path / "b.db")
+    db_a.set_tracked_list([{"numero_cnj": "A", "tribunal": "tjmg"}])
+    assert db_b.get_tracked_list() == []  # tenant B can't see tenant A's list

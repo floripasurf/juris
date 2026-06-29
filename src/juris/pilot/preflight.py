@@ -27,7 +27,7 @@ import shutil
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Protocol
 
@@ -38,7 +38,7 @@ from juris.repertory.readiness import (
 )
 
 
-class CheckStatus(str, Enum):
+class CheckStatus(StrEnum):
     """Per-check verdict."""
 
     PASS = "pass"  # noqa: S105 — verdict label, not a credential

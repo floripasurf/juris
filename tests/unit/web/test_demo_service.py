@@ -8,16 +8,16 @@ from juris.web.demo_service import estrategia_payload
 
 
 def _linha(tese: str, **kw: object) -> SimpleNamespace:
-    base = dict(
-        tese=tese,
-        ordem="principal",
-        confianca="alta",
-        score=0.8,
-        fundamentos=["f1"],
-        citacoes=["STJ-1"],
-        riscos=[],
-        fundamento_consequencialista="reduz o custo decisório",
-    )
+    base = {
+        "tese": tese,
+        "ordem": "principal",
+        "confianca": "alta",
+        "score": 0.8,
+        "fundamentos": ["f1"],
+        "citacoes": ["STJ-1"],
+        "riscos": [],
+        "fundamento_consequencialista": "reduz o custo decisório",
+    }
     base.update(kw)
     return SimpleNamespace(**base)
 

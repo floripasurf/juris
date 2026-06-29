@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -25,6 +26,11 @@ def _tenant_db(tenant: Tenant) -> LocalDB:
     from juris.persistence.local_db import LocalDB
 
     return LocalDB(tenant_db_path(tenant))
+
+
+def _out_root() -> Path:
+    """Server-controlled output root — clients can't choose where runs are written."""
+    return Path(os.environ.get("JURIS_OUT_ROOT", "juris-out"))
 
 app = FastAPI(
     title="Juris Web",
@@ -117,8 +123,14 @@ def _evict_old_connect_jobs() -> None:
         _CONNECT_JOBS.pop(next(iter(_CONNECT_JOBS)))
 
 
-async def _run_connect_job(job_id: str, tribunal_cfg: TribunalConfig, payload: ConnectPayload) -> None:
-    """Background worker: run the (possibly slow) connect and record the outcome."""
+async def _run_connect_job(
+    job_id: str, tribunal_cfg: TribunalConfig, payload: ConnectPayload, tenant: Tenant
+) -> None:
+    """Background worker: run the (possibly slow) connect and record the outcome.
+
+    Writes go to the tenant's own store (isolation); the job carries its
+    ``tenant_id`` so only the owning tenant can read it back.
+    """
     try:
         result = await run_connect(
             tribunal_cfg,
@@ -127,10 +139,21 @@ async def _run_connect_job(job_id: str, tribunal_cfg: TribunalConfig, payload: C
             token_pin=payload.pin,
             seed_text=payload.seed_text,
             do_sync=payload.sync,
+            db=_tenant_db(tenant),
         )
-        _CONNECT_JOBS[job_id] = {"status": "done", "result": _serialize_connect(result), "error": None}
+        _CONNECT_JOBS[job_id] = {
+            "status": "done",
+            "result": _serialize_connect(result),
+            "error": None,
+            "tenant_id": tenant.tenant_id,
+        }
     except Exception as exc:  # noqa: BLE001 — surfaced to the client via the job
-        _CONNECT_JOBS[job_id] = {"status": "error", "result": None, "error": str(exc)}
+        _CONNECT_JOBS[job_id] = {
+            "status": "error",
+            "result": None,
+            "error": str(exc),
+            "tenant_id": tenant.tenant_id,
+        }
 
 
 @app.post("/api/connect", status_code=202)
@@ -152,8 +175,13 @@ async def create_connect(
 
     job_id = uuid.uuid4().hex
     _evict_old_connect_jobs()
-    _CONNECT_JOBS[job_id] = {"status": "running", "result": None, "error": None}
-    asyncio.get_event_loop().create_task(_run_connect_job(job_id, tribunal_cfg, payload))
+    _CONNECT_JOBS[job_id] = {
+        "status": "running",
+        "result": None,
+        "error": None,
+        "tenant_id": tenant.tenant_id,
+    }
+    asyncio.get_event_loop().create_task(_run_connect_job(job_id, tribunal_cfg, payload, tenant))
     return {"job_id": job_id, "status": "running"}
 
 
@@ -161,9 +189,9 @@ async def create_connect(
 async def get_connect(
     job_id: str, tenant: Tenant = Depends(current_tenant)
 ) -> dict[str, object]:
-    """Poll a connect job started by POST /api/connect."""
+    """Poll a connect job — only the tenant that started it can read it."""
     job = _CONNECT_JOBS.get(job_id)
-    if job is None:
+    if job is None or job.get("tenant_id") != tenant.tenant_id:
         raise HTTPException(status_code=404, detail="job não encontrado")
     return job
 
@@ -186,7 +214,7 @@ async def get_audit(
     from juris.web.audit_service import audit_view, resolve_audit_path
     from juris.web.auth import tenant_scoped_dir
 
-    root = tenant_scoped_dir(tenant, Path("juris-out"))
+    root = tenant_scoped_dir(tenant, _out_root())
     try:
         audit_path = resolve_audit_path(output_dir, root=root)
     except ValueError as exc:
@@ -210,13 +238,14 @@ async def create_demo_run(
     """Run the demo pipeline from a browser request."""
     from juris.web.auth import tenant_scoped_dir
 
+    # payload.out_root is ignored — the server controls where runs are written.
     request = WebDemoRunRequest(
         numero_cnj=payload.numero_cnj.strip(),
         tipo=payload.tipo,
         tribunal=payload.tribunal.strip() or "tjmg",
         source=payload.source,
         modo=payload.modo,
-        out_root=tenant_scoped_dir(tenant, Path(payload.out_root)),
+        out_root=tenant_scoped_dir(tenant, _out_root()),
         thesis=payload.thesis.strip() if payload.thesis else None,
         instructions=payload.instructions,
         cloud=payload.cloud,

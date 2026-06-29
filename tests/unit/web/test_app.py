@@ -94,23 +94,29 @@ def test_connect_jobs_are_bounded() -> None:
 async def test_connect_job_runner_records_result(monkeypatch) -> None:
     app_module = importlib.import_module("juris.web.app")
     from juris.jobs.connect import ConnectResult
+    from juris.web.auth import Tenant
+
+    captured: dict[str, object] = {}
 
     async def fake_run_connect(tribunal_cfg, cpf, senha, **kwargs):
+        captured["db"] = kwargs.get("db")
         return ConnectResult(avisos_added=2, seed_added=3, total_tracked=5, first_time=True, sync=None)
 
     monkeypatch.setattr(app_module, "run_connect", fake_run_connect)
+    monkeypatch.setattr(app_module, "_tenant_db", lambda tenant: f"db::{tenant.tenant_id}")
     payload = app_module.ConnectPayload(cpf="07671039632", tribunal="tjmg", pin="1234")
     app_module._CONNECT_JOBS["job-x"] = {"status": "running", "result": None, "error": None}
 
-    await app_module._run_connect_job("job-x", object(), payload)
+    await app_module._run_connect_job("job-x", object(), payload, Tenant("escritorio-a"))
 
     job = app_module._CONNECT_JOBS["job-x"]
     assert job["status"] == "done"
     assert job["result"]["total_tracked"] == 5
+    assert job["tenant_id"] == "escritorio-a"  # job is owned by the tenant
+    assert captured["db"] == "db::escritorio-a"  # writes scoped to the tenant's store
 
 
 def test_audit_endpoint_returns_chain(monkeypatch) -> None:
-    app_module = importlib.import_module("juris.web.app")
     view = {"total": 2, "intact": True, "corrupted": [], "entries": [{"event_type": "draft"}]}
     import juris.web.audit_service as audit_service
 
@@ -276,3 +282,12 @@ def test_endpoints_enforce_api_key_when_tenants_configured(tmp_path, monkeypatch
         assert ok.status_code == 200  # valid key → allowed
     finally:
         auth.default_registry.cache_clear()  # reset to open for other tests
+
+
+def test_connect_job_hidden_from_non_owner() -> None:
+    app_module = importlib.import_module("juris.web.app")
+    # a job owned by escritorio-a is invisible to the public caller (open default)
+    app_module._CONNECT_JOBS["job-y"] = {
+        "status": "done", "result": {}, "error": None, "tenant_id": "escritorio-a",
+    }
+    assert client.get("/api/connect/job-y").status_code == 404

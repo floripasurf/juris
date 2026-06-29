@@ -15,6 +15,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -22,6 +23,17 @@ from pathlib import Path
 from fastapi import Header, HTTPException
 
 PUBLIC_TENANT_ID = "public"
+
+# A tenant_id becomes a storage path segment — keep it to safe chars so a crafted
+# id (with `/` or `..`) can't escape its directory.
+_TENANT_ID_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
+def _validate_tenant_id(tenant_id: str) -> str:
+    if not _TENANT_ID_RE.match(tenant_id):
+        msg = f"tenant_id inválido (use ^[a-zA-Z0-9_-]+$): {tenant_id!r}"
+        raise ValueError(msg)
+    return tenant_id
 
 
 def hash_api_key(api_key: str) -> str:
@@ -43,7 +55,7 @@ class TenantRegistry:
     def __init__(self, tenants: dict[str, str]) -> None:
         # config is {tenant_id: api_key}; index by key for O(1) auth.
         self._by_key: dict[str, Tenant] = {
-            key: Tenant(tenant_id) for tenant_id, key in tenants.items()
+            key: Tenant(_validate_tenant_id(tenant_id)) for tenant_id, key in tenants.items()
         }
 
     @classmethod
@@ -105,7 +117,7 @@ def tenant_scoped_dir(tenant: Tenant, base: Path) -> Path:
     """Per-account storage root: shared ``base`` for public, ``base/tenants/<id>`` otherwise."""
     if tenant.tenant_id == PUBLIC_TENANT_ID:
         return base
-    return base / "tenants" / tenant.tenant_id
+    return base / "tenants" / _validate_tenant_id(tenant.tenant_id)
 
 
 def tenant_db_path(tenant: Tenant, *, base: Path | None = None) -> Path:

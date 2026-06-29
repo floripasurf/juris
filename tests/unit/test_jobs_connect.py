@@ -36,7 +36,7 @@ def test_seeds_avisos_into_tracked_and_syncs() -> None:
 
     with (
         patch("juris.jobs.connect.get_tracked", return_value=[]),
-        patch("juris.jobs.connect.set_tracked", side_effect=lambda e: stored.__setitem__("t", e)),
+        patch("juris.jobs.connect.set_tracked", side_effect=lambda e, db=None: stored.__setitem__("t", e)),
         patch("juris.jobs.connect.run_nightly", side_effect=fake_nightly),
     ):
         result = _run(token_pin="1234", mni_service=_FakeMNI(avisos))  # noqa: S106
@@ -64,7 +64,7 @@ def test_seed_text_adds_to_tracked() -> None:
     stored: dict[str, list] = {}
     with (
         patch("juris.jobs.connect.get_tracked", return_value=[]),
-        patch("juris.jobs.connect.set_tracked", side_effect=lambda e: stored.__setitem__("t", e)),
+        patch("juris.jobs.connect.set_tracked", side_effect=lambda e, db=None: stored.__setitem__("t", e)),
     ):
         result = _run(token_pin="1234", seed_text=f"{_CNJ}\n", do_sync=False, mni_service=_FakeMNI(avisos))  # noqa: S106
 
@@ -88,3 +88,20 @@ def test_invalid_seed_lines_are_surfaced_not_dropped_silently() -> None:
 
     assert result.seed_added == 1  # the valid one
     assert any("não-é-um-cnj" in e for e in result.seed_errors)  # the invalid one surfaced
+
+
+def test_run_connect_scopes_tracking_to_tenant_db(tmp_path) -> None:
+    from juris.persistence.local_db import LocalDB
+
+    avisos = AvisosResult(sucesso=True, mensagem="ok", avisos=[])
+    db = LocalDB(tmp_path / "tenant.db")
+    result = _run(
+        token_pin="1234",  # noqa: S106
+        seed_text=f"{_CNJ}\n",
+        do_sync=False,
+        mni_service=_FakeMNI(avisos),
+        db=db,
+    )
+    assert result.total_tracked == 1
+    # the tracked list landed in the tenant's own store, not the global Keychain
+    assert db.get_tracked_list() == [{"numero_cnj": _CNJ, "tribunal": "tjmg"}]

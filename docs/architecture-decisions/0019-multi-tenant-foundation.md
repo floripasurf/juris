@@ -34,11 +34,18 @@ SaaS. Implemented in `web/auth.py`:
 - API keys: `hash_api_key` (sha256) + constant-time auth accepting **plaintext
   (dev) or hashed (production)** stored values. **Rotation** = update the tenants
   file and reload (`default_registry.cache_clear`).
+- **Write path scoped**: `run_connect(db=...)` threads the tenant's `LocalDB`
+  through the tracked list (`get/set_tracked(db=)`, now backed by a
+  `tracked_processos` table) and the nightly sync (`run_nightly(db=)`) — import
+  and sync write to the tenant's own store, not the global acervo.
+- **Hardening**: connect jobs carry their `tenant_id` and `GET /api/connect/{id}`
+  is 404 for non-owners; the demo/audit output root is **server-controlled**
+  (`$JURIS_OUT_ROOT`, client `out_root` ignored); `tenant_id` is validated
+  (`^[a-zA-Z0-9_-]+$`) before it becomes a path segment.
 
 **Next (Phase 2):**
-1. Scope the *write* paths fully — the connect job's LocalDB + tracking still use
-   the default store; thread the `Tenant` through `run_connect`.
-2. Per ADR-0015, swap the InProcess services for `Remote*` clients talking to each
+1. Per ADR-0015, swap the InProcess services for `Remote*` clients talking to each
    firm's local agent (the token never co-locates with the cloud orchestrator).
+2. Move connect jobs out of the in-process dict into a per-tenant durable queue.
 3. Rate limiting + a durable audit sink (Redis + Cloud Logging) + a secrets store
    for the keys file.

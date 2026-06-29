@@ -115,6 +115,15 @@ class JurisprudenciaLocal(LocalBase):
     created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
+class TrackedProcessoLocal(LocalBase):
+    """The list of CNJs this store tracks for nightly sync (per-tenant when scoped)."""
+
+    __tablename__ = "tracked_processos"
+
+    numero_cnj = Column(String(25), primary_key=True)
+    tribunal_id = Column(String(20), nullable=False)
+
+
 class LocalDB:
     """SQLite-backed local database for single-user mode."""
 
@@ -389,6 +398,25 @@ class LocalDB:
                 if obj:
                     result.append(obj)
             return result
+
+    def get_tracked_list(self) -> list[dict[str, str]]:
+        """The tracked-processo list (``[{"numero_cnj", "tribunal"}, ...]``)."""
+        with self.session() as s:
+            rows = s.query(TrackedProcessoLocal).all()
+            return [{"numero_cnj": str(r.numero_cnj), "tribunal": str(r.tribunal_id)} for r in rows]
+
+    def set_tracked_list(self, entries: list[dict[str, str]]) -> None:
+        """Replace the tracked-processo list (full overwrite, deduped by CNJ)."""
+        with self.session() as s:
+            s.query(TrackedProcessoLocal).delete()
+            seen: set[str] = set()
+            for entry in entries:
+                cnj = entry["numero_cnj"]
+                if cnj in seen:
+                    continue
+                seen.add(cnj)
+                s.add(TrackedProcessoLocal(numero_cnj=cnj, tribunal_id=entry["tribunal"]))
+            s.commit()
 
     @property
     def path(self) -> Path:

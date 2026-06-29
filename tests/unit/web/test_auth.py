@@ -66,3 +66,15 @@ def test_authenticates_hashed_keys_for_production() -> None:
     assert resolve_tenant(registry, api_key="raw-key") == Tenant("escritorio-a")
     with pytest.raises(PermissionError):
         resolve_tenant(registry, api_key="wrong")
+
+
+def test_rejects_unsafe_tenant_id_in_config() -> None:
+    with pytest.raises(ValueError, match="inválido"):
+        TenantRegistry({"../etc": "key"})
+
+
+def test_tenant_scoped_dir_rejects_unsafe_id(tmp_path) -> None:
+    from juris.web.auth import tenant_scoped_dir
+
+    with pytest.raises(ValueError, match="inválido"):
+        tenant_scoped_dir(Tenant("../escape"), tmp_path)

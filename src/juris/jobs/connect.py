@@ -26,6 +26,7 @@ from juris.mni.tribunais import TribunalConfig
 if TYPE_CHECKING:
     from juris.jobs.nightly import NightlySummary
     from juris.mni.service import MNIReadService
+    from juris.persistence.local_db import LocalDB
 
 logger = get_logger(__name__)
 
@@ -51,14 +52,19 @@ async def run_connect(
     seed_text: str | None = None,
     do_sync: bool = True,
     mni_service: MNIReadService | None = None,
+    db: LocalDB | None = None,
 ) -> ConnectResult:
-    """Import/update the tracked acervo and (optionally) sync it. See module docs."""
+    """Import/update the tracked acervo and (optionally) sync it. See module docs.
+
+    When ``db`` is given (the tenant's store), the tracked list and the sync
+    writes are scoped to it; otherwise they use the single-user defaults.
+    """
     if mni_service is None:
         from juris.mni.service import InProcessMNIReadService
 
         mni_service = InProcessMNIReadService()
 
-    tracked = get_tracked()
+    tracked = get_tracked(db=db)
     first_time = not tracked
 
     # 1) Pending avisos → tracked list.
@@ -83,12 +89,12 @@ async def run_connect(
                 lines=seed_errors,
             )
 
-    set_tracked(tracked)
+    set_tracked(tracked, db=db)
 
     # 3) Differential import/update (handles first-time vs. delta itself).
     summary: NightlySummary | None = None
     if do_sync and tracked:
-        summary = await run_nightly(tracked, cpf=cpf, senha=senha, token_pin=token_pin)
+        summary = await run_nightly(tracked, cpf=cpf, senha=senha, token_pin=token_pin, db=db)
 
     return ConnectResult(
         avisos_added=avisos_added,
