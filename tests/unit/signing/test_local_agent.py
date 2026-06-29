@@ -1,14 +1,38 @@
-"""Tests for the local agent WebSocket skeleton."""
+"""Tests for the local agent — signing handler + WebSocket endpoint (ADR-0015)."""
 from __future__ import annotations
 
+import base64
 import json
+from datetime import UTC, date, datetime
 
 import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from juris.api.local_agent import app, get_signing_token, validate_local_agent_host
+from juris.api import local_agent
+from juris.api.local_agent import app, get_signing_token, handle_sign_request, validate_local_agent_host
 from juris.api.ws_schemas import HealthResponse, SignRequest, SignResponse
+from juris.signing.pades import SigningResult
+from juris.signing.service import SigningService
+
+
+class _FakeSigner(SigningService):
+    """Signs deterministically without a real token; records the PIN it saw."""
+
+    def __init__(self) -> None:
+        self.seen_pin: str | None = None
+
+    def sign_pdf(self, pdf_bytes, *, pin, token_label=None, field_name="AdvogadoSignature", use_timestamp=False):  # noqa: ANN001, ANN201
+        self.seen_pin = pin
+        return SigningResult(
+            signed_pdf=b"SIGNED:" + pdf_bytes,
+            signer_name="Dra. Ana",
+            signer_cpf="12345678900",
+            timestamp=datetime(2026, 6, 29, tzinfo=UTC),
+            pdf_hash="h",
+            signed_pdf_hash="sh",
+            cert_valid_until=date(2027, 1, 1),
+        )
 
 
 def test_health_endpoint():
@@ -22,22 +46,44 @@ def test_health_endpoint():
     HealthResponse.model_validate(data)
 
 
-def test_ws_sign_accepts_valid_request():
-    """WebSocket accepts a valid SignRequest and responds with SignResponse."""
+def test_handle_sign_request_resolves_pin_locally_and_signs() -> None:
+    signer = _FakeSigner()
+    req = SignRequest(request_id="r1", pdf_bytes_b64=base64.b64encode(b"PDF").decode())
+
+    resp = handle_sign_request(req, signer, pin_resolver=lambda: "1234")
+
+    assert resp.success
+    assert base64.b64decode(resp.signed_pdf_b64) == b"SIGNED:PDF"
+    assert resp.signed_at is not None
+    assert resp.cert_valid_until == date(2027, 1, 1)
+    assert signer.seen_pin == "1234"  # PIN came from the local resolver, not the request
+
+
+def test_handle_sign_request_maps_errors_to_response() -> None:
+    class _Boom(SigningService):
+        def sign_pdf(self, *a, **k):  # noqa: ANN001, ANN002, ANN003, ANN201
+            raise RuntimeError("token ausente")
+
+    req = SignRequest(request_id="r2", pdf_bytes_b64=base64.b64encode(b"PDF").decode())
+    resp = handle_sign_request(req, _Boom(), pin_resolver=lambda: "x")
+
+    assert resp.success is False
+    assert "token ausente" in (resp.error or "")
+
+
+def test_ws_sign_round_trip_signs_via_agent(monkeypatch):
+    """WebSocket accepts a SignRequest and returns a real signed response."""
+    monkeypatch.setattr(local_agent, "agent_signer", lambda: _FakeSigner())
+    monkeypatch.setenv("JURIS_AGENT_PIN", "1234")
     client = TestClient(app)
     token = get_signing_token()
     with client.websocket_connect(f"/ws/sign?token={token}") as ws:
-        request = SignRequest(
-            request_id="test-001",
-            pdf_bytes_b64="JVBERi0xLjQK",  # minimal base64
-            field_name="AdvogadoSignature",
-        )
+        request = SignRequest(request_id="test-001", pdf_bytes_b64=base64.b64encode(b"PDF").decode())
         ws.send_text(request.model_dump_json())
-        data = ws.receive_text()
-        response = SignResponse.model_validate_json(data)
+        response = SignResponse.model_validate_json(ws.receive_text())
         assert response.request_id == "test-001"
-        assert response.success is False  # skeleton returns not-implemented
-        assert "Sprint 11" in (response.error or "")
+        assert response.success is True
+        assert base64.b64decode(response.signed_pdf_b64) == b"SIGNED:PDF"
 
 
 def test_ws_sign_handles_invalid_json():
