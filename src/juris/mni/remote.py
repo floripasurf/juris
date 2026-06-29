@@ -68,11 +68,17 @@ class WebSocketAgentTransport:
 class RemoteMNIReadService(MNIReadService):
     """Reads MNI by forwarding to the lawyer's local agent (credentials stay remote)."""
 
-    def __init__(self, transport: AgentTransport) -> None:
+    def __init__(self, transport: AgentTransport, *, tenant_id: str = "public") -> None:
         self._transport = transport
+        self._tenant_id = tenant_id
 
     def _call(self, operation: str, payload: dict[str, object]) -> dict[str, object]:
-        request = AgentRequest(request_id=uuid.uuid4().hex, operation=operation, payload=payload)
+        request = AgentRequest(
+            request_id=uuid.uuid4().hex,
+            tenant_id=self._tenant_id,
+            operation=operation,
+            payload=payload,
+        )
         response = self._transport.send(request)
         if response.request_id != request.request_id:
             msg = (

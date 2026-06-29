@@ -26,3 +26,22 @@ def test_remote_requires_agent_url(monkeypatch) -> None:
     monkeypatch.delenv("JURIS_LOCAL_AGENT_URL", raising=False)
     with pytest.raises(RuntimeError, match="JURIS_LOCAL_AGENT_URL"):
         get_signing_service()
+
+
+def test_remote_fails_early_when_token_empty(monkeypatch) -> None:
+    monkeypatch.setenv("JURIS_AGENT_MODE", "remote")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_URL", "ws://127.0.0.1:8765")
+    monkeypatch.delenv("JURIS_LOCAL_AGENT_TOKEN", raising=False)
+    with pytest.raises(RuntimeError, match="JURIS_LOCAL_AGENT_TOKEN"):
+        get_signing_service()
+
+
+def test_agent_token_comes_from_env_for_pairing(monkeypatch) -> None:
+    from juris.api import local_agent
+
+    monkeypatch.setenv("JURIS_AGENT_TOKEN", "shared-pairing-secret")
+    local_agent._resolve_signing_token.cache_clear()
+    try:
+        assert local_agent.get_signing_token() == "shared-pairing-secret"
+    finally:
+        local_agent._resolve_signing_token.cache_clear()

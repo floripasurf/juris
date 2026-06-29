@@ -76,3 +76,11 @@ def test_raises_on_request_id_mismatch() -> None:
 
     with pytest.raises(RuntimeError, match="correlaciona"):
         RemoteSigningService(_MismatchTransport()).sign_pdf(b"PDF", pin="9999")
+
+
+def test_tenant_id_is_carried_on_the_request() -> None:
+    transport = _FakeTransport(_ok_response())
+    service = RemoteSigningService(transport, tenant_id="escritorio-a")
+    service.sign_pdf(b"PDF", pin="9999")
+    assert transport.sent is not None
+    assert transport.sent.tenant_id == "escritorio-a"

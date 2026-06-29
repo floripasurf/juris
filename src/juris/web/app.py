@@ -147,6 +147,7 @@ async def _run_connect_job(
             seed_text=payload.seed_text,
             do_sync=payload.sync,
             db=_tenant_db(tenant),
+            tenant_id=tenant.tenant_id,
         )
         _CONNECT_JOBS[job_id] = {
             "status": "done",

@@ -198,3 +198,11 @@ def test_demo_load_processo_mni_routes_through_factory(monkeypatch) -> None:
 
     assert used["flag"] is True
     assert result.classe == "Apelação Cível"
+
+
+def test_tenant_id_is_carried_on_mni_requests() -> None:
+    transport = _EchoTransport(TypeAdapter(ProcessoDomain).dump_python(_processo(), mode="json"))
+    service = RemoteMNIReadService(transport, tenant_id="escritorio-b")
+    service.consultar_processo("123", get_tribunal("tjmg"), "cpf", "senha")
+    assert transport.sent is not None
+    assert transport.sent.tenant_id == "escritorio-b"

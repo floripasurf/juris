@@ -15,6 +15,7 @@ import base64
 import os
 import secrets
 from collections.abc import Callable
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -29,8 +30,14 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-_SIGNING_TOKEN = secrets.token_urlsafe(32)
 _LOCAL_AGENT_HOST = "127.0.0.1"
+
+
+@lru_cache(maxsize=1)
+def _resolve_signing_token() -> str:
+    """The agent's auth token — ``$JURIS_AGENT_TOKEN`` (paired with the orchestrator's
+    ``JURIS_LOCAL_AGENT_TOKEN``) or a random dev token when unset."""
+    return os.environ.get("JURIS_AGENT_TOKEN") or secrets.token_urlsafe(32)
 
 app = FastAPI(
     title="Juris Local Agent",
@@ -41,7 +48,7 @@ app = FastAPI(
 
 def get_signing_token() -> str:
     """Return the local signing token for authenticated clients."""
-    return _SIGNING_TOKEN
+    return _resolve_signing_token()
 
 
 def agent_signer() -> SigningService:
@@ -215,7 +222,7 @@ async def signing_socket(ws: WebSocket) -> None:
     agent signs locally and replies with a ``SignResponse`` JSON; repeat or close.
     """
     token = ws.query_params.get("token")
-    if token is None or not secrets.compare_digest(token, _SIGNING_TOKEN):
+    if token is None or not secrets.compare_digest(token, get_signing_token()):
         await ws.close(code=4001, reason="Unauthorized")
         return
     await ws.accept()
@@ -251,7 +258,7 @@ async def mni_socket(ws: WebSocket) -> None:
     ``AgentResponse`` carrying the serialised result.
     """
     token = ws.query_params.get("token")
-    if token is None or not secrets.compare_digest(token, _SIGNING_TOKEN):
+    if token is None or not secrets.compare_digest(token, get_signing_token()):
         await ws.close(code=4001, reason="Unauthorized")
         return
     await ws.accept()

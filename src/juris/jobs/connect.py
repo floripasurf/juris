@@ -53,16 +53,18 @@ async def run_connect(
     do_sync: bool = True,
     mni_service: MNIReadService | None = None,
     db: LocalDB | None = None,
+    tenant_id: str = "public",
 ) -> ConnectResult:
     """Import/update the tracked acervo and (optionally) sync it. See module docs.
 
     When ``db`` is given (the tenant's store), the tracked list and the sync
     writes are scoped to it; otherwise they use the single-user defaults.
+    ``tenant_id`` tags the remote agent's audit log for this firm.
     """
     if mni_service is None:
         from juris.mni.factory import get_mni_read_service
 
-        mni_service = get_mni_read_service()
+        mni_service = get_mni_read_service(tenant_id)
 
     tracked = get_tracked(db=db)
     first_time = not tracked

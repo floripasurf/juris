@@ -56,8 +56,9 @@ class WebSocketSignTransport:
 class RemoteSigningService(SigningService):
     """Signs by forwarding to the lawyer's local agent (token stays remote)."""
 
-    def __init__(self, transport: SignTransport) -> None:
+    def __init__(self, transport: SignTransport, *, tenant_id: str = "public") -> None:
         self._transport = transport
+        self._tenant_id = tenant_id
 
     def sign_pdf(
         self,
@@ -73,6 +74,7 @@ class RemoteSigningService(SigningService):
         # policy. We only ship the bytes to sign.
         request = SignRequest(
             request_id=uuid.uuid4().hex,
+            tenant_id=self._tenant_id,
             pdf_bytes_b64=base64.b64encode(pdf_bytes).decode("ascii"),
             field_name=field_name,
         )
