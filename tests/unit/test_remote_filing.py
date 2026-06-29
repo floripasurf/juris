@@ -112,3 +112,31 @@ def test_filing_factory_remote_when_configured(monkeypatch) -> None:
     monkeypatch.setenv("JURIS_LOCAL_AGENT_URL", "ws://127.0.0.1:8765")
     monkeypatch.setenv("JURIS_LOCAL_AGENT_TOKEN", "tok")
     assert isinstance(get_filing_service(), RemoteFilingService)
+
+
+def test_remote_filing_carries_protocol_metadata_not_artifacts() -> None:
+    from datetime import UTC, datetime
+
+    from juris.mni.operations.peticionamento import FilingReceipt
+    from juris.signing.filing_service import _custody_to_payload, _payload_to_result
+
+    receipt = FilingReceipt(
+        sucesso=True, mensagem="Recebido", protocolo="PROTO-2026-123",
+        data_recebimento=datetime(2026, 6, 29, 12, 0, tzinfo=UTC),
+        numero_processo="5082351-40.2017.8.13.0024", pdf_hash="ph",
+    )
+    result = FilingResult(
+        success=True, receipt=receipt, signing_result=None, preflight=None,
+        audit_entry_ids=["a1"], chain_of_custody=_custody(),
+    )
+
+    payload = _custody_to_payload(result)
+    assert payload["receipt"]["protocolo"] == "PROTO-2026-123"  # receipt number
+    assert payload["receipt"]["numero_processo"] == "5082351-40.2017.8.13.0024"
+    assert payload["receipt"]["mensagem"] == "Recebido"  # status text
+
+    rebuilt = _payload_to_result(payload)
+    assert rebuilt.receipt is not None
+    assert rebuilt.receipt.protocolo == "PROTO-2026-123"
+    assert rebuilt.receipt.data_recebimento.year == 2026
+    assert rebuilt.signing_result is None  # the signed PDF never crosses

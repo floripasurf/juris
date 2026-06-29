@@ -23,7 +23,7 @@ from juris.api.ws_schemas import AgentRequest, AgentResponse
 from juris.signing.filing import ChainOfCustody, FilingRequest, FilingResult
 
 if TYPE_CHECKING:
-    pass
+    from juris.mni.operations.peticionamento import FilingReceipt
 
 
 async def run_filing(request: FilingRequest, *, pin: str | None) -> FilingResult:
@@ -114,8 +114,13 @@ def get_filing_service(tenant_id: str = "public") -> FilingService:
 
 
 def _custody_to_payload(result: FilingResult) -> dict[str, object]:
-    """The auditable proof that crosses back — hashes only, never the artifacts."""
+    """The auditable proof + protocol metadata that crosses back.
+
+    Hashes (chain of custody) + the receipt's protocol fields (numero, data,
+    processo, status) — enough for the UI/audit, **never** the PDF or any secret.
+    """
     coc = result.chain_of_custody
+    rcpt = result.receipt
     return {
         "success": result.success,
         "error": result.error,
@@ -130,6 +135,20 @@ def _custody_to_payload(result: FilingResult) -> dict[str, object]:
             if coc is not None
             else None
         ),
+        "receipt": (
+            {
+                "sucesso": rcpt.sucesso,
+                "mensagem": rcpt.mensagem,  # protocol status text
+                "protocolo": rcpt.protocolo,  # receipt number
+                "data_recebimento": (
+                    rcpt.data_recebimento.isoformat() if rcpt.data_recebimento else None
+                ),
+                "numero_processo": rcpt.numero_processo,
+                "pdf_hash": rcpt.pdf_hash,
+            }
+            if rcpt is not None
+            else None
+        ),
     }
 
 
@@ -139,12 +158,33 @@ def _payload_to_result(payload: dict[str, object]) -> FilingResult:
     error = payload.get("error")
     return FilingResult(
         success=bool(payload.get("success")),
-        receipt=None,  # artifacts stay at the agent — only the proof crosses
-        signing_result=None,
+        receipt=_receipt_from_payload(payload.get("receipt")),  # protocol metadata only
+        signing_result=None,  # the signed PDF stays at the agent
         preflight=None,
         audit_entry_ids=list(ids) if isinstance(ids, list) else [],
         chain_of_custody=ChainOfCustody(**coc) if isinstance(coc, dict) else None,
         error=error if isinstance(error, str) else None,
+    )
+
+
+def _receipt_from_payload(data: object) -> FilingReceipt | None:
+    """Rebuild the protocol receipt (metadata only) from the wire payload."""
+    if not isinstance(data, dict):
+        return None
+    from datetime import datetime
+
+    from juris.mni.operations.peticionamento import FilingReceipt
+
+    dr = data.get("data_recebimento")
+    return FilingReceipt(
+        sucesso=bool(data.get("sucesso")),
+        mensagem=str(data.get("mensagem", "")),
+        protocolo=data.get("protocolo") if isinstance(data.get("protocolo"), str) else None,
+        data_recebimento=datetime.fromisoformat(dr) if isinstance(dr, str) else None,
+        numero_processo=(
+            data.get("numero_processo") if isinstance(data.get("numero_processo"), str) else None
+        ),
+        pdf_hash=data.get("pdf_hash") if isinstance(data.get("pdf_hash"), str) else None,
     )
 
 
