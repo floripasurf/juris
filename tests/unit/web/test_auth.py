@@ -78,3 +78,35 @@ def test_tenant_scoped_dir_rejects_unsafe_id(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="inválido"):
         tenant_scoped_dir(Tenant("../escape"), tmp_path)
+
+
+# --- #3: explicit sha256: hash format ---
+
+
+def test_hash_api_key_is_prefixed() -> None:
+    from juris.web.auth import hash_api_key
+
+    assert hash_api_key("raw-key").startswith("sha256:")
+
+
+def test_plaintext_key_not_confused_with_hash() -> None:
+    from juris.web.auth import hash_api_key
+
+    # a stored hash authenticates its raw key, and only that key
+    registry = TenantRegistry({"a": hash_api_key("raw-key"), "b": "plain-key"})
+    assert resolve_tenant(registry, api_key="raw-key") == Tenant("a")
+    assert resolve_tenant(registry, api_key="plain-key") == Tenant("b")
+
+
+# --- #1: fail-closed when tenants are required but absent ---
+
+
+def test_open_registry_fails_closed_when_required() -> None:
+    registry = TenantRegistry({})  # open
+    with pytest.raises(PermissionError):
+        resolve_tenant(registry, api_key=None, require_configured=True)
+
+
+def test_open_registry_stays_open_by_default() -> None:
+    registry = TenantRegistry({})
+    assert resolve_tenant(registry, api_key=None) == Tenant("public")

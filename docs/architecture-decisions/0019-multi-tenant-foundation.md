@@ -42,6 +42,13 @@ SaaS. Implemented in `web/auth.py`:
   is 404 for non-owners; the demo/audit output root is **server-controlled**
   (`$JURIS_OUT_ROOT`, client `out_root` ignored); `tenant_id` is validated
   (`^[a-zA-Z0-9_-]+$`) before it becomes a path segment.
+- **Fail-closed switch**: `JURIS_REQUIRE_TENANTS=1` makes an open registry (no
+  tenants file) reject every request instead of falling back to `public` — set it
+  in production so a missing config can't silently open the deployment.
+- **Key format**: stored keys are `sha256:<hex>` (explicit prefix) or plaintext —
+  no ambiguity between the two. `hash_api_key` emits the prefixed form.
+- **Resource**: `_tenant_db` caches one `LocalDB` per storage path (engine/pool
+  reused across requests), not one per request.
 
 **Next (Phase 2):**
 1. Per ADR-0015, swap the InProcess services for `Remote*` clients talking to each

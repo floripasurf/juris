@@ -36,9 +36,16 @@ def _validate_tenant_id(tenant_id: str) -> str:
     return tenant_id
 
 
+_HASH_PREFIX = "sha256:"
+
+
 def hash_api_key(api_key: str) -> str:
-    """SHA-256 of an API key — store these in production, never the raw key."""
-    return hashlib.sha256(api_key.encode("utf-8")).hexdigest()
+    """``sha256:<hex>`` of an API key — store these in production, never the raw key.
+
+    The explicit prefix removes any ambiguity between a stored hash and a stored
+    plaintext key.
+    """
+    return _HASH_PREFIX + hashlib.sha256(api_key.encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,27 +77,37 @@ class TenantRegistry:
         return not self._by_key
 
     def authenticate(self, api_key: str | None) -> Tenant | None:
-        """Match a key against stored values — plaintext (dev) or sha256 (prod).
+        """Match a key against stored values — plaintext (dev) or ``sha256:`` (prod).
 
-        Constant-time comparison; a stored value is treated as a hash when it's
-        the incoming key's sha256, else as a plaintext key.
+        Constant-time comparison; the ``sha256:`` prefix decides unambiguously
+        whether a stored value is a hash or a plaintext key.
         """
         if api_key is None:
             return None
         incoming_hash = hash_api_key(api_key)
         for stored, tenant in self._by_key.items():
-            if hmac.compare_digest(stored, api_key) or hmac.compare_digest(stored, incoming_hash):
+            target = incoming_hash if stored.startswith(_HASH_PREFIX) else api_key
+            if hmac.compare_digest(stored, target):
                 return tenant
         return None
 
 
-def resolve_tenant(registry: TenantRegistry, *, api_key: str | None) -> Tenant:
+def resolve_tenant(
+    registry: TenantRegistry, *, api_key: str | None, require_configured: bool = False
+) -> Tenant:
     """Resolve the tenant for a request, or raise if the key is invalid.
 
+    Args:
+        require_configured: fail closed when no tenants are configured (instead of
+            falling back to the open ``public`` tenant) — set in production.
+
     Raises:
-        PermissionError: when tenants are configured and the key is missing/invalid.
+        PermissionError: when tenants are required but absent, or the key is bad.
     """
     if registry.is_open:
+        if require_configured:
+            msg = "tenants exigidos mas nenhum configurado (JURIS_REQUIRE_TENANTS)."
+            raise PermissionError(msg)
         return Tenant(PUBLIC_TENANT_ID)
     tenant = registry.authenticate(api_key)
     if tenant is None:
@@ -105,10 +122,17 @@ def default_registry() -> TenantRegistry:
     return TenantRegistry.from_file(Path(os.environ.get("JURIS_TENANTS_FILE", "config/tenants.json")))
 
 
+def _require_tenants() -> bool:
+    """Whether to fail closed when no tenants are configured (``$JURIS_REQUIRE_TENANTS``)."""
+    return os.environ.get("JURIS_REQUIRE_TENANTS", "").strip().lower() in {"1", "true", "yes"}
+
+
 async def current_tenant(x_api_key: str | None = Header(default=None)) -> Tenant:
     """FastAPI dependency: resolve the request's tenant (401 if the key is bad)."""
     try:
-        return resolve_tenant(default_registry(), api_key=x_api_key)
+        return resolve_tenant(
+            default_registry(), api_key=x_api_key, require_configured=_require_tenants()
+        )
     except PermissionError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 

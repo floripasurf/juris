@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -21,11 +22,17 @@ if TYPE_CHECKING:
     from juris.persistence.local_db import LocalDB
 
 
-def _tenant_db(tenant: Tenant) -> LocalDB:
-    """A LocalDB scoped to the tenant's storage (isolated per firm; shared for public)."""
+@lru_cache(maxsize=128)
+def _localdb_for_path(path: str) -> LocalDB:
+    """One cached LocalDB per storage path — reuse its engine/pool across requests."""
     from juris.persistence.local_db import LocalDB
 
-    return LocalDB(tenant_db_path(tenant))
+    return LocalDB(Path(path))
+
+
+def _tenant_db(tenant: Tenant) -> LocalDB:
+    """A LocalDB scoped to the tenant's storage (isolated per firm; shared for public)."""
+    return _localdb_for_path(str(tenant_db_path(tenant)))
 
 
 def _out_root() -> Path:

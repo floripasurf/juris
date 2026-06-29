@@ -291,3 +291,10 @@ def test_connect_job_hidden_from_non_owner() -> None:
         "status": "done", "result": {}, "error": None, "tenant_id": "escritorio-a",
     }
     assert client.get("/api/connect/job-y").status_code == 404
+
+
+def test_localdb_is_cached_per_path(tmp_path) -> None:
+    app_module = importlib.import_module("juris.web.app")
+    path = str(tmp_path / "tenant.db")
+    # same path → same LocalDB instance (engine/pool reused, not rebuilt per request)
+    assert app_module._localdb_for_path(path) is app_module._localdb_for_path(path)
