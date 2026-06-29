@@ -2264,6 +2264,36 @@ def agent_health_cmd(
     )
 
 
+@agent_app.command("serve")
+def agent_serve(
+    host: str = typer.Option("127.0.0.1", "--host", help="Bind host — apenas loopback."),
+    port: int = typer.Option(8765, "--port", help="Porta do agente."),
+) -> None:
+    """Run the lawyer-side local agent (the token holder) — loopback-only.
+
+    The agent must never be reachable off the machine: ``--host`` is validated to
+    127.0.0.1. Set ``JURIS_AGENT_TOKEN`` (pairing), ``JURIS_AGENT_CPF/SENHA/PIN``
+    (the lawyer's secrets, resolved here) before serving.
+    """
+    from juris.api.local_agent import app as agent_asgi
+    from juris.api.local_agent import get_signing_token, validate_local_agent_host
+
+    try:
+        bind_host = validate_local_agent_host(host)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from None
+
+    token = get_signing_token()
+    console.print(f"[bold]Agente local[/bold] em ws://{bind_host}:{port} (somente loopback)")
+    console.print(f"Token de pareamento: {token}")
+    console.print("Configure JURIS_LOCAL_AGENT_TOKEN com este valor no orquestrador. Ctrl-C para sair.")
+
+    import uvicorn
+
+    uvicorn.run(agent_asgi, host=bind_host, port=port, log_level="info")
+
+
 alerts_app = typer.Typer(name="alerts", help="Deadline alert management.")
 app.add_typer(alerts_app)
 
