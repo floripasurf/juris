@@ -1,7 +1,7 @@
 """Pydantic WebSocket message schemas for the local signing agent."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel
 
@@ -23,8 +23,9 @@ class ConsentSummarySchema(BaseModel):
 
 
 class SignRequest(BaseModel):
-    """Request to sign a PDF."""
+    """Request to sign a PDF. The PIN is NEVER carried — resolved at the agent."""
     request_id: str
+    tenant_id: str = "public"
     pdf_bytes_b64: str  # Base64-encoded PDF
     field_name: str = "AdvogadoSignature"
     consent_summary: ConsentSummarySchema | None = None
@@ -38,6 +39,29 @@ class SignResponse(BaseModel):
     signer_name: str | None = None
     signer_cpf: str | None = None
     signed_pdf_hash: str | None = None
+    signed_at: datetime | None = None
+    cert_valid_until: date | None = None
+    error: str | None = None
+
+
+class AgentRequest(BaseModel):
+    """Unified envelope for token operations forwarded to the local agent (ADR-0015).
+
+    ``operation`` is one of ``mni.consultar_processo`` / ``mni.consultar_avisos`` /
+    ``mni.consultar_teor``; ``payload`` carries the operation-specific arguments.
+    Sensitive material (PIN) is resolved at the agent and never travels in here.
+    """
+    request_id: str
+    tenant_id: str = "public"
+    operation: str
+    payload: dict[str, object] = {}
+
+
+class AgentResponse(BaseModel):
+    """Reply to an :class:`AgentRequest` — ``payload`` is the serialised result."""
+    request_id: str
+    success: bool
+    payload: dict[str, object] | None = None
     error: str | None = None
 
 

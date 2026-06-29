@@ -1,0 +1,28 @@
+"""Tests for the signing-service factory — config picks InProcess vs Remote (ADR-0015)."""
+
+from __future__ import annotations
+
+import pytest
+
+from juris.signing.factory import get_signing_service
+from juris.signing.remote import RemoteSigningService
+from juris.signing.service import InProcessSigningService
+
+
+def test_inprocess_by_default(monkeypatch) -> None:
+    monkeypatch.delenv("JURIS_AGENT_MODE", raising=False)
+    assert isinstance(get_signing_service(), InProcessSigningService)
+
+
+def test_remote_when_mode_is_remote(monkeypatch) -> None:
+    monkeypatch.setenv("JURIS_AGENT_MODE", "remote")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_URL", "ws://127.0.0.1:8765/ws/sign")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_TOKEN", "tok")
+    assert isinstance(get_signing_service(), RemoteSigningService)
+
+
+def test_remote_requires_agent_url(monkeypatch) -> None:
+    monkeypatch.setenv("JURIS_AGENT_MODE", "remote")
+    monkeypatch.delenv("JURIS_LOCAL_AGENT_URL", raising=False)
+    with pytest.raises(RuntimeError, match="JURIS_LOCAL_AGENT_URL"):
+        get_signing_service()
