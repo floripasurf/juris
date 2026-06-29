@@ -42,6 +42,13 @@ fmt:
 
 check: lint types test
 
+# CI gate (mirrors .github/workflows/ci.yml): ruff + tests are hard gates;
+# mypy is informational until the per-module debt is zeroed (frente E).
+gate:
+	uv run ruff check src/juris tests
+	uv run pytest tests/unit -q
+	uv run mypy src/juris || true
+
 # === Cleanup ===
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true

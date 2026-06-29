@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Sync deps
+        run: uv sync --frozen || uv sync
+
+      # --- Hard gates (block the build) ---------------------------------------
+      - name: Ruff — lint src + tests
+        run: uv run ruff check src/juris tests
+
+      - name: Pytest — unit suite
+        run: uv run pytest tests/unit -q
+
+      # --- Final gate (informational until the module debt is zeroed) ---------
+      # Trilha E-2: mypy is being cleaned module by module (core/web/api/jobs are
+      # clean; mni/persistence/signing/cli remain). It must only ever shrink. Flip
+      # `|| true` to a hard gate once `uv run mypy src/juris` is clean.
+      - name: Mypy — type check (informational)
+        run: uv run mypy src/juris || true
