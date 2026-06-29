@@ -87,12 +87,17 @@ def _split_by_tokens(
 
 def _build_metadata(fonte: FonteJurisprudencia) -> dict[str, Any]:
     """Build metadata dict from a FonteJurisprudencia."""
+    from juris.repertory.corpus.status import is_active
+
     meta: dict[str, Any] = {
         "tribunal": fonte.tribunal,
         "tipo": fonte.tipo.value,
         "numero": fonte.numero,
         "hierarquia": fonte.hierarquia,
         "situacao": fonte.situacao,
+        # Normalised vigência for the composite filter (ADR-0017): per-tipo
+        # is_active semantics, so the ranker need not know each tipo's statuses.
+        "vigente": is_active(fonte.tipo, fonte.situacao),
     }
     if fonte.temas:
         meta["temas"] = fonte.temas

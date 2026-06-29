@@ -15,6 +15,14 @@ from juris.repertory.corpus.models import _HIERARCHY_LABELS
 from juris.repertory.retrieval.hybrid import HybridRetriever
 from juris.repertory.vector_store import SearchResult
 
+try:
+    # The composite ranker (ADR-0017 Stage 1) is part of the local retrieval
+    # engine and may be absent in a public checkout — degrade gracefully to the
+    # relevance order instead of breaking the import.
+    from juris.repertory.retrieval.ranking import rank_with_scores
+except ImportError:  # pragma: no cover - engine kept local
+    rank_with_scores = None  # type: ignore[assignment]
+
 if TYPE_CHECKING:
     from juris.llm.base import AbstractLLM
     from juris.persistence.audit import AuditLog
@@ -43,6 +51,10 @@ class RetrievalResult:
     tribunal: str
     texto: str
     base_legal: list[str] = field(default_factory=list)
+    # Per-component breakdown of the composite score (ADR-0017 auditability):
+    # {relevancia, autoridade, vigencia, corroboracao, recencia, pacificacao, total}.
+    # None when the composite ranker isn't active (relevance-only fallback).
+    score_components: dict[str, float] | None = None
 
 
 class RepertoryService:
@@ -87,13 +99,17 @@ class RepertoryService:
         if use_hyde and llm is not None:
             hyde_query = self._hyde_expand(query, llm, audit)
 
-        # Get more results than needed for post-filtering
-        fetch_k = top_k * 3 if (temas or tribunal or hierarquia_min) else top_k
-        raw_results = self._retriever.search(query, top_k=fetch_k)
+        # Fetch more than needed so the composite re-rank can promote a vigente/
+        # authoritative precedent that sits just below the top_k relevance cut.
+        fetch_k = top_k * 3
+        # When the composite ranker handles authority, skip the retriever's
+        # hierarchy boost so authority isn't counted twice.
+        boost = rank_with_scores is None
+        raw_results = self._retriever.search(query, top_k=fetch_k, apply_hierarchy_boost=boost)
 
         # Merge HyDE results if available
         if hyde_query:
-            hyde_results = self._retriever.search(hyde_query, top_k=fetch_k)
+            hyde_results = self._retriever.search(hyde_query, top_k=fetch_k, apply_hierarchy_boost=boost)
             seen: dict[str, SearchResult] = {}
             for r in raw_results + hyde_results:
                 if r.source_id not in seen or r.score > seen[r.source_id].score:
@@ -103,14 +119,25 @@ class RepertoryService:
         # Post-filter
         filtered = self._apply_filters(raw_results, temas, tribunal, hierarquia_min)
 
+        # Composite re-rank (ADR-0017 Stage 1): relevância + autoridade (nível) +
+        # vigência + corroboração + pacificação. The reported score is the
+        # composite (what drove the order) and score_components itemises why
+        # (auditability). Falls back to the relevance order, no breakdown, when
+        # the ranking engine isn't present.
+        if rank_with_scores is not None:
+            ranked = [(r, b.total, b.as_dict()) for r, b in rank_with_scores(filtered)]
+        else:
+            ranked = [(r, r.score, None) for r in filtered]
+
         # Convert to RetrievalResult
         output: list[RetrievalResult] = []
-        for result in filtered[:top_k]:
+        for result, composite, components in ranked[:top_k]:
             hierarquia = result.metadata.get("hierarquia", 6)
             output.append(
                 RetrievalResult(
                     source_id=result.source_id,
-                    score=result.score,
+                    score=round(composite, 4),
+                    score_components=components,
                     hierarchy=hierarquia,
                     hierarchy_label=_HIERARCHY_LABELS.get(
                         hierarquia, f"Nivel {hierarquia}"

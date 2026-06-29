@@ -115,6 +115,7 @@ class DrafterAgent:
 
         # Step 2: Defense analysis (contestacao/contrarrazoes)
         defesa_text = ""
+        analise_adversario: str | None = None
         if self._defesa_analyzer and request.tipo_peticao in (
             TipoPeticao.CONTESTACAO,
             TipoPeticao.CONTRARRAZOES,
@@ -122,6 +123,7 @@ class DrafterAgent:
             try:
                 defesa_report = await self._defesa_analyzer.analyze(context)
                 defesa_text = f"## ANALISE DE DEFESAS\n{defesa_report.summary}\n\n"
+                analise_adversario = defesa_report.summary  # Módulo D — feed the strategy
             except Exception:
                 logger.warning(
                     "defesa_analysis_failed", numero_cnj=request.numero_cnj
@@ -150,6 +152,7 @@ class DrafterAgent:
                 estrategia = await self._estrategia.propor(
                     contexto=f"{thesis}\n{case_ctx}",
                     precedentes=research.supporting,
+                    analise_adversario=analise_adversario,
                 )
                 result.estrategia = estrategia
                 if not request.thesis and estrategia.escolhida.tese:
@@ -163,9 +166,17 @@ class DrafterAgent:
                         "ordem": estrategia.escolhida.ordem,
                         "confianca": estrategia.escolhida.confianca,
                         "alternativas": len(estrategia.alternativas),
+                        "avisos_deontologicos": estrategia.avisos_deontologicos,
+                        "revisao_humana_obrigatoria": estrategia.revisao_humana_obrigatoria,
                     },
                     result,
                 )
+                if estrategia.avisos_deontologicos:
+                    logger.warning(
+                        "estrategia_deontologia",
+                        numero_cnj=request.numero_cnj,
+                        avisos=estrategia.avisos_deontologicos,
+                    )
             except Exception:
                 logger.warning("estrategia_failed", numero_cnj=request.numero_cnj)
 

@@ -35,15 +35,20 @@ class HybridRetriever:
         self._embedder = embedder
         self._reranker = reranker
 
-    def search(self, query: str, top_k: int = 10) -> list[SearchResult]:
+    def search(
+        self, query: str, top_k: int = 10, *, apply_hierarchy_boost: bool = True
+    ) -> list[SearchResult]:
         """Hybrid search combining dense and sparse results.
 
         Args:
             query: Search query text.
             top_k: Maximum number of results to return.
+            apply_hierarchy_boost: Boost by authority level. Disable when a
+                downstream composite re-rank (ADR-0017) already accounts for
+                authority, to avoid double-counting it.
 
         Returns:
-            Ranked list of search results with hierarchy boosting applied.
+            Ranked list of search results.
         """
         # Dense retrieval
         dense_results: list[SearchResult] = []
@@ -67,10 +72,11 @@ class HybridRetriever:
         if self._reranker is not None:
             merged = self._reranker.rerank(query, merged, top_k=min(15, top_k * 2))
 
-        # Apply hierarchy boost
-        boosted = self.hierarchy_boost(merged, HIERARCHY_WEIGHTS)
+        # Apply hierarchy boost (unless a composite re-rank handles authority).
+        if apply_hierarchy_boost:
+            merged = self.hierarchy_boost(merged, HIERARCHY_WEIGHTS)
 
-        return boosted[:top_k]
+        return merged[:top_k]
 
     @staticmethod
     def reciprocal_rank_fusion(
