@@ -42,11 +42,18 @@ fmt:
 
 check: lint types test
 
-# CI gate (mirrors .github/workflows/ci.yml): ruff + tests are hard gates;
-# mypy is informational until the per-module debt is zeroed (frente E).
+# Mypy-clean packages — a hard gate (must not regress). Grow this list as tracks
+# are cleaned, until it covers src/juris and the `|| true` below can be dropped.
+MYPY_CLEAN := src/juris/agents src/juris/alerts src/juris/api src/juris/busca \
+	src/juris/core src/juris/defesas src/juris/demo src/juris/escavacao \
+	src/juris/prazo src/juris/review src/juris/web
+
+# CI gate (mirrors .github/workflows/ci.yml): ruff + tests + mypy-on-clean-packages
+# are hard gates; the full mypy run is informational until the debt is zeroed.
 gate:
 	uv run ruff check src/juris tests
 	uv run pytest tests/unit -q
+	uv run mypy $(MYPY_CLEAN)
 	uv run mypy src/juris || true
 
 # === Cleanup ===

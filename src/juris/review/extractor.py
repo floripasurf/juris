@@ -56,11 +56,13 @@ def extract_text_from_file(path: Path) -> str:
 def _extract_pdf(path: Path) -> str:
     """Extract text from PDF using pymupdf."""
     import pymupdf
-    doc = pymupdf.open(str(path))
+
+    # pymupdf ships no type stubs; the runtime API is correct (Document is iterable).
+    doc = pymupdf.open(str(path))  # type: ignore[no-untyped-call]
     parts = []
-    for page in doc:
+    for page in doc:  # type: ignore[attr-defined]
         parts.append(page.get_text())
-    doc.close()
+    doc.close()  # type: ignore[no-untyped-call]
     return "\n".join(parts)
 
 

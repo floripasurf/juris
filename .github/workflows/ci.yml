@@ -24,9 +24,16 @@ jobs:
       - name: Pytest — unit suite
         run: uv run pytest tests/unit -q
 
-      # --- Final gate (informational until the module debt is zeroed) ---------
-      # Trilha E-2: mypy is being cleaned module by module (core/web/api/jobs are
-      # clean; mni/persistence/signing/cli remain). It must only ever shrink. Flip
-      # `|| true` to a hard gate once `uv run mypy src/juris` is clean.
-      - name: Mypy — type check (informational)
+      # --- Mypy: hard on the clean packages, informational on the rest ---------
+      # Trilha E-2: these packages are mypy-clean and must NOT regress (hard gate).
+      # Remaining debt (cli/persistence/signing/mni/jobs/repertory) is cleaned by
+      # track; the full run is informational until it's zeroed, then folded in here.
+      - name: Mypy — clean packages (hard gate)
+        run: >
+          uv run mypy
+          src/juris/agents src/juris/alerts src/juris/api src/juris/busca
+          src/juris/core src/juris/defesas src/juris/demo src/juris/escavacao
+          src/juris/prazo src/juris/review src/juris/web
+
+      - name: Mypy — full (informational, shrinking)
         run: uv run mypy src/juris || true

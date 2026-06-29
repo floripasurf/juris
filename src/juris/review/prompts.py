@@ -116,7 +116,7 @@ DIMENSION_PROMPTS: dict[str, str] = {
     "compliance": COMPLIANCE_PROMPT,
 }
 
-REVIEW_SCHEMA: dict = {
+REVIEW_SCHEMA: dict[str, object] = {
     "type": "object",
     "properties": {
         "issues": {

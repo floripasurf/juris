@@ -145,10 +145,10 @@ class EprocChannel(SearchChannel):
                     numero_cnj=str(numero).strip(),
                     tribunal=tribunal_id.upper(),
                     fonte=FonteOrigem.EPROC,
-                    classe=item.get("classeProcessual", item.get("classe", "")),
+                    classe=str(item.get("classeProcessual") or item.get("classe") or ""),
                     assunto=item.get("assunto", ""),
-                    orgao_julgador=item.get("orgaoJulgador", item.get("vara", "")),
-                    data_ajuizamento=item.get("dataAjuizamento", item.get("dataInicio", "")),
+                    orgao_julgador=str(item.get("orgaoJulgador") or item.get("vara") or ""),
+                    data_ajuizamento=str(item.get("dataAjuizamento") or item.get("dataInicio") or ""),
                     grau=item.get("grau", "1"),
                     ultima_atualizacao=item.get("ultimaAtualizacao", ""),
                     polo_ativo=_extract_polo(item, "poloAtivo"),
@@ -250,7 +250,7 @@ def _extract_polo(item: dict[str, Any], key: str) -> list[str]:
     polo = item.get(key, [])
     if isinstance(polo, list):
         return [
-            p.get("nome", p.get("name", str(p))) if isinstance(p, dict) else str(p)
+            str(p.get("nome") or p.get("name") or p) if isinstance(p, dict) else str(p)
             for p in polo
         ]
     if isinstance(polo, str):
