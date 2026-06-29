@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from juris.agents.analyzer import AnalysisResult, ProcessoAnalysis
+from juris.agents.citation_verifier import GroundingReport, GroundingStatus
 from juris.agents.drafter import DraftResult
 from juris.demo.artifacts import write_artifacts
 from juris.demo.disclaimer import DEMO_BANNER, DISCLAIMER_FOOTER
@@ -247,6 +248,26 @@ class TestWriteArtifactsHappyPath:
         # the manifest payload is built — it's not in the manifest list itself.
         assert (set(artifacts) - {"run-manifest.json"}) <= manifest_names
         assert manifest["request"]["numero_cnj"] == result.request.numero_cnj
+        assert manifest["draft"]["grounding_status"] == "verified"
+        assert manifest["draft"]["grounding_blocked_reason"] is None
+
+    def test_run_manifest_records_blocked_grounding(self, tmp_path: Path) -> None:
+        result = _build_result(tmp_path)
+        assert result.draft is not None
+        result.draft.grounding_report = GroundingReport(
+            status=GroundingStatus.BLOCKED,
+            failed_citation_ids=["inventado"],
+            spurious_citations=["REsp 123456"],
+            reason="citacoes_invalidas+citacoes_sem_marcador",
+        )
+        result.draft.blocked_reason = result.draft.grounding_report.reason
+
+        write_artifacts(result)
+        manifest = json.loads((result.out_dir / "run-manifest.json").read_text())
+
+        assert manifest["draft"]["grounding_status"] == "blocked"
+        assert manifest["draft"]["grounding_failed_citation_ids"] == ["inventado"]
+        assert manifest["draft"]["grounding_spurious_citations"] == ["REsp 123456"]
 
 
 class TestDemoModeGuards:

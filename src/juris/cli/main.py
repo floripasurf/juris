@@ -2167,6 +2167,9 @@ def draft(
     console.print()
     console.print("[bold]--- Resumo ---[/bold]")
     console.print(f"Cobertura: {result.research_summary}")
+    console.print(f"Grounding: {result.grounding_report.status.value}")
+    if result.blocked_reason:
+        console.print(f"Bloqueio: {result.blocked_reason}")
     console.print(f"Citacoes: {len(result.citations_used)}")
     console.print(f"Revisoes: {result.revisions}")
     console.print(f"Duracao: {result.total_duration_seconds:.1f}s")

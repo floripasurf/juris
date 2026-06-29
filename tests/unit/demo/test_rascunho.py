@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from juris.agents.analyzer import AnalysisResult, ProcessoAnalysis
-from juris.agents.citation_verifier import CitationCheck
+from juris.agents.citation_verifier import CitationCheck, GroundingReport, GroundingStatus
 from juris.agents.drafter import DraftResult
 from juris.demo.rascunho import build_rascunho_markdown
 from juris.mni.tpu import CategoriaSemantica, Urgencia
@@ -110,6 +110,22 @@ class TestAnaliseJuridicaSection:
     def test_graceful_when_research_and_analysis_missing(self) -> None:
         body = build_rascunho_markdown(draft=_draft(research=""), analysis=None)
         assert "Sem dados de pesquisa disponíveis" in body
+
+    def test_surfaces_blocked_grounding_status(self) -> None:
+        draft = _draft(research="")
+        draft.grounding_report = GroundingReport(
+            status=GroundingStatus.BLOCKED,
+            failed_citation_ids=["inventado"],
+            spurious_citations=["REsp 123456"],
+            reason="citacoes_invalidas+citacoes_sem_marcador",
+        )
+        draft.blocked_reason = draft.grounding_report.reason
+
+        body = build_rascunho_markdown(draft=draft, analysis=None)
+
+        assert "Status de verificação:** BLOQUEADO" in body
+        assert "`inventado`" in body
+        assert "REsp 123456" in body
 
 
 class TestArgumentosSugeridosSection:

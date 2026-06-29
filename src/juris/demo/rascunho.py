@@ -76,6 +76,17 @@ def build_rascunho_markdown(
 
 def _render_analise_juridica(draft: DraftResult, analysis: ProcessoAnalysis | None) -> str:
     out: list[str] = ["## Análise jurídica", ""]
+    if not draft.is_grounded:
+        out.append("**Status de verificação:** BLOQUEADO")
+        if draft.blocked_reason:
+            out.append(f"Motivo: `{draft.blocked_reason}`")
+        if draft.grounding_report.failed_citation_ids:
+            ids = ", ".join(f"`{i}`" for i in draft.grounding_report.failed_citation_ids)
+            out.append(f"Marcadores inválidos: {ids}")
+        if draft.grounding_report.spurious_citations:
+            refs = ", ".join(draft.grounding_report.spurious_citations)
+            out.append(f"Referências sem lastro: {refs}")
+        out.append("")
     if draft.research_summary.strip():
         out.append(draft.research_summary.strip())
         out.append("")

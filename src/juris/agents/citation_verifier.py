@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from enum import StrEnum
 
 from juris.core.observability import get_logger
 from juris.repertory.citation_lookup import resolve_source_id
@@ -50,6 +51,64 @@ class VerificationResult:
     checks: list[CitationCheck] = field(default_factory=list)
     failed: list[CitationCheck] = field(default_factory=list)
     spurious_citations: list[str] = field(default_factory=list)
+
+
+class GroundingStatus(StrEnum):
+    """Publication status for LLM text after deterministic citation checks."""
+
+    VERIFIED = "verified"
+    BLOCKED = "blocked"
+
+
+@dataclass(frozen=True, slots=True)
+class GroundingReport:
+    """Deterministic grounding summary used by product surfaces."""
+
+    status: GroundingStatus
+    verified_citation_ids: list[str] = field(default_factory=list)
+    failed_citation_ids: list[str] = field(default_factory=list)
+    spurious_citations: list[str] = field(default_factory=list)
+    reason: str | None = None
+
+    @classmethod
+    def verified(cls, checks: list[CitationCheck] | None = None) -> GroundingReport:
+        return cls(
+            status=GroundingStatus.VERIFIED,
+            verified_citation_ids=[c.source_id for c in checks or [] if c.resolved],
+        )
+
+    @property
+    def is_verified(self) -> bool:
+        return self.status == GroundingStatus.VERIFIED
+
+
+def build_grounding_report(
+    verification: VerificationResult | None,
+) -> GroundingReport:
+    """Convert low-level citation checks into a product-level safety status."""
+
+    if verification is None:
+        return GroundingReport(
+            status=GroundingStatus.BLOCKED,
+            reason="verificacao_nao_executada",
+        )
+
+    if verification.all_passed:
+        return GroundingReport.verified(verification.checks)
+
+    reasons: list[str] = []
+    if verification.failed:
+        reasons.append("citacoes_invalidas")
+    if verification.spurious_citations:
+        reasons.append("citacoes_sem_marcador")
+
+    return GroundingReport(
+        status=GroundingStatus.BLOCKED,
+        verified_citation_ids=[c.source_id for c in verification.checks if c.resolved],
+        failed_citation_ids=[c.source_id for c in verification.failed],
+        spurious_citations=list(verification.spurious_citations),
+        reason="+".join(reasons) or "grounding_falhou",
+    )
 
 
 class MarkerCitationVerifier:

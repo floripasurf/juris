@@ -8,8 +8,10 @@ from typing import Any
 
 from juris.agents.citation_verifier import (
     CitationCheck,
+    GroundingReport,
     MarkerCitationVerifier,
     VerificationResult,
+    build_grounding_report,
 )
 from juris.agents.estrategia import EstrategiaAgent, EstrategiaResult
 from juris.agents.researcher import Researcher, ResearchQuery, ResearchResult
@@ -58,6 +60,15 @@ class DraftResult:
     total_duration_seconds: float = 0.0
     audit_entry_ids: list[str] = field(default_factory=list)
     estrategia: EstrategiaResult | None = None
+    grounding_report: GroundingReport = field(
+        default_factory=GroundingReport.verified
+    )
+    blocked_reason: str | None = None
+
+    @property
+    def is_grounded(self) -> bool:
+        """True when the draft text is safe to surface as LLM-authored prose."""
+        return self.grounding_report.is_verified
 
 
 class DrafterAgent:
@@ -292,6 +303,19 @@ class DrafterAgent:
                     + "\n\n"
                 )
 
+        grounding_report = build_grounding_report(verification)
+        result.grounding_report = grounding_report
+        result.citations_used = verification.checks if verification else []
+
+        if not grounding_report.is_verified:
+            return self._block_ungrounded_result(
+                result=result,
+                request=request,
+                research=research,
+                report=grounding_report,
+                start=start,
+            )
+
         # Step 8: Pre-show review (optional)
         if self._reviewer and verification and verification.all_passed:
             try:
@@ -344,15 +368,45 @@ class DrafterAgent:
                         style_text=style_text,
                         revision_feedback=revision_feedback,
                     )
+                    verification = self._verifier.verify(
+                        draft_text, allowed_source_ids=allowed_ids
+                    )
+                    result.grounding_report = build_grounding_report(verification)
+                    result.citations_used = verification.checks
+                    self._log_audit(
+                        "draft.citations_verified",
+                        request.numero_cnj,
+                        {
+                            "all_passed": verification.all_passed,
+                            "total_checks": len(verification.checks),
+                            "failed_count": len(verification.failed),
+                            "spurious_count": len(verification.spurious_citations),
+                            "revision": result.revisions,
+                            "after_reviewer": True,
+                        },
+                        result,
+                    )
             except Exception:
                 logger.warning(
                     "review_after_draft_failed", numero_cnj=request.numero_cnj
                 )
 
+        grounding_report = build_grounding_report(verification)
+        result.grounding_report = grounding_report
+        result.citations_used = verification.checks if verification else []
+        if not grounding_report.is_verified:
+            return self._block_ungrounded_result(
+                result=result,
+                request=request,
+                research=research,
+                report=grounding_report,
+                start=start,
+                after_reviewer=True,
+            )
+
         # Step 9: Compose result
         result.draft_markdown = self._resolve_cite_markers(draft_text, research)
         result.contraponto_section = self._build_contraponto(research)
-        result.citations_used = verification.checks if verification else []
         result.total_duration_seconds = time.monotonic() - start
 
         self._log_audit(
@@ -361,6 +415,7 @@ class DrafterAgent:
             {
                 "revisions": result.revisions,
                 "citations_count": len(result.citations_used),
+                "grounding_status": result.grounding_report.status.value,
                 "duration_seconds": result.total_duration_seconds,
                 "prompt_version": PROMPT_VERSION,
             },
@@ -368,6 +423,71 @@ class DrafterAgent:
         )
 
         return result
+
+    def _block_ungrounded_result(
+        self,
+        *,
+        result: DraftResult,
+        request: DraftRequest,
+        research: ResearchResult,
+        report: GroundingReport,
+        start: float,
+        after_reviewer: bool = False,
+    ) -> DraftResult:
+        result.draft_markdown = self._blocked_grounding_notice(report)
+        result.contraponto_section = self._build_contraponto(research)
+        result.blocked_reason = report.reason
+        result.total_duration_seconds = time.monotonic() - start
+        details: dict[str, Any] = {
+            "reason": report.reason,
+            "failed_citation_ids": report.failed_citation_ids,
+            "spurious_citations": report.spurious_citations,
+            "duration_seconds": result.total_duration_seconds,
+            "prompt_version": PROMPT_VERSION,
+        }
+        if after_reviewer:
+            details["after_reviewer"] = True
+        self._log_audit(
+            "draft.blocked_ungrounded",
+            request.numero_cnj,
+            details,
+            result,
+        )
+        return result
+
+    @staticmethod
+    def _blocked_grounding_notice(report: GroundingReport) -> str:
+        """Return a deterministic replacement when generated prose is unsafe."""
+
+        lines = [
+            "# Minuta bloqueada por falta de lastro verificável",
+            "",
+            "A saída da IA não foi liberada como minuta porque citou fonte ou "
+            "jurisprudência sem verificação no corpus autorizado.",
+            "",
+            "## Pendências de verificação",
+        ]
+        if report.failed_citation_ids:
+            lines.append("")
+            lines.append("**Marcadores [CITE:] inválidos:**")
+            lines.extend(f"- `{source_id}`" for source_id in report.failed_citation_ids)
+        if report.spurious_citations:
+            lines.append("")
+            lines.append("**Referências jurisprudenciais sem marcador verificável:**")
+            lines.extend(f"- {citation}" for citation in report.spurious_citations)
+        if not report.failed_citation_ids and not report.spurious_citations:
+            lines.append("")
+            lines.append("- Verificação determinística não concluída.")
+        lines.extend(
+            [
+                "",
+                "## Próxima ação",
+                "",
+                "Refaça a pesquisa, substitua as referências por fontes presentes no "
+                "corpus ou remova a citação antes de liberar a peça.",
+            ]
+        )
+        return "\n".join(lines)
 
     async def _generate(
         self,
