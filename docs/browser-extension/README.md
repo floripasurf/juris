@@ -1,73 +1,64 @@
 # Browser extension — the OS glue for the browser session (ADR-0018)
 
-**Status:** scaffolding. The juris (Python) side is done and tested — protocol
-(`api/ws_schemas.CompletionRequest/Response`), transport (`api/browser_bridge`),
-and the Native Messaging **host framing** (`api/native_host`, unit-tested). What
-remains needs **Chrome + Node** to build/test: the manifest, the content script
-(DOM automation of the chat UI), and registering the native host.
+Uses the **lawyer's own Claude.ai/ChatGPT subscription** to run completions, driven
+by the juris local agent through a Native Messaging bridge. The juris (Python) side
+is done and tested — protocol (`api/ws_schemas.CompletionRequest/Response`),
+transport (`api/browser_bridge`), and the host framing (`api/native_host`). This
+directory is the **MV3 extension** (the JS half).
 
-## Chain (recap)
+## Chain
 
 ```
-Cloud → juris local agent (WS) → native host (api/native_host) ⇄ extension (content.js) → Claude.ai/ChatGPT tab
-                                   ✅ Python framing done            ⏳ JS (this dir)
+juris agent → native host (api/native_host) ⇄ background.js → content.js → Claude.ai/ChatGPT tab
 ```
 
-## 1. `manifest.json` (Chrome MV3)
+## Files
 
-```json
-{
-  "manifest_version": 3,
-  "name": "Juris — sessão de IA",
-  "version": "0.1.0",
-  "permissions": ["nativeMessaging", "scripting", "activeTab"],
-  "host_permissions": ["https://claude.ai/*", "https://chatgpt.com/*"],
-  "background": { "service_worker": "background.js" },
-  "content_scripts": [
-    { "matches": ["https://claude.ai/*", "https://chatgpt.com/*"], "js": ["content.js"] }
-  ]
-}
+| File | Role |
+|---|---|
+| `manifest.json` | MV3 manifest — minimal perms (`nativeMessaging`, `tabs`) + the two provider hosts |
+| `selectors.js` | **Isolated per-provider DOM selectors + extraction** (the brittle part; unit-tested) |
+| `content.js` | Completion flow: inject prompt → wait for generation to finish → extract → reply |
+| `background.js` | Service worker: relays host ⇄ content script |
+| `native-host.json` | Native-messaging host manifest (set the real extension id + host path) |
+| `selectors.test.js` | vitest + jsdom unit tests for the selectors/parsers |
+
+## Build, test
+
+```bash
+npm install
+npm test          # vitest — selectors/parsers against a jsdom DOM fixture
+npm run build     # esbuild bundles content.js (+ selectors) → dist/content.js
 ```
 
-## 2. `content.js` (outline)
+`dist/` and `node_modules/` are gitignored — run `npm run build` before loading.
 
-Receives a `CompletionRequest` (relayed from the native host via the background
-service worker), drives the chat UI, returns a `CompletionResponse`.
+## Load in Chrome (smoke test)
 
-```js
-// All DOM selectors isolated here — they break on UI changes; degrade to
-// { success: false, error } rather than returning a partial answer.
-async function complete({ request_id, prompt, system }) {
-  const box = document.querySelector('div[contenteditable="true"]'); // composer
-  if (!box) return { request_id, success: false, error: "composer não encontrado" };
-  box.focus();
-  document.execCommand("insertText", false, (system ? system + "\n\n" : "") + prompt);
-  // submit (Enter) and wait for the streamed reply to finish (stop button → copy)
-  // ... extract the final assistant message text ...
-  return { request_id, success: true, content: replyText };
-}
-```
+1. `npm run build`.
+2. `chrome://extensions` → Developer mode → **Load unpacked** → this folder.
+3. Copy the extension id into `native-host.json` (`allowed_origins`) and register the
+   host (`com.juris.host`) pointing `path` at the juris native host binary.
+4. Open Claude.ai (or ChatGPT) and **log in**; in onboarding, disable training/history.
+5. Drive a completion from the juris agent → it should appear in the tab and the
+   final text return as a `CompletionResponse`.
 
-## 3. Native host registration
+## Robustness (built in)
 
-`api/native_host.serve(handler)` is the host loop (framing done + tested).
-Register it with Chrome via a host manifest, e.g. `com.juris.host.json`:
+- Selectors isolated per provider in `selectors.js` — retune in one place when a UI changes.
+- 120s timeout; polls until the **stop/streaming** control disappears **and** the text
+  is non-empty and stable — a partial/streaming answer is **never** returned as success.
+- Clear errors: `provedor não suportado`, `composer não encontrado — faça login`,
+  `nenhuma aba aberta`, `timeout aguardando a resposta finalizar`.
 
-```json
-{
-  "name": "com.juris.host",
-  "path": "/usr/local/bin/juris-native-host",
-  "type": "stdio",
-  "allowed_origins": ["chrome-extension://<EXTENSION_ID>/"]
-}
-```
+## Security
 
-The `handler` relays each `CompletionRequest` to the juris local agent over the
-localhost WS (`api/browser_bridge.WebSocketBridgeChannel`) and returns the
-`CompletionResponse`.
+- The prompt arrives **already de-identified** (juris de-id runs before the bridge).
+- Minimal `host_permissions` (only the two providers); no broad tab access.
+- Prompts are **not persisted** in JS — no localStorage/sessionStorage, transient closure only.
 
-## Notes
+## DoD
 
-- Onboarding (disable training, log in) is in `docs/pilot/onboarding.md §3.5`.
-- De-id still applies upstream (the prompt arrives already de-identified).
-- ToS caveat for multi-tenant resale: see ADR-0018.
+`BrowserSessionLLM` completes a real call via the lawyer's Claude.ai/ChatGPT session.
+The selector retuning against live DOM is the manual smoke step above; the unit tests
+cover the extraction logic so a UI change is caught early.

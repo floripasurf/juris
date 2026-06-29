@@ -1,0 +1,16 @@
+{
+  "name": "juris-browser-extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Juris MV3 extension — drives the lawyer's Claude.ai/ChatGPT session via the native bridge (ADR-0018)",
+  "scripts": {
+    "test": "vitest run",
+    "build": "esbuild content.js --bundle --format=iife --outfile=dist/content.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "jsdom": "^25.0.0",
+    "vitest": "^2.1.0"
+  }
+}
