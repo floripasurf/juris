@@ -2486,27 +2486,12 @@ def file_petition(
 
     Use --dry-run for a side-effect-free preview.
     """
-    # Filing is co-located only: signing AND peticionamento both need the A3 token,
-    # so the whole pipeline runs where the token lives. In remote (split-trust) mode
-    # that is a future agent-side `/ws/file` op (ADR-0015), not InProcess — fail
-    # loudly instead of signing on the wrong machine.
-    from juris.api.agent_config import is_remote
-
-    if is_remote():
-        console.print(
-            "[red]juris file não suporta modo remote ainda[/red] — assinatura + "
-            "peticionamento exigem o token local. Use JURIS_AGENT_MODE=inprocess no "
-            "agente (filing remoto = /ws/file, ADR-0015)."
-        )
-        raise typer.Exit(code=2)
 
     import asyncio
     from pathlib import Path as FilePath
 
     from juris.core.credentials import get_credential, store_credential
-    from juris.persistence.audit import AuditLog
-    from juris.persistence.filing_receipt import FilingReceiptStore
-    from juris.signing.filing import FilingOrchestrator, FilingRequest
+    from juris.signing.filing import FilingRequest
 
     # 1. Load draft markdown
     draft_path = FilePath(draft_path_or_tipo)
@@ -2549,22 +2534,10 @@ def file_petition(
 
     # 3. Resolve senha
     resolved_senha = _get_senha(tribunal, cpf, senha)
-    from juris.mni.auth import AuthStrategy, PasswordAuth
 
-    mni_auth = PasswordAuth(cpf=cpf, senha=resolved_senha)
-
-    # 4. Setup components
-    juris_dir = FilePath.home() / ".juris"
-    audit = AuditLog(juris_dir / "audit.jsonl")
-    receipt_store = FilingReceiptStore(juris_dir / "filings", audit)
-
-    # 5. MNI client factory
-    def mni_client_factory(tribunal_id: str, auth: AuthStrategy) -> object:
-        from juris.mni.client import get_mni_client
-
-        return get_mni_client(tribunal_id, auth)
-
-    # 6. Build filing request
+    # 4. Build the filing request. The service runs the whole pipeline where the
+    # token lives — InProcess here, or Remote (/ws/file at the agent) when
+    # JURIS_AGENT_MODE=remote, with no code change (ADR-0015).
     filing_request = FilingRequest(
         numero_cnj=numero_cnj,
         tribunal=tribunal,
@@ -2578,34 +2551,10 @@ def file_petition(
         prazo_override=prazo_override,
     )
 
-    # 7. Initialize signer (via SigningService — no direct PKCS#11) and run pipeline
-    from juris.signing.service import InProcessSigningService
+    from juris.signing.filing_service import get_filing_service
 
     try:
-        if dry_run and skip_preflight:
-            # Dry-run without preflight doesn't need the hardware token
-            from unittest.mock import MagicMock
-
-            from juris.signing.pades import PAdESSigner
-
-            orchestrator = FilingOrchestrator(
-                signer=MagicMock(spec=PAdESSigner),
-                audit=audit,
-                receipt_store=receipt_store,
-                mni_client_factory=mni_client_factory,
-                mni_auth=mni_auth,
-            )
-            result = asyncio.run(orchestrator.file(filing_request))
-        else:
-            with InProcessSigningService().open_signer(pin=resolved_pin) as signer:
-                orchestrator = FilingOrchestrator(
-                    signer=signer,
-                    audit=audit,
-                    receipt_store=receipt_store,
-                    mni_client_factory=mni_client_factory,
-                    mni_auth=mni_auth,
-                )
-                result = asyncio.run(orchestrator.file(filing_request))
+        result = asyncio.run(get_filing_service().file(filing_request, pin=resolved_pin))
     except Exception as exc:
         console.print(f"[red]Erro fatal: {exc}[/red]")
         raise typer.Exit(code=1) from exc

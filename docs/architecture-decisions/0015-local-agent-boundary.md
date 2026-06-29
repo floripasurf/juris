@@ -23,14 +23,19 @@ The split-trust agent is implemented and swappable by config:
   rewrite. Agent-side secrets: `JURIS_AGENT_CPF` / `JURIS_AGENT_SENHA` /
   `JURIS_AGENT_PIN`.
 
+- **Remote filing (`/ws/file`) — done.** Signing *and* peticionamento both need the
+  A3 token, so the whole pipeline runs at the agent (not a `get_signing_service()`
+  swap). `signing/filing_service.py`: `FilingService` ABC + `run_filing` (shared
+  in-process body) + `InProcessFilingService` + `RemoteFilingService` (forwards a
+  `FilingRequest` with **cpf/senha/PIN blanked** — resolved at the agent). The agent
+  serves `/ws/file` (`handle_file_request`); the result crosses as the **chain-of-
+  custody hashes** (auditable proof) — the signed PDF + receipt stay at the agent.
+  `get_filing_service()` picks InProcess/Remote by config; `juris file` routes through
+  it (the old remote guard is gone). Unit-tested split-trust (no creds cross); live
+  filing needs the real token (manual smoke).
+
 Remaining:
 
-- **Remote filing (`/ws/file`).** `juris file` is co-located only: signing *and*
-  peticionamento both need the A3 token, so the whole `FilingOrchestrator` pipeline
-  (validate_cert → render → sign → peticionar) must run at the agent — it is **not**
-  a `get_signing_service()` swap. The remote path is a future `/ws/file` op that
-  forwards a `FilingRequest` and runs the InProcess orchestrator agent-side; the CLI
-  now fails loudly in remote mode instead of signing on the wrong machine.
 - mTLS between orchestrator and agent beyond the shared `JURIS_AGENT_TOKEN` pairing.
 - Per-tenant agent routing (one agent URL per firm).
 - Demo-path `tenant_id` threading (connect already tags it).

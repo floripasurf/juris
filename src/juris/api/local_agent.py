@@ -28,6 +28,7 @@ from juris.core.observability import get_logger
 if TYPE_CHECKING:
     from juris.mni.service import MNIReadService
     from juris.mni.tribunais import TribunalConfig
+    from juris.signing.filing_service import FilingService
     from juris.signing.service import SigningService
 
 logger = get_logger(__name__)
@@ -313,6 +314,48 @@ async def mni_socket(ws: WebSocket) -> None:
                 agent_mni_service(),
                 credentials_resolver=_default_credentials_resolver,
                 tribunal_resolver=get_tribunal,
+            )
+            await ws.send_text(response.model_dump_json())
+    except WebSocketDisconnect:
+        pass
+
+
+def agent_filing_service() -> FilingService:
+    """The agent's filing service — InProcess (token is local here). Overridable in tests."""
+    from juris.signing.filing_service import InProcessFilingService
+
+    return InProcessFilingService()
+
+
+@app.websocket("/ws/file")
+async def filing_socket(ws: WebSocket) -> None:
+    """WebSocket endpoint for remote filing (token-authenticated).
+
+    The agent runs the whole pipeline (render → preflight → sign → peticionar) with
+    locally-resolved credentials, and replies with the chain-of-custody proof.
+    """
+    token = ws.query_params.get("token")
+    if token is None or not secrets.compare_digest(token, get_signing_token()):
+        await ws.close(code=4001, reason="Unauthorized")
+        return
+    await ws.accept()
+
+    from juris.signing.filing_service import handle_file_request
+
+    try:
+        while True:
+            data = await ws.receive_text()
+            try:
+                request = AgentRequest.model_validate_json(data)
+            except Exception as e:  # noqa: BLE001 — malformed input → typed error reply
+                await ws.send_text(
+                    AgentResponse(
+                        request_id="unknown", success=False, error=f"Invalid request: {e}"
+                    ).model_dump_json()
+                )
+                continue
+            response = await handle_file_request(
+                request, agent_filing_service(), credentials_resolver=_default_credentials_resolver
             )
             await ws.send_text(response.model_dump_json())
     except WebSocketDisconnect:
