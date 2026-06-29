@@ -13,6 +13,7 @@ caller's concern (kept out of this orchestration).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from dataclasses import dataclass, field
@@ -30,13 +31,28 @@ logger = get_logger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class InteiroTeor:
-    """One scraped full-text decision."""
+    """One scraped full-text decision, with provenance for the deep corpus."""
 
     numero_cnj: str
     texto: str
     fonte: str  # provider that supplied it
     origem_tema: str  # espinha id that surfaced this case
+    parcial: bool = False  # True = procedural trail (DataJud), not the full acórdão
+    url: str | None = None  # where it came from (provenance)
+    licenca: str | None = None  # source terms/licence (e.g. "dados públicos TST")
+    data_coleta: str | None = None  # ISO date the fetcher collected it
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def content_hash(self) -> str:
+        """SHA-256 of the full text — identity for dedup + provenance."""
+        return hashlib.sha256(self.texto.encode("utf-8")).hexdigest()
+
+    @property
+    def dedup_key(self) -> tuple[str, str, str]:
+        """Dedup by (content, processo, source) — re-collection is idempotent, but
+        the same decision from a *different* source is kept (corroboration)."""
+        return (self.content_hash, self.numero_cnj, self.fonte)
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +127,11 @@ def write_inteiro_teor(coletados: list[InteiroTeor], out_dir: Path) -> list[Path
                     "texto": teor.texto,
                     "fonte": teor.fonte,
                     "origem_tema": teor.origem_tema,
+                    "parcial": teor.parcial,
+                    "url": teor.url,
+                    "licenca": teor.licenca,
+                    "data_coleta": teor.data_coleta,
+                    "content_hash": teor.content_hash,
                     "metadata": teor.metadata,
                 },
                 ensure_ascii=False,

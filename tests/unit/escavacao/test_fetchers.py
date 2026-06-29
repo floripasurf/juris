@@ -69,8 +69,7 @@ def _teor(cnj: str, fonte: str, *, parcial: bool):
     from juris.escavacao.executor import InteiroTeor
 
     return InteiroTeor(
-        numero_cnj=cnj, texto=f"texto {fonte}", fonte=fonte, origem_tema="STJ-1",
-        metadata={"parcial": parcial},
+        numero_cnj=cnj, texto=f"texto {fonte}", fonte=fonte, origem_tema="STJ-1", parcial=parcial,
     )
 
 
@@ -86,7 +85,7 @@ async def test_failover_prefers_complete_source_over_partial() -> None:
     teor = await fetcher.fetch(_alvo("A"))
     assert teor is not None
     assert teor.fonte == "esaj-cjsg"  # provenance of the winning source
-    assert teor.metadata["parcial"] is False
+    assert teor.parcial is False
 
 
 @pytest.mark.asyncio

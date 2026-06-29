@@ -98,3 +98,23 @@ def test_write_inteiro_teor_writes_one_json_per_record(tmp_path) -> None:
     assert data["numero_cnj"] == "5082351-40.2017.8.13.0024"
     assert data["texto"] == "acórdão A"
     assert data["fonte"] == "datajud"
+
+
+def test_inteiro_teor_provenance_and_dedup() -> None:
+    a = InteiroTeor(
+        numero_cnj="5000000-00.2020.5.00.0000", texto="acórdão completo", fonte="tst",
+        origem_tema="TST-1", parcial=False, url="https://jurisprudencia.tst.jus.br/x",
+        licenca="dados públicos TST", data_coleta="2026-06-29",
+    )
+    import hashlib
+
+    assert a.parcial is False
+    assert a.url is not None
+    assert a.content_hash == hashlib.sha256(b"ac\xc3\xb3rd\xc3\xa3o completo").hexdigest()
+    cnj = "5000000-00.2020.5.00.0000"
+    # same text + CNJ + source ⇒ same dedup key (idempotent re-collection)
+    b = InteiroTeor(numero_cnj=cnj, texto="acórdão completo", fonte="tst", origem_tema="TST-1")
+    assert a.dedup_key == b.dedup_key
+    # different source ⇒ different key (corroboration kept)
+    c = InteiroTeor(numero_cnj=cnj, texto="acórdão completo", fonte="datajud", origem_tema="TST-1")
+    assert a.dedup_key != c.dedup_key

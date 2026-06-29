@@ -51,10 +51,10 @@ class DataJudEscavacaoFetcher:
             texto=_source_to_text(source),
             fonte="datajud",
             origem_tema=alvo.origem_tema,
+            parcial=True,  # movimentos trail, not the full acórdão
             metadata={
                 "classe": source.get("classe", {}).get("nome", ""),
                 "movimentos": len(source.get("movimentos", [])),
-                "parcial": True,  # movimentos trail, not the full acórdão
             },
         )
 
@@ -62,11 +62,11 @@ class DataJudEscavacaoFetcher:
 class FailoverFetcher:
     """Source Mesh for escavação — tries fetchers in order, best provenance wins.
 
-    A **complete** full text (a source that doesn't set ``metadata["parcial"]``,
-    e.g. a real acórdão database) wins immediately; otherwise the first **partial**
-    result (e.g. the DataJud movements trail) is the fallback. The winning
-    InteiroTeor carries its source's ``fonte`` as provenance. Plug richer
-    full-text sources ahead of DataJud as they become available.
+    A **complete** full text (``parcial=False``, e.g. a real acórdão database)
+    wins immediately; otherwise the first **partial** result (``parcial=True``,
+    e.g. the DataJud movements trail) is the fallback. The winning InteiroTeor
+    carries its source's ``fonte`` as provenance. Plug richer full-text sources
+    ahead of DataJud as they become available.
     """
 
     def __init__(self, fetchers: list[EscavacaoFetcher]) -> None:
@@ -78,7 +78,7 @@ class FailoverFetcher:
             teor = await fetcher.fetch(alvo)
             if teor is None:
                 continue
-            if not teor.metadata.get("parcial", False):
+            if not teor.parcial:
                 return teor  # a complete source wins over any partial trail
             if fallback is None:
                 fallback = teor
