@@ -150,6 +150,9 @@ async def _run_connect_job(
     Writes go to the tenant's own store (isolation); the job carries its
     ``tenant_id`` so only the owning tenant can read it back.
     """
+    from juris.core.observability import bind_tenant_log_context
+
+    bind_tenant_log_context(tenant.tenant_id)  # background task runs in its own context
     store = _connect_job_store()
     try:
         result = await run_connect(

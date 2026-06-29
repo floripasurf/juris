@@ -128,13 +128,21 @@ def _require_tenants() -> bool:
 
 
 async def current_tenant(x_api_key: str | None = Header(default=None)) -> Tenant:
-    """FastAPI dependency: resolve the request's tenant (401 if the key is bad)."""
+    """FastAPI dependency: resolve the request's tenant (401 if the key is bad).
+
+    Binds ``tenant_id`` to the log context so every log in this request is
+    attributable to its firm (per-tenant observability).
+    """
     try:
-        return resolve_tenant(
+        tenant = resolve_tenant(
             default_registry(), api_key=x_api_key, require_configured=_require_tenants()
         )
     except PermissionError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
+    from juris.core.observability import bind_tenant_log_context
+
+    bind_tenant_log_context(tenant.tenant_id)
+    return tenant
 
 
 def tenant_scoped_dir(tenant: Tenant, base: Path) -> Path:

@@ -40,6 +40,15 @@ def new_correlation_id() -> str:
     return str(uuid.uuid4())[:12]
 
 
+def bind_tenant_log_context(tenant_id: str) -> None:
+    """Bind ``tenant_id`` to the structlog context so every subsequent log in this
+    request/task carries it — per-tenant observability (ADR-0015 Phase 2).
+
+    Context vars are task-local, so binding per request never leaks across tenants.
+    """
+    structlog.contextvars.bind_contextvars(tenant_id=tenant_id)
+
+
 def get_logger(name: str) -> structlog.stdlib.BoundLogger:
     """Get a named logger instance."""
     return cast("structlog.stdlib.BoundLogger", structlog.get_logger(name))
