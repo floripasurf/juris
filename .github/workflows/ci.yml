@@ -37,3 +37,25 @@ jobs:
 
       - name: Mypy — full (informational, shrinking)
         run: uv run mypy src/juris || true
+
+  extension:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docs/browser-extension
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        run: npm ci || npm install
+
+      - name: Vitest — selectors/parsers
+        run: npm test
+
+      - name: Build + package (esbuild + zip)
+        run: npm run package
