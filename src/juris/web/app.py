@@ -71,6 +71,14 @@ async def health() -> dict[str, str]:
     return {"status": "ok", "version": __version__}
 
 
+@app.get("/api/ai-session")
+async def get_ai_session() -> dict[str, object]:
+    """Active AI mode + de-id posture, for the operator console badge (ADR-0016/0018)."""
+    from juris.web.ai_status import resolve_ai_session_status
+
+    return resolve_ai_session_status()
+
+
 @app.get("/api/processos")
 async def get_processos(tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
     """List the lawyer's imported processos with their nearest pending prazo."""

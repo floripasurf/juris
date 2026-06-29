@@ -7,7 +7,7 @@
 // bridge). We never persist it — no localStorage/sessionStorage, just a transient
 // closure that is GC'd after the reply.
 
-import { providerFor, findComposer, isStreaming, extractResponse } from "./selectors.js";
+import { providerFor, findComposer, isStreaming, extractResponse, detectBlocker } from "./selectors.js";
 
 const TIMEOUT_MS = 120000; // hard cap on a single completion
 const POLL_MS = 400;
@@ -51,20 +51,50 @@ async function waitForCompletion(provider, request_id) {
   return fail(request_id, "timeout aguardando a resposta finalizar");
 }
 
+// Insert text into a (React) editor reliably: execCommand keeps the editor's own
+// handling intact; the input event makes the framework register the change.
+function insertPrompt(composer, text) {
+  composer.focus();
+  document.execCommand("insertText", false, text);
+  composer.dispatchEvent(new InputEvent("input", { bubbles: true, data: text, inputType: "insertText" }));
+}
+
+// Prefer the send button (more reliable on modern UIs than a synthetic Enter).
+function submit(composer, provider) {
+  const btn = provider.sendButton ? document.querySelector(provider.sendButton) : null;
+  if (btn && !btn.disabled) {
+    btn.click();
+    return;
+  }
+  composer.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+}
+
+const BLOCKER_MESSAGES = {
+  not_logged_in: "sessão não logada — faça login no Claude.ai/ChatGPT",
+  rate_limited: "limite de uso da sessão atingido — tente mais tarde",
+};
+
 async function complete({ request_id, prompt, system }) {
   const provider = providerFor(location.host);
   if (!provider) return fail(request_id, "provedor não suportado nesta aba");
+
+  const blocker = detectBlocker(document, provider);
+  if (blocker) return fail(request_id, BLOCKER_MESSAGES[blocker]);
 
   const composer = findComposer(document, provider);
   if (!composer) return fail(request_id, "composer não encontrado — faça login na sessão");
 
   try {
-    composer.focus();
     const full = system ? `${system}\n\n${prompt}` : prompt;
-    // insertText keeps the editor's own input handling intact
-    document.execCommand("insertText", false, full);
-    composer.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    return await waitForCompletion(provider, request_id);
+    insertPrompt(composer, full);
+    submit(composer, provider);
+    const result = await waitForCompletion(provider, request_id);
+    if (!result.success) {
+      // a usage limit can appear mid-generation — report it precisely
+      const post = detectBlocker(document, provider);
+      if (post) return fail(request_id, BLOCKER_MESSAGES[post]);
+    }
+    return result;
   } catch (e) {
     return fail(request_id, `falha ao injetar/extrair: ${e?.message ?? e}`);
   }

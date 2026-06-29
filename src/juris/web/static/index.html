@@ -335,7 +335,7 @@
       <button type="button" data-nav="agenda">Agenda</button>
       <button type="button" data-nav="caso">Novo caso</button>
     </nav>
-    <div class="status">Interface local do piloto</div>
+    <div class="status" id="ai-session" title="Modo de IA e de-identificação (ADR-0016/0018)">IA: …</div>
   </header>
 
   <main>
@@ -864,6 +864,20 @@
       }
     }
 
+    async function loadAiSession() {
+      const el = document.getElementById("ai-session");
+      try {
+        const r = await fetch("/api/ai-session");
+        const s = await r.json();
+        const labels = { browser_session: "sessão do navegador", cloud_deid: "nuvem", local: "local" };
+        const deid = s.deidentify ? " · de-id ✓" : "";
+        el.textContent = `IA: ${labels[s.mode] || s.mode}${deid}`;
+      } catch {
+        el.textContent = "IA: indisponível";
+      }
+    }
+
+    loadAiSession();
     loadProcessos();
     loadPrazos();
   </script>

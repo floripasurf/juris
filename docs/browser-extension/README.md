@@ -29,6 +29,7 @@ juris agent → native host (api/native_host) ⇄ background.js → content.js �
 npm install
 npm test          # vitest — selectors/parsers against a jsdom DOM fixture
 npm run build     # esbuild bundles content.js (+ selectors) → dist/content.js
+npm run package   # build + zip → dist/juris-extension.zip (distributable)
 ```
 
 `dist/` and `node_modules/` are gitignored — run `npm run build` before loading.
@@ -48,8 +49,14 @@ npm run build     # esbuild bundles content.js (+ selectors) → dist/content.js
 - Selectors isolated per provider in `selectors.js` — retune in one place when a UI changes.
 - 120s timeout; polls until the **stop/streaming** control disappears **and** the text
   is non-empty and stable — a partial/streaming answer is **never** returned as success.
-- Clear errors: `provedor não suportado`, `composer não encontrado — faça login`,
-  `nenhuma aba aberta`, `timeout aguardando a resposta finalizar`.
+- `detectBlocker()` catches a **login wall** or **usage/rate limit** (selector + text
+  patterns) before and after sending → a precise error, never a silent empty answer.
+- Send prefers the provider's **send button**, falling back to Enter; the prompt is
+  inserted via `execCommand` + an `input` event so the React editor registers it.
+- Clear errors: `provedor não suportado`, `sessão não logada — faça login`,
+  `limite de uso atingido`, `nenhuma aba aberta`, `timeout aguardando a resposta`.
+
+The operator console shows the active AI mode + de-id posture (`GET /api/ai-session`).
 
 ## Security
 

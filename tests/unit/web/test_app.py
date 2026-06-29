@@ -298,3 +298,15 @@ def test_localdb_is_cached_per_path(tmp_path) -> None:
     path = str(tmp_path / "tenant.db")
     # same path → same LocalDB instance (engine/pool reused, not rebuilt per request)
     assert app_module._localdb_for_path(path) is app_module._localdb_for_path(path)
+
+
+def test_ai_session_endpoint_returns_mode() -> None:
+    body = client.get("/api/ai-session").json()
+    assert body["mode"] in {"browser_session", "cloud_deid", "local"}
+    assert "deidentify" in body
+
+
+def test_index_renders_ai_session_badge() -> None:
+    text = client.get("/").text
+    assert 'id="ai-session"' in text
+    assert "loadAiSession" in text

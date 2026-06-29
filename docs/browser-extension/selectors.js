@@ -10,13 +10,29 @@ export const PROVIDERS = {
     responseBlocks: '.font-claude-message, [data-testid="assistant-message"]',
     // present only while the model is still generating
     streaming: 'button[aria-label="Stop response"], [data-testid="stop-button"]',
+    // a login wall (no usable session)
+    loginWall: 'a[href*="/login"], a[href*="/sign-in"], [data-testid="login-button"]',
+    // the send button (preferred over Enter when present)
+    sendButton: 'button[aria-label="Send message"], button[aria-label="Send Message"]',
   },
   "chatgpt.com": {
     composer: '#prompt-textarea, div[contenteditable="true"]#prompt-textarea',
     responseBlocks: 'div[data-message-author-role="assistant"]',
     streaming: 'button[data-testid="stop-button"]',
+    loginWall: 'a[href*="/auth/login"], button[data-testid="login-button"]',
+    sendButton: 'button[data-testid="send-button"]',
   },
 };
+
+// Usage/rate-limit messages (provider-agnostic text patterns).
+const RATE_LIMIT_PATTERNS = [
+  /usage limit/i,
+  /reached your limit/i,
+  /rate limit/i,
+  /try again later/i,
+  /limite de uso/i,
+  /muitas mensagens/i,
+];
 
 export function providerFor(host) {
   if (host.includes("claude.ai")) return PROVIDERS["claude.ai"];
@@ -30,6 +46,15 @@ export function findComposer(doc, provider) {
 
 export function isStreaming(doc, provider) {
   return doc.querySelector(provider.streaming) !== null;
+}
+
+// Why a completion can't proceed: "not_logged_in" | "rate_limited" | null.
+// content.js turns this into a clear error instead of a partial/empty answer.
+export function detectBlocker(doc, provider) {
+  if (provider.loginWall && doc.querySelector(provider.loginWall)) return "not_logged_in";
+  const text = doc.body ? doc.body.textContent || "" : "";
+  if (RATE_LIMIT_PATTERNS.some((re) => re.test(text))) return "rate_limited";
+  return null;
 }
 
 // The current assistant reply text, or null if there isn't one yet. Returning null

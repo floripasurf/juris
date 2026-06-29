@@ -2,7 +2,7 @@
 // These cover the brittle part — the DOM extraction — so a UI change is caught
 // here and retuned in one place. The live integration is the manual Chrome smoke.
 import { describe, it, expect } from "vitest";
-import { providerFor, findComposer, isStreaming, extractResponse } from "./selectors.js";
+import { providerFor, findComposer, isStreaming, extractResponse, detectBlocker } from "./selectors.js";
 
 describe("providerFor", () => {
   it("maps hosts to providers", () => {
@@ -54,5 +54,25 @@ describe("chatgpt.com DOM", () => {
       <div data-message-author-role="user">pergunta</div>
       <div data-message-author-role="assistant">resposta do gpt</div>`;
     expect(extractResponse(document, provider)).toBe("resposta do gpt");
+  });
+});
+
+describe("detectBlocker", () => {
+  const claude = providerFor("claude.ai");
+
+  it("returns null when the composer is usable", () => {
+    document.body.innerHTML = `<div contenteditable="true"></div>`;
+    expect(detectBlocker(document, claude)).toBeNull();
+  });
+
+  it("detects a login wall", () => {
+    document.body.innerHTML = `<a href="/login">Entrar</a>`;
+    expect(detectBlocker(document, claude)).toBe("not_logged_in");
+  });
+
+  it("detects a rate/usage limit by message text", () => {
+    document.body.innerHTML = `<div contenteditable="true"></div>
+      <div>You've reached your usage limit. Try again later.</div>`;
+    expect(detectBlocker(document, claude)).toBe("rate_limited");
   });
 });
