@@ -2223,6 +2223,47 @@ def escavacao_run(
         console.print(f"[yellow]Falhas:[/yellow] {amostra}{'…' if len(result.falhas) > 5 else ''}")
 
 
+agent_app = typer.Typer(name="agent", help="Local agent pairing + readiness (ADR-0015).")
+app.add_typer(agent_app)
+
+
+@agent_app.command("pair")
+def agent_pair() -> None:
+    """Mint a pairing token and show how to configure both sides (split-trust)."""
+    from juris.api.pairing import generate_pairing_token
+
+    token = generate_pairing_token()
+    console.print("[bold]Token de pareamento gerado[/bold] — use o MESMO valor nos dois lados:\n")
+    console.print(f"  No AGENTE (máquina do advogado):   export JURIS_AGENT_TOKEN={token}")
+    console.print(f"  No ORQUESTRADOR (nuvem):           export JURIS_LOCAL_AGENT_TOKEN={token}\n")
+    console.print(
+        "  No orquestrador, ative o modo remoto:\n"
+        "    export JURIS_AGENT_MODE=remote\n"
+        "    export JURIS_LOCAL_AGENT_URL=ws://<host-do-agente>:<porta>\n"
+    )
+    console.print("Valide com: [cyan]juris agent health --url ws://<host>:<porta>[/cyan]")
+
+
+@agent_app.command("health")
+def agent_health_cmd(
+    url: str = typer.Option("ws://127.0.0.1:8765", "--url", help="URL base do agente (ws:// ou http://)."),
+) -> None:
+    """Probe the local agent's /health — reachability + token readiness."""
+    from juris.api.pairing import check_agent_health
+
+    try:
+        health = check_agent_health(url)
+    except RuntimeError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from None
+
+    token_state = "[green]conectado[/green]" if health.token_connected else "[yellow]ausente[/yellow]"
+    console.print(
+        f"Agente v{health.version} — token: {token_state}; "
+        f"cert válido até: {health.cert_valid_until or '—'}"
+    )
+
+
 alerts_app = typer.Typer(name="alerts", help="Deadline alert management.")
 app.add_typer(alerts_app)
 
