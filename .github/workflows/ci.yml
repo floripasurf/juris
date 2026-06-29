@@ -24,16 +24,16 @@ jobs:
       - name: Pytest — unit suite
         run: uv run pytest tests/unit -q
 
-      # --- Mypy: hard on the clean packages, informational on the rest ---------
-      # Trilha E-2: these packages are mypy-clean and must NOT regress (hard gate).
-      # Remaining debt (cli/persistence/signing/mni/jobs/repertory) is cleaned by
-      # track; the full run is informational until it's zeroed, then folded in here.
+      # --- Mypy: hard on the clean+fully-tracked packages, informational rest ---
+      # Trilha E-2: these packages are mypy-clean AND have no engine-local
+      # (gitignored) source, so local == CI — safe as a hard gate (anti-regression).
+      # Mixed packages (engine-local files) + the debt tracks (cli/persistence/
+      # signing/mni/jobs/repertory) stay in the informational run until folded in.
       - name: Mypy — clean packages (hard gate)
         run: >
           uv run mypy
-          src/juris/agents src/juris/alerts src/juris/api src/juris/busca
-          src/juris/core src/juris/defesas src/juris/demo src/juris/escavacao
-          src/juris/prazo src/juris/review src/juris/web
+          src/juris/alerts src/juris/api src/juris/busca
+          src/juris/demo src/juris/escavacao src/juris/web
 
       - name: Mypy — full (informational, shrinking)
         run: uv run mypy src/juris || true
