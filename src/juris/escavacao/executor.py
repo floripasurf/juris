@@ -141,3 +141,40 @@ def write_inteiro_teor(coletados: list[InteiroTeor], out_dir: Path) -> list[Path
         )
         written.append(path)
     return written
+
+
+def load_inteiro_teor(out_dir: Path) -> list[InteiroTeor]:
+    """Read back the JSONs written by :func:`write_inteiro_teor` (ingestion feed)."""
+    loaded: list[InteiroTeor] = []
+    for path in sorted(out_dir.glob("*.json")):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        loaded.append(
+            InteiroTeor(
+                numero_cnj=data["numero_cnj"],
+                texto=data["texto"],
+                fonte=data["fonte"],
+                origem_tema=data["origem_tema"],
+                parcial=data.get("parcial", False),
+                url=data.get("url"),
+                licenca=data.get("licenca"),
+                data_coleta=data.get("data_coleta"),
+                metadata=data.get("metadata", {}),
+            )
+        )
+    return loaded
+
+
+def dedup_inteiro_teor(teores: list[InteiroTeor]) -> list[InteiroTeor]:
+    """Drop re-collected duplicates by :attr:`InteiroTeor.dedup_key`.
+
+    The same decision from a *different* source is kept — corroboration is a
+    ranking signal, not noise.
+    """
+    seen: set[tuple[str, str, str]] = set()
+    unique: list[InteiroTeor] = []
+    for teor in teores:
+        if teor.dedup_key in seen:
+            continue
+        seen.add(teor.dedup_key)
+        unique.append(teor)
+    return unique

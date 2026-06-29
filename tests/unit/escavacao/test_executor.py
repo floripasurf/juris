@@ -118,3 +118,35 @@ def test_inteiro_teor_provenance_and_dedup() -> None:
     # different source ⇒ different key (corroboration kept)
     c = InteiroTeor(numero_cnj=cnj, texto="acórdão completo", fonte="datajud", origem_tema="TST-1")
     assert a.dedup_key != c.dedup_key
+
+
+def test_load_inteiro_teor_round_trips_provenance(tmp_path) -> None:
+    from juris.escavacao.executor import load_inteiro_teor, write_inteiro_teor
+
+    original = [
+        InteiroTeor(
+            numero_cnj="5000000-00.2020.5.00.0000", texto="acórdão A", fonte="tst",
+            origem_tema="TST-1", parcial=False, url="https://x", licenca="TST", data_coleta="2026-06-29",
+        ),
+    ]
+    write_inteiro_teor(original, tmp_path)
+    loaded = load_inteiro_teor(tmp_path)
+
+    assert len(loaded) == 1
+    assert loaded[0].fonte == "tst"
+    assert loaded[0].parcial is False
+    assert loaded[0].url == "https://x"
+    assert loaded[0].dedup_key == original[0].dedup_key  # identity preserved
+
+
+def test_dedup_inteiro_teor_keeps_corroborating_sources() -> None:
+    from juris.escavacao.executor import dedup_inteiro_teor
+
+    tst = InteiroTeor(numero_cnj="A", texto="mesmo acórdão", fonte="tst", origem_tema="T")
+    tst_again = InteiroTeor(numero_cnj="A", texto="mesmo acórdão", fonte="tst", origem_tema="T")  # re-collected
+    datajud = InteiroTeor(numero_cnj="A", texto="mesmo acórdão", fonte="datajud", origem_tema="T")
+
+    deduped = dedup_inteiro_teor([tst, tst_again, datajud])
+
+    assert len(deduped) == 2  # the re-collected tst is dropped; datajud (other source) kept
+    assert {t.fonte for t in deduped} == {"tst", "datajud"}
