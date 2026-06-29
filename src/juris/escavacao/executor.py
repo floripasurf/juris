@@ -118,8 +118,11 @@ def write_inteiro_teor(coletados: list[InteiroTeor], out_dir: Path) -> list[Path
     out_dir.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
     for teor in coletados:
-        safe = re.sub(r"[^0-9A-Za-z]", "_", teor.numero_cnj)
-        path = out_dir / f"{safe}.json"
+        safe_cnj = re.sub(r"[^0-9A-Za-z]", "_", teor.numero_cnj)
+        safe_fonte = re.sub(r"[^0-9A-Za-z]", "_", teor.fonte)
+        # name encodes the dedup identity (cnj + fonte + content hash) so the same
+        # processo from TST and DataJud are kept as distinct files, never overwritten.
+        path = out_dir / f"{safe_cnj}__{safe_fonte}__{teor.content_hash[:12]}.json"
         path.write_text(
             json.dumps(
                 {

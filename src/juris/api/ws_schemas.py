@@ -47,9 +47,12 @@ class SignResponse(BaseModel):
 class AgentRequest(BaseModel):
     """Unified envelope for token operations forwarded to the local agent (ADR-0015).
 
-    ``operation`` is one of ``mni.consultar_processo`` / ``mni.consultar_avisos`` /
-    ``mni.consultar_teor``; ``payload`` carries the operation-specific arguments.
-    Sensitive material (PIN) is resolved at the agent and never travels in here.
+    ``operation`` is one of ``mni.consultar_processo`` / ``mni.consultar_avisos``;
+    ``payload`` carries the operation-specific arguments. The full document text
+    (inteiro teor) is obtained via ``consultar_processo`` with
+    ``payload.com_documentos = True`` — there is no separate ``consultar_teor``.
+    Sensitive material (PIN, PJe credentials) is resolved at the agent and never
+    travels in here.
     """
     request_id: str
     tenant_id: str = "public"

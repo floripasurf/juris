@@ -22,6 +22,11 @@ Cada registro carrega **proveniência**: `fonte`, `url`, `licenca`, `data_coleta
 numero_cnj, fonte)`: re-coleta é idempotente, mas o mesmo acórdão de **outra fonte**
 é mantido — corroboração é sinal, não ruído (`dedup_inteiro_teor`).
 
+`write_inteiro_teor` grava um arquivo por registro, nomeado
+`<cnj>__<fonte>__<hash12>.json`, espelhando o `dedup_key` — TST e DataJud do mesmo
+processo ficam em arquivos distintos, **nunca se sobrescrevem**. `load_inteiro_teor`
+lê todos de volta para a ingestão.
+
 ## Fontes (Source Mesh — `FailoverFetcher`)
 
 `build_escavacao_fetcher()` compõe as fontes em ordem de qualidade:

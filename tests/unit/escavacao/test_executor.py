@@ -150,3 +150,19 @@ def test_dedup_inteiro_teor_keeps_corroborating_sources() -> None:
 
     assert len(deduped) == 2  # the re-collected tst is dropped; datajud (other source) kept
     assert {t.fonte for t in deduped} == {"tst", "datajud"}
+
+
+def test_write_keeps_records_from_different_sources_for_same_cnj(tmp_path) -> None:
+    from juris.escavacao.executor import load_inteiro_teor, write_inteiro_teor
+
+    same_cnj = "5082351-40.2017.8.13.0024"
+    coletados = [
+        InteiroTeor(numero_cnj=same_cnj, texto="acórdão TST", fonte="tst", origem_tema="T", parcial=False),
+        InteiroTeor(numero_cnj=same_cnj, texto="trilha DataJud", fonte="datajud", origem_tema="T", parcial=True),
+    ]
+    paths = write_inteiro_teor(coletados, tmp_path)
+
+    assert len(paths) == 2
+    assert len(set(paths)) == 2  # distinct files — TST does not overwrite DataJud
+    loaded = load_inteiro_teor(tmp_path)
+    assert {t.fonte for t in loaded} == {"tst", "datajud"}
