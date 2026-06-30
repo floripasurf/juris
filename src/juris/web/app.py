@@ -205,6 +205,16 @@ async def create_connect(
     return {"job_id": job_id, "status": "running"}
 
 
+@app.get("/api/agent-mode")
+async def get_agent_mode() -> dict[str, object]:
+    """Tell the UI whether token ops are remote (the local agent resolves secrets) or
+    co-located. In remote the connect/new-case forms must hide CPF/PIN and send only
+    {tribunal, sync}; co-located source=mni still needs the CPF (ADR-0015)."""
+    from juris.api.agent_config import agent_mode, is_remote
+
+    return {"remote": is_remote(), "mode": agent_mode()}
+
+
 @app.get("/api/connect/{job_id}")
 async def get_connect(
     job_id: str, tenant: Tenant = Depends(current_tenant)

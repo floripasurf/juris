@@ -380,3 +380,17 @@ def test_demo_run_remote_agent_failure_is_controlled_not_500(monkeypatch, tmp_pa
 
     assert response.status_code == 400, response.status_code  # controlled, not a 500
     assert "binding" in response.json()["detail"]
+
+
+def test_agent_mode_endpoint_reports_remote(monkeypatch) -> None:
+    monkeypatch.setenv("JURIS_AGENT_MODE", "remote")
+    response = client.get("/api/agent-mode")
+    assert response.status_code == 200
+    assert response.json()["remote"] is True
+
+
+def test_agent_mode_endpoint_reports_inprocess(monkeypatch) -> None:
+    monkeypatch.delenv("JURIS_AGENT_MODE", raising=False)
+    response = client.get("/api/agent-mode")
+    assert response.status_code == 200
+    assert response.json()["remote"] is False

@@ -407,6 +407,11 @@
           <option value="mni">MNI</option>
         </select>
 
+        <div id="nc_cpf_row" style="display:none">
+          <label for="nc_cpf">CPF do advogado (MNI co-localizado)</label>
+          <input id="nc_cpf" placeholder="CPF do advogado" autocomplete="off" />
+        </div>
+
         <label for="thesis">Tese ou objetivo</label>
         <textarea id="thesis" placeholder="Opcional"></textarea>
 
@@ -605,6 +610,40 @@
     });
     const checked = (id) => document.querySelector(`#${id}`).checked;
 
+    // Split-trust mode (ADR-0015): the UI adapts to whether token ops are remote.
+    let AGENT_REMOTE = false;
+    const sourceSel = document.querySelector("#source");
+    const ncCpfRow = document.querySelector("#nc_cpf_row");
+    function toggleNewCaseCpf() {
+      // CPF field only matters for co-located source=mni (remote: agent resolves it)
+      ncCpfRow.style.display = sourceSel.value === "mni" && !AGENT_REMOTE ? "" : "none";
+    }
+    function applyAgentMode() {
+      ["#c_cpf", "#c_pin"].forEach((sel) => {
+        const el = document.querySelector(sel);
+        if (el) {
+          el.style.display = AGENT_REMOTE ? "none" : "";
+          el.disabled = AGENT_REMOTE;
+        }
+      });
+      if (AGENT_REMOTE) {
+        const cs = document.querySelector("#connect-status");
+        if (cs) cs.textContent = "Modo remoto: o agente local resolve o token (sem CPF/PIN aqui).";
+      }
+      toggleNewCaseCpf();
+    }
+    async function loadAgentMode() {
+      try {
+        const r = await fetch("/api/agent-mode");
+        if (r.ok) AGENT_REMOTE = (await r.json()).remote === true;
+      } catch (_) {
+        /* default to co-located */
+      }
+      applyAgentMode();
+    }
+    sourceSel.addEventListener("change", toggleNewCaseCpf);
+    loadAgentMode();
+
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       notice.hidden = true;
@@ -625,6 +664,10 @@
         cloud: checked("cloud"),
         skip_review: checked("skip_review"),
       };
+      // Co-located MNI needs the CPF; in remote the agent resolves it.
+      if (payload.source === "mni" && !AGENT_REMOTE) {
+        payload.cpf = document.querySelector("#nc_cpf").value.trim() || null;
+      }
 
       try {
         const response = await fetch("/api/demo-runs", {
@@ -812,9 +855,17 @@
       event.preventDefault();
       const cpf = document.querySelector("#c_cpf").value.trim();
       const pin = document.querySelector("#c_pin").value;
-      if (!cpf || !pin) {
-        connectStatus.textContent = "Informe CPF e PIN.";
-        return;
+      // Split-trust: in remote mode the local agent resolves CPF/PIN — the cloud must
+      // send neither. Co-located still requires both.
+      let body;
+      if (AGENT_REMOTE) {
+        body = { tribunal: "tjmg", sync: true };
+      } else {
+        if (!cpf || !pin) {
+          connectStatus.textContent = "Informe CPF e PIN.";
+          return;
+        }
+        body = { cpf, pin, tribunal: "tjmg", sync: true };
       }
       connectBtn.disabled = true;
       connectBtn.textContent = "Conectando…";
@@ -823,7 +874,7 @@
         const response = await fetch("/api/connect", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ cpf, pin, tribunal: "tjmg" }),
+          body: JSON.stringify(body),
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || "Falha ao conectar");
