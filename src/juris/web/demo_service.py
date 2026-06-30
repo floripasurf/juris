@@ -37,6 +37,8 @@ class WebDemoRunRequest:
     cloud: bool = False
     skip_review: bool = False
     use_cache: bool = True
+    tenant_id: str = "public"  # routes source=mni to this firm's agent (multi-tenant)
+    cpf: str | None = None  # co-located MNI; in remote mode the agent resolves it
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,6 +158,8 @@ async def execute_demo_run(request: WebDemoRunRequest) -> WebDemoRun:
             source_mode,
             use_cache=request.use_cache,
             audit_path=audit_path,
+            cpf=request.cpf,
+            tenant_id=request.tenant_id,  # source=mni routes to the tenant's agent
         )
     except (LookupError, NotImplementedError, ValueError) as exc:
         raise DemoRunError(str(exc)) from exc

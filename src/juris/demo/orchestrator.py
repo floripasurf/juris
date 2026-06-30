@@ -367,6 +367,7 @@ def load_processo(
     senha: str | None = None,
     token_pin: str | None = None,
     mni_service: MNIReadService | None = None,
+    tenant_id: str = "public",
 ) -> ProcessoDomain:
     """Resolve a ProcessoDomain from the configured source.
 
@@ -397,18 +398,21 @@ def load_processo(
         return _build_fixture_processo(numero_cnj, tribunal)
 
     if source is SourceMode.MNI:
+        from juris.api.agent_config import is_remote
         from juris.mni.tribunais import get_tribunal
 
-        if not cpf:
+        # In remote (split-trust) mode the agent resolves the lawyer's own
+        # cpf/senha/PIN; only co-located needs them at the orchestrator.
+        if not is_remote() and not cpf:
             msg = "Source 'mni' requer o cpf do advogado constituído (--cpf)."
             raise ValueError(msg)
-        service = mni_service or get_mni_read_service()
+        service = mni_service or get_mni_read_service(tenant_id)  # routes to the tenant's agent
         tribunal_cfg = get_tribunal(tribunal)
         processo = service.consultar_processo(
             numero_cnj,
             tribunal_cfg,
-            cpf,
-            senha or cpf,
+            cpf or "",
+            senha or cpf or "",
             token_pin=token_pin,
         )
         # Record the privileged read in the demo's hashed audit chain. The
@@ -419,7 +423,7 @@ def load_processo(
 
             AuditLog(audit_path).log(
                 event_type="mni.consulta",
-                actor=f"user:{cpf}",
+                actor=f"user:{cpf or tenant_id}",
                 processo_cnj=processo.numero_cnj,
                 details={
                     "tribunal": tribunal_cfg.id,

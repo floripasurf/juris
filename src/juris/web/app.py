@@ -64,6 +64,7 @@ class DemoRunPayload(BaseModel):
     cloud: bool = False
     skip_review: bool = False
     use_cache: bool = True
+    cpf: str | None = None  # co-located source=mni; in remote the agent resolves it
 
 
 @app.get("/health")
@@ -270,6 +271,8 @@ async def create_demo_run(
         cloud=payload.cloud,
         skip_review=payload.skip_review,
         use_cache=payload.use_cache,
+        tenant_id=tenant.tenant_id,  # source=mni routes to this firm's agent
+        cpf=payload.cpf,
     )
     try:
         result = await execute_demo_run(request)

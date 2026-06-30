@@ -190,13 +190,45 @@ def test_demo_load_processo_mni_routes_through_factory(monkeypatch) -> None:
         def consultar_avisos(self, *a, **k):  # noqa: ANN002, ANN003, ANN201
             raise AssertionError
 
-    monkeypatch.setattr(orchestrator, "get_mni_read_service", lambda: _Svc())
+    monkeypatch.setattr(orchestrator, "get_mni_read_service", lambda tenant_id="public": _Svc())
     result = load_processo(
         "5082351-40.2017.8.13.0024", "tjmg", SourceMode.MNI,
         cpf="07671039632", senha="x", token_pin="9999",  # noqa: S106
     )
 
     assert used["flag"] is True
+    assert result.classe == "Apelação Cível"
+
+
+def test_demo_load_processo_mni_routes_to_tenant_agent_and_remote_needs_no_cpf(monkeypatch) -> None:
+    """Web demo source=mni must route to the tenant's agent and, in remote mode, not
+    require a CPF (the agent resolves it) — closes the multi-tenant remote gap."""
+    from juris.demo import orchestrator
+    from juris.demo.orchestrator import SourceMode, load_processo
+
+    captured: dict[str, object] = {}
+
+    class _Svc:
+        def consultar_processo(self, numero_cnj, tribunal_cfg, cpf, senha, *, token_pin=None, com_documentos=False):  # noqa: ANN001, ANN201
+            captured["cpf"] = cpf
+            return _processo()
+
+        def consultar_avisos(self, *a, **k):  # noqa: ANN002, ANN003, ANN201
+            raise AssertionError
+
+    def _factory(tenant_id: str = "public"):  # noqa: ANN202
+        captured["tenant_id"] = tenant_id
+        return _Svc()
+
+    monkeypatch.setattr(orchestrator, "get_mni_read_service", _factory)
+    monkeypatch.setenv("JURIS_AGENT_MODE", "remote")  # remote: no CPF at the orchestrator
+
+    result = load_processo(
+        "5082351-40.2017.8.13.0024", "tjmg", SourceMode.MNI, tenant_id="escritorio-a"
+    )
+
+    assert captured["tenant_id"] == "escritorio-a"  # routed to the firm's agent
+    assert captured["cpf"] == ""  # the agent resolves the lawyer's own CPF
     assert result.classe == "Apelação Cível"
 
 
