@@ -439,6 +439,15 @@ async def get_pilot_feedback_summary(tenant: Tenant = Depends(current_tenant)) -
     return summarize_feedback(tenant_scoped_dir(tenant, _out_root()))
 
 
+@app.get("/api/pilot-feedback/comparison")
+async def get_pilot_feedback_comparison(tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
+    """Compare first vs latest feedback for cases run more than once."""
+    from juris.web.auth import tenant_scoped_dir
+    from juris.web.pilot_feedback import compare_feedback_runs
+
+    return compare_feedback_runs(tenant_scoped_dir(tenant, _out_root()))
+
+
 @app.get("/api/corpus/candidates")
 async def get_corpus_candidates(tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
     """Pilot feedback records that should be evaluated for corpus expansion."""
@@ -493,6 +502,17 @@ async def mark_corpus_source_reingested(
     if source is None:
         raise HTTPException(status_code=404, detail="fonte não encontrada")
     return {"source": source}
+
+
+@app.post("/api/corpus/reingest")
+async def reingest_pilot_corpus(tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
+    """Run controlled reingestion for pending pilot-directed corpus sources."""
+    from juris.repertory.readiness import resolve_repertory_path
+    from juris.web.auth import tenant_scoped_dir
+    from juris.web.corpus_queue import reingest_pending_sources
+
+    report = reingest_pending_sources(tenant_scoped_dir(tenant, _out_root()), resolve_repertory_path())
+    return report.to_dict()
 
 
 @app.get("/api/pilot-feedback/export")

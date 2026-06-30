@@ -114,6 +114,55 @@ def summarize_feedback(root: Path) -> dict[str, object]:
     }
 
 
+def compare_feedback_runs(root: Path) -> dict[str, object]:
+    """Compare first vs latest feedback for cases run more than once."""
+    grouped: dict[str, list[dict[str, object]]] = {}
+    for record in sorted(list_feedback(root), key=lambda r: str(r.get("created_at", ""))):
+        cnj = str(record.get("numero_cnj") or "").strip()
+        if not cnj:
+            continue
+        grouped.setdefault(cnj, []).append(record)
+
+    comparisons: list[dict[str, object]] = []
+    for cnj, records in grouped.items():
+        if len(records) < 2:
+            continue
+        first = records[0]
+        latest = records[-1]
+        first_rate = _citation_acceptance(first)
+        latest_rate = _citation_acceptance(latest)
+        comparisons.append(
+            {
+                "numero_cnj": cnj,
+                "runs": len(records),
+                "first_created_at": first.get("created_at"),
+                "latest_created_at": latest.get("created_at"),
+                "delta_time_saved_minutes": _int_value(latest.get("time_saved_minutes"))
+                - _int_value(first.get("time_saved_minutes")),
+                "delta_utility": _int_value(latest.get("perceived_utility"))
+                - _int_value(first.get("perceived_utility")),
+                "delta_citation_acceptance": None
+                if first_rate is None or latest_rate is None
+                else round(latest_rate - first_rate, 3),
+                "remaining_missing_source": latest.get("missing_source"),
+                "remaining_error": latest.get("deadline_or_analysis_error"),
+            }
+        )
+
+    improved = [
+        c
+        for c in comparisons
+        if _int_value(c.get("delta_time_saved_minutes")) > 0
+        or _int_value(c.get("delta_utility")) > 0
+        or (c.get("delta_citation_acceptance") is not None and float(c["delta_citation_acceptance"]) > 0)
+    ]
+    return {
+        "compared_cases": len(comparisons),
+        "improved_cases": len(improved),
+        "comparisons": comparisons,
+    }
+
+
 def export_feedback_report_markdown(root: Path) -> str:
     """Markdown report for pilot review and commercial follow-up."""
     summary = summarize_feedback(root)
@@ -186,6 +235,15 @@ def _counts(records: list[dict[str, object]], key: str) -> dict[str, int]:
             continue
         counts[value] = counts.get(value, 0) + 1
     return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
+
+
+def _citation_acceptance(record: dict[str, object]) -> float | None:
+    accepted = _int_value(record.get("citations_accepted"))
+    rejected = _int_value(record.get("citations_rejected"))
+    total = accepted + rejected
+    if total == 0:
+        return None
+    return round(accepted / total, 3)
 
 
 def _prioritized_gaps(records: list[dict[str, object]]) -> list[dict[str, object]]:

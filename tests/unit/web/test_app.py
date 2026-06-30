@@ -55,6 +55,8 @@ def test_index_renders_local_ui() -> None:
     assert "/api/corpus/candidates" in response.text
     assert "/api/corpus/coverage" in response.text
     assert "renderCorpusCoverage" in response.text
+    assert "/api/pilot-feedback/comparison" in response.text
+    assert "renderPilotComparison" in response.text
     assert "apiErrorMessage" in response.text
     assert "escHtml" in response.text  # untrusted data escaped before innerHTML (XSS)
 
@@ -256,6 +258,7 @@ def test_pilot_feedback_endpoints_are_tenant_scoped(monkeypatch, tmp_path) -> No
     created = client.post("/api/pilot-feedback", json=payload)
     listed = client.get("/api/pilot-feedback")
     summary = client.get("/api/pilot-feedback/summary")
+    comparison = client.get("/api/pilot-feedback/comparison")
     exported = client.get("/api/pilot-feedback/export", params={"format": "csv"})
     report = client.get("/api/pilot-feedback/export", params={"format": "md"})
 
@@ -266,6 +269,8 @@ def test_pilot_feedback_endpoints_are_tenant_scoped(monkeypatch, tmp_path) -> No
     assert summary.status_code == 200
     assert summary.json()["total_time_saved_minutes"] == 30
     assert summary.json()["prioritized_gaps"][0]["label"] == "TJMG acórdão"
+    assert comparison.status_code == 200
+    assert comparison.json()["compared_cases"] == 0
     assert exported.status_code == 200
     assert "TJMG acórdão" in exported.text
     assert report.status_code == 200
@@ -277,6 +282,7 @@ def test_corpus_queue_endpoints(monkeypatch, tmp_path) -> None:
     from juris.web.pilot_feedback import append_feedback
 
     monkeypatch.setattr(app_module, "_out_root", lambda: tmp_path)
+    monkeypatch.setenv("JURIS_REPERTORY_PATH", str(tmp_path / "repertory.db"))
     append_feedback(
         tmp_path,
         {
@@ -322,6 +328,35 @@ def test_corpus_queue_endpoints(monkeypatch, tmp_path) -> None:
     marked = client.post(f"/api/corpus/sources/{source_id}/reingested")
     assert marked.status_code == 200
     assert marked.json()["source"]["reingest_status"] == "done"
+
+
+def test_corpus_reingest_endpoint_writes_repertory(monkeypatch, tmp_path) -> None:
+    app_module = importlib.import_module("juris.web.app")
+
+    monkeypatch.setattr(app_module, "_out_root", lambda: tmp_path)
+    monkeypatch.setenv("JURIS_REPERTORY_PATH", str(tmp_path / "repertory.db"))
+    created = client.post(
+        "/api/corpus/sources",
+        json={
+            "numero_cnj": "0001234-56.2026.8.13.0001",
+            "title": "Acórdão aprovado",
+            "source_url": "https://example.test/resp",
+            "source_date": "2026-06-30",
+            "source_type": "acordao_publicado",
+            "tribunal": "STJ",
+            "area": "civel",
+            "tema": "cobranca",
+            "status": "vigente",
+            "source_text": "EMENTA. Cobrança. VOTO. Recurso provido.",
+        },
+    )
+    assert created.status_code == 201, created.text
+
+    response = client.post("/api/corpus/reingest")
+
+    assert response.status_code == 200
+    assert response.json()["processed"] == 1
+    assert response.json()["chunks"] >= 1
 
 
 def test_create_demo_run_returns_artifact_previews(monkeypatch) -> None:

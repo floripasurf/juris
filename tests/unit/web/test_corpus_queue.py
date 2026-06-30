@@ -8,6 +8,7 @@ from juris.web.corpus_queue import (
     coverage_report,
     list_accepted_sources,
     mark_reingested,
+    reingest_pending_sources,
 )
 from juris.web.pilot_feedback import append_feedback
 
@@ -63,3 +64,37 @@ def test_candidates_sources_coverage_and_reingest(tmp_path) -> None:
     assert updated is not None
     assert updated["reingest_status"] == "done"
     assert coverage_report(tmp_path)["pending_reingest"] == []
+
+
+def test_reingest_pending_sources_writes_repertory_chunks(tmp_path) -> None:
+    source = append_accepted_source(
+        tmp_path,
+        {
+            "numero_cnj": "0001234-56.2026.8.13.0001",
+            "title": "Acórdão aprovado",
+            "source_url": "https://example.test/acordao",
+            "source_date": "2026-06-30",
+            "source_type": "acordao_publicado",
+            "tribunal": "STJ",
+            "area": "civel",
+            "tema": "cobranca",
+            "status": "vigente",
+            "source_text": "EMENTA. Cobrança. Prova documental. VOTO. Recurso provido.",
+            "notes": "",
+        },
+    )
+    repertory = tmp_path / "repertory.db"
+
+    report = reingest_pending_sources(tmp_path, repertory)
+
+    assert report.processed == 1
+    assert report.chunks >= 1
+    assert report.errors == []
+    assert coverage_report(tmp_path)["pending_reingest"] == []
+
+    import sqlite3
+
+    with sqlite3.connect(repertory) as conn:
+        row = conn.execute("SELECT source_id, metadata FROM chunks LIMIT 1").fetchone()
+    assert row[0] == f"pilot-{source['id']}"
+    assert "content_sha256" in row[1]

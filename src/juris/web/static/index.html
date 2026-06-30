@@ -525,6 +525,8 @@
           <div id="corpus-coverage" class="proc-empty">Carregando…</div>
         </div>
       </div>
+      <h2>Segunda execução dos casos</h2>
+      <div id="pilot-comparison" class="proc-empty">Carregando…</div>
       <div id="pilot-feedback" class="proc-empty">Carregando…</div>
     </section>
 
@@ -1330,6 +1332,7 @@
     const pilotSubmit = document.querySelector("#pilot-submit");
     const corpusCandidatesEl = document.querySelector("#corpus-candidates");
     const corpusCoverageEl = document.querySelector("#corpus-coverage");
+    const pilotComparisonEl = document.querySelector("#pilot-comparison");
 
     function renderPilotSummary(summary) {
       const citations = summary.citations || {};
@@ -1453,6 +1456,42 @@
       }
     }
 
+    function renderPilotComparison(data) {
+      const items = data.comparisons || [];
+      if (!items.length) {
+        pilotComparisonEl.className = "proc-empty";
+        pilotComparisonEl.textContent = "Nenhum caso com segunda execução registrada.";
+        return;
+      }
+      pilotComparisonEl.className = "proc-list";
+      pilotComparisonEl.innerHTML = "";
+      items.forEach((c) => {
+        const row = document.createElement("div");
+        row.className = "proc-row";
+        const left = document.createElement("div");
+        left.innerHTML = `<div class="proc-cnj">${escHtml(c.numero_cnj)}</div><div class="proc-meta">${c.runs} execuções comparadas</div>`;
+        const mid = document.createElement("div");
+        mid.className = "proc-meta";
+        mid.textContent = `tempo ${c.delta_time_saved_minutes} min · utilidade ${c.delta_utility}`;
+        const right = document.createElement("div");
+        right.className = "proc-prazo";
+        right.innerHTML = `<span class="badge ${c.delta_utility > 0 ? "urg-alta" : "urg-baixa"}">citações ${c.delta_citation_acceptance == null ? "—" : Math.round(c.delta_citation_acceptance * 100) + "%"}</span>`;
+        row.append(left, mid, right, document.createElement("div"));
+        pilotComparisonEl.appendChild(row);
+      });
+    }
+
+    async function loadPilotComparison() {
+      try {
+        const response = await fetch("/api/pilot-feedback/comparison");
+        const data = response.ok ? await response.json() : { comparisons: [] };
+        renderPilotComparison(data);
+      } catch (_) {
+        pilotComparisonEl.className = "proc-empty";
+        pilotComparisonEl.textContent = "Não foi possível carregar comparação.";
+      }
+    }
+
     pilotForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       pilotSubmit.disabled = true;
@@ -1484,6 +1523,7 @@
         await loadPilotFeedback();
         await loadPilotSummary();
         await loadCorpusQueue();
+        await loadPilotComparison();
       } catch (err) {
         pilotFeedbackEl.className = "proc-empty";
         pilotFeedbackEl.textContent = err.message;
@@ -1523,6 +1563,7 @@
     loadPilotFeedback();
     loadPilotSummary();
     loadCorpusQueue();
+    loadPilotComparison();
   </script>
 </body>
 </html>

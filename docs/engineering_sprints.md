@@ -117,7 +117,13 @@ Fatia entregue agora:
   job controlado.
 - A aba `Piloto` mostra fila de corpus, fontes aceitas e pendências de
   reingestão.
+- `/api/corpus/reingest` executa reingestão real das fontes pendentes no
+  `repertory.db`, gerando chunks com proveniência (`source_url`, `source_date`,
+  `content_sha256`, área, tema e tribunal) e só marca `done` após upsert.
+- `/api/pilot-feedback/comparison` compara primeira e última avaliação do mesmo
+  CNJ: delta de tempo economizado, utilidade e aceitação de citações.
+- A aba `Piloto` mostra a seção `Segunda execução dos casos`.
 
 Próximas entregas:
-- Conectar a fila `pending_reingest` ao job real de reingestão do repertory.
-- Comparar segunda execução dos casos contra a primeira para medir ganho.
+- Rodar casos reais suficientes para popular a comparação com evidência.
+- Usar os deltas da segunda execução para priorizar corpus vs UX vs estratégia.

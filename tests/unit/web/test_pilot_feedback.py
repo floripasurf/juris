@@ -6,6 +6,7 @@ import json
 
 from juris.web.pilot_feedback import (
     append_feedback,
+    compare_feedback_runs,
     export_feedback_csv,
     export_feedback_json,
     export_feedback_report_markdown,
@@ -53,3 +54,43 @@ def test_append_list_and_export_feedback(tmp_path) -> None:
     assert summary["citations"]["acceptance_rate"] == 0.75
     assert summary["prioritized_gaps"][0]["label"] == "STJ inteiro teor"
     assert summary["corpus_candidates"][0]["numero_cnj"] == "0001234-56.2026.8.13.0001"
+
+
+def test_compare_feedback_runs_first_vs_latest(tmp_path) -> None:
+    base = {
+        "numero_cnj": "0001234-56.2026.8.13.0001",
+        "output_dir": "juris-out/CASE",
+        "mode_used": "rascunho",
+        "missing_source": "",
+        "deadline_or_analysis_error": "",
+        "corpus_usable": False,
+        "notes": "",
+    }
+    append_feedback(
+        tmp_path,
+        {
+            **base,
+            "time_saved_minutes": 10,
+            "citations_accepted": 1,
+            "citations_rejected": 1,
+            "perceived_utility": 3,
+        },
+    )
+    append_feedback(
+        tmp_path,
+        {
+            **base,
+            "time_saved_minutes": 25,
+            "citations_accepted": 3,
+            "citations_rejected": 0,
+            "perceived_utility": 5,
+        },
+    )
+
+    comparison = compare_feedback_runs(tmp_path)
+
+    assert comparison["compared_cases"] == 1
+    assert comparison["improved_cases"] == 1
+    assert comparison["comparisons"][0]["delta_time_saved_minutes"] == 15
+    assert comparison["comparisons"][0]["delta_utility"] == 2
+    assert comparison["comparisons"][0]["delta_citation_acceptance"] == 0.5
