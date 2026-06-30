@@ -356,3 +356,27 @@ def test_connect_remote_mode_accepts_no_cpf(monkeypatch) -> None:
     # remote: neither cpf nor pin/senha needed — the agent resolves them
     response = client.post("/api/connect", json={"tribunal": "tjmg", "sync": False})
     assert response.status_code == 202, response.text
+
+
+def test_demo_run_remote_agent_failure_is_controlled_not_500(monkeypatch, tmp_path) -> None:
+    from juris.web import demo_service
+
+    def _boom(*a, **k):
+        raise RuntimeError("tenant 'x' sem binding de agente próprio (fail-closed)")
+
+    monkeypatch.setattr(demo_service, "_build_llm", lambda *, use_cloud: object())
+    monkeypatch.setattr(demo_service, "_build_repertory", lambda _p: object())
+    monkeypatch.setattr(demo_service, "load_processo", _boom)
+
+    response = client.post(
+        "/api/demo-runs",
+        json={
+            "numero_cnj": "0001234-56.2026.8.13.0001",
+            "tipo": "contestacao",
+            "source": "mni",
+            "out_root": str(tmp_path),
+        },
+    )
+
+    assert response.status_code == 400, response.status_code  # controlled, not a 500
+    assert "binding" in response.json()["detail"]

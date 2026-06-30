@@ -183,6 +183,10 @@ async def execute_demo_run(request: WebDemoRunRequest) -> WebDemoRun:
         )
     except (LookupError, NotImplementedError, ValueError) as exc:
         raise DemoRunError(str(exc)) from exc
+    except (RuntimeError, ConnectionError, TimeoutError, OSError) as exc:
+        # Missing tenant binding, agent unavailable, or remote transport failure —
+        # an operational problem, not a 500. Surface it as a controlled message.
+        raise DemoRunError(f"Falha ao consultar o agente/MNI: {exc}") from exc
 
     demo_request = DemoRequest(
         numero_cnj=numero_cnj,
