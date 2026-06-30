@@ -127,3 +127,66 @@ Fatia entregue agora:
 Próximas entregas:
 - Rodar casos reais suficientes para popular a comparação com evidência.
 - Usar os deltas da segunda execução para priorizar corpus vs UX vs estratégia.
+
+## Sprint 7 — Qualidade de Minuta e Estratégia
+
+**Status:** entregue em fatia operacional.
+
+Objetivo:
+- Ajudar o advogado a decidir estratégia antes da minuta e reduzir risco de
+  tese sem lastro.
+
+Entregas:
+- `EstrategiaAgent` mantém matriz probatória e classificação do caso no
+  relatório estruturado.
+- O payload web expõe `classificacao`, `matriz_probatoria`, `lacunas_prova` e
+  `tom_minuta`.
+- A UI mostra o tom recomendado (`forte`, `cauteloso`, `rascunho`) e as lacunas
+  de prova antes da minuta.
+- O reviewer agora adiciona achados determinísticos para:
+  - alegação sem prova indicada;
+  - pedido sem fundamento explícito;
+  - jurisprudência fraca/genérica ou não verificada;
+  - risco de tese excessiva.
+
+Critério atendido:
+- Baixa confiança aparece como `rascunho`.
+- Falhas jurídicas previsíveis são surfacadas sem depender exclusivamente do
+  LLM.
+
+Próximas entregas:
+- Passar `tom_minuta` diretamente para o drafter quando houver ajuste de prompt
+  do gerador final.
+- Calibrar as heurísticas com feedback real do piloto para reduzir ruído.
+
+## Sprint 8 — Assinatura e Protocolo Controlados
+
+**Status:** entregue em fatia web segura.
+
+Objetivo:
+- Fechar o ciclo `minuta revisada -> protocolo` com preflight, consentimento e
+  cadeia de custódia visíveis.
+
+Entregas:
+- Nova aba `Protocolo` no console.
+- `/api/filing/status` lista filings pendentes e recibos recentes com hashes.
+- `/api/filing/dry-run` executa render/preflight sem assinatura nem contato MNI.
+- `/api/filing/submit` exige revisão humana confirmada e consentimento explícito
+  antes de assinar/protocolar.
+- Em modo remoto, CPF/senha/PIN não são exigidos nem encaminhados; o agente local
+  resolve segredos e retorna apenas metadados, recibo e hashes.
+- A UI renderiza checklist de preflight, pendências recuperáveis, recibo e cadeia
+  de custódia (`pdf_hash`, `signed_pdf_hash`, `submitted_payload_hash`,
+  `receipt_hash`).
+
+Critério atendido:
+- Não há submit sem revisão e consentimento.
+- O console mostra recibo/hashes quando o protocolo retorna cadeia de custódia.
+- O fluxo remoto mantém PDF/recibo sensíveis no agente conforme a fronteira
+  split-trust.
+
+Próximas entregas:
+- Integrar seleção automática do artefato de minuta gerado pelo caso, evitando
+  colar Markdown manualmente.
+- Adicionar recuperação assistida/retry para diretórios `_pending`, além da
+  visibilidade atual.

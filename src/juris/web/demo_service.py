@@ -90,11 +90,45 @@ def estrategia_payload(draft: object) -> dict[str, object] | None:
             "fundamento_consequencialista": getattr(linha, "fundamento_consequencialista", None),
         }
 
+    def _tom_minuta(confianca: str) -> str:
+        return {
+            "alta": "forte",
+            "media": "cauteloso",
+            "baixa": "rascunho",
+        }.get(confianca, "cauteloso")
+
+    def _matriz(item: object) -> dict[str, object]:
+        return {
+            "alegacao": getattr(item, "alegacao", ""),
+            "provas": list(getattr(item, "provas", [])),
+            "lacunas": list(getattr(item, "lacunas", [])),
+        }
+
+    matriz = [_matriz(i) for i in getattr(est, "matriz_probatoria", [])]
+    lacunas_prova = [
+        {
+            "alegacao": str(item.get("alegacao") or ""),
+            "lacunas": list(item.get("lacunas") or ["sem prova indicada"]),
+        }
+        for item in matriz
+        if not item.get("provas") or item.get("lacunas")
+    ]
+    escolhida = _linha(est.escolhida)
     return {
-        "escolhida": _linha(est.escolhida),
+        "escolhida": escolhida,
         "alternativas": [_linha(a) for a in getattr(est, "alternativas", [])],
         "avisos_deontologicos": list(getattr(est, "avisos_deontologicos", [])),
         "revisao_humana_obrigatoria": bool(getattr(est, "revisao_humana_obrigatoria", False)),
+        "tom_minuta": _tom_minuta(str(escolhida.get("confianca") or "")),
+        "classificacao": [
+            {
+                "texto": getattr(item, "texto", ""),
+                "tipo": getattr(item, "tipo", ""),
+            }
+            for item in getattr(est, "classificacao", [])
+        ],
+        "matriz_probatoria": matriz,
+        "lacunas_prova": lacunas_prova,
     }
 
 

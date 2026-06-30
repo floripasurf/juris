@@ -33,6 +33,11 @@ def test_payload_surfaces_chosen_line_alternatives_and_flags() -> None:
         alternativas=[_linha("vice", ordem="subsidiaria", confianca="media", score=0.4)],
         avisos_deontologicos=["Afirma êxito garantido — vedado pelo CED."],
         revisao_humana_obrigatoria=True,
+        classificacao=[SimpleNamespace(texto="contrato assinado", tipo="prova")],
+        matriz_probatoria=[
+            SimpleNamespace(alegacao="mora contratual", provas=["contrato"], lacunas=[]),
+            SimpleNamespace(alegacao="dano material", provas=[], lacunas=["nota fiscal ausente"]),
+        ],
     )
     payload = estrategia_payload(SimpleNamespace(estrategia=est))
 
@@ -43,6 +48,26 @@ def test_payload_surfaces_chosen_line_alternatives_and_flags() -> None:
     assert [a["tese"] for a in payload["alternativas"]] == ["vice"]
     assert payload["avisos_deontologicos"]
     assert payload["revisao_humana_obrigatoria"] is True
+    assert payload["tom_minuta"] == "forte"
+    assert payload["classificacao"] == [{"texto": "contrato assinado", "tipo": "prova"}]
+    assert payload["matriz_probatoria"][1]["alegacao"] == "dano material"
+    assert payload["lacunas_prova"] == [{"alegacao": "dano material", "lacunas": ["nota fiscal ausente"]}]
+
+
+def test_payload_marks_low_confidence_as_draft_tone() -> None:
+    est = SimpleNamespace(
+        escolhida=_linha("fraca", confianca="baixa"),
+        alternativas=[],
+        avisos_deontologicos=[],
+        revisao_humana_obrigatoria=True,
+        classificacao=[],
+        matriz_probatoria=[],
+    )
+
+    payload = estrategia_payload(SimpleNamespace(estrategia=est))
+
+    assert payload is not None
+    assert payload["tom_minuta"] == "rascunho"
 
 
 def _issue(severity: str, title: str, dimension: str = "authority", **kw: object) -> SimpleNamespace:

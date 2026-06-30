@@ -410,6 +410,7 @@
       <button type="button" data-nav="acervo">Acervo</button>
       <button type="button" data-nav="agenda">Agenda</button>
       <button type="button" data-nav="caso">Novo caso</button>
+      <button type="button" data-nav="protocolo">Protocolo</button>
       <button type="button" data-nav="piloto">Piloto</button>
     </nav>
     <div class="status" id="ai-session" title="Modo de IA e de-identificação (ADR-0016/0018)">IA: …</div>
@@ -530,6 +531,62 @@
       <div id="pilot-feedback" class="proc-empty">Carregando…</div>
     </section>
 
+    <section class="processos-panel" data-view="protocolo" hidden>
+      <h1>Protocolo controlado</h1>
+      <p class="lede">Faça dry-run, confira preflight e cadeia de custódia, e só assine com revisão e consentimento explícitos.</p>
+      <form id="filing-form">
+        <div class="row">
+          <div>
+            <label for="fl_cnj">Número CNJ</label>
+            <input id="fl_cnj" autocomplete="off" />
+          </div>
+          <div>
+            <label for="fl_tribunal">Tribunal</label>
+            <input id="fl_tribunal" value="tjmg" />
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="fl_tipo_doc">Tipo documento</label>
+            <input id="fl_tipo_doc" value="manifestacao" />
+          </div>
+          <div>
+            <label for="fl_tipo_peticao">Tipo petição</label>
+            <input id="fl_tipo_peticao" value="manifestacao" />
+          </div>
+        </div>
+        <div id="filing-secret-row" class="row">
+          <div>
+            <label for="fl_cpf">CPF</label>
+            <input id="fl_cpf" autocomplete="off" />
+          </div>
+          <div>
+            <label for="fl_pin">PIN token A3</label>
+            <input id="fl_pin" type="password" autocomplete="off" />
+          </div>
+        </div>
+        <div id="filing-senha-row">
+          <label for="fl_senha">Senha MNI/PJe</label>
+          <input id="fl_senha" type="password" autocomplete="off" />
+        </div>
+        <label for="fl_draft">Minuta Markdown revisada</label>
+        <textarea id="fl_draft" style="min-height:180px"></textarea>
+        <label for="fl_prazo_override">Override de prazo</label>
+        <input id="fl_prazo_override" autocomplete="off" />
+        <div class="checks">
+          <label class="check"><input id="fl_review" type="checkbox" /> revisão humana concluída</label>
+          <label class="check"><input id="fl_consent" type="checkbox" /> autorizo assinar e protocolar esta versão</label>
+        </div>
+        <div class="list-tools">
+          <button type="button" id="filing-dry-run">dry-run / preflight</button>
+          <button type="button" id="filing-submit" class="ghost">assinar e protocolar</button>
+        </div>
+      </form>
+      <div id="filing-result" class="proc-empty">Nenhum dry-run executado.</div>
+      <h2>Filings pendentes e recibos</h2>
+      <div id="filing-status" class="proc-empty">Carregando…</div>
+    </section>
+
     <section class="form-panel" data-view="caso" hidden>
       <h1>Novo caso</h1>
       <p class="lede">Gere rascunho de pesquisa ou minuta sugerida a partir do pipeline atual.</p>
@@ -633,12 +690,14 @@
       const conf = escHtml(esc.confianca || "media");
       const ordem = escHtml(esc.ordem || "principal");
       const list = (arr) => (arr && arr.length ? arr.map((x) => `<li>${escHtml(x)}</li>`).join("") : "<li class='muted'>—</li>");
+      const tom = est.tom_minuta || "cauteloso";
 
       let html = `<div class="estrategia-head">
           <h3>Linha argumentativa <span class="badge ordem-${ordem}">${ordem}</span></h3>
           <span class="badge conf-${conf}">${escHtml(CONF_LABEL[conf] || conf)}</span>
         </div>
-        <p class="tese">${escHtml(esc.tese || "")}</p>`;
+        <p class="tese">${escHtml(esc.tese || "")}</p>
+        <div class="proc-meta"><strong>Tom da minuta:</strong> ${escHtml(tom)}</div>`;
       if (esc.fundamento_consequencialista) {
         html += `<p class="conseq"><strong>Argumento consequencialista:</strong> ${escHtml(esc.fundamento_consequencialista)}</p>`;
       }
@@ -647,6 +706,16 @@
           <div><h4>Citações</h4><ul>${list(esc.citacoes)}</ul></div>
           <div><h4>Riscos</h4><ul>${list(esc.riscos)}</ul></div>
         </div>`;
+
+      if (est.lacunas_prova && est.lacunas_prova.length) {
+        const gaps = est.lacunas_prova
+          .map((g) => `<li><strong>${escHtml(g.alegacao || "Alegação")}</strong><br/><span class="muted">${escHtml((g.lacunas || []).join("; ") || "sem prova indicada")}</span></li>`)
+          .join("");
+        html += `<div class="estrategia-alert">
+            <strong>Lacunas de prova antes da minuta</strong>
+            <ul>${gaps}</ul>
+          </div>`;
+      }
 
       if (est.revisao_humana_obrigatoria || (est.avisos_deontologicos && est.avisos_deontologicos.length)) {
         const avisos = (est.avisos_deontologicos || []).map((a) => `<li>${escHtml(a)}</li>`).join("");
@@ -791,6 +860,10 @@
           el.style.display = AGENT_REMOTE ? "none" : "";
           el.disabled = AGENT_REMOTE;
         }
+      });
+      ["#filing-secret-row", "#filing-senha-row"].forEach((sel) => {
+        const el = document.querySelector(sel);
+        if (el) el.style.display = AGENT_REMOTE ? "none" : "";
       });
       if (AGENT_REMOTE) {
         const cs = document.querySelector("#connect-status");
@@ -1326,6 +1399,120 @@
     prazosFilter.addEventListener("input", () => renderPrazos(filteredPrazos()));
     prazosUrgency.addEventListener("change", () => renderPrazos(filteredPrazos()));
 
+    const filingStatusEl = document.querySelector("#filing-status");
+    const filingResultEl = document.querySelector("#filing-result");
+    const filingDryRunBtn = document.querySelector("#filing-dry-run");
+    const filingSubmitBtn = document.querySelector("#filing-submit");
+
+    function filingPayload() {
+      const payload = {
+        numero_cnj: document.querySelector("#fl_cnj").value.trim(),
+        tribunal: document.querySelector("#fl_tribunal").value.trim() || "tjmg",
+        tipo_documento: document.querySelector("#fl_tipo_doc").value.trim() || "manifestacao",
+        tipo_peticao: document.querySelector("#fl_tipo_peticao").value.trim() || "manifestacao",
+        draft_markdown: document.querySelector("#fl_draft").value,
+        prazo_override: document.querySelector("#fl_prazo_override").value.trim() || null,
+        review_confirmed: document.querySelector("#fl_review").checked,
+        consent: document.querySelector("#fl_consent").checked,
+      };
+      if (!AGENT_REMOTE) {
+        payload.cpf = document.querySelector("#fl_cpf").value.trim();
+        payload.senha = document.querySelector("#fl_senha").value;
+        payload.pin = document.querySelector("#fl_pin").value;
+      }
+      return payload;
+    }
+
+    function renderFilingResult(data) {
+      const pf = data.preflight || {};
+      const checks = (pf.checks || []).map((c) => `<li class="${c.passed ? "sev-suggestion" : "sev-critical"}">
+          <strong>${escHtml(c.name)}</strong>
+          <p>${escHtml(c.message)}</p>
+        </li>`).join("") || "<li class='muted'>Sem checklist de preflight.</li>";
+      const coc = data.chain_of_custody;
+      const hashes = coc ? `<div class="queue-item"><strong>Cadeia de custódia</strong>
+          <div class="meta">PDF: ${escHtml(coc.pdf_hash)}</div>
+          <div class="meta">Assinado: ${escHtml(coc.signed_pdf_hash)}</div>
+          <div class="meta">Payload: ${escHtml(coc.submitted_payload_hash)}</div>
+          <div class="meta">Recibo: ${escHtml(coc.receipt_hash)}</div>
+        </div>` : "";
+      const receipt = data.receipt ? `<div class="queue-item"><strong>Recibo ${escHtml(data.receipt.protocolo || "sem protocolo")}</strong>
+          <div class="meta">${escHtml(data.receipt.mensagem || "")}</div>
+        </div>` : "";
+      filingResultEl.className = "review-card";
+      filingResultEl.innerHTML = `<div class="review-head"><h3>${data.success ? "Operação concluída" : "Operação bloqueada"}</h3>
+          <span class="sev-chip ${data.success ? "sev-suggestion" : "sev-critical"}">${data.success ? "ok" : "falha"}</span></div>
+        ${data.error ? `<p class="notice error" style="position:static">${escHtml(data.error)}</p>` : ""}
+        <div class="proc-meta">Prazo: ${escHtml(pf.prazo_status || "—")} · preflight ${pf.passed === false ? "bloqueado" : "ok"}</div>
+        <ul class="review-issues">${checks}</ul>
+        ${hashes}${receipt}`;
+    }
+
+    function renderFilingStatus(data) {
+      const pending = data.pending || [];
+      const receipts = data.recent_receipts || [];
+      if (!pending.length && !receipts.length) {
+        filingStatusEl.className = "proc-empty";
+        filingStatusEl.textContent = "Nenhum filing pendente ou recibo local.";
+        return;
+      }
+      filingStatusEl.className = "proc-list";
+      filingStatusEl.innerHTML = "";
+      pending.forEach((p) => {
+        const row = document.createElement("div");
+        row.className = "queue-item";
+        row.innerHTML = `<strong>Pendente: ${escHtml(p.numero_cnj)}</strong>
+          <div class="meta">${escHtml(p.receipt_id)} · ${escHtml(p.path)}</div>
+          <div class="meta">signed hash: ${escHtml((p.hashes || {}).signed_pdf_hash || "—")}</div>`;
+        filingStatusEl.appendChild(row);
+      });
+      receipts.forEach((r) => {
+        const row = document.createElement("div");
+        row.className = "queue-item";
+        row.innerHTML = `<strong>Recibo: ${escHtml(r.protocolo || r.receipt_id)}</strong>
+          <div class="meta">${escHtml(r.numero_cnj)} · ${escHtml(r.tribunal || "")} · ${escHtml(r.filed_at || "")}</div>
+          <div class="meta">PDF: ${escHtml((r.hashes || {}).pdf_hash || "—")} · assinado: ${escHtml((r.hashes || {}).signed_pdf_hash || "—")} · recibo: ${escHtml((r.hashes || {}).receipt_hash || "—")}</div>`;
+        filingStatusEl.appendChild(row);
+      });
+    }
+
+    async function loadFilingStatus() {
+      try {
+        const response = await fetch("/api/filing/status");
+        const data = response.ok ? await response.json() : {};
+        renderFilingStatus(data);
+      } catch (_) {
+        filingStatusEl.className = "proc-empty";
+        filingStatusEl.textContent = "Não foi possível carregar status de protocolo.";
+      }
+    }
+
+    async function runFiling(endpoint, button) {
+      button.disabled = true;
+      const oldText = button.textContent;
+      button.textContent = endpoint.endsWith("submit") ? "Protocolando…" : "Verificando…";
+      try {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(filingPayload()),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(apiErrorMessage(data, "Falha no protocolo"));
+        renderFilingResult(data);
+        await loadFilingStatus();
+      } catch (err) {
+        filingResultEl.className = "proc-empty";
+        filingResultEl.innerHTML = `<p class="notice error" style="position:static">${escHtml(err.message)}</p>`;
+      } finally {
+        button.disabled = false;
+        button.textContent = oldText;
+      }
+    }
+
+    filingDryRunBtn.addEventListener("click", () => runFiling("/api/filing/dry-run", filingDryRunBtn));
+    filingSubmitBtn.addEventListener("click", () => runFiling("/api/filing/submit", filingSubmitBtn));
+
     const pilotForm = document.querySelector("#pilot-form");
     const pilotFeedbackEl = document.querySelector("#pilot-feedback");
     const pilotSummaryEl = document.querySelector("#pilot-summary");
@@ -1564,6 +1751,7 @@
     loadPilotSummary();
     loadCorpusQueue();
     loadPilotComparison();
+    loadFilingStatus();
   </script>
 </body>
 </html>

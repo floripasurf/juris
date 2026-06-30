@@ -170,6 +170,22 @@ class CorpusSourcePayload(BaseModel):
     notes: str = ""
 
 
+class FilingPayload(BaseModel):
+    """Controlled filing request from the web console."""
+
+    numero_cnj: str = Field(min_length=1)
+    tribunal: str = "tjmg"
+    tipo_documento: str = "manifestacao"
+    tipo_peticao: str = "manifestacao"
+    draft_markdown: str = Field(min_length=1)
+    cpf: str | None = None
+    senha: str | None = None
+    pin: str | None = None
+    prazo_override: str | None = None
+    review_confirmed: bool = False
+    consent: bool = False
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     """Health check for the local web UI."""
@@ -555,6 +571,104 @@ async def get_audit(
         return audit_view(audit_path)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="audit.jsonl não encontrado") from exc
+
+
+@app.get("/api/filing/status")
+async def get_filing_status() -> dict[str, object]:
+    """Pending filings and recent custody chains visible to the console."""
+    from juris.web.filing_console import filing_status
+
+    return filing_status()
+
+
+@app.post("/api/filing/dry-run")
+async def dry_run_filing(
+    payload: FilingPayload, tenant: Tenant = Depends(current_tenant)
+) -> dict[str, object]:
+    """Render and preflight a filing without signing or contacting the tribunal."""
+    from juris.signing.filing import FilingRequest
+    from juris.signing.filing_service import get_filing_service
+    from juris.web.filing_console import serialize_filing_result
+
+    remote = _is_remote_agent_mode()
+    _require_filing_credentials(payload, remote=remote)
+    request = FilingRequest(
+        numero_cnj=payload.numero_cnj.strip(),
+        tribunal=payload.tribunal.strip() or "tjmg",
+        tipo_documento=payload.tipo_documento.strip() or "manifestacao",
+        draft_markdown=payload.draft_markdown,
+        tipo_peticao=payload.tipo_peticao.strip() or "manifestacao",
+        cpf="" if remote else payload.cpf or "",
+        senha="" if remote else payload.senha or "",
+        dry_run=True,
+        prazo_override=payload.prazo_override,
+    )
+    try:
+        result = await get_filing_service(tenant.tenant_id).file(
+            request,
+            pin=None if remote else payload.pin,
+        )
+    except Exception as exc:  # noqa: BLE001 — operational filing error, not 500
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return serialize_filing_result(result)
+
+
+@app.post("/api/filing/submit")
+async def submit_filing(
+    payload: FilingPayload, tenant: Tenant = Depends(current_tenant)
+) -> dict[str, object]:
+    """Sign and file only after review confirmation and explicit lawyer consent."""
+    from juris.signing.filing import FilingRequest
+    from juris.signing.filing_service import get_filing_service
+    from juris.web.filing_console import serialize_filing_result
+
+    if not payload.review_confirmed:
+        raise HTTPException(status_code=400, detail="Confirme a revisão humana antes de protocolar.")
+    if not payload.consent:
+        raise HTTPException(status_code=400, detail="Consentimento explícito é obrigatório antes de assinar.")
+
+    remote = _is_remote_agent_mode()
+    _require_filing_credentials(payload, remote=remote)
+    request = FilingRequest(
+        numero_cnj=payload.numero_cnj.strip(),
+        tribunal=payload.tribunal.strip() or "tjmg",
+        tipo_documento=payload.tipo_documento.strip() or "manifestacao",
+        draft_markdown=payload.draft_markdown,
+        tipo_peticao=payload.tipo_peticao.strip() or "manifestacao",
+        cpf="" if remote else payload.cpf or "",
+        senha="" if remote else payload.senha or "",
+        dry_run=False,
+        prazo_override=payload.prazo_override,
+    )
+    try:
+        result = await get_filing_service(tenant.tenant_id).file(
+            request,
+            pin=None if remote else payload.pin,
+        )
+    except Exception as exc:  # noqa: BLE001 — operational filing error, not 500
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return serialize_filing_result(result)
+
+
+def _is_remote_agent_mode() -> bool:
+    from juris.api.agent_config import is_remote
+
+    return is_remote()
+
+
+def _require_filing_credentials(payload: FilingPayload, *, remote: bool) -> None:
+    if remote:
+        return
+    missing = [
+        name
+        for name, value in (("CPF", payload.cpf), ("senha", payload.senha), ("PIN", payload.pin))
+        if not value
+    ]
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{', '.join(missing)} obrigatório(s) no modo co-localizado.",
+        )
 
 
 @app.get("/", response_class=HTMLResponse)

@@ -33,6 +33,7 @@ def test_index_renders_local_ui() -> None:
     assert "showView" in response.text  # section navigation wired
     assert 'data-nav="acervo"' in response.text
     assert 'data-nav="mesa"' in response.text
+    assert 'data-nav="protocolo"' in response.text
     assert "renderWorkbench" in response.text
     assert "/api/workbench" in response.text
     assert "Prazos críticos" in response.text
@@ -57,6 +58,14 @@ def test_index_renders_local_ui() -> None:
     assert "renderCorpusCoverage" in response.text
     assert "/api/pilot-feedback/comparison" in response.text
     assert "renderPilotComparison" in response.text
+    assert "Protocolo controlado" in response.text
+    assert "/api/filing/status" in response.text
+    assert "/api/filing/dry-run" in response.text
+    assert "/api/filing/submit" in response.text
+    assert "renderFilingResult" in response.text
+    assert "Cadeia de custódia" in response.text
+    assert "Lacunas de prova antes da minuta" in response.text
+    assert "Tom da minuta" in response.text
     assert "apiErrorMessage" in response.text
     assert "escHtml" in response.text  # untrusted data escaped before innerHTML (XSS)
 
@@ -172,6 +181,136 @@ def test_audit_endpoint_404_when_missing(monkeypatch) -> None:
 
 def test_audit_endpoint_rejects_path_traversal() -> None:
     assert client.get("/api/audit", params={"output_dir": "../../etc"}).status_code == 400
+
+
+def _filing_payload(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "numero_cnj": "0001234-56.2026.8.13.0001",
+        "tribunal": "tjmg",
+        "tipo_documento": "manifestacao",
+        "tipo_peticao": "manifestacao",
+        "draft_markdown": "# Petição\n\nTexto revisado.",
+        "cpf": "07671039632",
+        "senha": "senha",
+        "pin": "1234",
+        "review_confirmed": True,
+        "consent": True,
+    }
+    payload.update(overrides)
+    return payload
+
+
+class _FakeFilingService:
+    def __init__(self) -> None:
+        self.calls: list[tuple[object, str | None]] = []
+
+    async def file(self, request, *, pin=None):
+        from juris.signing.filing import ChainOfCustody, FilingResult
+
+        self.calls.append((request, pin))
+        preflight = SimpleNamespace(
+            passed=True,
+            prazo_status=SimpleNamespace(value="unknown"),
+            checks=[
+                SimpleNamespace(
+                    name="pdf_valid",
+                    passed=True,
+                    severity="blocker",
+                    message="PDF válido",
+                    retryable=False,
+                )
+            ],
+        )
+        chain = None
+        receipt = None
+        if not request.dry_run:
+            from juris.mni.operations.peticionamento import FilingReceipt
+
+            receipt = FilingReceipt(sucesso=True, mensagem="ok", protocolo="PROT-1", numero_processo=request.numero_cnj)
+            chain = ChainOfCustody("pdf", "signed", "payload", "receipt")
+        return FilingResult(
+            success=True,
+            receipt=receipt,
+            signing_result=None,
+            preflight=preflight,
+            audit_entry_ids=["audit-1"],
+            chain_of_custody=chain,
+        )
+
+
+def test_filing_status_endpoint(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("JURIS_FILING_ROOT", str(tmp_path))
+    (tmp_path / "cnj" / "20260630_pending").mkdir(parents=True)
+
+    response = client.get("/api/filing/status")
+
+    assert response.status_code == 200
+    assert response.json()["pending"][0]["receipt_id"] == "20260630_pending"
+
+
+def test_filing_dry_run_uses_service_without_consent_requirement(monkeypatch) -> None:
+    import juris.signing.filing_service as filing_service
+
+    service = _FakeFilingService()
+    monkeypatch.setattr(filing_service, "get_filing_service", lambda tenant_id="public": service)
+
+    response = client.post("/api/filing/dry-run", json=_filing_payload(consent=False, review_confirmed=False))
+
+    assert response.status_code == 200, response.text
+    assert response.json()["preflight"]["checks"][0]["name"] == "pdf_valid"
+    request, pin = service.calls[0]
+    assert request.dry_run is True
+    assert pin == "1234"
+
+
+def test_filing_submit_requires_review_and_consent() -> None:
+    without_review = client.post("/api/filing/submit", json=_filing_payload(review_confirmed=False))
+    without_consent = client.post("/api/filing/submit", json=_filing_payload(consent=False))
+
+    assert without_review.status_code == 400
+    assert "revisão" in without_review.json()["detail"]
+    assert without_consent.status_code == 400
+    assert "Consentimento" in without_consent.json()["detail"]
+
+
+def test_filing_submit_returns_chain_of_custody(monkeypatch) -> None:
+    import juris.signing.filing_service as filing_service
+
+    service = _FakeFilingService()
+    monkeypatch.setattr(filing_service, "get_filing_service", lambda tenant_id="public": service)
+
+    response = client.post("/api/filing/submit", json=_filing_payload())
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["receipt"]["protocolo"] == "PROT-1"
+    assert body["chain_of_custody"] == {
+        "pdf_hash": "pdf",
+        "signed_pdf_hash": "signed",
+        "submitted_payload_hash": "payload",
+        "receipt_hash": "receipt",
+    }
+
+
+def test_filing_remote_mode_does_not_require_or_forward_secrets(monkeypatch) -> None:
+    import juris.signing.filing_service as filing_service
+
+    service = _FakeFilingService()
+    monkeypatch.setenv("JURIS_AGENT_MODE", "remote")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_URL", "ws://127.0.0.1:8765")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_TOKEN", "tok")
+    monkeypatch.setattr(filing_service, "get_filing_service", lambda tenant_id="public": service)
+
+    response = client.post(
+        "/api/filing/dry-run",
+        json=_filing_payload(cpf=None, senha=None, pin=None, consent=False, review_confirmed=False),
+    )
+
+    assert response.status_code == 200, response.text
+    request, pin = service.calls[0]
+    assert request.cpf == ""
+    assert request.senha == ""
+    assert pin is None
 
 
 def test_processo_detail_endpoint_returns_detail(monkeypatch) -> None:

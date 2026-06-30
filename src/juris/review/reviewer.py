@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from typing import Any
 
@@ -43,6 +44,30 @@ _RETRIEVAL_QUERIES: dict[ReviewDimension, str] = {
     ReviewDimension.COUNTERARGUMENTS: "contra-argumento tese contraria improcedencia",
     ReviewDimension.COMPLIANCE: "litigancia ma-fe CPC artigo 78 79 80 81",
 }
+
+_PROOF_MARKERS = re.compile(
+    r"\b(prova|documento|doc\.|anexo|contrato|comprovante|recibo|nota fiscal|id\.|evento\s+\d+)\b",
+    re.IGNORECASE,
+)
+_LEGAL_BASIS_MARKERS = re.compile(
+    r"(\bart\.|\b(?:artigo|cpc|cc|clt|lei|constitui|fundamento|nos termos|com base|"
+    r"s[uú]mula|tema|resp|are?s?p?)\b)",
+    re.IGNORECASE,
+)
+_EXCESSIVE_THESIS = re.compile(
+    r"\b(êxito garantido|vit[oó]ria garantida|proced[eê]ncia certa|sem risco algum|risco zero|"
+    r"inevit[aá]vel|indiscutivelmente|manifestamente procedente)\b",
+    re.IGNORECASE,
+)
+_GENERIC_JURIS = re.compile(
+    r"\b(jurisprud[eê]ncia pac[ií]fica|entendimento dominante|os tribunais entendem|"
+    r"conforme a jurisprud[eê]ncia|precedentes s[aã]o un[aâ]nimes)\b",
+    re.IGNORECASE,
+)
+_CLAIM_WITHOUT_PROOF = re.compile(
+    r"\b(alega(?:-se)?|afirma(?:-se)?|sustenta(?:-se)?|houve|ocorreu|descumpriu|causou)\b",
+    re.IGNORECASE,
+)
 
 
 class ReviewerAgent:
@@ -86,6 +111,7 @@ class ReviewerAgent:
         raw_citations = extract_citations(request.petition_text)
         report.citations_found = self._verify_citations(raw_citations)
         report.retrieval_calls += 1
+        report.issues.extend(deterministic_legal_issues(request, report.citations_found))
 
         # 2. Analyze each dimension
         for dim in dims:
@@ -233,3 +259,128 @@ class ReviewerAgent:
                 "prompt_version": report.prompt_version,
             },
         )
+
+
+def deterministic_legal_issues(
+    request: ReviewRequest,
+    citations_found: list[CitationRef],
+) -> list[ReviewIssue]:
+    """High-precision legal guardrails independent from the LLM.
+
+    These checks intentionally target patterns that are dangerous in drafts and
+    cheap to verify deterministically. They do not replace the LLM review; they
+    guarantee that obvious evidentiary and filing-quality risks are surfaced.
+    """
+    text = request.petition_text
+    issues: list[ReviewIssue] = []
+
+    proof_gap = _first_claim_without_proof(text)
+    if proof_gap:
+        issues.append(
+            ReviewIssue(
+                dimension=ReviewDimension.COMPLETENESS,
+                severity=IssueSeverity.IMPORTANT,
+                title="Alegação sem prova indicada",
+                description=(
+                    "Há alegação factual relevante sem referência próxima a documento, "
+                    "evento, anexo ou outro lastro probatório."
+                ),
+                line_anchor=proof_gap,
+                suggestion="Indique a prova correspondente ou marque a tese como lacuna antes de usar na minuta.",
+            )
+        )
+
+    request_gap = _unfounded_request_anchor(text)
+    if request_gap:
+        issues.append(
+            ReviewIssue(
+                dimension=ReviewDimension.COMPLETENESS,
+                severity=IssueSeverity.IMPORTANT,
+                title="Pedido sem fundamento explícito",
+                description=(
+                    "A seção de pedidos contém requerimento sem base legal, contratual "
+                    "ou jurisprudencial explícita no próprio bloco."
+                ),
+                line_anchor=request_gap,
+                suggestion="Vincule o pedido ao fundamento normativo/probatório que o sustenta.",
+            )
+        )
+
+    weak_juris_anchor = _weak_jurisprudence_anchor(text, citations_found)
+    if weak_juris_anchor:
+        issues.append(
+            ReviewIssue(
+                dimension=ReviewDimension.AUTHORITY,
+                severity=IssueSeverity.IMPORTANT,
+                title="Jurisprudência fraca ou genérica",
+                description=(
+                    "O texto usa autoridade jurisprudencial sem fonte verificável ou "
+                    "com citação não localizada no repertório."
+                ),
+                line_anchor=weak_juris_anchor,
+                suggestion="Substitua por precedente verificado, súmula, tema ou remova a afirmação genérica.",
+            )
+        )
+
+    excess_anchor = _excessive_thesis_anchor(text)
+    if excess_anchor:
+        issues.append(
+            ReviewIssue(
+                dimension=ReviewDimension.COUNTERARGUMENTS,
+                severity=IssueSeverity.IMPORTANT,
+                title="Risco de tese excessiva",
+                description=(
+                    "A redação usa linguagem absoluta ou garante resultado, o que aumenta "
+                    "risco de vulnerabilidade estratégica e desconformidade ética."
+                ),
+                line_anchor=excess_anchor,
+                suggestion="Troque por tom proporcional à confiança: forte, cauteloso ou rascunho.",
+            )
+        )
+
+    return issues
+
+
+def _paragraphs(text: str) -> list[str]:
+    return [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+
+
+def _first_claim_without_proof(text: str) -> str | None:
+    for paragraph in _paragraphs(text):
+        if _CLAIM_WITHOUT_PROOF.search(paragraph) and not _PROOF_MARKERS.search(paragraph):
+            return paragraph[:280]
+    return None
+
+
+def _unfounded_request_anchor(text: str) -> str | None:
+    for paragraph in _paragraphs(text):
+        lower = paragraph.lower()
+        if "requer" not in lower:
+            continue
+        if _LEGAL_BASIS_MARKERS.search(paragraph):
+            continue
+        if _PROOF_MARKERS.search(paragraph):
+            continue
+        return paragraph[:280]
+    return None
+
+
+def _weak_jurisprudence_anchor(text: str, citations_found: list[CitationRef]) -> str | None:
+    generic = _GENERIC_JURIS.search(text)
+    unverified = next((c for c in citations_found if not c.found_in_repertory), None)
+    if unverified is not None:
+        return unverified.raw_text
+    if generic:
+        start = max(generic.start() - 80, 0)
+        end = min(generic.end() + 120, len(text))
+        return text[start:end].strip()
+    return None
+
+
+def _excessive_thesis_anchor(text: str) -> str | None:
+    match = _EXCESSIVE_THESIS.search(text)
+    if not match:
+        return None
+    start = max(match.start() - 80, 0)
+    end = min(match.end() + 120, len(text))
+    return text[start:end].strip()
