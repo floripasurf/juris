@@ -21,20 +21,31 @@ _ACADEMIC_CITE_PATTERN = re.compile(
 )
 
 # Patterns for raw case references in prose (not anchored to [CITE:])
-# Raw jurisprudence references not anchored to a [CITE:] marker. Covers the real
-# Brazilian formats: A-prefixed siglas (AREsp/ARE), agravo compounds (AgInt no REsp,
-# AgRg), the "n."/"nº"/"n°" number lead-in, the "/UF" suffix, and the
-# Tema Repetitivo / Súmula Vinculante / IRDR / IAC families. Each requires a number,
-# which keeps plain prose from matching.
-_RECURSO_SIGLAS = (
-    r"E?A?REsp|A?RE|AgInt|AgRg|AgR|EDcl|EDv|RHC|HC|RMS|MS|ADI|ADC|ADPF|IRDR|IAC|RR|AIRR|ADO"
-)
+# Raw jurisprudence references not anchored to a [CITE:] marker. Two tiers to catch
+# real Brazilian formats WITHOUT false-positiving on plain prose / product names:
+#
+# * STRONG siglas (REsp/AREsp/AgInt/AgRg/RHC/RMS/EDcl/ADI/ADC/ADPF/IRDR/IAC/AIRR) are
+#   distinctive, so a bare number is a safe signal (case-insensitive).
+# * AMBIGUOUS short siglas (RE/ARE/HC/MS/RR/AI/ADO) collide with common text — "MS 365",
+#   "HC 12", "are 123". They match ONLY uppercase (case-sensitive) AND with a *qualified*
+#   number: dotted (1.234.567), "/UF", an "n./nº" lead-in, or >= 5 digits.
+_STRONG_SIGLAS = r"E?A?REsp|AgInt|AgRg|EDcl|EDv|RHC|RMS|ADI|ADC|ADPF|IRDR|IAC|AIRR"
 _NUM_TAIL = r"(?:n[º°.]?\s*)?\d[\d.]*(?:\s*/\s*[A-Z]{2})?"
+_AMBIGUOUS_SIGLAS = r"ARE|RE|HC|MS|RR|AI|ADO"
+_QUALIFIED_NUM = (
+    r"(?:n[º°.]\s*\d[\d.]*"  # n. 123 / nº 1.234
+    r"|\d{1,3}(?:\.\d{3})+"  # dotted: 1.234.567
+    r"|\d+\s*/\s*[A-Z]{2}"  # 12345/SP
+    r"|\d{5,})"  # long bare number
+    r"(?:\s*/\s*[A-Z]{2})?"  # optional trailing /UF
+)
 _RAW_CASE_PATTERNS = [
-    # recurso siglas, with an optional "AgInt/AgRg/AgR no/na" compound prefix
+    # strong siglas, with an optional "AgInt/AgRg/AgR no/na" compound prefix
     re.compile(
-        rf"\b(?:Ag(?:Int|Rg|R)\s+n[oa]\s+)?(?:{_RECURSO_SIGLAS})\b\.?\s*{_NUM_TAIL}", re.IGNORECASE
+        rf"\b(?:Ag(?:Int|Rg|R)\s+n[oa]\s+)?(?:{_STRONG_SIGLAS})\b\.?\s*{_NUM_TAIL}", re.IGNORECASE
     ),
+    # ambiguous siglas: case-sensitive + a qualified number only (avoids "MS 365" etc.)
+    re.compile(rf"\b(?:{_AMBIGUOUS_SIGLAS})\b\.?\s*{_QUALIFIED_NUM}"),
     re.compile(r"\bS[uú]mula(?:\s+Vinculante)?\s+(?:n[º°.]?\s*)?\d+", re.IGNORECASE),
     re.compile(r"\bTema(?:\s+Repetitivo)?\s+(?:n[º°.]?\s*)?\d+", re.IGNORECASE),
 ]

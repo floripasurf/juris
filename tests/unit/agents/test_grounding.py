@@ -174,3 +174,28 @@ def test_spurious_detection_no_false_positive_on_plain_prose(text) -> None:
     verifier = MarkerCitationVerifier(cast(RepertoryService, object()))
     result = verifier.verify(text, {"src-1"})
     assert result.spurious_citations == []
+
+
+@_pytest.mark.parametrize(
+    "text",
+    ["are 123", "MS 365", "HC 12", "O MS 365 da empresa", "AI 9 do plano"],
+)
+def test_spurious_no_false_positive_on_ambiguous_short_siglas(text) -> None:
+    # short siglas (RE/HC/MS/AI) collide with plain words / product names — must not
+    # block a valid draft unless the number is qualified (dotted, /UF, n., or long)
+    from juris.repertory.retrieval.service import RepertoryService
+
+    verifier = MarkerCitationVerifier(cast(RepertoryService, object()))
+    assert verifier.verify(text, {"src-1"}).spurious_citations == []
+
+
+@_pytest.mark.parametrize(
+    "text",
+    ["RE 1.234.567/SP", "HC 123.456", "MS 12.345/DF", "RE 123456", "ARE 1.234.567"],
+)
+def test_spurious_still_catches_qualified_ambiguous_siglas(text) -> None:
+    # the SAME siglas, with a real qualified number, must still be blocked
+    from juris.repertory.retrieval.service import RepertoryService
+
+    verifier = MarkerCitationVerifier(cast(RepertoryService, object()))
+    assert verifier.verify(f"conforme {text}", {"src-1"}).spurious_citations, text
