@@ -2315,6 +2315,57 @@ def agent_serve(
     uvicorn.run(agent_asgi, host=bind_host, port=port, log_level="info")
 
 
+browser_app = typer.Typer(name="browser", help="Browser-session AI bridge (ADR-0018).")
+app.add_typer(browser_app)
+
+
+@browser_app.command("install-native-host")
+def browser_install_native_host(
+    extension_id: str = typer.Option(
+        ...,
+        "--extension-id",
+        help="ID da extensão carregada em chrome://extensions.",
+    ),
+    browser: str = typer.Option(
+        "chrome",
+        "--browser",
+        help="Navegador alvo: chrome, chromium, brave ou edge.",
+    ),
+    port: int = typer.Option(8787, "--port", help="Porta WS local exposta pelo host nativo."),
+) -> None:
+    """Install the Chrome Native Messaging host for the browser LLM session."""
+    from juris.api.native_host import install_native_host
+
+    try:
+        installation = install_native_host(extension_id=extension_id, browser=browser, ws_port=port)
+    except (RuntimeError, ValueError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from None
+
+    console.print("[green]Host nativo instalado.[/green]")
+    console.print(f"  Manifest: {installation.manifest_path}")
+    console.print(f"  Launcher: {installation.launcher_path}")
+    console.print("\nConfigure o juris para usar a ponte local:")
+    console.print(f"  export JURIS_BROWSER_BRIDGE_URL={installation.bridge_url}")
+    console.print("Depois recarregue a extensão e mantenha Claude.ai/ChatGPT logado em uma aba.")
+
+
+@browser_app.command("status")
+def browser_status() -> None:
+    """Show browser-session readiness and de-id posture."""
+    from juris.web.ai_status import resolve_ai_session_status
+
+    status = resolve_ai_session_status()
+    browser = status.get("browser", {})
+    mode = str(status.get("mode"))
+    deid = "ligado" if status.get("deidentify") else "desligado"
+    console.print(f"Modo de IA: [bold]{mode}[/bold] · de-id: {deid}")
+    if isinstance(browser, dict):
+        console.print(f"Bridge URL: {browser.get('bridge_url') or 'não configurada'}")
+        console.print(f"Host nativo: {'instalado' if browser.get('native_host_installed') else 'não encontrado'}")
+        console.print(f"Status: {browser.get('status')} — {browser.get('message')}")
+
+
 alerts_app = typer.Typer(name="alerts", help="Deadline alert management.")
 app.add_typer(alerts_app)
 

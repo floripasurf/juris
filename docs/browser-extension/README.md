@@ -38,10 +38,19 @@ npm run package   # build + zip → dist/juris-extension.zip (distributable)
 
 1. `npm run build`.
 2. `chrome://extensions` → Developer mode → **Load unpacked** → this folder.
-3. Copy the extension id into `native-host.json` (`allowed_origins`) and register the
-   host (`com.juris.host`) pointing `path` at the juris native host binary.
+3. Copy the extension id and install the native host:
+   ```bash
+   uv run juris browser install-native-host --extension-id <EXTENSION_ID>
+   export JURIS_BROWSER_BRIDGE_URL=ws://127.0.0.1:8787
+   ```
+   The command writes the per-user Chrome manifest (`com.juris.host`) and a local
+   launcher under `~/.juris/browser-session/`.
 4. Open Claude.ai (or ChatGPT) and **log in**; in onboarding, disable training/history.
-5. Drive a completion from the juris agent → it should appear in the tab and the
+5. Check readiness:
+   ```bash
+   uv run juris browser status
+   ```
+6. Drive a completion from the juris agent → it should appear in the tab and the
    final text return as a `CompletionResponse`.
 
 ## Robustness (built in)
@@ -56,7 +65,8 @@ npm run package   # build + zip → dist/juris-extension.zip (distributable)
 - Clear errors: `provedor não suportado`, `sessão não logada — faça login`,
   `limite de uso atingido`, `nenhuma aba aberta`, `timeout aguardando a resposta`.
 
-The operator console shows the active AI mode + de-id posture (`GET /api/ai-session`).
+The operator console shows the active AI mode, de-id posture, and whether the
+native host manifest is installed (`GET /api/ai-session`).
 
 ## Security
 

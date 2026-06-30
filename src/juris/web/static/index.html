@@ -1872,7 +1872,10 @@
         const s = await r.json();
         const labels = { browser_session: "sessão do navegador", cloud_deid: "nuvem", local: "local" };
         const deid = s.deidentify ? " · de-id ✓" : "";
-        el.textContent = `IA: ${labels[s.mode] || s.mode}${deid}`;
+        const browserNeedsSetup = s.mode === "browser_session" && s.browser?.status && s.browser.status !== "ready";
+        const setup = browserNeedsSetup ? " · configurar bridge" : "";
+        el.textContent = `IA: ${labels[s.mode] || s.mode}${deid}${setup}`;
+        if (s.browser?.message) el.title = s.browser.message;
       } catch {
         el.textContent = "IA: indisponível";
       }

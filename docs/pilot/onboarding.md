@@ -68,8 +68,22 @@ do(a) advogado(a)** (ADR-0018). Passo a passo, **na ordem**:
     comportamento seguro do ADR-0016.
 
 - [ ] **Instalar a extensão juris + o host de mensagens nativas** e autorizá-la no
-  navegador. *(Status: a cola de extensão/host está em construção — o lado juris
-  do bridge já está pronto; ver `docs/design_browser_bridge.md`.)*
+  navegador:
+  ```bash
+  cd docs/browser-extension
+  npm install
+  npm run build
+  ```
+  Em `chrome://extensions`, ative o modo desenvolvedor, carregue
+  `docs/browser-extension` como extensão unpacked, copie o ID da extensão e rode:
+  ```bash
+  uv run juris browser install-native-host --extension-id <EXTENSION_ID>
+  export JURIS_BROWSER_BRIDGE_URL=ws://127.0.0.1:8787
+  uv run juris browser status
+  ```
+  O status deve mostrar `browser_session`, de-id ligado e, após recarregar a
+  extensão, `ready` para o bridge. Se aparecer `agent_offline`, recarregue a
+  extensão e confirme que a aba Claude.ai/ChatGPT está aberta.
 
 - [ ] **Logar no Claude.ai / ChatGPT** na mesma janela do navegador e deixar a aba
   aberta (a extensão usa a sessão autenticada).

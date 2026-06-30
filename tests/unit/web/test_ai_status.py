@@ -6,9 +6,16 @@ from juris.web.ai_status import ai_session_status
 
 
 def test_browser_session_mode_when_bridge_configured() -> None:
-    status = ai_session_status(anthropic_key=False, browser_bridge=True, ollama_reachable=True)
+    status = ai_session_status(
+        anthropic_key=False,
+        browser_bridge=True,
+        browser_bridge_url="ws://127.0.0.1:8787",
+        native_host_manifest="/var/empty/juris-nao-existe",
+        ollama_reachable=True,
+    )
     assert status["mode"] == "browser_session"
     assert status["deidentify"] is True  # de-id always on for off-device AI (ADR-0016)
+    assert status["browser"]["status"] == "needs_native_host"
 
 
 def test_cloud_deid_mode_when_only_anthropic() -> None:
@@ -26,3 +33,37 @@ def test_local_mode_when_neither_cloud_nor_browser() -> None:
 def test_reports_provider_availability() -> None:
     status = ai_session_status(anthropic_key=True, browser_bridge=True, ollama_reachable=False)
     assert status["providers"] == {"cloud": True, "browser": True, "local": False}
+
+
+def test_reports_browser_offline_when_manifest_exists_but_bridge_is_not_reachable(tmp_path) -> None:
+    manifest = tmp_path / "com.juris.host.json"
+    manifest.write_text("{}", encoding="utf-8")
+
+    status = ai_session_status(
+        anthropic_key=False,
+        browser_bridge=True,
+        browser_bridge_url="ws://127.0.0.1:8787",
+        native_host_manifest=str(manifest),
+        browser_bridge_reachable=False,
+        ollama_reachable=True,
+    )
+
+    assert status["browser"]["status"] == "agent_offline"
+    assert status["browser"]["native_host_installed"] is True
+
+
+def test_reports_browser_ready_when_bridge_is_reachable(tmp_path) -> None:
+    manifest = tmp_path / "com.juris.host.json"
+    manifest.write_text("{}", encoding="utf-8")
+
+    status = ai_session_status(
+        anthropic_key=False,
+        browser_bridge=True,
+        browser_bridge_url="ws://127.0.0.1:8787",
+        native_host_manifest=str(manifest),
+        browser_bridge_reachable=True,
+        ollama_reachable=True,
+    )
+
+    assert status["browser"]["status"] == "ready"
+    assert status["browser"]["bridge_reachable"] is True

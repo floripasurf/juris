@@ -30,13 +30,14 @@ Claude.ai / ChatGPT tab  (lawyer logged in, training disabled)
 | `NativeBridgeTransport` (`api/browser_bridge.py`) | ✅ done, tracked | Serialise request → `BridgeChannel.request` → unwrap reply; satisfies `BrowserTransport` |
 | `BrowserSessionLLM` (`llm/browser_session.py`) | ✅ done — **local only** (gitignored engine; **not in GitHub**) | `AbstractLLM` over the transport |
 | `WebSocketBridgeChannel` (`api/browser_bridge.py`) | ✅ done, tracked | WS client to the host: open → send JSON → await reply → close; injectable `connect` |
-| Native Messaging Host | ⏳ next (OS glue) | Registered manifest; localhost WS server ↔ stdio to the extension |
-| Chrome extension content script | ⏳ next (OS glue) | Inject prompt into the tab, extract the (streamed) reply |
+| Native Messaging Host (`api/native_host.py` + `juris browser install-native-host`) | ✅ done, tracked | Registered manifest; localhost WS server ↔ stdio to the extension |
+| Chrome extension content script (`docs/browser-extension/content.js`) | ✅ minimal MV3 done, tracked | Inject prompt into the tab, extract the (streamed) reply |
 
-The **entire juris (Python) side is built and tested**:
-`BrowserSessionLLM → NativeBridgeTransport → WebSocketBridgeChannel → (host WS)`.
-What remains is OS/Chrome-level: the native host (a small WS server that Chrome
-launches and that relays to the extension over stdio) and the content script.
+The **juris side and minimal OS/Chrome glue are built and tested**:
+`BrowserSessionLLM → NativeBridgeTransport → WebSocketBridgeChannel → native host WS
+→ Native Messaging stdio → extension content script`.
+What remains before declaring the sprint fully done is the manual smoke against
+the live Claude.ai/ChatGPT DOM on the lawyer's machine.
 
 > **Public vs local:** the **protocol + transport** (`ws_schemas`, `browser_bridge`)
 > are tracked and on GitHub; the **LLM backend** (`BrowserSessionLLM`) lives only
