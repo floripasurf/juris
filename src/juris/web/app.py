@@ -297,4 +297,5 @@ async def create_demo_run(
         ],
         "estrategia": result.estrategia,
         "review": result.review,
+        "grounding": result.grounding,  # anti-hallucination chip (first-class state)
     }

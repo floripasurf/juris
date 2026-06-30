@@ -81,3 +81,54 @@ def test_review_payload_groups_issues_and_counts() -> None:
     assert payload["issues"][0]["title"] == "Citação não verificada"
     assert payload["issues"][0]["severity"] == "critical"
     assert payload["citations"][0]["found"] is True
+
+
+# --- grounding (anti-hallucination state as first-class data) ---
+
+
+def _grounding(status: str, **kw: object) -> SimpleNamespace:
+    base: dict[str, object] = {
+        "status": SimpleNamespace(value=status),
+        "is_verified": status == "verified",
+        "failed_citation_ids": [],
+        "spurious_citations": [],
+    }
+    base.update(kw)
+    return SimpleNamespace(**base)
+
+
+def test_grounding_payload_none_when_no_draft() -> None:
+    from juris.web.demo_service import grounding_payload
+
+    assert grounding_payload(None) is None
+
+
+def test_grounding_payload_surfaces_verified() -> None:
+    from juris.web.demo_service import grounding_payload
+
+    draft = SimpleNamespace(grounding_report=_grounding("verified"), blocked_reason=None)
+    payload = grounding_payload(draft)
+    assert payload == {
+        "status": "verified",
+        "blocked": False,
+        "blocked_reason": None,
+        "failed_citation_ids": [],
+        "spurious_citations": [],
+    }
+
+
+def test_grounding_payload_surfaces_blocked_with_offending_refs() -> None:
+    from juris.web.demo_service import grounding_payload
+
+    draft = SimpleNamespace(
+        grounding_report=_grounding(
+            "blocked", failed_citation_ids=["inventado"], spurious_citations=["REsp 1.234.567/SP"]
+        ),
+        blocked_reason="citacoes_sem_marcador",
+    )
+    payload = grounding_payload(draft)
+    assert payload is not None
+    assert payload["status"] == "blocked"
+    assert payload["blocked"] is True
+    assert payload["blocked_reason"] == "citacoes_sem_marcador"
+    assert payload["spurious_citations"] == ["REsp 1.234.567/SP"]

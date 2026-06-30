@@ -64,6 +64,7 @@ class WebDemoRun:
     artifacts: tuple[WebDemoArtifact, ...]
     estrategia: dict[str, object] | None = None  # the selected argumentative line (Relatório)
     review: dict[str, object] | None = None  # structured reviewer report
+    grounding: dict[str, object] | None = None  # anti-hallucination state (verified/blocked)
 
 
 def estrategia_payload(draft: object) -> dict[str, object] | None:
@@ -99,6 +100,25 @@ def estrategia_payload(draft: object) -> dict[str, object] | None:
 
 def _enum_value(value: object) -> str:
     return value.value if hasattr(value, "value") else str(value)
+
+
+def grounding_payload(draft: object) -> dict[str, object] | None:
+    """Extract the anti-hallucination state from a DraftResult (or None).
+
+    Surfaces the grounding status, whether the draft was blocked, and the offending
+    references — so the console renders the block as a first-class chip instead of
+    leaving the operator to discover it in the markdown/manifest.
+    """
+    report = getattr(draft, "grounding_report", None)
+    if report is None:
+        return None
+    return {
+        "status": report.status.value,
+        "blocked": not report.is_verified,
+        "blocked_reason": getattr(draft, "blocked_reason", None),
+        "failed_citation_ids": list(report.failed_citation_ids),
+        "spurious_citations": list(report.spurious_citations),
+    }
 
 
 def review_payload(draft: object) -> dict[str, object] | None:
@@ -202,6 +222,7 @@ async def execute_demo_run(request: WebDemoRunRequest) -> WebDemoRun:
         artifacts=artifacts,
         estrategia=estrategia_payload(getattr(result, "draft", None)),
         review=review_payload(getattr(result, "draft", None)),
+        grounding=grounding_payload(getattr(result, "draft", None)),
     )
 
 

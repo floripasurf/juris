@@ -285,6 +285,19 @@
     .mov-cat { background: #eef2ff; color: #4338ca; }
 
     /* Review panel */
+    /* Grounding chip (anti-hallucination state, first-class) */
+    .grounding-chip {
+      display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+      padding: 12px 16px; border-radius: 10px; margin: 16px 0; font-size: 0.92rem;
+    }
+    .grounding-chip .g-dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+    .grounding-chip .muted { color: var(--muted); }
+    .grounding-chip code { background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 4px; }
+    .grounding-chip > div { flex-basis: 100%; font-size: 0.85rem; margin-top: 2px; }
+    .grounding-ok { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; }
+    .grounding-ok .g-dot { background: #10b981; }
+    .grounding-blocked { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+    .grounding-blocked .g-dot { background: #ef4444; }
     .review-card {
       border: 1px solid #d7e3ee; border-radius: 12px; padding: 16px 18px;
       margin-bottom: 16px; background: #fff;
@@ -418,6 +431,7 @@
         </div>
         <div id="output-dir" class="out"></div>
       </div>
+      <div id="grounding"></div>
       <div id="estrategia"></div>
       <div id="review"></div>
       <div id="artifacts" class="empty">Os documentos gerados aparecerão aqui.</div>
@@ -513,6 +527,30 @@
         .join("");
       procModalBody.innerHTML = `<h2>Auditoria</h2>${verdict}
         <h4>Cadeia de eventos</h4><ul class="timeline audit-timeline">${rows}</ul>`;
+    }
+
+    const groundingEl = document.querySelector("#grounding");
+
+    function renderGrounding(g) {
+      groundingEl.innerHTML = "";
+      if (!g) return;
+      const card = document.createElement("div");
+      if (!g.blocked) {
+        card.className = "grounding-chip grounding-ok";
+        card.innerHTML = "<span class='g-dot'></span><strong>Lastro verificado</strong>" +
+          "<span class='muted'>todas as citações conferem com o corpus</span>";
+        groundingEl.appendChild(card);
+        return;
+      }
+      card.className = "grounding-chip grounding-blocked";
+      const failed = (g.failed_citation_ids || []).map((x) => `<code>${escHtml(x)}</code>`).join(", ");
+      const spurious = (g.spurious_citations || []).map((x) => `<code>${escHtml(x)}</code>`).join(", ");
+      let refs = "";
+      if (failed) refs += `<div>Marcadores inválidos: ${failed}</div>`;
+      if (spurious) refs += `<div>Jurisprudência sem fonte verificada: ${spurious}</div>`;
+      card.innerHTML = "<span class='g-dot'></span><strong>Minuta bloqueada — sem lastro verificável</strong>" +
+        `<span class='muted'>${escHtml(g.blocked_reason || "grounding falhou")}</span>${refs}`;
+      groundingEl.appendChild(card);
     }
 
     const reviewEl = document.querySelector("#review");
@@ -627,6 +665,7 @@
       notice.className = data.succeeded ? "notice" : "notice error";
       notice.hidden = false;
 
+      renderGrounding(data.grounding);
       renderEstrategia(data.estrategia);
       renderReview(data.review);
 
