@@ -41,13 +41,17 @@ class ConnectJobStore:
         return sqlite3.connect(self._path)
 
     def create(self, job_id: str, tenant_id: str) -> None:
-        """Record a new job as ``running`` (monotonic created_at for FIFO eviction)."""
+        """Record a new job as ``running``.
+
+        ``created_at`` is the UTC epoch (``time.time()``) — stable across restarts,
+        unlike a monotonic clock, so FIFO eviction stays correct after a reboot.
+        """
         with self._conn() as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO connect_jobs "
                 "(job_id, tenant_id, status, result_json, error, created_at) "
                 "VALUES (?, ?, 'running', NULL, NULL, ?)",
-                (job_id, tenant_id, time.monotonic()),
+                (job_id, tenant_id, time.time()),
             )
 
     def mark_done(self, job_id: str, result: dict[str, Any]) -> None:
@@ -86,7 +90,8 @@ class ConnectJobStore:
         with self._conn() as conn:
             conn.execute(
                 "DELETE FROM connect_jobs WHERE job_id IN ("
-                "  SELECT job_id FROM connect_jobs ORDER BY created_at DESC LIMIT -1 OFFSET ?"
+                "  SELECT job_id FROM connect_jobs "
+                "  ORDER BY created_at DESC, rowid DESC LIMIT -1 OFFSET ?"  # rowid breaks epoch ties
                 ")",
                 (max_jobs,),
             )
