@@ -17,6 +17,7 @@ def test_open_when_no_tenants_configured() -> None:
 def test_valid_api_key_resolves_its_tenant() -> None:
     registry = TenantRegistry({"escritorio-a": "key-aaa", "escritorio-b": "key-bbb"})
     assert resolve_tenant(registry, api_key="key-bbb") == Tenant("escritorio-b")
+    assert registry.tenant_ids == ("escritorio-a", "escritorio-b")
 
 
 def test_missing_or_invalid_key_is_rejected_when_configured() -> None:

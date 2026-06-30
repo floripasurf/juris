@@ -187,8 +187,57 @@
       .artifact-list { grid-template-columns: 1fr; }
       .tabs { border-right: 0; border-bottom: 1px solid var(--line); }
       .row { grid-template-columns: 1fr; }
+      .workbench-grid { grid-template-columns: 1fr; }
+      .metric-grid { grid-template-columns: 1fr; }
     }
     .processos-panel { grid-column: 1 / -1; padding: 24px; }
+    .workbench-panel { grid-column: 1 / -1; padding: 24px; }
+    .workbench-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(180px, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .queue-column {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      min-height: 180px;
+      padding: 12px;
+    }
+    .queue-column h2 { font-size: 13px; color: #344054; margin-bottom: 10px; }
+    .queue-list { display: grid; gap: 8px; }
+    .queue-item {
+      border: 1px solid #d7e3ee;
+      border-radius: 8px;
+      background: #fff;
+      padding: 10px;
+    }
+    .queue-item strong {
+      display: block;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      line-height: 1.35;
+      word-break: break-word;
+    }
+    .queue-item .meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    .queue-actions { display: flex; gap: 6px; margin-top: 8px; }
+    .queue-actions button { width: auto; margin: 0; padding: 6px 9px; font-size: 12px; }
+    .queue-empty { color: var(--muted); font-size: 13px; }
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(150px, 1fr));
+      gap: 10px;
+      margin: 12px 0 16px;
+    }
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      padding: 12px;
+    }
+    .metric strong { display: block; font-size: 18px; }
+    .metric span { color: var(--muted); font-size: 12px; }
     .proc-list { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
     .proc-row {
       display: grid;
@@ -213,6 +262,19 @@
     .connect-bar input { width: auto; flex: 0 1 180px; margin: 0; }
     .connect-bar button { width: auto; flex: 0 0 auto; }
     #connect-status { color: var(--muted); font-size: 13px; }
+    .list-tools {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin: 10px 0 14px;
+    }
+    .list-tools input, .list-tools select {
+      width: auto;
+      min-width: 180px;
+      margin: 0;
+    }
+    .list-tools button { width: auto; margin: 0; }
 
     /* Estratégia panel (the structured Relatório) */
     .estrategia-card {
@@ -344,15 +406,23 @@
   <header>
     <div class="brand"><div class="mark">J</div><div>Juris</div></div>
     <nav id="nav">
-      <button type="button" data-nav="acervo" class="active">Acervo</button>
+      <button type="button" data-nav="mesa" class="active">Mesa</button>
+      <button type="button" data-nav="acervo">Acervo</button>
       <button type="button" data-nav="agenda">Agenda</button>
       <button type="button" data-nav="caso">Novo caso</button>
+      <button type="button" data-nav="piloto">Piloto</button>
     </nav>
     <div class="status" id="ai-session" title="Modo de IA e de-identificação (ADR-0016/0018)">IA: …</div>
   </header>
 
   <main>
-    <section class="processos-panel" data-view="acervo">
+    <section class="workbench-panel" data-view="mesa">
+      <h1>Mesa de trabalho</h1>
+      <p class="lede">Filas do dia por prazo, movimentação, rascunho, bloqueio e artefatos recentes.</p>
+      <div id="workbench" class="workbench-grid"></div>
+    </section>
+
+    <section class="processos-panel" data-view="acervo" hidden>
       <h1>Meus processos</h1>
       <p class="lede">Acervo importado do seu token. Conecte para importar e manter atualizado; clique em "minuta" para redigir a partir de um processo.</p>
       <form id="connect-form" class="connect-bar">
@@ -361,13 +431,91 @@
         <button id="connect-btn" type="submit">Conectar / sincronizar</button>
         <span id="connect-status"></span>
       </form>
+      <div class="list-tools">
+        <input id="processos-filter" placeholder="Filtrar CNJ, classe ou assunto" autocomplete="off" />
+        <select id="processos-sort">
+          <option value="prazo">ordenar por prazo</option>
+          <option value="sync">ordenar por última sync</option>
+          <option value="prazos">ordenar por nº de prazos</option>
+        </select>
+      </div>
       <div id="processos" class="proc-empty">Carregando…</div>
     </section>
 
     <section class="processos-panel" data-view="agenda" hidden>
       <h1>Agenda de prazos</h1>
       <p class="lede">Prazos pendentes do acervo, mais próximos primeiro.</p>
+      <div class="list-tools">
+        <input id="prazos-filter" placeholder="Filtrar CNJ ou prazo" autocomplete="off" />
+        <select id="prazos-urgency">
+          <option value="">todas urgências</option>
+          <option value="alta">alta</option>
+          <option value="media">média</option>
+          <option value="baixa">baixa</option>
+        </select>
+      </div>
       <div id="prazos" class="proc-empty">Carregando…</div>
+    </section>
+
+    <section class="processos-panel" data-view="piloto" hidden>
+      <h1>Piloto instrumentado</h1>
+      <p class="lede">Registre valor, qualidade e lacunas de corpus para cada caso real.</p>
+      <form id="pilot-form">
+        <div class="row">
+          <div>
+            <label for="pf_cnj">Número CNJ</label>
+            <input id="pf_cnj" autocomplete="off" />
+          </div>
+          <div>
+            <label for="pf_output_dir">Diretório do artefato</label>
+            <input id="pf_output_dir" autocomplete="off" />
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="pf_time">Tempo economizado (min)</label>
+            <input id="pf_time" type="number" min="0" value="0" />
+          </div>
+          <div>
+            <label for="pf_mode">Modo usado</label>
+            <select id="pf_mode">
+              <option value="rascunho">rascunho</option>
+              <option value="minuta">minuta</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="pf_acc">Citações aceitas</label>
+            <input id="pf_acc" type="number" min="0" value="0" />
+          </div>
+          <div>
+            <label for="pf_rej">Citações rejeitadas</label>
+            <input id="pf_rej" type="number" min="0" value="0" />
+          </div>
+        </div>
+        <label for="pf_missing">Fonte faltante</label>
+        <input id="pf_missing" autocomplete="off" />
+        <label for="pf_error">Erro de prazo/análise</label>
+        <input id="pf_error" autocomplete="off" />
+        <div class="row">
+          <div>
+            <label for="pf_utility">Utilidade percebida (1-5)</label>
+            <input id="pf_utility" type="number" min="1" max="5" value="4" />
+          </div>
+          <label class="check" style="margin-top:34px"><input id="pf_corpus" type="checkbox" /> aproveitável para corpus</label>
+        </div>
+        <label for="pf_notes">Notas</label>
+        <textarea id="pf_notes"></textarea>
+        <button id="pilot-submit" type="submit">Registrar feedback</button>
+      </form>
+      <div class="list-tools">
+        <button type="button" class="ghost" id="pilot-export-json">exportar JSON</button>
+        <button type="button" class="ghost" id="pilot-export-csv">exportar CSV</button>
+        <button type="button" class="ghost" id="pilot-export-md">relatório MD</button>
+      </div>
+      <div id="pilot-summary"></div>
+      <div id="pilot-feedback" class="proc-empty">Carregando…</div>
     </section>
 
     <section class="form-panel" data-view="caso" hidden>
@@ -459,6 +607,7 @@
     const summaryEl = document.querySelector("#result-summary");
     const outputDirEl = document.querySelector("#output-dir");
     const estrategiaEl = document.querySelector("#estrategia");
+    const workbenchEl = document.querySelector("#workbench");
 
     const CONF_LABEL = { alta: "Confiança alta", media: "Confiança média", baixa: "Confiança baixa" };
 
@@ -595,6 +744,11 @@
     // Escape untrusted text (LLM output, court/process data) before innerHTML.
     const ESC_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
     const escHtml = (v) => (v == null ? "" : String(v).replace(/[&<>"']/g, (c) => ESC_MAP[c]));
+    const apiErrorMessage = (data, fallback) => {
+      if (data && data.detail && data.detail.message) return data.detail.message;
+      if (data && typeof data.detail === "string") return data.detail;
+      return fallback;
+    };
 
     // View navigation — show one section group at a time.
     function showView(name) {
@@ -632,6 +786,21 @@
       }
       toggleNewCaseCpf();
     }
+    function renderAgentHealth(h) {
+      const cs = document.querySelector("#connect-status");
+      if (!cs || !h || !h.remote) return;
+      if (h.error || h.reachable === false) {
+        cs.textContent = `Agente remoto indisponível: ${h.error || "sem resposta"}`;
+        return;
+      }
+      if (h.token_connected === false) {
+        cs.textContent = "Agente remoto alcançável, mas token A3 não detectado.";
+        return;
+      }
+      if (h.token_connected === true) {
+        cs.textContent = "Agente remoto pronto: token A3 conectado.";
+      }
+    }
     async function loadAgentMode() {
       try {
         const r = await fetch("/api/agent-mode");
@@ -640,6 +809,14 @@
         /* default to co-located */
       }
       applyAgentMode();
+      if (AGENT_REMOTE) {
+        try {
+          const h = await fetch("/api/agent-health");
+          if (h.ok) renderAgentHealth(await h.json());
+        } catch (_) {
+          /* keep the mode message */
+        }
+      }
     }
     sourceSel.addEventListener("change", toggleNewCaseCpf);
     loadAgentMode();
@@ -676,7 +853,7 @@
           body: JSON.stringify(payload),
         });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || "Falha desconhecida");
+        if (!response.ok) throw new Error(apiErrorMessage(data, "Falha desconhecida"));
         renderRun(data);
       } catch (error) {
         notice.textContent = error.message;
@@ -711,6 +888,7 @@
       renderGrounding(data.grounding);
       renderEstrategia(data.estrategia);
       renderReview(data.review);
+      loadWorkbench();
 
       if (!data.artifacts.length) {
         artifactsEl.className = "empty";
@@ -739,6 +917,9 @@
     }
 
     const processosEl = document.querySelector("#processos");
+    const processosFilter = document.querySelector("#processos-filter");
+    const processosSort = document.querySelector("#processos-sort");
+    let processosCache = [];
 
     const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString("pt-BR") : "—");
 
@@ -750,6 +931,144 @@
       const target = document.querySelector("#numero_cnj");
       target.scrollIntoView({ behavior: "smooth", block: "center" });
       target.focus();
+    }
+
+    async function copyText(text) {
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch (_) {
+        const el = document.createElement("textarea");
+        el.value = text;
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand("copy");
+        el.remove();
+      }
+    }
+
+    function queueItem(title, meta, actions) {
+      const item = document.createElement("div");
+      item.className = "queue-item";
+      item.innerHTML = `<strong>${escHtml(title)}</strong><div class="meta">${escHtml(meta || "")}</div>`;
+      if (actions && actions.length) {
+        const actionRow = document.createElement("div");
+        actionRow.className = "queue-actions";
+        actions.forEach((action) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = action.ghost ? "ghost" : "";
+          btn.textContent = action.label;
+          btn.addEventListener("click", action.run);
+          actionRow.appendChild(btn);
+        });
+        item.appendChild(actionRow);
+      }
+      return item;
+    }
+
+    function renderQueue(title, items, emptyText) {
+      const col = document.createElement("div");
+      col.className = "queue-column";
+      col.innerHTML = `<h2>${escHtml(title)}</h2>`;
+      const list = document.createElement("div");
+      list.className = "queue-list";
+      if (!items.length) {
+        const empty = document.createElement("div");
+        empty.className = "queue-empty";
+        empty.textContent = emptyText;
+        list.appendChild(empty);
+      } else {
+        items.forEach((item) => list.appendChild(item));
+      }
+      col.appendChild(list);
+      return col;
+    }
+
+    function reviewSummary(review) {
+      if (!review) return "review —";
+      return `review ${review.critical || 0}/${review.important || 0}/${review.suggestion || 0}`;
+    }
+
+    function runMeta(run) {
+      const source = run.source ? `fonte ${run.source}` : "fonte —";
+      const grounding = run.grounding_status ? `grounding ${run.grounding_status}` : "grounding —";
+      return `${source} · ${grounding} · ${reviewSummary(run.review)}`;
+    }
+
+    function caseMeta(item, fallback) {
+      if (!item.latest_run) return fallback;
+      return `${fallback} · ${runMeta(item.latest_run)}`;
+    }
+
+    function caseActions(item, primaryLabel) {
+      const actions = [
+        { label: primaryLabel || "minuta", run: () => useProcesso(item.numero_cnj, item.tribunal || "tjmg") },
+      ];
+      if (item.latest_run && item.latest_run.output_dir) {
+        actions.unshift({ label: "auditoria", ghost: true, run: () => openAudit(item.latest_run.output_dir) });
+      }
+      return actions;
+    }
+
+    function renderWorkbench(wb) {
+      const critical = (wb.critical_deadlines || [])
+        .map((p) => queueItem(
+          p.numero_cnj,
+          caseMeta(p, `${fmtDate(p.data_limite)} · ${p.rule_nome || "prazo pendente"}`),
+          caseActions(p, "minuta")
+        ));
+
+      const updated = (wb.recent_movements || [])
+        .map((p) => queueItem(
+          p.numero_cnj,
+          caseMeta(p, `sync ${fmtDate(p.last_sync_at)} · ${(p.tribunal || "").toUpperCase()}`),
+          [
+            { label: "abrir", ghost: true, run: () => openProcessoDetail(p.numero_cnj) },
+            ...caseActions(p, "minuta"),
+          ]
+        ));
+
+      const draftReady = (wb.draft_ready || [])
+        .map((p) => queueItem(
+          p.numero_cnj,
+          caseMeta(p, `${p.classe || "processo"} · ${p.prazos_pendentes || 0} prazo(s)`),
+          caseActions(p, "gerar")
+        ));
+
+      const blocked = (wb.blocked_cases || []).map((b) => queueItem(
+        b.numero_cnj,
+        `${b.grounding_blocked_reason || "grounding bloqueou a minuta"} · ${runMeta(b)}`,
+        [{ label: "abrir caso", run: () => useProcesso(b.numero_cnj, b.tribunal || "tjmg") }]
+      ));
+
+      const artifacts = (wb.recent_artifacts || []).map((a) => queueItem(
+        a.numero_cnj || "última execução",
+        `${a.artifact_count || 0} artefato(s) · ${runMeta(a)} · ${fmtDate(a.finished_at)}`,
+        [
+          { label: "auditoria", ghost: true, run: () => openAudit(a.output_dir) },
+          { label: "copiar", run: () => copyText(a.output_dir) },
+        ]
+      ));
+
+      workbenchEl.innerHTML = "";
+      workbenchEl.append(
+        renderQueue("Prazos críticos", critical, "Nenhum prazo crítico."),
+        renderQueue("Novas movimentações", updated, "Sem sync recente."),
+        renderQueue("Prontos para rascunho", draftReady, "Nenhum processo importado."),
+        renderQueue("Bloqueados", blocked, "Nenhum bloqueio nesta sessão."),
+        renderQueue("Artefatos recentes", artifacts, "Nenhum artefato nesta sessão.")
+      );
+    }
+
+    async function loadWorkbench() {
+      try {
+        const response = await fetch("/api/workbench");
+        const data = response.ok ? await response.json() : {};
+        renderWorkbench(data);
+      } catch (_) {
+        workbenchEl.innerHTML = "";
+        workbenchEl.appendChild(renderQueue("Mesa", [], "Não foi possível carregar a mesa."));
+      }
     }
 
     const procModal = document.querySelector("#proc-modal");
@@ -795,11 +1114,29 @@
         <ul class="timeline">${movs}</ul>`;
     }
 
+    function filteredProcessos() {
+      const q = (processosFilter.value || "").trim().toLowerCase();
+      const sorted = processosCache
+        .filter((p) => {
+          if (!q) return true;
+          return [p.numero_cnj, p.classe, p.assunto, p.tribunal].some((v) => String(v || "").toLowerCase().includes(q));
+        })
+        .slice();
+      if (processosSort.value === "sync") {
+        sorted.sort((a, b) => String(b.last_sync_at || "").localeCompare(String(a.last_sync_at || "")));
+      } else if (processosSort.value === "prazos") {
+        sorted.sort((a, b) => (b.prazos_pendentes || 0) - (a.prazos_pendentes || 0));
+      } else {
+        sorted.sort((a, b) => String(a.proximo_prazo || "9999").localeCompare(String(b.proximo_prazo || "9999")));
+      }
+      return sorted;
+    }
+
     function renderProcessos(items) {
       if (!items.length) {
         processosEl.className = "proc-empty";
         processosEl.textContent =
-          "Nenhum processo importado ainda. Rode 'juris connect --cpf …' para importar seu acervo.";
+          processosCache.length ? "Nenhum processo encontrado com esses filtros." : "Nenhum processo importado ainda.";
         return;
       }
       processosEl.className = "proc-list";
@@ -840,12 +1177,15 @@
       try {
         const response = await fetch("/api/processos");
         const data = await response.json();
-        renderProcessos(data.processos || []);
+        processosCache = data.processos || [];
+        renderProcessos(filteredProcessos());
       } catch (error) {
         processosEl.className = "proc-empty";
         processosEl.textContent = "Não foi possível carregar os processos.";
       }
     }
+    processosFilter.addEventListener("input", () => renderProcessos(filteredProcessos()));
+    processosSort.addEventListener("change", () => renderProcessos(filteredProcessos()));
 
     const connectForm = document.querySelector("#connect-form");
     const connectBtn = document.querySelector("#connect-btn");
@@ -877,7 +1217,7 @@
           body: JSON.stringify(body),
         });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || "Falha ao conectar");
+        if (!response.ok) throw new Error(apiErrorMessage(data, "Falha ao conectar"));
         document.querySelector("#c_pin").value = "";
         await pollConnect(data.job_id);
       } catch (error) {
@@ -905,17 +1245,34 @@
         connectStatus.textContent = `+${d.avisos_added} via avisos, +${d.seed_added} via seed (total ${d.total_tracked})${sync}.`;
         loadProcessos();
         loadPrazos();
+        loadWorkbench();
         return;
       }
       connectStatus.textContent = "Tempo limite aguardando a sincronização.";
     }
 
     const prazosEl = document.querySelector("#prazos");
+    const prazosFilter = document.querySelector("#prazos-filter");
+    const prazosUrgency = document.querySelector("#prazos-urgency");
+    let prazosCache = [];
+
+    function filteredPrazos() {
+      const q = (prazosFilter.value || "").trim().toLowerCase();
+      const urgency = prazosUrgency.value;
+      return prazosCache
+        .filter((p) => !urgency || p.urgencia === urgency)
+        .filter((p) => {
+          if (!q) return true;
+          return [p.numero_cnj, p.rule_nome, p.tipo_acao].some((v) => String(v || "").toLowerCase().includes(q));
+        })
+        .slice()
+        .sort((a, b) => String(a.data_limite || "9999").localeCompare(String(b.data_limite || "9999")));
+    }
 
     function renderPrazos(items) {
       if (!items.length) {
         prazosEl.className = "proc-empty";
-        prazosEl.textContent = "Nenhum prazo pendente.";
+        prazosEl.textContent = prazosCache.length ? "Nenhum prazo encontrado com esses filtros." : "Nenhum prazo pendente.";
         return;
       }
       prazosEl.className = "proc-list";
@@ -947,12 +1304,145 @@
       try {
         const response = await fetch("/api/prazos");
         const data = await response.json();
-        renderPrazos(data.prazos || []);
+        prazosCache = data.prazos || [];
+        renderPrazos(filteredPrazos());
       } catch (error) {
         prazosEl.className = "proc-empty";
         prazosEl.textContent = "Não foi possível carregar a agenda.";
       }
     }
+    prazosFilter.addEventListener("input", () => renderPrazos(filteredPrazos()));
+    prazosUrgency.addEventListener("change", () => renderPrazos(filteredPrazos()));
+
+    const pilotForm = document.querySelector("#pilot-form");
+    const pilotFeedbackEl = document.querySelector("#pilot-feedback");
+    const pilotSummaryEl = document.querySelector("#pilot-summary");
+    const pilotSubmit = document.querySelector("#pilot-submit");
+
+    function renderPilotSummary(summary) {
+      const citations = summary.citations || {};
+      const gaps = summary.prioritized_gaps || [];
+      const candidates = summary.corpus_candidates || [];
+      const gapRows = gaps.length
+        ? gaps.slice(0, 5).map((g) => `<li>${escHtml(g.label)} <span class="proc-meta">${escHtml(g.kind)} · ${g.count} caso(s)</span></li>`).join("")
+        : "<li class='proc-meta'>Nenhuma lacuna registrada.</li>";
+      const candidateRows = candidates.length
+        ? candidates.slice(0, 5).map((c) => `<li>${escHtml(c.numero_cnj)} <span class="proc-meta">${escHtml(c.missing_source || c.notes || "")}</span></li>`).join("")
+        : "<li class='proc-meta'>Nenhum caso marcado para corpus.</li>";
+
+      pilotSummaryEl.innerHTML = `
+        <div class="metric-grid">
+          <div class="metric"><strong>${summary.total_cases || 0}</strong><span>casos avaliados</span></div>
+          <div class="metric"><strong>${summary.total_time_saved_minutes || 0} min</strong><span>tempo economizado</span></div>
+          <div class="metric"><strong>${summary.average_utility || 0}/5</strong><span>utilidade média</span></div>
+          <div class="metric"><strong>${citations.acceptance_rate == null ? "—" : Math.round(citations.acceptance_rate * 100) + "%"}</strong><span>aceitação de citações</span></div>
+        </div>
+        <div class="row">
+          <div><h2>Lacunas priorizadas</h2><ul class="detail-prazos">${gapRows}</ul></div>
+          <div><h2>Aproveitáveis para corpus</h2><ul class="detail-prazos">${candidateRows}</ul></div>
+        </div>`;
+    }
+
+    async function loadPilotSummary() {
+      try {
+        const response = await fetch("/api/pilot-feedback/summary");
+        const data = response.ok ? await response.json() : {};
+        renderPilotSummary(data);
+      } catch (_) {
+        pilotSummaryEl.innerHTML = "";
+      }
+    }
+
+    function renderPilotFeedback(items) {
+      if (!items.length) {
+        pilotFeedbackEl.className = "proc-empty";
+        pilotFeedbackEl.textContent = "Nenhum feedback registrado.";
+        return;
+      }
+      pilotFeedbackEl.className = "proc-list";
+      pilotFeedbackEl.innerHTML = "";
+      items.forEach((f) => {
+        const row = document.createElement("div");
+        row.className = "proc-row";
+        const left = document.createElement("div");
+        left.innerHTML = `<div class="proc-cnj">${escHtml(f.numero_cnj)}</div><div class="proc-meta">${fmtDate(f.created_at)} · ${escHtml(f.mode_used || "—")}</div>`;
+        const mid = document.createElement("div");
+        mid.className = "proc-meta";
+        mid.textContent = `${f.time_saved_minutes || 0} min · utilidade ${f.perceived_utility || "—"}/5`;
+        const right = document.createElement("div");
+        right.className = "proc-prazo";
+        right.innerHTML = `<span class="badge ${f.corpus_usable ? "urg-alta" : "urg-baixa"}">${f.corpus_usable ? "corpus" : "não corpus"}</span><div class="proc-meta">${f.citations_accepted || 0}/${f.citations_rejected || 0} citações</div>`;
+        const action = document.createElement("div");
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "ghost";
+        btn.textContent = "copiar";
+        btn.addEventListener("click", () => copyText(f.output_dir || f.numero_cnj || ""));
+        action.appendChild(btn);
+        row.append(left, mid, right, action);
+        pilotFeedbackEl.appendChild(row);
+      });
+    }
+
+    async function loadPilotFeedback() {
+      try {
+        const response = await fetch("/api/pilot-feedback");
+        const data = response.ok ? await response.json() : { feedback: [] };
+        renderPilotFeedback(data.feedback || []);
+      } catch (_) {
+        pilotFeedbackEl.className = "proc-empty";
+        pilotFeedbackEl.textContent = "Não foi possível carregar o feedback.";
+      }
+    }
+
+    pilotForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      pilotSubmit.disabled = true;
+      pilotSubmit.textContent = "Registrando…";
+      const payload = {
+        numero_cnj: document.querySelector("#pf_cnj").value.trim(),
+        output_dir: document.querySelector("#pf_output_dir").value.trim() || null,
+        time_saved_minutes: Number(document.querySelector("#pf_time").value || 0),
+        mode_used: document.querySelector("#pf_mode").value,
+        citations_accepted: Number(document.querySelector("#pf_acc").value || 0),
+        citations_rejected: Number(document.querySelector("#pf_rej").value || 0),
+        missing_source: document.querySelector("#pf_missing").value.trim(),
+        deadline_or_analysis_error: document.querySelector("#pf_error").value.trim(),
+        perceived_utility: Number(document.querySelector("#pf_utility").value || 1),
+        corpus_usable: document.querySelector("#pf_corpus").checked,
+        notes: document.querySelector("#pf_notes").value.trim(),
+      };
+      try {
+        const response = await fetch("/api/pilot-feedback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(apiErrorMessage(data, "Falha ao registrar feedback"));
+        pilotForm.reset();
+        document.querySelector("#pf_time").value = "0";
+        document.querySelector("#pf_utility").value = "4";
+        await loadPilotFeedback();
+        await loadPilotSummary();
+      } catch (err) {
+        pilotFeedbackEl.className = "proc-empty";
+        pilotFeedbackEl.textContent = err.message;
+      } finally {
+        pilotSubmit.disabled = false;
+        pilotSubmit.textContent = "Registrar feedback";
+      }
+    });
+
+    document.querySelector("#pilot-export-json").addEventListener("click", () => {
+      window.open("/api/pilot-feedback/export?format=json", "_blank");
+    });
+    document.querySelector("#pilot-export-csv").addEventListener("click", () => {
+      window.open("/api/pilot-feedback/export?format=csv", "_blank");
+    });
+    document.querySelector("#pilot-export-md").addEventListener("click", () => {
+      window.open("/api/pilot-feedback/export?format=md", "_blank");
+    });
 
     async function loadAiSession() {
       const el = document.getElementById("ai-session");
@@ -968,8 +1458,11 @@
     }
 
     loadAiSession();
+    loadWorkbench();
     loadProcessos();
     loadPrazos();
+    loadPilotFeedback();
+    loadPilotSummary();
   </script>
 </body>
 </html>

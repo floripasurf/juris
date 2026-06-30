@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib
+import json
+from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -20,6 +22,7 @@ def test_index_renders_local_ui() -> None:
 
     assert response.status_code == 200
     assert "Novo caso" in response.text
+    assert "Mesa de trabalho" in response.text
     assert "Gerar artefatos" in response.text
     assert "Meus processos" in response.text
     assert "Agenda de prazos" in response.text
@@ -29,6 +32,26 @@ def test_index_renders_local_ui() -> None:
     assert "openAudit" in response.text  # audit viewer wired
     assert "showView" in response.text  # section navigation wired
     assert 'data-nav="acervo"' in response.text
+    assert 'data-nav="mesa"' in response.text
+    assert "renderWorkbench" in response.text
+    assert "/api/workbench" in response.text
+    assert "Prazos críticos" in response.text
+    assert "runMeta" in response.text
+    assert "reviewSummary" in response.text
+    assert "caseMeta" in response.text
+    assert "caseActions" in response.text
+    assert "processos-filter" in response.text
+    assert "filteredProcessos" in response.text
+    assert "prazos-urgency" in response.text
+    assert "filteredPrazos" in response.text
+    assert "Piloto instrumentado" in response.text
+    assert "pilot-form" in response.text
+    assert "/api/pilot-feedback" in response.text
+    assert "/api/pilot-feedback/summary" in response.text
+    assert "pilot-export-md" in response.text
+    assert "renderPilotFeedback" in response.text
+    assert "renderPilotSummary" in response.text
+    assert "apiErrorMessage" in response.text
     assert "escHtml" in response.text  # untrusted data escaped before innerHTML (XSS)
 
 
@@ -183,6 +206,68 @@ def test_prazos_endpoint_returns_agenda(monkeypatch) -> None:
     assert response.json()["prazos"][0]["urgencia"] == "alta"
 
 
+def test_workbench_endpoint_returns_daily_queues(monkeypatch, tmp_path) -> None:
+    app_module = importlib.import_module("juris.web.app")
+
+    monkeypatch.setattr(app_module, "_tenant_db", lambda tenant: "db")
+    monkeypatch.setattr(app_module, "_out_root", lambda: tmp_path)
+    monkeypatch.setattr(app_module, "list_processos", lambda db=None: [])
+    monkeypatch.setattr(app_module, "list_prazos", lambda db=None: [])
+    monkeypatch.setattr(
+        app_module,
+        "build_workbench",
+        lambda *, processos, prazos, out_root: {
+            "critical_deadlines": [],
+            "recent_movements": [],
+            "draft_ready": [],
+            "blocked_cases": [{"numero_cnj": "A"}],
+            "recent_artifacts": [],
+        },
+    )
+
+    response = client.get("/api/workbench")
+
+    assert response.status_code == 200
+    assert response.json()["blocked_cases"][0]["numero_cnj"] == "A"
+
+
+def test_pilot_feedback_endpoints_are_tenant_scoped(monkeypatch, tmp_path) -> None:
+    app_module = importlib.import_module("juris.web.app")
+
+    monkeypatch.setattr(app_module, "_out_root", lambda: tmp_path)
+    payload = {
+        "numero_cnj": "0001234-56.2026.8.13.0001",
+        "output_dir": "juris-out/CASE",
+        "time_saved_minutes": 30,
+        "mode_used": "minuta",
+        "citations_accepted": 2,
+        "citations_rejected": 1,
+        "missing_source": "TJMG acórdão",
+        "deadline_or_analysis_error": "",
+        "perceived_utility": 4,
+        "corpus_usable": True,
+        "notes": "validar corpus",
+    }
+
+    created = client.post("/api/pilot-feedback", json=payload)
+    listed = client.get("/api/pilot-feedback")
+    summary = client.get("/api/pilot-feedback/summary")
+    exported = client.get("/api/pilot-feedback/export", params={"format": "csv"})
+    report = client.get("/api/pilot-feedback/export", params={"format": "md"})
+
+    assert created.status_code == 201, created.text
+    assert created.json()["feedback"]["time_saved_minutes"] == 30
+    assert listed.status_code == 200
+    assert listed.json()["feedback"][0]["numero_cnj"] == "0001234-56.2026.8.13.0001"
+    assert summary.status_code == 200
+    assert summary.json()["total_time_saved_minutes"] == 30
+    assert summary.json()["prioritized_gaps"][0]["label"] == "TJMG acórdão"
+    assert exported.status_code == 200
+    assert "TJMG acórdão" in exported.text
+    assert report.status_code == 200
+    assert "# Relatório do Piloto Juris" in report.text
+
+
 def test_create_demo_run_returns_artifact_previews(monkeypatch) -> None:
     app_module = importlib.import_module("juris.web.app")
 
@@ -271,8 +356,6 @@ def test_create_demo_run_executes_real_service_path(monkeypatch, tmp_path: Path)
 
 
 def test_endpoints_enforce_api_key_when_tenants_configured(tmp_path, monkeypatch) -> None:
-    import json
-
     from juris.web import auth
 
     app_module = importlib.import_module("juris.web.app")
@@ -289,6 +372,76 @@ def test_endpoints_enforce_api_key_when_tenants_configured(tmp_path, monkeypatch
         auth.default_registry.cache_clear()  # reset to open for other tests
 
 
+def test_invalid_tenant_error_is_structured(tmp_path, monkeypatch) -> None:
+    from juris.web import auth
+
+    tenants = tmp_path / "tenants.json"
+    tenants.write_text(json.dumps({"escritorio-a": "secret-key"}), encoding="utf-8")
+    monkeypatch.setenv("JURIS_TENANTS_FILE", str(tenants))
+    auth.default_registry.cache_clear()
+    try:
+        response = client.get("/api/prazos", headers={"X-API-Key": "wrong"})
+    finally:
+        auth.default_registry.cache_clear()
+
+    assert response.status_code == 401
+    assert response.json()["detail"]["code"] == "tenant_invalid"
+
+
+def test_validate_startup_config_fails_closed_without_tenants(monkeypatch) -> None:
+    from juris.web import auth
+
+    app_module = importlib.import_module("juris.web.app")
+    monkeypatch.setenv("JURIS_REQUIRE_TENANTS", "1")
+    monkeypatch.delenv("JURIS_TENANTS_FILE", raising=False)
+    auth.default_registry.cache_clear()
+    try:
+        with pytest.raises(RuntimeError, match="JURIS_TENANTS_FILE"):
+            app_module.validate_startup_config()
+    finally:
+        auth.default_registry.cache_clear()
+
+
+def test_validate_startup_config_requires_agent_binding_per_tenant(tmp_path, monkeypatch) -> None:
+    from juris.api.agent_config import _load_agent_bindings
+    from juris.web import auth
+
+    app_module = importlib.import_module("juris.web.app")
+    tenants = tmp_path / "tenants.json"
+    agents = tmp_path / "agents.json"
+    tenants.write_text(json.dumps({"escritorio-a": "key-a", "escritorio-b": "key-b"}), encoding="utf-8")
+    agents.write_text(json.dumps({"escritorio-a": {"url": "ws://a.local:8765", "token": "tok-a"}}), encoding="utf-8")
+    monkeypatch.setenv("JURIS_REQUIRE_TENANTS", "1")
+    monkeypatch.setenv("JURIS_AGENT_MODE", "remote")
+    monkeypatch.setenv("JURIS_TENANTS_FILE", str(tenants))
+    monkeypatch.setenv("JURIS_AGENTS_FILE", str(agents))
+    auth.default_registry.cache_clear()
+    _load_agent_bindings.cache_clear()
+    try:
+        with pytest.raises(RuntimeError, match="escritorio-b"):
+            app_module.validate_startup_config()
+    finally:
+        auth.default_registry.cache_clear()
+        _load_agent_bindings.cache_clear()
+
+
+def test_api_rate_limit_is_per_api_key(monkeypatch) -> None:
+    app_module = importlib.import_module("juris.web.app")
+    from juris.web.rate_limit import FixedWindowRateLimiter
+
+    limiter = FixedWindowRateLimiter(limit=1, window_seconds=60)
+    monkeypatch.setattr(app_module, "_api_rate_limiter", lambda: limiter)
+
+    first = client.get("/api/agent-mode", headers={"X-API-Key": "a"})
+    blocked = client.get("/api/agent-mode", headers={"X-API-Key": "a"})
+    other_key = client.get("/api/agent-mode", headers={"X-API-Key": "b"})
+
+    assert first.status_code == 200
+    assert blocked.status_code == 429
+    assert blocked.json()["detail"]["code"] == "rate_limited"
+    assert other_key.status_code == 200
+
+
 def test_connect_job_hidden_from_non_owner(monkeypatch, tmp_path) -> None:
     app_module = importlib.import_module("juris.web.app")
     from juris.web.connect_jobs import ConnectJobStore
@@ -298,6 +451,86 @@ def test_connect_job_hidden_from_non_owner(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(app_module, "_connect_job_store", lambda: store)
     # invisible to the public caller (open default)
     assert client.get("/api/connect/job-y").status_code == 404
+
+
+def test_connect_job_hidden_from_other_configured_tenant(tmp_path, monkeypatch) -> None:
+    from juris.web import auth
+    from juris.web.connect_jobs import ConnectJobStore
+
+    app_module = importlib.import_module("juris.web.app")
+    tenants = tmp_path / "tenants.json"
+    tenants.write_text(json.dumps({"escritorio-a": "key-a", "escritorio-b": "key-b"}), encoding="utf-8")
+    store = ConnectJobStore(tmp_path / "jobs.db")
+    store.create("job-a", "escritorio-a")
+    monkeypatch.setenv("JURIS_TENANTS_FILE", str(tenants))
+    monkeypatch.setattr(app_module, "_connect_job_store", lambda: store)
+    auth.default_registry.cache_clear()
+    try:
+        assert client.get("/api/connect/job-a", headers={"X-API-Key": "key-b"}).status_code == 404
+        assert client.get("/api/connect/job-a", headers={"X-API-Key": "key-a"}).status_code == 200
+    finally:
+        auth.default_registry.cache_clear()
+
+
+def test_demo_run_output_root_is_tenant_scoped(tmp_path, monkeypatch) -> None:
+    from juris.web import auth
+
+    app_module = importlib.import_module("juris.web.app")
+    tenants = tmp_path / "tenants.json"
+    tenants.write_text(json.dumps({"escritorio-a": "key-a", "escritorio-b": "key-b"}), encoding="utf-8")
+    captured: list[Path] = []
+
+    async def fake_execute(request):
+        captured.append(request.out_root)
+        return WebDemoRun(
+            succeeded=True,
+            degraded=False,
+            degradation_reason="",
+            errors=(),
+            duration_seconds=0.1,
+            output_dir=str(request.out_root / "CASE"),
+            artifacts=(),
+        )
+
+    monkeypatch.setenv("JURIS_TENANTS_FILE", str(tenants))
+    monkeypatch.setenv("JURIS_OUT_ROOT", str(tmp_path / "out"))
+    monkeypatch.setattr(app_module, "execute_demo_run", fake_execute)
+    auth.default_registry.cache_clear()
+    payload = {
+        "numero_cnj": "0001234-56.2026.8.13.0001",
+        "tipo": "contestacao",
+        "source": "fixture",
+    }
+    try:
+        assert client.post("/api/demo-runs", json=payload, headers={"X-API-Key": "key-a"}).status_code == 200
+        assert client.post("/api/demo-runs", json=payload, headers={"X-API-Key": "key-b"}).status_code == 200
+    finally:
+        auth.default_registry.cache_clear()
+
+    assert captured == [
+        tmp_path / "out" / "tenants" / "escritorio-a",
+        tmp_path / "out" / "tenants" / "escritorio-b",
+    ]
+
+
+def test_audit_endpoint_cannot_escape_to_other_tenant_root(tmp_path, monkeypatch) -> None:
+    from juris.web import auth
+
+    tenants = tmp_path / "tenants.json"
+    tenants.write_text(json.dumps({"escritorio-a": "key-a", "escritorio-b": "key-b"}), encoding="utf-8")
+    monkeypatch.setenv("JURIS_TENANTS_FILE", str(tenants))
+    monkeypatch.setenv("JURIS_OUT_ROOT", str(tmp_path / "out"))
+    auth.default_registry.cache_clear()
+    try:
+        response = client.get(
+            "/api/audit",
+            params={"output_dir": "../escritorio-a/CASE"},
+            headers={"X-API-Key": "key-b"},
+        )
+    finally:
+        auth.default_registry.cache_clear()
+
+    assert response.status_code == 400
 
 
 def test_localdb_is_cached_per_path(tmp_path) -> None:
@@ -394,3 +627,64 @@ def test_agent_mode_endpoint_reports_inprocess(monkeypatch) -> None:
     response = client.get("/api/agent-mode")
     assert response.status_code == 200
     assert response.json()["remote"] is False
+
+
+def test_agent_health_inprocess_does_not_require_agent(monkeypatch) -> None:
+    monkeypatch.delenv("JURIS_AGENT_MODE", raising=False)
+
+    response = client.get("/api/agent-health")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["remote"] is False
+    assert body["agent_required"] is False
+    assert body["error"] is None
+
+
+def test_agent_health_remote_reports_tenant_agent(monkeypatch) -> None:
+    from juris.api import pairing
+    from juris.api.ws_schemas import HealthResponse
+
+    monkeypatch.setenv("JURIS_AGENT_MODE", "remote")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_URL", "ws://127.0.0.1:8765")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_TOKEN", "tok")
+    monkeypatch.setattr(
+        pairing,
+        "check_agent_health",
+        lambda url: HealthResponse(
+            status="ok",
+            token_connected=True,
+            cert_valid_until=date(2030, 1, 2),
+            version="1.2.3",
+        ),
+    )
+
+    response = client.get("/api/agent-health")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["remote"] is True
+    assert body["agent_configured"] is True
+    assert body["reachable"] is True
+    assert body["token_connected"] is True
+    assert body["cert_valid_until"] == "2030-01-02"
+
+
+def test_agent_health_remote_unmapped_tenant_reports_error(tmp_path, monkeypatch) -> None:
+    from juris.api.agent_config import _load_agent_bindings
+
+    agents = tmp_path / "agents.json"
+    agents.write_text(json.dumps({"escritorio-a": {"url": "ws://a.local:8765", "token": "tok-a"}}), encoding="utf-8")
+    monkeypatch.setenv("JURIS_AGENT_MODE", "remote")
+    monkeypatch.setenv("JURIS_AGENTS_FILE", str(agents))
+    _load_agent_bindings.cache_clear()
+    try:
+        response = client.get("/api/agent-health")
+    finally:
+        _load_agent_bindings.cache_clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["remote"] is True
+    assert body["reachable"] is False
+    assert "sem binding" in body["error"]

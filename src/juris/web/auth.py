@@ -76,6 +76,11 @@ class TenantRegistry:
     def is_open(self) -> bool:
         return not self._by_key
 
+    @property
+    def tenant_ids(self) -> tuple[str, ...]:
+        """Configured tenant ids, for production preflight checks."""
+        return tuple(sorted({tenant.tenant_id for tenant in self._by_key.values()}))
+
     def authenticate(self, api_key: str | None) -> Tenant | None:
         """Match a key against stored values — plaintext (dev) or ``sha256:`` (prod).
 
@@ -138,7 +143,10 @@ async def current_tenant(x_api_key: str | None = Header(default=None)) -> Tenant
             default_registry(), api_key=x_api_key, require_configured=_require_tenants()
         )
     except PermissionError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=401,
+            detail={"code": "tenant_invalid", "message": str(exc)},
+        ) from exc
     from juris.core.observability import bind_tenant_log_context
 
     bind_tenant_log_context(tenant.tenant_id)

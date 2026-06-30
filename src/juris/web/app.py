@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from fastapi import Depends, FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from juris import __version__
@@ -17,6 +19,8 @@ from juris.web.auth import Tenant, current_tenant, tenant_db_path
 from juris.web.connect_jobs import ConnectJobStore
 from juris.web.demo_service import DemoRunError, WebDemoRunRequest, execute_demo_run
 from juris.web.processos_service import get_processo_detail, list_prazos, list_processos
+from juris.web.rate_limit import FixedWindowRateLimiter
+from juris.web.workbench_service import build_workbench
 
 if TYPE_CHECKING:
     from juris.mni.tribunais import TribunalConfig
@@ -40,14 +44,80 @@ def _out_root() -> Path:
     """Server-controlled output root — clients can't choose where runs are written."""
     return Path(os.environ.get("JURIS_OUT_ROOT", "juris-out"))
 
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    validate_startup_config()
+    yield
+
+
 app = FastAPI(
     title="Juris Web",
     version=__version__,
     description="Local browser UI for the Juris pilot demo workflow.",
+    lifespan=_lifespan,
 )
 
 _STATIC_DIR = Path(__file__).with_name("static")
 _INDEX_PATH = _STATIC_DIR / "index.html"
+
+
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes"}
+
+
+@lru_cache(maxsize=1)
+def _api_rate_limiter() -> FixedWindowRateLimiter:
+    limit = int(os.environ.get("JURIS_API_RATE_LIMIT_PER_MINUTE", "120"))
+    return FixedWindowRateLimiter(limit=limit, window_seconds=60)
+
+
+@app.middleware("http")
+async def _rate_limit_api(request: Request, call_next: Any) -> Any:
+    """Basic per-API-key burst protection for web API routes."""
+    if not request.url.path.startswith("/api/"):
+        return await call_next(request)
+    from juris.web.auth import hash_api_key
+
+    raw_key = request.headers.get("X-API-Key")
+    key = hash_api_key(raw_key) if raw_key else "public"
+    decision = _api_rate_limiter().check(key)
+    if decision.allowed:
+        return await call_next(request)
+    return JSONResponse(
+        status_code=429,
+        headers={"Retry-After": str(decision.retry_after_seconds)},
+        content={
+            "detail": {
+                "code": "rate_limited",
+                "message": "Limite de requisições excedido para esta API key.",
+                "retry_after_seconds": decision.retry_after_seconds,
+            }
+        },
+    )
+
+
+def validate_startup_config() -> None:
+    """Fail closed for production multi-tenant deployments.
+
+    ``JURIS_REQUIRE_TENANTS=1`` means the web process must not silently fall back
+    to the shared public tenant, and remote agent mode must have one binding per
+    configured tenant.
+    """
+    from juris.api.agent_config import is_remote, tenant_agent_binding
+    from juris.web.auth import default_registry
+
+    if not _env_flag("JURIS_REQUIRE_TENANTS"):
+        return
+
+    registry = default_registry()
+    if registry.is_open:
+        msg = "JURIS_REQUIRE_TENANTS=1 exige JURIS_TENANTS_FILE com pelo menos um tenant."
+        raise RuntimeError(msg)
+
+    if is_remote():
+        for tenant_id in registry.tenant_ids:
+            tenant_agent_binding(tenant_id)
 
 
 class DemoRunPayload(BaseModel):
@@ -65,6 +135,22 @@ class DemoRunPayload(BaseModel):
     skip_review: bool = False
     use_cache: bool = True
     cpf: str | None = None  # co-located source=mni; in remote the agent resolves it
+
+
+class PilotFeedbackPayload(BaseModel):
+    """Structured feedback from one real pilot case."""
+
+    numero_cnj: str = Field(min_length=1)
+    output_dir: str | None = None
+    time_saved_minutes: int = Field(ge=0)
+    mode_used: str = Field(pattern="^(minuta|rascunho)$")
+    citations_accepted: int = Field(default=0, ge=0)
+    citations_rejected: int = Field(default=0, ge=0)
+    missing_source: str = ""
+    deadline_or_analysis_error: str = ""
+    perceived_utility: int = Field(ge=1, le=5)
+    corpus_usable: bool = False
+    notes: str = ""
 
 
 @app.get("/health")
@@ -215,6 +301,66 @@ async def get_agent_mode() -> dict[str, object]:
     return {"remote": is_remote(), "mode": agent_mode()}
 
 
+@app.get("/api/agent-health")
+async def get_agent_health(tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
+    """Tenant-scoped readiness of the split-trust local agent.
+
+    In in-process mode there is no remote agent to probe. In remote mode, resolve
+    this tenant's binding and call its /health endpoint. The shared token is never
+    returned.
+    """
+    from juris.api.agent_config import agent_mode, is_remote, tenant_agent_binding
+    from juris.api.pairing import check_agent_health
+
+    remote = is_remote()
+    payload: dict[str, object] = {
+        "tenant_id": tenant.tenant_id,
+        "mode": agent_mode(),
+        "remote": remote,
+        "agent_required": remote,
+        "agent_configured": not remote,
+        "reachable": None,
+        "token_connected": None,
+        "cert_valid_until": None,
+        "version": None,
+        "error_code": None,
+        "error": None,
+    }
+    if not remote:
+        return payload
+
+    try:
+        binding = tenant_agent_binding(tenant.tenant_id)
+        payload["agent_configured"] = True
+        health = check_agent_health(binding.base_url)
+    except Exception as exc:  # noqa: BLE001 — health reports readiness, not stack traces
+        payload["reachable"] = False
+        payload["error_code"] = _agent_health_error_code(str(exc))
+        payload["error"] = str(exc)
+        return payload
+
+    payload.update(
+        {
+            "reachable": True,
+            "token_connected": health.token_connected,
+            "cert_valid_until": health.cert_valid_until.isoformat() if health.cert_valid_until else None,
+            "version": health.version,
+        }
+    )
+    return payload
+
+
+def _agent_health_error_code(message: str) -> str:
+    lower = message.lower()
+    if "sem binding" in lower or "incompleto" in lower:
+        return "agent_missing"
+    if "token" in lower:
+        return "agent_token_missing"
+    if "inacessível" in lower or "inacessivel" in lower or "connection" in lower:
+        return "agent_offline"
+    return "agent_unavailable"
+
+
 @app.get("/api/connect/{job_id}")
 async def get_connect(
     job_id: str, tenant: Tenant = Depends(current_tenant)
@@ -230,6 +376,69 @@ async def get_connect(
 async def get_prazos(tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
     """Deadline agenda: pending prazos across the acervo, soonest first."""
     return {"prazos": [v.to_dict() for v in list_prazos(db=_tenant_db(tenant))]}
+
+
+@app.get("/api/workbench")
+async def get_workbench(tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
+    """Daily workbench queues for the lawyer console."""
+    from juris.web.auth import tenant_scoped_dir
+
+    db = _tenant_db(tenant)
+    return build_workbench(
+        processos=list_processos(db=db),
+        prazos=list_prazos(db=db),
+        out_root=tenant_scoped_dir(tenant, _out_root()),
+    )
+
+
+@app.post("/api/pilot-feedback", status_code=201)
+async def create_pilot_feedback(
+    payload: PilotFeedbackPayload, tenant: Tenant = Depends(current_tenant)
+) -> dict[str, object]:
+    """Record structured value/quality feedback for one pilot case."""
+    from juris.web.auth import tenant_scoped_dir
+    from juris.web.pilot_feedback import append_feedback
+
+    root = tenant_scoped_dir(tenant, _out_root())
+    record = append_feedback(root, payload.model_dump())
+    return {"feedback": record}
+
+
+@app.get("/api/pilot-feedback")
+async def get_pilot_feedback(tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
+    """List pilot feedback records for this tenant."""
+    from juris.web.auth import tenant_scoped_dir
+    from juris.web.pilot_feedback import list_feedback
+
+    return {"feedback": list_feedback(tenant_scoped_dir(tenant, _out_root()))}
+
+
+@app.get("/api/pilot-feedback/summary")
+async def get_pilot_feedback_summary(tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
+    """Aggregate pilot feedback into metrics, gaps, and corpus candidates."""
+    from juris.web.auth import tenant_scoped_dir
+    from juris.web.pilot_feedback import summarize_feedback
+
+    return summarize_feedback(tenant_scoped_dir(tenant, _out_root()))
+
+
+@app.get("/api/pilot-feedback/export")
+async def export_pilot_feedback(
+    export_format: str = Query("json", alias="format"),
+    tenant: Tenant = Depends(current_tenant),
+) -> Response:
+    """Export pilot feedback as JSON or CSV for commercial/product review."""
+    from juris.web.auth import tenant_scoped_dir
+    from juris.web.pilot_feedback import export_feedback_csv, export_feedback_json, export_feedback_report_markdown
+
+    root = tenant_scoped_dir(tenant, _out_root())
+    if export_format == "csv":
+        return Response(export_feedback_csv(root), media_type="text/csv")
+    if export_format == "json":
+        return Response(export_feedback_json(root), media_type="application/json")
+    if export_format == "md":
+        return Response(export_feedback_report_markdown(root), media_type="text/markdown")
+    raise HTTPException(status_code=400, detail="format deve ser json, csv ou md")
 
 
 @app.get("/api/audit")
