@@ -8,7 +8,14 @@ from datetime import UTC, datetime
 from juris.mni.operations.peticionamento import FilingReceipt
 from juris.signing.filing import ChainOfCustody, FilingResult
 from juris.signing.pades import SigningResult
-from juris.web.filing_console import filing_artifacts, filing_status, read_filing_artifact, serialize_filing_result
+from juris.web.filing_console import (
+    archive_pending,
+    filing_artifacts,
+    filing_status,
+    pending_recovery,
+    read_filing_artifact,
+    serialize_filing_result,
+)
 
 
 def test_filing_status_lists_pending_and_receipts(tmp_path) -> None:
@@ -34,8 +41,45 @@ def test_filing_status_lists_pending_and_receipts(tmp_path) -> None:
     status = filing_status(tmp_path)
 
     assert status["pending"][0]["hashes"]["signed_pdf_hash"] == "signed-pending"
+    assert status["pending"][0]["pending_key"] == "0001234_56_2026_8_13_0001/20260630_120000_pending"
+    assert status["pending"][0]["signed_pdf_size"] is None
     assert status["recent_receipts"][0]["protocolo"] == "PROT-1"
     assert status["recent_receipts"][0]["hashes"]["receipt_hash"] == "receipt"
+
+
+def test_pending_recovery_and_archive_preserve_files(tmp_path) -> None:
+    cnj_dir = tmp_path / "0001234_56_2026_8_13_0001"
+    pending = cnj_dir / "20260630_120000_pending"
+    pending.mkdir(parents=True)
+    (pending / "signed.pdf").write_bytes(b"%PDF signed")
+    (pending / "hashes.json").write_text(json.dumps({"signed_pdf_hash": "signed"}), encoding="utf-8")
+    key = "0001234_56_2026_8_13_0001/20260630_120000_pending"
+
+    recovery = pending_recovery(tmp_path, key)
+    archived = archive_pending(tmp_path, key, reason="protocolo conferido no portal")
+
+    assert recovery["pending_key"] == key
+    assert recovery["safe_to_retry"] is False
+    assert "signed.pdf" not in json.dumps(recovery)
+    archived_path = tmp_path / "0001234_56_2026_8_13_0001" / "20260630_120000_manual_resolution"
+    assert archived["archived"] is True
+    assert archived_path.exists()
+    assert (archived_path / "signed.pdf").read_bytes() == b"%PDF signed"
+    recovery_record = json.loads((archived_path / "recovery.json").read_text(encoding="utf-8"))
+    assert recovery_record["reason"] == "protocolo conferido no portal"
+    assert filing_status(tmp_path)["pending"] == []
+
+
+def test_archive_pending_requires_reason(tmp_path) -> None:
+    cnj_dir = tmp_path / "0001234"
+    (cnj_dir / "20260630_pending").mkdir(parents=True)
+
+    try:
+        archive_pending(tmp_path, "0001234/20260630_pending", reason=" ")
+    except ValueError as exc:
+        assert "justificativa" in str(exc)
+    else:
+        raise AssertionError("archive sem justificativa deveria falhar")
 
 
 def test_serialize_filing_result_does_not_expose_pdf_bytes() -> None:

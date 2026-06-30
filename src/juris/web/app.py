@@ -193,6 +193,19 @@ class FilingArtifactPayload(BaseModel):
     artifact_name: str = Field(min_length=1)
 
 
+class PendingRecoveryPayload(BaseModel):
+    """One pending filing selected for recovery."""
+
+    pending_key: str = Field(min_length=1)
+
+
+class PendingArchivePayload(PendingRecoveryPayload):
+    """Explicit manual resolution of a pending filing."""
+
+    reason: str = Field(min_length=1)
+    confirm_manual_resolution: bool = False
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     """Health check for the local web UI."""
@@ -611,6 +624,30 @@ async def get_filing_artifact_content(
             output_dir=payload.output_dir,
             artifact_name=payload.artifact_name,
         )
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/filing/pending/recovery")
+async def recover_pending_filing(payload: PendingRecoveryPayload) -> dict[str, object]:
+    """Recovery checklist for one pending filing, without exposing signed PDF bytes."""
+    from juris.web.filing_console import pending_recovery
+
+    try:
+        return pending_recovery(None, payload.pending_key)
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/filing/pending/archive")
+async def archive_pending_filing(payload: PendingArchivePayload) -> dict[str, object]:
+    """Archive a pending filing only after explicit manual resolution."""
+    from juris.web.filing_console import archive_pending
+
+    if not payload.confirm_manual_resolution:
+        raise HTTPException(status_code=400, detail="confirmação manual é obrigatória para arquivar")
+    try:
+        return archive_pending(None, payload.pending_key, reason=payload.reason)
     except (FileNotFoundError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

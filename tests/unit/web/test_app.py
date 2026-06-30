@@ -62,6 +62,8 @@ def test_index_renders_local_ui() -> None:
     assert "/api/filing/status" in response.text
     assert "/api/filing/artifacts" in response.text
     assert "/api/filing/artifacts/content" in response.text
+    assert "/api/filing/pending/recovery" in response.text
+    assert "/api/filing/pending/archive" in response.text
     assert "/api/filing/dry-run" in response.text
     assert "/api/filing/submit" in response.text
     assert "loadFilingArtifacts" in response.text
@@ -249,6 +251,33 @@ def test_filing_status_endpoint(monkeypatch, tmp_path) -> None:
 
     assert response.status_code == 200
     assert response.json()["pending"][0]["receipt_id"] == "20260630_pending"
+
+
+def test_filing_pending_recovery_and_archive_endpoints(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("JURIS_FILING_ROOT", str(tmp_path))
+    pending = tmp_path / "cnj" / "20260630_pending"
+    pending.mkdir(parents=True)
+    (pending / "signed.pdf").write_bytes(b"%PDF signed")
+    (pending / "hashes.json").write_text(json.dumps({"signed_pdf_hash": "signed"}), encoding="utf-8")
+    key = "cnj/20260630_pending"
+
+    recovery = client.post("/api/filing/pending/recovery", json={"pending_key": key})
+    blocked = client.post(
+        "/api/filing/pending/archive",
+        json={"pending_key": key, "reason": "conferido no portal", "confirm_manual_resolution": False},
+    )
+    archived = client.post(
+        "/api/filing/pending/archive",
+        json={"pending_key": key, "reason": "conferido no portal", "confirm_manual_resolution": True},
+    )
+
+    assert recovery.status_code == 200
+    assert recovery.json()["safe_to_retry"] is False
+    assert blocked.status_code == 400
+    assert "confirmação" in blocked.json()["detail"]
+    assert archived.status_code == 200
+    assert archived.json()["archived"] is True
+    assert client.get("/api/filing/status").json()["pending"] == []
 
 
 def test_filing_artifact_endpoints_are_confined(monkeypatch, tmp_path) -> None:

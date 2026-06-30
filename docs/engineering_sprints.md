@@ -183,6 +183,11 @@ Entregas:
   `receipt_hash`).
 - A UI permite carregar uma minuta recente no formulário de protocolo sem colar
   Markdown manualmente.
+- `/api/filing/pending/recovery` mostra plano de recuperação de `_pending`
+  sem expor `signed.pdf`.
+- `/api/filing/pending/archive` arquiva um pendente apenas com confirmação
+  humana e justificativa, preservando os arquivos em diretório de resolução
+  manual.
 
 Critério atendido:
 - Não há submit sem revisão e consentimento.
@@ -191,6 +196,6 @@ Critério atendido:
   split-trust.
 
 Próximas entregas:
-- Adicionar recuperação assistida/retry para diretórios `_pending`, além da
-  visibilidade atual.
 - Amarrar o protocolo diretamente à página do caso/processo selecionado.
+- Só considerar retry automático de `_pending` depois de desenhar salvaguarda
+  contra protocolo duplicado.

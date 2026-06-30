@@ -152,12 +152,20 @@ def serialize_filing_result(result: FilingResult) -> dict[str, object]:
 def _pending_payload(cnj_dir: Path, filing_dir: Path) -> dict[str, object]:
     stat = filing_dir.stat()
     hashes = _read_json(filing_dir / "hashes.json")
+    signed_pdf = filing_dir / "signed.pdf"
     return {
         "numero_cnj": cnj_dir.name,
         "receipt_id": filing_dir.name,
+        "pending_key": f"{cnj_dir.name}/{filing_dir.name}",
         "path": str(filing_dir),
         "created_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+        "signed_pdf_size": signed_pdf.stat().st_size if signed_pdf.exists() else None,
         "hashes": hashes,
+        "recovery_actions": [
+            "verificar no portal do tribunal se o protocolo foi recebido",
+            "se houver protocolo, registrar o recibo manualmente e arquivar o pendente",
+            "se não houver protocolo, executar novo protocolo só após confirmar que não houve duplicidade",
+        ],
     }
 
 
@@ -177,6 +185,53 @@ def _receipt_payload(cnj_dir: Path, filing_dir: Path) -> dict[str, object] | Non
         "protocolo": receipt.get("protocolo"),
         "mensagem": receipt.get("mensagem"),
         "hashes": hashes,
+    }
+
+
+def pending_recovery(root: Path | None, pending_key: str) -> dict[str, object]:
+    """Return a recovery plan for one pending filing without exposing signed PDF bytes."""
+    root = root or default_filing_root()
+    pending = _resolve_pending(root, pending_key)
+    cnj_dir = pending.parent
+    payload = _pending_payload(cnj_dir, pending)
+    payload["status"] = "pending_manual_recovery"
+    payload["checklist"] = [
+        {"label": "Confirmar no portal se o protocolo existe", "required": True},
+        {"label": "Salvar protocolo/recibo externo no caso, se encontrado", "required": True},
+        {"label": "Arquivar o pendente somente após conferência humana", "required": True},
+    ]
+    payload["safe_to_retry"] = False
+    payload["retry_note"] = (
+        "Retry automático fica bloqueado para evitar protocolo duplicado; reenvie apenas após "
+        "confirmar manualmente que o tribunal não recebeu o documento."
+    )
+    return payload
+
+
+def archive_pending(root: Path | None, pending_key: str, *, reason: str) -> dict[str, object]:
+    """Archive one pending directory after explicit manual resolution."""
+    reason = reason.strip()
+    if not reason:
+        msg = "justificativa é obrigatória para arquivar filing pendente"
+        raise ValueError(msg)
+    root = root or default_filing_root()
+    pending = _resolve_pending(root, pending_key)
+    recovery = {
+        "archived_at": datetime.now().isoformat(),
+        "reason": reason,
+        "original_pending_key": pending_key,
+    }
+    (pending / "recovery.json").write_text(json.dumps(recovery, indent=2, ensure_ascii=False), encoding="utf-8")
+    archived = pending.with_name(pending.name.replace("_pending", "_manual_resolution"))
+    suffix = 1
+    while archived.exists():
+        archived = pending.with_name(pending.name.replace("_pending", f"_manual_resolution_{suffix}"))
+        suffix += 1
+    pending.rename(archived)
+    return {
+        "archived": True,
+        "archived_path": str(archived),
+        "reason": reason,
     }
 
 
@@ -212,6 +267,22 @@ def _preflight_payload(preflight: Any | None) -> dict[str, object] | None:
         "blockers": [c for c in checks if not c["passed"] and c["severity"] == "blocker"],
         "checks": checks,
     }
+
+
+def _resolve_pending(root: Path, pending_key: str) -> Path:
+    base = root.resolve()
+    parts = Path(pending_key).parts
+    if len(parts) != 2 or any(part in {"", ".", ".."} for part in parts):
+        msg = "chave de filing pendente inválida"
+        raise ValueError(msg)
+    pending = (base / parts[0] / parts[1]).resolve()
+    if not pending.is_relative_to(base):
+        msg = "filing pendente fora do diretório permitido"
+        raise ValueError(msg)
+    if not pending.name.endswith("_pending") or not pending.is_dir():
+        msg = "filing pendente não encontrado"
+        raise FileNotFoundError(msg)
+    return pending
 
 
 def _read_json(path: Path) -> dict[str, object]:
