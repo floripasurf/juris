@@ -153,6 +153,23 @@ class PilotFeedbackPayload(BaseModel):
     notes: str = ""
 
 
+class CorpusSourcePayload(BaseModel):
+    """Lawyer-approved source to enter the pilot-directed corpus queue."""
+
+    numero_cnj: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    source_url: str = Field(min_length=1)
+    source_date: str = Field(min_length=1)
+    source_type: str = Field(min_length=1)
+    tribunal: str = Field(min_length=1)
+    area: str = Field(min_length=1)
+    tema: str = Field(min_length=1)
+    status: str = "vigente"
+    content_sha256: str | None = None
+    source_text: str | None = None
+    notes: str = ""
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     """Health check for the local web UI."""
@@ -420,6 +437,62 @@ async def get_pilot_feedback_summary(tenant: Tenant = Depends(current_tenant)) -
     from juris.web.pilot_feedback import summarize_feedback
 
     return summarize_feedback(tenant_scoped_dir(tenant, _out_root()))
+
+
+@app.get("/api/corpus/candidates")
+async def get_corpus_candidates(tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
+    """Pilot feedback records that should be evaluated for corpus expansion."""
+    from juris.web.auth import tenant_scoped_dir
+    from juris.web.corpus_queue import corpus_candidates
+
+    return {"candidates": corpus_candidates(tenant_scoped_dir(tenant, _out_root()))}
+
+
+@app.post("/api/corpus/sources", status_code=201)
+async def create_corpus_source(
+    payload: CorpusSourcePayload, tenant: Tenant = Depends(current_tenant)
+) -> dict[str, object]:
+    """Record an accepted source with mandatory provenance."""
+    from juris.web.auth import tenant_scoped_dir
+    from juris.web.corpus_queue import append_accepted_source
+
+    try:
+        source = append_accepted_source(tenant_scoped_dir(tenant, _out_root()), payload.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"source": source}
+
+
+@app.get("/api/corpus/sources")
+async def get_corpus_sources(tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
+    """Accepted pilot-directed corpus sources for this tenant."""
+    from juris.web.auth import tenant_scoped_dir
+    from juris.web.corpus_queue import list_accepted_sources
+
+    return {"sources": list_accepted_sources(tenant_scoped_dir(tenant, _out_root()))}
+
+
+@app.get("/api/corpus/coverage")
+async def get_corpus_coverage(tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
+    """Coverage and reingestion queue for the pilot-directed corpus."""
+    from juris.web.auth import tenant_scoped_dir
+    from juris.web.corpus_queue import coverage_report
+
+    return coverage_report(tenant_scoped_dir(tenant, _out_root()))
+
+
+@app.post("/api/corpus/sources/{source_id}/reingested")
+async def mark_corpus_source_reingested(
+    source_id: str, tenant: Tenant = Depends(current_tenant)
+) -> dict[str, object]:
+    """Mark a queued source as reingested after the controlled corpus job runs."""
+    from juris.web.auth import tenant_scoped_dir
+    from juris.web.corpus_queue import mark_reingested
+
+    source = mark_reingested(tenant_scoped_dir(tenant, _out_root()), source_id)
+    if source is None:
+        raise HTTPException(status_code=404, detail="fonte não encontrada")
+    return {"source": source}
 
 
 @app.get("/api/pilot-feedback/export")

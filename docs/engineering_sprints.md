@@ -96,3 +96,28 @@ Fatia entregue agora:
 
 Próximas entregas:
 - Rodar 5-10 casos reais com o advogado e alimentar o feedback estruturado.
+
+## Sprint 6 — Corpus Dirigido pelo Piloto
+
+**Status:** em andamento.
+
+Objetivo:
+- Transformar lacunas reais do piloto em fontes aceitas, rastreáveis e prontas
+  para reingestão controlada.
+
+Fatia entregue agora:
+- `/api/corpus/candidates` lista casos do feedback marcados como aproveitáveis
+  para corpus.
+- `/api/corpus/sources` registra fonte aceita com proveniência obrigatória:
+  URL, data, tipo, tribunal, área, tema, status e `content_sha256` ou texto
+  fonte para cálculo de hash.
+- `/api/corpus/coverage` reporta cobertura por área, tema, tribunal, tipo e
+  status, além de candidatos pendentes e fila de reingestão.
+- `/api/corpus/sources/{id}/reingested` marca uma fonte como reingerida após o
+  job controlado.
+- A aba `Piloto` mostra fila de corpus, fontes aceitas e pendências de
+  reingestão.
+
+Próximas entregas:
+- Conectar a fila `pending_reingest` ao job real de reingestão do repertory.
+- Comparar segunda execução dos casos contra a primeira para medir ganho.

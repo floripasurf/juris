@@ -515,6 +515,16 @@
         <button type="button" class="ghost" id="pilot-export-md">relatório MD</button>
       </div>
       <div id="pilot-summary"></div>
+      <div class="row">
+        <div>
+          <h2>Fila de corpus</h2>
+          <div id="corpus-candidates" class="proc-empty">Carregando…</div>
+        </div>
+        <div>
+          <h2>Cobertura do corpus dirigido</h2>
+          <div id="corpus-coverage" class="proc-empty">Carregando…</div>
+        </div>
+      </div>
       <div id="pilot-feedback" class="proc-empty">Carregando…</div>
     </section>
 
@@ -1318,6 +1328,8 @@
     const pilotFeedbackEl = document.querySelector("#pilot-feedback");
     const pilotSummaryEl = document.querySelector("#pilot-summary");
     const pilotSubmit = document.querySelector("#pilot-submit");
+    const corpusCandidatesEl = document.querySelector("#corpus-candidates");
+    const corpusCoverageEl = document.querySelector("#corpus-coverage");
 
     function renderPilotSummary(summary) {
       const citations = summary.citations || {};
@@ -1395,6 +1407,52 @@
       }
     }
 
+    function renderCorpusCandidates(items) {
+      if (!items.length) {
+        corpusCandidatesEl.className = "proc-empty";
+        corpusCandidatesEl.textContent = "Nenhum candidato marcado no piloto.";
+        return;
+      }
+      corpusCandidatesEl.className = "proc-list";
+      corpusCandidatesEl.innerHTML = "";
+      items.forEach((c) => {
+        const row = document.createElement("div");
+        row.className = "queue-item";
+        row.innerHTML = `<strong>${escHtml(c.numero_cnj)}</strong>
+          <div class="meta">${escHtml(c.missing_source || c.notes || "fonte a avaliar")} · ${c.accepted ? "aceita" : "pendente"}</div>`;
+        corpusCandidatesEl.appendChild(row);
+      });
+    }
+
+    function renderCorpusCoverage(report) {
+      const coverage = report.coverage || {};
+      const fmtCounts = (obj) => Object.entries(obj || {}).map(([k, v]) => `${escHtml(k)}: ${v}`).join(" · ") || "—";
+      corpusCoverageEl.className = "proc-list";
+      corpusCoverageEl.innerHTML = `
+        <div class="queue-item"><strong>${report.accepted_count || 0}</strong><div class="meta">fontes aceitas</div></div>
+        <div class="queue-item"><strong>${(report.pending_reingest || []).length}</strong><div class="meta">pendentes de reingestão</div></div>
+        <div class="queue-item"><strong>Tribunais</strong><div class="meta">${fmtCounts(coverage.tribunal)}</div></div>
+        <div class="queue-item"><strong>Temas</strong><div class="meta">${fmtCounts(coverage.tema)}</div></div>`;
+    }
+
+    async function loadCorpusQueue() {
+      try {
+        const [candidatesResp, coverageResp] = await Promise.all([
+          fetch("/api/corpus/candidates"),
+          fetch("/api/corpus/coverage"),
+        ]);
+        const candidates = candidatesResp.ok ? await candidatesResp.json() : { candidates: [] };
+        const coverage = coverageResp.ok ? await coverageResp.json() : {};
+        renderCorpusCandidates(candidates.candidates || []);
+        renderCorpusCoverage(coverage);
+      } catch (_) {
+        corpusCandidatesEl.className = "proc-empty";
+        corpusCandidatesEl.textContent = "Não foi possível carregar candidatos.";
+        corpusCoverageEl.className = "proc-empty";
+        corpusCoverageEl.textContent = "Não foi possível carregar cobertura.";
+      }
+    }
+
     pilotForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       pilotSubmit.disabled = true;
@@ -1425,6 +1483,7 @@
         document.querySelector("#pf_utility").value = "4";
         await loadPilotFeedback();
         await loadPilotSummary();
+        await loadCorpusQueue();
       } catch (err) {
         pilotFeedbackEl.className = "proc-empty";
         pilotFeedbackEl.textContent = err.message;
@@ -1463,6 +1522,7 @@
     loadPrazos();
     loadPilotFeedback();
     loadPilotSummary();
+    loadCorpusQueue();
   </script>
 </body>
 </html>

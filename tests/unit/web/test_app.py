@@ -51,6 +51,10 @@ def test_index_renders_local_ui() -> None:
     assert "pilot-export-md" in response.text
     assert "renderPilotFeedback" in response.text
     assert "renderPilotSummary" in response.text
+    assert "Fila de corpus" in response.text
+    assert "/api/corpus/candidates" in response.text
+    assert "/api/corpus/coverage" in response.text
+    assert "renderCorpusCoverage" in response.text
     assert "apiErrorMessage" in response.text
     assert "escHtml" in response.text  # untrusted data escaped before innerHTML (XSS)
 
@@ -266,6 +270,58 @@ def test_pilot_feedback_endpoints_are_tenant_scoped(monkeypatch, tmp_path) -> No
     assert "TJMG acórdão" in exported.text
     assert report.status_code == 200
     assert "# Relatório do Piloto Juris" in report.text
+
+
+def test_corpus_queue_endpoints(monkeypatch, tmp_path) -> None:
+    app_module = importlib.import_module("juris.web.app")
+    from juris.web.pilot_feedback import append_feedback
+
+    monkeypatch.setattr(app_module, "_out_root", lambda: tmp_path)
+    append_feedback(
+        tmp_path,
+        {
+            "numero_cnj": "0001234-56.2026.8.13.0001",
+            "output_dir": "juris-out/CASE",
+            "time_saved_minutes": 15,
+            "mode_used": "rascunho",
+            "citations_accepted": 1,
+            "citations_rejected": 0,
+            "missing_source": "acórdão STJ",
+            "deadline_or_analysis_error": "",
+            "perceived_utility": 4,
+            "corpus_usable": True,
+            "notes": "",
+        },
+    )
+    payload = {
+        "numero_cnj": "0001234-56.2026.8.13.0001",
+        "title": "REsp aprovado",
+        "source_url": "https://example.test/resp",
+        "source_date": "2026-06-30",
+        "source_type": "acordao_publicado",
+        "tribunal": "STJ",
+        "area": "civel",
+        "tema": "cobranca",
+        "status": "vigente",
+        "source_text": "inteiro teor",
+    }
+
+    candidates = client.get("/api/corpus/candidates")
+    created = client.post("/api/corpus/sources", json=payload)
+    sources = client.get("/api/corpus/sources")
+    coverage = client.get("/api/corpus/coverage")
+
+    assert candidates.status_code == 200
+    assert candidates.json()["candidates"][0]["missing_source"] == "acórdão STJ"
+    assert created.status_code == 201, created.text
+    source_id = created.json()["source"]["id"]
+    assert created.json()["source"]["content_sha256"]
+    assert sources.json()["sources"][0]["tribunal"] == "STJ"
+    assert coverage.json()["coverage"]["source_type"]["acordao_publicado"] == 1
+
+    marked = client.post(f"/api/corpus/sources/{source_id}/reingested")
+    assert marked.status_code == 200
+    assert marked.json()["source"]["reingest_status"] == "done"
 
 
 def test_create_demo_run_returns_artifact_previews(monkeypatch) -> None:
