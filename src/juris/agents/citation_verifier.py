@@ -21,14 +21,22 @@ _ACADEMIC_CITE_PATTERN = re.compile(
 )
 
 # Patterns for raw case references in prose (not anchored to [CITE:])
+# Raw jurisprudence references not anchored to a [CITE:] marker. Covers the real
+# Brazilian formats: A-prefixed siglas (AREsp/ARE), agravo compounds (AgInt no REsp,
+# AgRg), the "n."/"nº"/"n°" number lead-in, the "/UF" suffix, and the
+# Tema Repetitivo / Súmula Vinculante / IRDR / IAC families. Each requires a number,
+# which keeps plain prose from matching.
+_RECURSO_SIGLAS = (
+    r"E?A?REsp|A?RE|AgInt|AgRg|AgR|EDcl|EDv|RHC|HC|RMS|MS|ADI|ADC|ADPF|IRDR|IAC|RR|AIRR|ADO"
+)
+_NUM_TAIL = r"(?:n[º°.]?\s*)?\d[\d.]*(?:\s*/\s*[A-Z]{2})?"
 _RAW_CASE_PATTERNS = [
-    re.compile(r"\bREsp\s+[\d\.]+", re.IGNORECASE),
-    re.compile(r"\bRE\s+[\d\.]+", re.IGNORECASE),
-    re.compile(r"\bHC\s+[\d\.]+", re.IGNORECASE),
-    re.compile(r"\bMS\s+[\d\.]+", re.IGNORECASE),
-    re.compile(r"\bRHC\s+[\d\.]+", re.IGNORECASE),
-    re.compile(r"\bS[uú]mula\s+\d+", re.IGNORECASE),
-    re.compile(r"\bTema\s+\d+", re.IGNORECASE),
+    # recurso siglas, with an optional "AgInt/AgRg/AgR no/na" compound prefix
+    re.compile(
+        rf"\b(?:Ag(?:Int|Rg|R)\s+n[oa]\s+)?(?:{_RECURSO_SIGLAS})\b\.?\s*{_NUM_TAIL}", re.IGNORECASE
+    ),
+    re.compile(r"\bS[uú]mula(?:\s+Vinculante)?\s+(?:n[º°.]?\s*)?\d+", re.IGNORECASE),
+    re.compile(r"\bTema(?:\s+Repetitivo)?\s+(?:n[º°.]?\s*)?\d+", re.IGNORECASE),
 ]
 
 

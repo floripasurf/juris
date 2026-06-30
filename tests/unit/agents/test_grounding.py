@@ -133,3 +133,44 @@ async def test_drafter_allows_verified_marker_and_resolves_label() -> None:
     assert result.blocked_reason is None
     assert result.grounding_report.verified_citation_ids == ["src-1"]
     assert "[STJ precedente — STJ (src-1)]" in result.draft_markdown
+
+
+import pytest as _pytest  # noqa: E402
+
+
+@_pytest.mark.parametrize(
+    "text",
+    [
+        "REsp 123456",
+        "REsp n. 1.234.567/SP",
+        "REsp nº 1.234.567/SP",
+        "REsp n° 1.234.567",
+        "AREsp 1.234.567/SP",
+        "AgInt no REsp 1.234.567/SP",
+        "AgRg 1.234.567",
+        "Tema Repetitivo 123",
+        "Tema 123",
+        "Súmula 7",
+        "Súmula Vinculante 12",
+        "IRDR 5",
+        "IAC 3",
+    ],
+)
+def test_spurious_detection_catches_real_jurisprudence_formats(text) -> None:
+    from juris.repertory.retrieval.service import RepertoryService
+
+    verifier = MarkerCitationVerifier(cast(RepertoryService, object()))
+    result = verifier.verify(f"A tese procede, conforme {text}.", {"src-1"})
+    assert result.spurious_citations, f"não detectou jurisprudência crua: {text!r}"
+
+
+@_pytest.mark.parametrize(
+    "text",
+    ["A responsabilidade civil é objetiva.", "O contrato é nulo.", "Houve dano moral."],
+)
+def test_spurious_detection_no_false_positive_on_plain_prose(text) -> None:
+    from juris.repertory.retrieval.service import RepertoryService
+
+    verifier = MarkerCitationVerifier(cast(RepertoryService, object()))
+    result = verifier.verify(text, {"src-1"})
+    assert result.spurious_citations == []
