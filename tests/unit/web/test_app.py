@@ -60,8 +60,11 @@ def test_index_renders_local_ui() -> None:
     assert "renderPilotComparison" in response.text
     assert "Protocolo controlado" in response.text
     assert "/api/filing/status" in response.text
+    assert "/api/filing/artifacts" in response.text
+    assert "/api/filing/artifacts/content" in response.text
     assert "/api/filing/dry-run" in response.text
     assert "/api/filing/submit" in response.text
+    assert "loadFilingArtifacts" in response.text
     assert "renderFilingResult" in response.text
     assert "Cadeia de custódia" in response.text
     assert "Lacunas de prova antes da minuta" in response.text
@@ -246,6 +249,42 @@ def test_filing_status_endpoint(monkeypatch, tmp_path) -> None:
 
     assert response.status_code == 200
     assert response.json()["pending"][0]["receipt_id"] == "20260630_pending"
+
+
+def test_filing_artifact_endpoints_are_confined(monkeypatch, tmp_path) -> None:
+    app_module = importlib.import_module("juris.web.app")
+    case_dir = tmp_path / "CASE-1"
+    case_dir.mkdir()
+    (case_dir / "draft.md").write_text("# Minuta pronta", encoding="utf-8")
+    (case_dir / "run-manifest.json").write_text(
+        json.dumps(
+            {
+                "finished_at": "2026-06-30T12:00:00",
+                "output_mode": "minuta-sugerida",
+                "request": {"numero_cnj": "0001234-56.2026.8.13.0001", "tribunal": "tjmg"},
+                "draft": {"grounding_status": "verified"},
+                "artifacts": [{"name": "draft.md", "sha256": "sha"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(app_module, "_out_root", lambda: tmp_path)
+
+    listed = client.get("/api/filing/artifacts")
+    content = client.post(
+        "/api/filing/artifacts/content",
+        json={"output_dir": str(case_dir), "artifact_name": "draft.md"},
+    )
+    traversal = client.post(
+        "/api/filing/artifacts/content",
+        json={"output_dir": "../", "artifact_name": "draft.md"},
+    )
+
+    assert listed.status_code == 200
+    assert listed.json()["artifacts"][0]["artifact_name"] == "draft.md"
+    assert content.status_code == 200
+    assert content.json()["content"] == "# Minuta pronta"
+    assert traversal.status_code == 400
 
 
 def test_filing_dry_run_uses_service_without_consent_requirement(monkeypatch) -> None:

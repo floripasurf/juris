@@ -173,11 +173,16 @@ Entregas:
 - `/api/filing/dry-run` executa render/preflight sem assinatura nem contato MNI.
 - `/api/filing/submit` exige revisão humana confirmada e consentimento explícito
   antes de assinar/protocolar.
+- `/api/filing/artifacts` lista minutas/rascunhos recentes e
+  `/api/filing/artifacts/content` carrega o conteúdo com confinamento ao
+  diretório do tenant.
 - Em modo remoto, CPF/senha/PIN não são exigidos nem encaminhados; o agente local
   resolve segredos e retorna apenas metadados, recibo e hashes.
 - A UI renderiza checklist de preflight, pendências recuperáveis, recibo e cadeia
   de custódia (`pdf_hash`, `signed_pdf_hash`, `submitted_payload_hash`,
   `receipt_hash`).
+- A UI permite carregar uma minuta recente no formulário de protocolo sem colar
+  Markdown manualmente.
 
 Critério atendido:
 - Não há submit sem revisão e consentimento.
@@ -186,7 +191,6 @@ Critério atendido:
   split-trust.
 
 Próximas entregas:
-- Integrar seleção automática do artefato de minuta gerado pelo caso, evitando
-  colar Markdown manualmente.
 - Adicionar recuperação assistida/retry para diretórios `_pending`, além da
   visibilidade atual.
+- Amarrar o protocolo diretamente à página do caso/processo selecionado.

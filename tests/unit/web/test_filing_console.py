@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from juris.mni.operations.peticionamento import FilingReceipt
 from juris.signing.filing import ChainOfCustody, FilingResult
 from juris.signing.pades import SigningResult
-from juris.web.filing_console import filing_status, serialize_filing_result
+from juris.web.filing_console import filing_artifacts, filing_status, read_filing_artifact, serialize_filing_result
 
 
 def test_filing_status_lists_pending_and_receipts(tmp_path) -> None:
@@ -68,3 +68,57 @@ def test_serialize_filing_result_does_not_expose_pdf_bytes() -> None:
     dumped = json.dumps(payload)
     assert "%PDF sensitive" not in dumped
     assert '"signed_pdf":' not in dumped
+
+
+def test_filing_artifacts_lists_primary_drafts(tmp_path) -> None:
+    case_dir = tmp_path / "CASE-1"
+    case_dir.mkdir()
+    (case_dir / "draft.md").write_text("# Minuta", encoding="utf-8")
+    (case_dir / "other.md").write_text("não listar", encoding="utf-8")
+    (case_dir / "run-manifest.json").write_text(
+        json.dumps(
+            {
+                "finished_at": "2026-06-30T12:00:00",
+                "output_mode": "minuta-sugerida",
+                "request": {"numero_cnj": "0001234", "tribunal": "tjmg", "tipo_peticao": "contestacao"},
+                "draft": {"grounding_status": "verified"},
+                "artifacts": [
+                    {"name": "draft.md", "sha256": "draft-hash"},
+                    {"name": "other.md", "sha256": "other-hash"},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    payload = filing_artifacts(tmp_path)
+
+    assert len(payload["artifacts"]) == 1
+    artifact = payload["artifacts"][0]
+    assert artifact["artifact_name"] == "draft.md"
+    assert artifact["numero_cnj"] == "0001234"
+    assert artifact["grounding_status"] == "verified"
+
+
+def test_read_filing_artifact_is_confined_to_root(tmp_path) -> None:
+    case_dir = tmp_path / "CASE-1"
+    case_dir.mkdir()
+    (case_dir / "draft.md").write_text("# Minuta", encoding="utf-8")
+
+    payload = read_filing_artifact(tmp_path, output_dir="CASE-1", artifact_name="draft.md")
+
+    assert payload["content"] == "# Minuta"
+
+    try:
+        read_filing_artifact(tmp_path, output_dir="../", artifact_name="draft.md")
+    except ValueError as exc:
+        assert "fora do diretório" in str(exc)
+    else:
+        raise AssertionError("path traversal deveria falhar")
+
+    try:
+        read_filing_artifact(tmp_path, output_dir="CASE-1", artifact_name="run-manifest.json")
+    except ValueError as exc:
+        assert "não permitido" in str(exc)
+    else:
+        raise AssertionError("artefato não primário deveria falhar")

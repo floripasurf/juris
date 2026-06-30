@@ -186,6 +186,13 @@ class FilingPayload(BaseModel):
     consent: bool = False
 
 
+class FilingArtifactPayload(BaseModel):
+    """Draft artifact selected for controlled filing."""
+
+    output_dir: str = Field(min_length=1)
+    artifact_name: str = Field(min_length=1)
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     """Health check for the local web UI."""
@@ -579,6 +586,33 @@ async def get_filing_status() -> dict[str, object]:
     from juris.web.filing_console import filing_status
 
     return filing_status()
+
+
+@app.get("/api/filing/artifacts")
+async def get_filing_artifacts(tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
+    """Recent draft artifacts that can prefill the controlled filing form."""
+    from juris.web.auth import tenant_scoped_dir
+    from juris.web.filing_console import filing_artifacts
+
+    return filing_artifacts(tenant_scoped_dir(tenant, _out_root()))
+
+
+@app.post("/api/filing/artifacts/content")
+async def get_filing_artifact_content(
+    payload: FilingArtifactPayload, tenant: Tenant = Depends(current_tenant)
+) -> dict[str, object]:
+    """Read a selected primary draft artifact, confined to this tenant's output root."""
+    from juris.web.auth import tenant_scoped_dir
+    from juris.web.filing_console import read_filing_artifact
+
+    try:
+        return read_filing_artifact(
+            tenant_scoped_dir(tenant, _out_root()),
+            output_dir=payload.output_dir,
+            artifact_name=payload.artifact_name,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/filing/dry-run")

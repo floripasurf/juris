@@ -10,6 +10,8 @@ from typing import Any
 
 from juris.signing.filing import FilingResult
 
+_PRIMARY_DRAFTS = frozenset({"draft.md", "rascunho-pesquisa.md"})
+
 
 def default_filing_root() -> Path:
     """Root used by the in-process filing pipeline, overrideable for tests/deploys."""
@@ -44,6 +46,74 @@ def filing_status(root: Path | None = None) -> dict[str, object]:
         "filing_root": str(root),
         "pending": pending,
         "recent_receipts": receipts[:20],
+    }
+
+
+def filing_artifacts(out_root: Path, *, max_items: int = 20) -> dict[str, object]:
+    """Return recent primary draft artifacts that can seed the filing form."""
+    root = out_root.resolve()
+    artifacts: list[dict[str, object]] = []
+    if root.exists():
+        manifests = sorted(
+            root.glob("*/run-manifest.json"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        for manifest_path in manifests:
+            manifest = _read_json(manifest_path)
+            case_dir = manifest_path.parent
+            request = manifest.get("request") if isinstance(manifest.get("request"), dict) else {}
+            draft = manifest.get("draft") if isinstance(manifest.get("draft"), dict) else {}
+            listed = manifest.get("artifacts") if isinstance(manifest.get("artifacts"), list) else []
+            for artifact in listed:
+                if not isinstance(artifact, dict):
+                    continue
+                name = str(artifact.get("name") or "")
+                if name not in _PRIMARY_DRAFTS:
+                    continue
+                path = case_dir / name
+                if not path.exists():
+                    continue
+                artifacts.append(
+                    {
+                        "numero_cnj": request.get("numero_cnj"),
+                        "tribunal": request.get("tribunal"),
+                        "tipo_peticao": request.get("tipo_peticao"),
+                        "output_mode": manifest.get("output_mode"),
+                        "finished_at": manifest.get("finished_at"),
+                        "output_dir": str(case_dir),
+                        "artifact_name": name,
+                        "sha256": artifact.get("sha256"),
+                        "grounding_status": draft.get("grounding_status"),
+                    }
+                )
+                if len(artifacts) >= max_items:
+                    return {"artifacts": artifacts}
+    return {"artifacts": artifacts}
+
+
+def read_filing_artifact(out_root: Path, *, output_dir: str, artifact_name: str) -> dict[str, object]:
+    """Read one primary draft artifact, confined to the tenant output root."""
+    name = Path(artifact_name).name
+    if name not in _PRIMARY_DRAFTS:
+        msg = "artefato não permitido para protocolo"
+        raise ValueError(msg)
+
+    base = out_root.resolve()
+    raw = Path(output_dir)
+    case_dir = (raw if raw.is_absolute() else base / raw).resolve()
+    if not case_dir.is_relative_to(base):
+        msg = "artefato fora do diretório de saída permitido"
+        raise ValueError(msg)
+    path = (case_dir / name).resolve()
+    if not path.is_relative_to(base):
+        msg = "artefato fora do diretório de saída permitido"
+        raise ValueError(msg)
+    text = path.read_text(encoding="utf-8", errors="replace")
+    return {
+        "output_dir": str(case_dir),
+        "artifact_name": name,
+        "content": text,
     }
 
 
