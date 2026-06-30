@@ -72,3 +72,30 @@ def test_tenant_binding_falls_back_to_global_env(tmp_path, monkeypatch) -> None:
     binding = tenant_agent_binding("public")
     assert binding.base_url == "ws://global:8765"
     assert binding.token == "global-tok"  # noqa: S105
+
+
+def test_binding_fails_closed_when_agents_file_set_but_tenant_missing(tmp_path, monkeypatch) -> None:
+    import json
+
+    from juris.api.agent_config import _load_agent_bindings, tenant_agent_binding
+
+    agents = tmp_path / "agents.json"
+    agents.write_text(json.dumps({"escritorio-a": {"url": "ws://a:8765", "token": "t"}}), encoding="utf-8")
+    monkeypatch.setenv("JURIS_AGENTS_FILE", str(agents))
+    _load_agent_bindings.cache_clear()
+
+    with pytest.raises(RuntimeError, match="sem binding"):
+        tenant_agent_binding("escritorio-desconhecido")  # not in the map → no silent global fallback
+
+
+def test_binding_fails_closed_when_require_tenants(monkeypatch) -> None:
+    from juris.api.agent_config import _load_agent_bindings, tenant_agent_binding
+
+    monkeypatch.delenv("JURIS_AGENTS_FILE", raising=False)
+    monkeypatch.setenv("JURIS_REQUIRE_TENANTS", "1")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_URL", "ws://global:8765")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_TOKEN", "g")
+    _load_agent_bindings.cache_clear()
+
+    with pytest.raises(RuntimeError, match="sem binding"):
+        tenant_agent_binding("qualquer")

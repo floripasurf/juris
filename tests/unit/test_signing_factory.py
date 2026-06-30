@@ -66,7 +66,7 @@ def test_factory_routes_each_tenant_to_its_own_agent(tmp_path, monkeypatch) -> N
     assert svc_a._transport._url == "ws://a.local:8765/ws/sign"  # routed to its own agent
     assert svc_a._transport._token == "tok-a"  # noqa: S105
 
-    # a tenant not in the map falls back to the global env
-    svc_pub = get_signing_service("public")
-    assert svc_pub._transport._url == "ws://global:8765/ws/sign"
-    assert svc_pub._transport._token == "global-tok"  # noqa: S105
+    # with a tenant map configured, an unmapped tenant FAILS CLOSED (no silent global
+    # fallback) so it can never reach the wrong firm's agent
+    with pytest.raises(RuntimeError, match="sem binding"):
+        get_signing_service("escritorio-desconhecido")

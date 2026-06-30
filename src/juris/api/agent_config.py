@@ -83,17 +83,33 @@ def _load_agent_bindings() -> dict[str, dict[str, str]]:
     return data
 
 
+def _require_tenants() -> bool:
+    """Whether a tenant must have its own agent binding (no silent global fallback)."""
+    return os.environ.get("JURIS_REQUIRE_TENANTS", "").strip().lower() in {"1", "true", "yes"}
+
+
 def tenant_agent_binding(tenant_id: str = "public") -> AgentBinding:
     """Resolve the agent a tenant routes to — its own (``$JURIS_AGENTS_FILE``) or the
     single-tenant fallback (``$JURIS_LOCAL_AGENT_URL`` / ``_TOKEN``).
 
     So each firm reaches *its* local agent (multi-tenant), and a co-located pilot
-    keeps working off the env. Raises when neither resolves in remote mode.
+    keeps working off the env. **Fail-closed**: once a tenant map is configured (or
+    ``JURIS_REQUIRE_TENANTS=1``), a tenant without its own binding raises instead of
+    silently using the global agent/token — a misconfigured tenant must never reach
+    another firm's agent. Raises when nothing resolves in remote mode.
     """
-    entry = _load_agent_bindings().get(tenant_id)
+    bindings = _load_agent_bindings()
+    entry = bindings.get(tenant_id)
     if entry is not None:
         if not entry.get("url") or not entry.get("token"):
             msg = f"binding do agente incompleto para o tenant {tenant_id!r} (precisa url + token)."
             raise RuntimeError(msg)
         return AgentBinding(_normalize_base_url(entry["url"]), entry["token"])
+
+    if bindings or _require_tenants():
+        msg = (
+            f"tenant {tenant_id!r} sem binding de agente próprio "
+            "(fail-closed: defina-o em JURIS_AGENTS_FILE)."
+        )
+        raise RuntimeError(msg)
     return AgentBinding(local_agent_base_url(), local_agent_token())
