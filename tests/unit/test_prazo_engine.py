@@ -61,6 +61,20 @@ class TestComputePrazo:
         assert prazo.dias_uteis_restantes < 0
         assert prazo.urgencia == Urgencia.CRITICA
 
+    def test_vencido_when_lapsed_over_weekend_only(self) -> None:
+        # Regression: a deadline lapsing on Friday must read VENCIDO on the following
+        # Saturday/Sunday — not URGENTE. dias_uteis_between(Fri, Sat) == 0, so the old
+        # `-0 == 0` fell through to URGENTE and showed a blown fatal prazo as "act today".
+        cal = JudicialCalendar(uf="mg", include_recesso=False)
+        analysis = _analysis(CategoriaSemantica.SENTENCA, data=date(2026, 6, 5))
+        rule = shortest_deadline(CategoriaSemantica.SENTENCA)
+        assert rule is not None
+
+        prazo = compute_prazo(analysis, rule, cal, today=date(2026, 6, 13), numero_cnj="123")
+        assert prazo.data_limite == date(2026, 6, 12)  # a Friday
+        assert prazo.status == StatusPrazo.VENCIDO  # lapsed, not URGENTE
+        assert prazo.urgencia == Urgencia.CRITICA
+
     def test_aberto_status(self) -> None:
         cal = JudicialCalendar(uf="mg", include_recesso=False)
         analysis = _analysis(CategoriaSemantica.CITACAO, codigo_tpu=12, data=date(2026, 4, 28))
@@ -142,3 +156,43 @@ class TestComputePrazos:
         # CLT recurso ordinário is 8 days, not 15
         has_8_day = any(p.dias_uteis_total == 8 for p in report.prazos)
         assert has_8_day
+
+
+class TestManualReviewSafetyNet:
+    """An actionable movement must never silently vanish or get a fabricated prazo."""
+
+    def _actionable(self, *, data_hora, codigo_tpu=132):
+        return AnalysisResult(
+            movimento_id="mov-x",
+            codigo_tpu=codigo_tpu,
+            descricao="Sentença",
+            data_hora=data_hora,
+            categoria=CategoriaSemantica.SENTENCA,
+            urgencia=Urgencia.CRITICA,
+            requer_acao=True,
+            recomendacao="Test",
+            confianca=0.95,
+            metodo="rule",
+        )
+
+    def test_missing_date_goes_to_manual_review_not_fabricated_prazo(self) -> None:
+        # data_hora None (parse failed) must NOT become a phantom deadline (was datetime.min
+        # → 0001-01-08 VENCIDO). It goes to manual review instead.
+        report = compute_prazos(
+            "123", "tjmg", [self._actionable(data_hora=None)], today=date(2026, 6, 15)
+        )
+        assert report.prazos == []  # no fabricated deadline
+        assert len(report.revisao_manual) == 1
+        assert report.revisao_manual[0].motivo == "data_ausente"
+        assert report.revisao_manual[0].movimento_id == "mov-x"
+
+    def test_actionable_movement_without_rule_goes_to_manual_review(self, monkeypatch) -> None:
+        # actionable movement that matches zero prazo rules must be surfaced, never dropped
+        monkeypatch.setattr("juris.prazo.engine.find_applicable_rules", lambda *a, **k: [])
+        dh = datetime(2026, 6, 10, 12, 0, tzinfo=UTC)
+        report = compute_prazos(
+            "123", "tjmg", [self._actionable(data_hora=dh)], today=date(2026, 6, 15)
+        )
+        assert report.prazos == []
+        assert len(report.revisao_manual) == 1
+        assert report.revisao_manual[0].motivo == "sem_regra_de_prazo"

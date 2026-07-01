@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from juris.core.observability import get_logger
@@ -28,7 +28,7 @@ class AnalysisResult:
     movimento_id: str
     codigo_tpu: int | None
     descricao: str
-    data_hora: datetime
+    data_hora: datetime | None  # None when the MNI movement had no parseable dataHora
     categoria: CategoriaSemantica
     urgencia: Urgencia
     requer_acao: bool
@@ -60,6 +60,15 @@ class ProcessoAnalysis:
             f"({len(urgentes)} urgentes), "
             f"{self.rule_classified} rule / {self.llm_calls} LLM"
         )
+
+
+def _data_tag(data_hora: datetime | None) -> str:
+    """ISO date for an id/prompt, or a stable ``sem-data`` marker when absent.
+
+    A movement with no parseable date must not fabricate one (the prazo engine routes
+    it to manual review); here we only need a stable, non-crashing tag.
+    """
+    return data_hora.isoformat() if data_hora is not None else "sem-data"
 
 
 def _rule_based_recommendation(entry_or_code: int, categoria: CategoriaSemantica) -> str:
@@ -99,7 +108,7 @@ def analyze_movimento_rule(mov: Movimento) -> AnalysisResult:
     confianca = 0.95 if is_high_confidence(codigo) else 0.5
 
     return AnalysisResult(
-        movimento_id=mov.id_movimento or f"mov_{codigo}_{mov.data_hora.isoformat()}",
+        movimento_id=mov.id_movimento or f"mov_{codigo}_{_data_tag(mov.data_hora)}",
         codigo_tpu=codigo if codigo else None,
         descricao=mov.descricao or "",
         data_hora=mov.data_hora,
@@ -128,7 +137,7 @@ async def analyze_movimento_llm(
         codigo_tpu=codigo,
         descricao=mov.descricao or "",
         complemento=mov.complemento or "",
-        data_hora=mov.data_hora.isoformat(),
+        data_hora=_data_tag(mov.data_hora),
     )
 
     response = await llm.complete(
@@ -152,7 +161,7 @@ async def analyze_movimento_llm(
         urgencia = Urgencia.MEDIA
 
     return AnalysisResult(
-        movimento_id=mov.id_movimento or f"mov_{codigo}_{mov.data_hora.isoformat()}",
+        movimento_id=mov.id_movimento or f"mov_{codigo}_{_data_tag(mov.data_hora)}",
         codigo_tpu=codigo if codigo else None,
         descricao=mov.descricao or "",
         data_hora=mov.data_hora,
@@ -219,7 +228,8 @@ async def analyze_processo(
 
     actionable.sort(key=lambda a: (
         list(Urgencia).index(a.urgencia),
-        a.data_hora,
+        a.data_hora is None,  # undated movements sort last within an urgency band
+        a.data_hora or datetime.max.replace(tzinfo=UTC),
     ))
 
     logger.info(

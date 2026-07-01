@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 
@@ -21,7 +21,7 @@ class Parte:
 class Movimento:
     """A single movement (event) in a process."""
 
-    data_hora: datetime
+    data_hora: datetime | None  # None when the MNI payload had no/invalid dataHora
     tipo: str  # movimentoNacional or movimentoLocal
     codigo_nacional: int | None = None
     complemento: str | None = None
@@ -65,7 +65,7 @@ class ProcessoDomain:
         """Most recent movement."""
         if not self.movimentos:
             return None
-        return max(self.movimentos, key=lambda m: m.data_hora)
+        return max(self.movimentos, key=_mov_sort_key)
 
 
 def parse_processo(response: Any, tribunal_id: str | None = None) -> ProcessoDomain:
@@ -99,11 +99,19 @@ def parse_processo(response: Any, tribunal_id: str | None = None) -> ProcessoDom
         valor_causa=float(getattr(dados, "valorCausa", 0)) if dados and getattr(dados, "valorCausa", None) else None,
         orgao_julgador=str(getattr(dados, "orgaoJulgador", None)) if dados else None,
         tribunal=tribunal_id,
-        movimentos=sorted(movimentos, key=lambda m: m.data_hora),
+        movimentos=sorted(movimentos, key=_mov_sort_key),
         documentos=documentos,
         partes=partes,
         data_ajuizamento=getattr(dados, "dataAjuizamento", None) if dados else None,
     )
+
+
+_MOV_SORT_MIN = datetime.min.replace(tzinfo=UTC)
+
+
+def _mov_sort_key(m: Movimento) -> datetime:
+    """Sort key that places undated movements (data_hora=None) first."""
+    return m.data_hora or _MOV_SORT_MIN
 
 
 def _parse_movimento(raw: Any) -> Movimento:
@@ -122,8 +130,11 @@ def _parse_movimento(raw: Any) -> Movimento:
     elif mov_local:
         descricao = str(getattr(mov_local, "descricao", ""))
 
+    raw_data = getattr(raw, "dataHora", None)
     return Movimento(
-        data_hora=getattr(raw, "dataHora", datetime.min),
+        # Never default to datetime.min — a phantom 0001-01-01 becomes a catastrophic
+        # "VENCIDO -508785d" prazo. None routes the movement to manual review instead.
+        data_hora=raw_data if isinstance(raw_data, datetime) else None,
         tipo=tipo,
         codigo_nacional=codigo,
         complemento=str(getattr(raw, "complementoNacional", "") or ""),
