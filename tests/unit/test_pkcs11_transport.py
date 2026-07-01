@@ -282,8 +282,8 @@ class TestProcessoDomainBridge:
 
         assert _parse_mni_datetime("20180322155100042") == datetime(2018, 3, 22, 15, 51, 0)
         assert _parse_mni_datetime("20170619") == datetime(2017, 6, 19, 0, 0, 0)
-        assert _parse_mni_datetime("") == datetime.min
-        assert _parse_mni_datetime("garbage") == datetime.min
+        assert _parse_mni_datetime("") is None  # malformed → None (routed to manual review)
+        assert _parse_mni_datetime("garbage") is None
 
     def test_to_processo_domain_movimentos(self) -> None:
         pd = self._result().to_processo_domain(tribunal_id="tjmg", numero_cnj="x")
@@ -363,3 +363,16 @@ class TestAvisosPkcs11:
         result = self._call(xml)
         assert not result.sucesso
         assert "login" in result.mensagem.lower()
+
+
+def test_parse_mni_datetime_returns_none_on_malformed_not_datetime_min() -> None:
+    """A malformed/missing MNI timestamp must yield None (routed to manual review),
+    never datetime.min — which crashed the prazo engine and silently dropped the
+    whole process's deadlines (pkcs11 path, the primary A3 production path)."""
+    from juris.mni.operations.consulta_pkcs11 import _parse_mni_datetime
+
+    assert _parse_mni_datetime("") is None
+    assert _parse_mni_datetime("garbage") is None
+    assert _parse_mni_datetime("00000000") is None  # ValueError → None
+    # a valid timestamp still parses
+    assert _parse_mni_datetime("20260701093000") is not None

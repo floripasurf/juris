@@ -259,15 +259,17 @@ class ConsultaResult:
         )
 
 
-def _parse_mni_datetime(raw: str) -> datetime:
-    """Parse an MNI timestamp (YYYYMMDDHHMMSS[mmm]) into a datetime.
+def _parse_mni_datetime(raw: str) -> datetime | None:
+    """Parse an MNI timestamp (YYYYMMDDHHMMSS[mmm]) into a datetime, or ``None``.
 
-    Falls back to ``datetime.min`` when the value is missing or malformed,
-    matching the zeep parser so downstream sorting/dedup stays consistent.
+    Returns ``None`` when the value is missing or malformed — mirroring the zeep
+    parser. A ``datetime.min`` fallback here fabricated a phantom year-1 deadline that
+    crashed the prazo engine and silently dropped the whole process's deadlines; ``None``
+    routes the movement to manual review instead (never a wrong/lost prazo).
     """
     digits = "".join(ch for ch in raw if ch.isdigit())
     if len(digits) < 8:
-        return datetime.min
+        return None
     try:
         year = int(digits[0:4])
         month = int(digits[4:6])
@@ -277,7 +279,7 @@ def _parse_mni_datetime(raw: str) -> datetime:
         second = int(digits[12:14]) if len(digits) >= 14 else 0
         return datetime(year, month, day, hour, minute, second)
     except ValueError:
-        return datetime.min
+        return None
 
 
 def _parse_response(response: SOAPResponse, numero_cnj: str) -> ConsultaResult:
