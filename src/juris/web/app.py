@@ -10,7 +10,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
@@ -393,6 +393,35 @@ async def create_connect(
     _BACKGROUND_TASKS.add(task)
     task.add_done_callback(_BACKGROUND_TASKS.discard)
     return {"job_id": job_id, "status": "running"}
+
+
+@app.websocket("/ws/agent-relay")
+async def agent_relay_socket(ws: WebSocket) -> None:
+    """Reverse channel (ADR-0015 Phase 2): the lawyer's agent dials IN (outbound) and
+    holds this connection open; the orchestrator routes token ops down it, sidestepping
+    the agent's NAT. The agent authenticates with its tenant's shared token."""
+    from juris.api.relay import get_relay_hub, relay_token_ok
+    from juris.api.ws_schemas import AgentResponse
+
+    tenant_id = ws.query_params.get("tenant", "public")
+    token = ws.headers.get("x-agent-token") or ws.query_params.get("token")
+    if not relay_token_ok(tenant_id, token):
+        await ws.close(code=4001, reason="Unauthorized")
+        return
+    await ws.accept()
+    hub = get_relay_hub()
+
+    async def _send(payload: str) -> None:
+        await ws.send_text(payload)
+
+    hub.register(tenant_id, _send)
+    try:
+        while True:  # agent → cloud replies, correlated by request_id
+            hub.resolve(AgentResponse.model_validate_json(await ws.receive_text()))
+    except WebSocketDisconnect:
+        pass
+    finally:
+        hub.unregister(tenant_id)
 
 
 @app.get("/api/agent-mode")

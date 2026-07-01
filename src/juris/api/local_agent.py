@@ -14,7 +14,7 @@ from __future__ import annotations
 import base64
 import os
 import secrets
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from datetime import date
 from functools import lru_cache
@@ -383,3 +383,63 @@ async def filing_socket(ws: WebSocket) -> None:
             await ws.send_text(response.model_dump_json())
     except WebSocketDisconnect:
         pass
+
+
+async def dispatch_agent_request(request: AgentRequest) -> AgentResponse:
+    """Route a relayed ``AgentRequest`` to the right local handler (agent side).
+
+    Used by the reverse channel: the orchestrator forwards a request over the dialed-in
+    connection and the agent runs it locally (credentials resolved here). ``file``
+    covers signing too — the whole pipeline runs at the agent.
+    """
+    from juris.mni.tribunais import get_tribunal
+
+    op = request.operation
+    if op == "file":
+        from juris.signing.filing_service import handle_file_request
+
+        return await handle_file_request(
+            request, agent_filing_service(), credentials_resolver=_default_credentials_resolver
+        )
+    if op.startswith("mni"):
+        return handle_mni_request(
+            request,
+            agent_mni_service(),
+            credentials_resolver=_default_credentials_resolver,
+            tribunal_resolver=get_tribunal,
+        )
+    return AgentResponse(
+        request_id=request.request_id, success=False, error=f"operação não suportada no relay: {op}"
+    )
+
+
+def run_relay_agent(
+    url: str,
+    token: str,
+    tenant_id: str,
+    *,
+    dispatch: Callable[[AgentRequest], Coroutine[object, object, AgentResponse]] | None = None,
+) -> None:
+    """Agent-side dialer: connect OUT to the orchestrator's relay and serve requests.
+
+    Blocking. The agent dials the cloud (so no inbound port / NAT hole is needed), then
+    for each forwarded ``AgentRequest`` runs it locally and sends back the
+    ``AgentResponse``. Reconnection/backoff is the caller's concern.
+    """
+    import asyncio
+
+    from websockets.sync.client import connect
+
+    handler = dispatch or dispatch_agent_request
+    sep = "&" if "?" in url else "?"
+    full_url = f"{url}{sep}tenant={tenant_id}"
+    with connect(full_url, additional_headers={"x-agent-token": token}) as ws:
+        for raw in ws:  # each message is a forwarded AgentRequest
+            text = raw if isinstance(raw, str) else raw.decode()
+            response: AgentResponse
+            try:
+                request = AgentRequest.model_validate_json(text)
+                response = asyncio.run(handler(request))
+            except Exception as exc:  # noqa: BLE001 — typed error back to the orchestrator
+                response = AgentResponse(request_id="unknown", success=False, error=str(exc))
+            ws.send(response.model_dump_json())

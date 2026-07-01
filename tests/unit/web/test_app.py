@@ -1031,3 +1031,37 @@ def test_uncaught_exception_returns_sanitized_500(monkeypatch) -> None:
     assert response.status_code == 500
     assert response.json()["detail"]["code"] == "internal_error"
     assert "token=abc123" not in response.text  # never leak the internal detail/traceback
+
+
+def test_agent_relay_rejects_bad_token(monkeypatch) -> None:
+    from fastapi import WebSocketDisconnect
+
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_URL", "ws://x:1")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_TOKEN", "right-token")
+    with (
+        pytest.raises(WebSocketDisconnect),
+        client.websocket_connect("/ws/agent-relay?tenant=public", headers={"x-agent-token": "wrong"}),
+    ):
+        pass
+
+
+def test_agent_relay_registers_then_unregisters(monkeypatch) -> None:
+    import time
+
+    from juris.api.relay import get_relay_hub
+
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_URL", "ws://x:1")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_TOKEN", "tok")
+    hub = get_relay_hub()
+    hub.unregister("public")
+
+    with client.websocket_connect("/ws/agent-relay?tenant=public", headers={"x-agent-token": "tok"}):
+        deadline = time.time() + 2
+        while not hub.is_connected("public") and time.time() < deadline:
+            time.sleep(0.02)
+        assert hub.is_connected("public") is True  # agent dialed in and registered
+
+    deadline = time.time() + 2
+    while hub.is_connected("public") and time.time() < deadline:
+        time.sleep(0.02)
+    assert hub.is_connected("public") is False  # unregistered on disconnect

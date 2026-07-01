@@ -2327,6 +2327,33 @@ def agent_serve(
     uvicorn.run(agent_asgi, host=bind_host, port=port, log_level="warning", access_log=False)
 
 
+@agent_app.command("connect-relay")
+def agent_connect_relay(
+    url: str = typer.Argument(..., help="URL do relay do orquestrador, ex.: wss://juris.cloud/ws/agent-relay"),
+    tenant: str = typer.Option("public", "--tenant", help="Tenant deste agente."),
+) -> None:
+    """Dial OUT to the orchestrator's reverse channel and serve token ops over it.
+
+    For non-co-located deploys: the agent (behind NAT) connects to the cloud instead of
+    the cloud reaching the agent. Requires ``JURIS_AGENT_TOKEN`` (+ CPF/SENHA/PIN).
+    Use ``wss://`` so the channel is TLS-encrypted (mTLS if the relay requires a client
+    cert). Reconnects are the operator's concern (run under a supervisor).
+    """
+    import os
+
+    from juris.api.local_agent import run_relay_agent
+
+    token = os.environ.get("JURIS_AGENT_TOKEN")
+    if not token:
+        console.print("[red]JURIS_AGENT_TOKEN não definido.[/red] Rode 'juris agent pair' primeiro.")
+        raise typer.Exit(code=2)
+    console.print(f"[bold]Agente[/bold] discando o relay {url} (tenant={tenant})… Ctrl-C para sair.")
+    try:
+        run_relay_agent(url, token, tenant)
+    except KeyboardInterrupt:
+        console.print("Encerrado.")
+
+
 browser_app = typer.Typer(name="browser", help="Browser-session AI bridge (ADR-0018).")
 app.add_typer(browser_app)
 

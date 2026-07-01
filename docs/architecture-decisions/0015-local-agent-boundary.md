@@ -41,11 +41,19 @@ factories route by tenant), **pairing** (`juris agent pair`/`serve`/`health`),
 `ConnectJobStore`, survives restart, tenant-scoped), **per-tenant logs**
 (`bind_tenant_log_context` binds `tenant_id` to structlog per request/job).
 
+**Reverse channel — built (core):** for non-co-located deploys the agent dials OUT to
+the orchestrator (`juris agent connect-relay <wss-url>`) and holds the connection open;
+the orchestrator routes token ops down it via `RelayHub` (request/response multiplexed
+by `request_id`), sidestepping the agent's NAT. Endpoint `/ws/agent-relay`
+(token-authed per tenant); agent-side `dispatch_agent_request` runs mni/file locally
+(file signs at the agent). Use `wss://` for channel TLS (mTLS if the relay requires a
+client cert).
+
 Remaining:
 
-- mTLS between orchestrator and agent beyond the shared `JURIS_AGENT_TOKEN` pairing.
-- Cloud→agent connectivity for non-co-located deploys (tunnel/reverse channel — see
-  `docs/deploy/agent-install.md §6`).
+- mTLS (client certs) beyond the shared `JURIS_AGENT_TOKEN` + `wss://` — pin per agent.
+- Route the orchestrator's Remote services through `RelayHub` in relay mode (today the
+  hub is the integration point) + dialer reconnection/backoff (run under a supervisor).
 - Demo-path `tenant_id` threading (connect already tags it; demo runs are sync).
 
 ## Date
