@@ -30,6 +30,18 @@ def test_base_url_rejects_a_url_without_scheme(monkeypatch) -> None:
         local_agent_base_url()
 
 
+def test_base_url_rejects_non_websocket_scheme(monkeypatch) -> None:
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_URL", "http://127.0.0.1:8765")
+    with pytest.raises(RuntimeError, match="ws://"):
+        local_agent_base_url()
+
+
+def test_base_url_rejects_embedded_credentials(monkeypatch) -> None:
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_URL", "ws://user:secret@127.0.0.1:8765")
+    with pytest.raises(RuntimeError, match="usuário/senha"):
+        local_agent_base_url()
+
+
 # --- per-tenant agent routing (multi-tenant keystone) ---
 
 
@@ -59,6 +71,23 @@ def test_tenant_binding_from_agents_file(tmp_path, monkeypatch) -> None:
     b = tenant_agent_binding("escritorio-b")
     assert b.base_url == "ws://b.local:8765"
     assert b.token == "tok-b"  # noqa: S105
+
+
+def test_tenant_binding_rejects_credentialed_agent_url(tmp_path, monkeypatch) -> None:
+    import json
+
+    from juris.api.agent_config import _load_agent_bindings, tenant_agent_binding
+
+    agents = tmp_path / "agents.json"
+    agents.write_text(
+        json.dumps({"escritorio-a": {"url": "ws://user:secret@a.local:8765", "token": "tok-a"}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("JURIS_AGENTS_FILE", str(agents))
+    _load_agent_bindings.cache_clear()
+
+    with pytest.raises(RuntimeError, match="usuário/senha"):
+        tenant_agent_binding("escritorio-a")
 
 
 def test_tenant_binding_falls_back_to_global_env(tmp_path, monkeypatch) -> None:

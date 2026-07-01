@@ -36,8 +36,11 @@ def _normalize_base_url(url: str) -> str:
     factories never produce a doubled ``/ws/sign/ws/sign``.
     """
     parsed = urlparse(url)
-    if not parsed.scheme or not parsed.netloc:
+    if parsed.scheme not in {"ws", "wss"} or not parsed.netloc:
         msg = f"URL do agente inválida (use ws://host:porta): {url!r}"
+        raise RuntimeError(msg)
+    if parsed.username or parsed.password:
+        msg = "URL do agente inválida: não inclua usuário/senha; use o token pareado separado."
         raise RuntimeError(msg)
     return urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
 
