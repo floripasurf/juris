@@ -146,8 +146,10 @@ class TestOrchestratorErrorPaths:
         skeleton, audit_path = _result_skeleton(tmp_path)
         orch, _ = self._build(audit_path)
 
-        # Force the drafter wrapper to raise.
-        orch._run_drafter = AsyncMock(side_effect=RuntimeError("drafter boom"))  # type: ignore[method-assign]
+        # Force the drafter wrapper to raise with detail that must not become public.
+        orch._run_drafter = AsyncMock(  # type: ignore[method-assign]
+            side_effect=RuntimeError("drafter /var/private/model token=abc pin=1234")
+        )
 
         # Stub analyzer to succeed quickly.
         fake_analysis = MagicMock(analyzed=[], actionable=[], summary="ok")
@@ -170,7 +172,11 @@ class TestOrchestratorErrorPaths:
 
         assert result.draft is None
         assert any(e.startswith("draft:") for e in result.errors)
-        assert "drafter boom" in result.errors[0]
+        dumped = json.dumps(result.errors)
+        assert "falha operacional" in dumped
+        assert "/var/private/model" not in dumped
+        assert "token=abc" not in dumped
+        assert "pin=1234" not in dumped
         assert result.succeeded is False
 
     def test_analyzer_failure_skips_prazos_and_marks_error(
@@ -187,7 +193,7 @@ class TestOrchestratorErrorPaths:
         with (
             patch(
                 "juris.demo.orchestrator.analyze_processo",
-                AsyncMock(side_effect=ValueError("bad movements")),
+                AsyncMock(side_effect=ValueError("bad movements /var/private/db token=abc")),
             ),
             patch("juris.demo.orchestrator.compute_prazos") as mock_prazos,
         ):
@@ -203,6 +209,8 @@ class TestOrchestratorErrorPaths:
         assert result.analysis is None
         assert result.prazo_report is None
         assert any(e.startswith("analyze:") for e in result.errors)
+        assert "/var/private/db" not in json.dumps(result.errors)
+        assert "token=abc" not in json.dumps(result.errors)
         # compute_prazos must NOT have been called when analysis is missing.
         mock_prazos.assert_not_called()
         # Drafter still ran, so draft is present, but errors keep succeeded False.
@@ -226,7 +234,7 @@ class TestOrchestratorErrorPaths:
             ),
             patch(
                 "juris.demo.orchestrator.compute_prazos",
-                side_effect=RuntimeError("prazo blew up"),
+                side_effect=RuntimeError("prazo blew up /var/private/cache token=abc"),
             ),
         ):
             result = asyncio.run(
@@ -240,6 +248,8 @@ class TestOrchestratorErrorPaths:
 
         assert result.prazo_report is None
         assert any(e.startswith("prazos:") for e in result.errors)
+        assert "/var/private/cache" not in json.dumps(result.errors)
+        assert "token=abc" not in json.dumps(result.errors)
         assert result.draft is not None
         assert result.succeeded is False
 

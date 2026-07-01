@@ -168,7 +168,7 @@ class DemoOrchestrator:
             )
         except Exception as exc:  # noqa: BLE001 — surface but don't abort
             logger.warning("demo_analyze_failed", error=str(exc))
-            result.errors.append(f"analyze: {exc}")
+            result.errors.append(_public_step_error("analyze"))
 
         # Step 2: compute prazos (only if analysis succeeded)
         if result.analysis is not None:
@@ -180,7 +180,7 @@ class DemoOrchestrator:
                 )
             except Exception as exc:  # noqa: BLE001
                 logger.warning("demo_prazos_failed", error=str(exc))
-                result.errors.append(f"prazos: {exc}")
+                result.errors.append(_public_step_error("prazos"))
 
         # Step 3: draft petition
         try:
@@ -206,7 +206,7 @@ class DemoOrchestrator:
                 )
             else:
                 logger.warning("demo_draft_failed", error=str(exc))
-                result.errors.append(f"draft: {exc}")
+                result.errors.append(_public_step_error("draft"))
 
         result.finished_at = datetime.now(UTC)
         result.duration_seconds = time.monotonic() - t0
@@ -276,6 +276,14 @@ class DemoOrchestrator:
     def _audit_path(self) -> Path:
         # AuditLog stores its path privately; reach in once via name-mangle-free attr.
         return getattr(self._audit, "_path", Path("audit.jsonl"))
+
+
+def _public_step_error(step: str) -> str:
+    return {
+        "analyze": "analyze: falha operacional na análise do processo",
+        "prazos": "prazos: falha operacional no cálculo de prazos",
+        "draft": "draft: falha operacional ao gerar a minuta",
+    }[step]
 
 
 def _can_degrade_to_deterministic_rascunho(request: DemoRequest, exc: Exception) -> bool:
