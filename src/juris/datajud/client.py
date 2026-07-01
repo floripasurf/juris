@@ -120,6 +120,27 @@ def _strip_cnj(numero_cnj: str) -> str:
     return numero_cnj.replace("-", "").replace(".", "")
 
 
+def _mask_document_for_log(value: str | None) -> str | None:
+    """Return a log-safe document marker, never the full CPF/CNPJ."""
+    if not value:
+        return None
+    digits = "".join(ch for ch in value if ch.isdigit())
+    if not digits:
+        return "present"
+    return f"***{digits[-2:]}"
+
+
+def _party_log_fields(*, nome: str | None, cpf: str | None) -> dict[str, object]:
+    """Metadata for party-search logs without exposing party PII."""
+    stripped_name = nome.strip() if nome else ""
+    return {
+        "nome_present": bool(stripped_name),
+        "nome_chars": len(stripped_name),
+        "cpf_present": bool(cpf),
+        "cpf_mask": _mask_document_for_log(cpf),
+    }
+
+
 def _hit_count(data: dict[str, Any]) -> int:
     """Extract Elasticsearch hit count from a DataJud response."""
     hits = data.get("hits", {}).get("hits", [])
@@ -369,7 +390,7 @@ def buscar_parte_tribunal(
     index = _get_index(tribunal_id)
     query = _build_party_query(nome=nome, cpf=cpf)
 
-    logger.info("datajud_busca_parte", tribunal=tribunal_id, nome=nome, cpf=cpf)
+    logger.info("datajud_busca_parte", tribunal=tribunal_id, **_party_log_fields(nome=nome, cpf=cpf))
 
     try:
         body = {

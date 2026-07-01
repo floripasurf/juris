@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 import httpx
 import pytest
 
-from juris.datajud.client import buscar_parte_todos_tribunais, consultar_processo
+from juris.datajud.client import _party_log_fields, buscar_parte_todos_tribunais, consultar_processo
 from juris.datajud.safety import BatchGuardError
 
 
@@ -126,3 +126,19 @@ def test_buscar_parte_todos_tribunais_requires_confirmation_for_large_fanout(mon
         )
 
     client.assert_not_called()
+
+
+def test_party_search_log_fields_do_not_expose_party_pii() -> None:
+    fields = _party_log_fields(nome="Maria Silva", cpf="123.456.789-00")
+    dumped = json.dumps(fields, ensure_ascii=False)
+
+    assert fields == {
+        "nome_present": True,
+        "nome_chars": 11,
+        "cpf_present": True,
+        "cpf_mask": "***00",
+    }
+    assert "Maria" not in dumped
+    assert "Silva" not in dumped
+    assert "123.456.789-00" not in dumped
+    assert "12345678900" not in dumped
