@@ -72,17 +72,23 @@ def build_ai_of_preference(
     *,
     ner_redactor: Callable[[str], list[str]] | None = None,
     allow_partial: bool = True,
+    fallback_is_local: bool = False,
 ) -> AbstractLLM:
     """Compose the ADR-0018 AI-of-preference: a **de-identified** browser session with a
     fallback for when it fails.
 
-    The browser session is wrapped in ``DeidentifyingLLM`` so PII is ALWAYS redacted
-    before any text leaves for the browser tab (mandatory de-id). If the session breaks
-    (DOM change, timeout, logged out), ``FallbackLLM`` degrades to ``fallback`` — pass a
-    de-identified cloud LLM or a local model there (its own de-id is the caller's
-    choice, since a local model keeps PII in-perimeter).
+    BOTH paths are de-identified by default: the browser session AND the fallback are
+    each wrapped in ``DeidentifyingLLM``. This matters because failover is exactly where
+    the guarantee would otherwise invert — a broken browser session must not dump raw
+    PII to the cloud fallback. Set ``fallback_is_local=True`` only when the fallback is
+    an on-device model (PII stays in-perimeter), to skip its redaction.
     """
     from juris.core.deid_llm import DeidentifyingLLM
 
     safe_browser = DeidentifyingLLM(browser_llm, allow_partial=allow_partial, ner_redactor=ner_redactor)
-    return FallbackLLM(safe_browser, fallback)
+    safe_fallback = (
+        fallback
+        if fallback_is_local
+        else DeidentifyingLLM(fallback, allow_partial=allow_partial, ner_redactor=ner_redactor)
+    )
+    return FallbackLLM(safe_browser, safe_fallback)

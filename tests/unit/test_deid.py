@@ -68,3 +68,13 @@ def test_ensure_cloud_safe_allows_complete_or_explicit_override() -> None:
     ensure_cloud_safe(complete)  # does not raise
     partial = deidentify("CPF 123.456.789-09.")
     ensure_cloud_safe(partial, allow_partial=True)  # explicit opt-in, no raise
+
+
+def test_oab_dotted_and_prefixed_forms_fully_redacted() -> None:
+    from juris.core.deid import deidentify
+
+    for raw in ["OAB/SP 234.567", "OAB/SP nº 234.567", "OAB/DF 1.234"]:
+        out = deidentify(raw).text
+        # the ENTIRE OAB number must be gone — the old \d{1,6} leaked the ".567" tail
+        assert "234.567" not in out and "234" not in out and "1.234" not in out, f"leaked: {out!r}"
+        assert "[OAB_1]" in out or "[OAB_" in out

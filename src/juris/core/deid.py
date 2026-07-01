@@ -23,7 +23,9 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("CNJ", re.compile(r"\b\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}\b")),
     ("CNPJ", re.compile(r"\b\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b")),
     ("CPF", re.compile(r"\b\d{3}\.\d{3}\.\d{3}-\d{2}\b")),
-    ("OAB", re.compile(r"\bOAB[/\s]?[A-Z]{2}\s?\d{1,6}\b", re.IGNORECASE)),
+    # OAB number: optional "nº" lead-in and dotted thousands (234.567) — the old
+    # \d{1,6} stopped at the dot and leaked the ".567" tail.
+    ("OAB", re.compile(r"\bOAB[/\s]?[A-Z]{2}\s*(?:n[º°.]?\s*)?\d{1,3}(?:\.\d{3})*\b", re.IGNORECASE)),
 ]
 
 
