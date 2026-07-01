@@ -297,3 +297,34 @@ async def test_two_tenants_survive_agent_reconnect() -> None:
     hub.unregister("escritorio-a", id_a1)
     assert hub.is_connected("escritorio-a") is True
     assert hub.is_connected("escritorio-b") is True  # B untouched throughout
+
+
+def test_reverse_channel_scaling_ok_flags_multiworker_without_broker(monkeypatch) -> None:
+    from juris.api.relay import reverse_channel_scaling_ok
+
+    monkeypatch.delenv("WEB_CONCURRENCY", raising=False)
+    monkeypatch.delenv("JURIS_WEB_WORKERS", raising=False)
+    monkeypatch.delenv("JURIS_RELAY_BROKER", raising=False)
+    assert reverse_channel_scaling_ok()[0] is True  # single worker: safe
+
+    monkeypatch.setenv("WEB_CONCURRENCY", "4")
+    assert reverse_channel_scaling_ok()[0] is False  # multi-worker, no broker: unsafe
+
+    monkeypatch.setenv("JURIS_RELAY_BROKER", "redis://localhost:6379")
+    assert reverse_channel_scaling_ok()[0] is True  # broker makes it safe again
+
+
+@pytest.mark.asyncio
+async def test_relay_send_fails_closed_under_multiworker(monkeypatch) -> None:
+    monkeypatch.setenv("WEB_CONCURRENCY", "4")
+    monkeypatch.delenv("JURIS_RELAY_BROKER", raising=False)
+    hub = RelayHub()
+
+    async def fake_send(_p: str) -> None:
+        pass
+
+    hub.register("t", fake_send)
+    req = AgentRequest(request_id="r", tenant_id="t", operation="mni", payload={})
+    # Fail LOUDLY (protect MNI/filing) instead of silently misrouting to a stale worker.
+    with pytest.raises(RuntimeError, match="múltiplos workers"):
+        await hub.send("t", req, timeout=1)

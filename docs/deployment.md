@@ -17,6 +17,13 @@ Two pieces of state live **in process memory** today:
 rate limiting is in use (`uvicorn ... --workers 1`; no horizontal replicas). Health
 `GET /api/health?deep=1` and the admin panel make a broken agent visible immediately.
 
+**Fail-closed guard (enforced in code):** `RelayHub.send()` refuses to route when
+`WEB_CONCURRENCY`/`JURIS_WEB_WORKERS > 1` and no `JURIS_RELAY_BROKER` is set
+(`reverse_channel_scaling_ok`). So misconfiguring the deploy to multi-worker **fails
+loudly** — an MNI read / filing raises a clear error instead of silently landing on a
+worker that isn't holding the agent's connection. Scaling therefore never *silently*
+breaks MNI/filing; it either works (single worker / sticky / broker) or errors visibly.
+
 ## Scaling option A — sticky sessions (smallest change)
 
 Pin each firm's traffic (and its dialed-in agent WebSocket) to one worker/instance by
@@ -69,5 +76,7 @@ Replace the in-memory maps with a broker so any worker can reach any agent:
 
 - [x] Single-worker requirement documented (here + `api/relay.py` docstring).
 - [x] Two-tenant agent-reconnect correctness under test (`test_two_tenants_survive_agent_reconnect`).
+- [x] Fail-closed guard so multi-worker never *silently* breaks MNI/filing
+      (`reverse_channel_scaling_ok`, `test_relay_send_fails_closed_under_multiworker`).
 - [ ] Sticky sessions **or** broker wired in the actual deploy (infra — pick A or B above).
 - [ ] Rate limit moved to proxy/Redis in the actual deploy (infra).

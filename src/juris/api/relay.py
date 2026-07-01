@@ -65,6 +65,12 @@ class RelayHub:
         Raises ``RuntimeError`` if no agent is connected and ``TimeoutError`` if the
         agent doesn't answer within ``timeout``.
         """
+        scaling_ok, reason = reverse_channel_scaling_ok()
+        if not scaling_ok:
+            # Fail LOUDLY under an unsafe multi-worker config instead of silently
+            # misrouting a token op (MNI read / filing) to a worker that isn't holding
+            # this tenant's agent connection.
+            raise RuntimeError(reason)
         send_entry = self._agents.get(tenant_id)
         if send_entry is None:
             msg = f"nenhum agente conectado para o tenant {tenant_id!r} (reverse-channel)"
@@ -90,6 +96,30 @@ class RelayHub:
         fut = self._pending.get((tenant_id, response.request_id))
         if fut is not None and not fut.done():
             fut.set_result(response)
+
+
+def reverse_channel_scaling_ok() -> tuple[bool, str]:
+    """Whether the in-memory reverse channel is safe under the current worker config.
+
+    The hub is per-process: an agent registers on the worker that terminated its
+    WebSocket; a request on another worker won't find it. So multi-worker
+    (``WEB_CONCURRENCY`` / ``JURIS_WEB_WORKERS`` > 1) WITHOUT an external broker
+    (``JURIS_RELAY_BROKER``) is unsafe — :meth:`RelayHub.send` fails-closed rather than
+    silently misroute a token op (MNI read / filing). See ``docs/deployment.md``.
+    """
+    import os
+
+    try:
+        workers = int(os.environ.get("WEB_CONCURRENCY") or os.environ.get("JURIS_WEB_WORKERS") or "1")
+    except ValueError:
+        workers = 1
+    if workers > 1 and not os.environ.get("JURIS_RELAY_BROKER"):
+        return False, (
+            "canal reverso inseguro com múltiplos workers sem broker: a conexão do "
+            "agente vive em um worker e a requisição pode cair em outro. Use 1 worker, "
+            "sticky sessions por tenant, ou configure JURIS_RELAY_BROKER (docs/deployment.md)."
+        )
+    return True, ""
 
 
 def relay_token_ok(tenant_id: str, presented: str | None) -> bool:
