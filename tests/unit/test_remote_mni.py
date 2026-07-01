@@ -128,6 +128,63 @@ def test_handle_mni_consultar_processo_resolves_creds_locally() -> None:
     assert resp.payload["classe"] == "Apelação Cível"
 
 
+def _processo_com_partes() -> ProcessoDomain:
+    from juris.mni.parsers.processo import Parte
+
+    return ProcessoDomain(
+        numero_cnj="5082351-40.2017.8.13.0024",
+        partes=[Parte(nome="João da Silva", tipo="autor", documento="123.456.789-09")],
+        movimentos=[
+            Movimento(data_hora=None, tipo="movimentoNacional", descricao="Intimação de João da Silva")
+        ],
+    )
+
+
+class _PartesMNI:
+    def consultar_processo(self, *args, **kwargs):  # noqa: ANN002, ANN003, ANN201
+        return _processo_com_partes()
+
+    def consultar_avisos(self, *args, **kwargs):  # noqa: ANN002, ANN003, ANN201
+        return AvisosResult(sucesso=True, mensagem="ok", avisos=[])
+
+
+def test_handle_mni_deid_reads_off_returns_raw_by_default(monkeypatch) -> None:
+    from juris.api.local_agent import handle_mni_request
+
+    monkeypatch.delenv("JURIS_AGENT_DEID_READS", raising=False)
+    req = AgentRequest(
+        request_id="rd0",
+        operation="mni.consultar_processo",
+        payload={"numero_cnj": "5082351-40.2017.8.13.0024", "tribunal_id": "tjmg"},
+    )
+    resp = handle_mni_request(req, _PartesMNI(), credentials_resolver=_creds, tribunal_resolver=get_tribunal)
+    assert resp.success
+    assert resp.payload["partes"][0]["nome"] == "João da Silva"  # default: unchanged
+
+
+def test_handle_mni_deid_reads_on_redacts_and_keeps_map_local(monkeypatch, tmp_path) -> None:
+    from juris.api.local_agent import handle_mni_request
+    from juris.api.reid_store import load_reid_map
+    from juris.core.deid import reidentify
+
+    monkeypatch.setenv("JURIS_AGENT_DEID_READS", "1")
+    monkeypatch.setenv("JURIS_HOME", str(tmp_path))
+    req = AgentRequest(
+        request_id="rd1",
+        operation="mni.consultar_processo",
+        payload={"numero_cnj": "5082351-40.2017.8.13.0024", "tribunal_id": "tjmg"},
+    )
+    resp = handle_mni_request(req, _PartesMNI(), credentials_resolver=_creds, tribunal_resolver=get_tribunal)
+    assert resp.success
+    # Raw PII must NOT cross to the cloud.
+    assert "João da Silva" not in resp.payload["partes"][0]["nome"]
+    assert "123.456.789-09" not in (resp.payload["partes"][0]["documento"] or "")
+    assert "João da Silva" not in resp.payload["movimentos"][0]["descricao"]
+    # The re-id map stays LOCAL to the agent and restores the original.
+    mapping = load_reid_map("public", "5082351-40.2017.8.13.0024")
+    assert reidentify(resp.payload["partes"][0]["nome"], mapping) == "João da Silva"
+
+
 def test_handle_mni_unknown_operation_errors() -> None:
     from juris.api.local_agent import handle_mni_request
 

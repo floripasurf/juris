@@ -62,6 +62,69 @@ class DeidResult:
     not cloud-safe by default."""
 
 
+class Deidentifier:
+    """Stateful de-identifier sharing ONE placeholder map across many texts.
+
+    A single instance keeps a stable mapping, so the same identifier (a party name
+    repeated across every movement, a CPF in two fields) always maps to the same
+    placeholder. This is what lets a structured record — e.g. a whole processo — be
+    de-identified field-by-field yet stay consistently reversible from one map.
+    """
+
+    def __init__(self, *, ner_redactor: Callable[[str], list[str]] | None = None) -> None:
+        self._mapping: dict[str, str] = {}
+        self._reverse: dict[str, str] = {}  # original → placeholder (stable)
+        self._counters: dict[str, int] = {}
+        self._ner = ner_redactor
+        # "Complete" once free-text entities are handled (a NER ran or known names
+        # were supplied); structured-only de-id leaves names in place.
+        self._free_text_handled = ner_redactor is not None
+
+    def _placeholder(self, label: str, original: str) -> str:
+        if original in self._reverse:
+            return self._reverse[original]
+        self._counters[label] = self._counters.get(label, 0) + 1
+        ph = f"[{label}_{self._counters[label]}]"
+        self._mapping[ph] = original
+        self._reverse[original] = ph
+        return ph
+
+    def _repl_for(self, label: str) -> Callable[[re.Match[str]], str]:
+        def repl(match: re.Match[str]) -> str:
+            return self._placeholder(label, match.group(0))
+
+        return repl
+
+    def redact(self, text: str, *, known_entities: list[str] | None = None) -> str:
+        """De-identify one text against the shared map, returning the redacted text.
+
+        ``known_entities`` are free-text identifiers already known (e.g. party names
+        pulled straight from the processo) — redacted deterministically, longest
+        first so "João da Silva" is replaced before a bare "Silva".
+        """
+        out = text
+        for label, pattern in _PATTERNS:
+            out = pattern.sub(self._repl_for(label), out)
+
+        entities = list(known_entities or [])
+        if known_entities:
+            self._free_text_handled = True
+        if self._ner is not None:
+            entities.extend(self._ner(text))
+        for entity in sorted({e for e in entities if e}, key=len, reverse=True):
+            if entity in out:
+                out = out.replace(entity, self._placeholder("NOME", entity))
+        return out
+
+    @property
+    def mapping(self) -> dict[str, str]:
+        return dict(self._mapping)
+
+    @property
+    def complete(self) -> bool:
+        return self._free_text_handled
+
+
 def deidentify(text: str, *, ner_redactor: Callable[[str], list[str]] | None = None) -> DeidResult:
     """Replace direct identifiers with reversible placeholders.
 
@@ -73,37 +136,9 @@ def deidentify(text: str, *, ner_redactor: Callable[[str], list[str]] | None = N
     Returns:
         :class:`DeidResult` with the de-identified text and the re-id map.
     """
-    mapping: dict[str, str] = {}
-    reverse: dict[str, str] = {}  # original → placeholder (stable)
-    counters: dict[str, int] = {}
-
-    def _placeholder(label: str, original: str) -> str:
-        if original in reverse:
-            return reverse[original]
-        counters[label] = counters.get(label, 0) + 1
-        ph = f"[{label}_{counters[label]}]"
-        mapping[ph] = original
-        reverse[original] = ph
-        return ph
-
-    def _repl_for(label: str) -> Callable[[re.Match[str]], str]:
-        def repl(match: re.Match[str]) -> str:
-            return _placeholder(label, match.group(0))
-
-        return repl
-
-    out = text
-    for label, pattern in _PATTERNS:
-        out = pattern.sub(_repl_for(label), out)
-
-    if ner_redactor is not None:
-        for entity in ner_redactor(text):
-            if entity and entity in out:
-                out = out.replace(entity, _placeholder("NOME", entity))
-
-    # "Complete" only when free-text entities were processed; structured-only
-    # de-id leaves names in place and must not be assumed cloud-safe.
-    return DeidResult(text=out, mapping=mapping, complete=ner_redactor is not None)
+    engine = Deidentifier(ner_redactor=ner_redactor)
+    out = engine.redact(text)
+    return DeidResult(text=out, mapping=engine.mapping, complete=engine.complete)
 
 
 def ensure_cloud_safe(result: DeidResult, *, allow_partial: bool = False) -> None:
