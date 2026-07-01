@@ -228,6 +228,11 @@ def test_no_doctrine_lead_in_bypass_for_case_ref() -> None:
         "AIRR-100-45.2019.5.02.0011",          # agravo de instrumento em RR
         "Apelação Cível 1234567-89.2020.8.26.0100",  # CNJ cited as precedent
         "Agravo de Instrumento 2233445-66.2021.8.13.0024",
+        "Recurso Especial nº 1.234.567/SP",
+        "Recurso Extraordinário n. 987654",
+        "Agravo em Recurso Especial nº 2.345.678/RJ",
+        "Habeas Corpus nº 123.456/SP",
+        "Mandado de Segurança nº 12.345/DF",
         "Tese 987",
         "Precedente 12",
         "Enunciado 5",
@@ -245,6 +250,7 @@ def test_spurious_catches_tst_labor_and_cnj_formats(text) -> None:
     "text",
     [
         "Trata-se de ação distribuída sob o Processo nº 1234567-89.2020.8.26.0100.",  # own case CNJ
+        "A parte interpôs recurso especial, mas o preparo não foi recolhido.",  # generic remedy, no precedent number
         "A parte requer a produção de provas.",
     ],
 )

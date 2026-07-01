@@ -968,6 +968,68 @@ def test_agent_health_remote_reports_tenant_agent(monkeypatch) -> None:
     assert body["reachable"] is True
     assert body["token_connected"] is True
     assert body["cert_valid_until"] == "2030-01-02"
+    assert body["ready"] is True
+    assert body["status"] == "ready"
+    assert body["error_code"] is None
+
+
+def test_agent_health_remote_reports_token_absent(monkeypatch) -> None:
+    from juris.api import pairing
+    from juris.api.ws_schemas import HealthResponse
+
+    monkeypatch.setenv("JURIS_AGENT_MODE", "remote")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_URL", "ws://127.0.0.1:8765")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_TOKEN", "tok")
+    monkeypatch.setattr(
+        pairing,
+        "check_agent_health",
+        lambda url: HealthResponse(
+            status="ok",
+            token_connected=False,
+            cert_valid_until=None,
+            version="1.2.3",
+        ),
+    )
+
+    response = client.get("/api/agent-health")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["reachable"] is True
+    assert body["ready"] is False
+    assert body["status"] == "token_absent"
+    assert body["error_code"] == "agent_token_missing"
+    assert "token A3" in body["message"]
+
+
+def test_agent_health_remote_reports_expired_certificate(monkeypatch) -> None:
+    from juris.api import pairing
+    from juris.api.ws_schemas import HealthResponse
+
+    monkeypatch.setenv("JURIS_AGENT_MODE", "remote")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_URL", "ws://127.0.0.1:8765")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_TOKEN", "tok")
+    monkeypatch.setattr(
+        pairing,
+        "check_agent_health",
+        lambda url: HealthResponse(
+            status="ok",
+            token_connected=True,
+            cert_valid_until=date(2020, 1, 2),
+            version="1.2.3",
+        ),
+    )
+
+    response = client.get("/api/agent-health")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["reachable"] is True
+    assert body["token_connected"] is True
+    assert body["ready"] is False
+    assert body["status"] == "cert_expired"
+    assert body["error_code"] == "agent_cert_expired"
+    assert "vencido" in body["message"]
 
 
 def test_agent_health_remote_unmapped_tenant_reports_error(tmp_path, monkeypatch) -> None:
@@ -987,6 +1049,9 @@ def test_agent_health_remote_unmapped_tenant_reports_error(tmp_path, monkeypatch
     body = response.json()
     assert body["remote"] is True
     assert body["reachable"] is False
+    assert body["ready"] is False
+    assert body["status"] == "missing_binding"
+    assert body["error_code"] == "agent_missing"
     assert "sem binding" in body["error"]
 
 

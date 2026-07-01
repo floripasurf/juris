@@ -51,6 +51,12 @@ _RECURSO_PREFIX = (
     r"|Recurso\s+\w+|Embargos(?:\s+\w+)?|Mandado\s+de\s+Seguran[çc]a|Conflito\s+de\s+Compet[êe]ncia"
     r"|Reclama[çc][ãa]o|Habeas\s+Corpus"
 )
+_FULL_RECURSO_PREFIX = (
+    r"Recurso\s+(?:Especial|Extraordin[áa]rio|Ordin[áa]rio|em\s+Habeas\s+Corpus"
+    r"|em\s+Mandado\s+de\s+Seguran[çc]a)"
+    r"|Agravo\s+em\s+Recurso\s+(?:Especial|Extraordin[áa]rio)"
+    r"|Habeas\s+Corpus|Mandado\s+de\s+Seguran[çc]a"
+)
 _RAW_CASE_PATTERNS = [
     # strong siglas, with an optional "AgInt/AgRg/AgR no/na" compound prefix
     re.compile(
@@ -62,6 +68,8 @@ _RAW_CASE_PATTERNS = [
     re.compile(rf"\b(?:{_LABOR_SIGLAS})\b\s*-?\s*{_CNJ_NUM}"),
     # a CNJ number introduced as a precedent by a recurso/court indicator
     re.compile(rf"\b(?:{_RECURSO_PREFIX})\s+(?:n[º°.]?\s*)?{_CNJ_NUM}", re.IGNORECASE),
+    # full recurso names with ordinary precedent numbers (e.g. "Recurso Especial nº 1.234.567/SP")
+    re.compile(rf"\b(?:{_FULL_RECURSO_PREFIX})\s+{_QUALIFIED_NUM}", re.IGNORECASE),
     re.compile(r"\bS[uú]mula(?:\s+Vinculante)?\s+(?:n[º°.]?\s*)?\d+", re.IGNORECASE),
     re.compile(r"\bTema(?:\s+Repetitivo)?\s+(?:n[º°.]?\s*)?\d+", re.IGNORECASE),
     re.compile(r"\b(?:Tese|Precedente|Enunciado)\s+(?:n[º°.]?\s*)?\d+", re.IGNORECASE),

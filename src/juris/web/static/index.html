@@ -880,6 +880,14 @@
     function renderAgentHealth(h) {
       const cs = document.querySelector("#connect-status");
       if (!cs || !h || !h.remote) return;
+      if (h.message && h.ready === false) {
+        cs.textContent = h.message;
+        return;
+      }
+      if (h.ready === true) {
+        cs.textContent = h.message || "Agente remoto pronto: token A3 conectado.";
+        return;
+      }
       if (h.error || h.reachable === false) {
         cs.textContent = `Agente remoto indisponível: ${h.error || "sem resposta"}`;
         return;

@@ -6,6 +6,7 @@ import asyncio
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
+from datetime import date
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -468,18 +469,24 @@ async def get_agent_health(tenant: Tenant = Depends(current_tenant)) -> dict[str
     """
     from juris.api.agent_config import agent_mode, is_remote, tenant_agent_binding
     from juris.api.pairing import check_agent_health
+    from juris.web.auth import default_registry
 
     remote = is_remote()
     payload: dict[str, object] = {
         "tenant_id": tenant.tenant_id,
+        "tenant_configured": not default_registry().is_open,
         "mode": agent_mode(),
         "remote": remote,
         "agent_required": remote,
         "agent_configured": not remote,
+        "binding_present": None if not remote else False,
         "reachable": None,
         "token_connected": None,
         "cert_valid_until": None,
         "version": None,
+        "ready": not remote,
+        "status": "inprocess" if not remote else "checking",
+        "message": "Operando em modo co-localizado." if not remote else None,
         "error_code": None,
         "error": None,
     }
@@ -489,19 +496,44 @@ async def get_agent_health(tenant: Tenant = Depends(current_tenant)) -> dict[str
     try:
         binding = tenant_agent_binding(tenant.tenant_id)
         payload["agent_configured"] = True
+        payload["binding_present"] = True
         health = check_agent_health(binding.base_url)
     except Exception as exc:  # noqa: BLE001 — health reports readiness, not stack traces
+        code = _agent_health_error_code(str(exc))
         payload["reachable"] = False
-        payload["error_code"] = _agent_health_error_code(str(exc))
+        payload["ready"] = False
+        payload["status"] = _agent_health_status(code)
+        payload["message"] = _agent_health_message(code)
+        payload["error_code"] = code
         payload["error"] = str(exc)
         return payload
+
+    cert_valid_until = health.cert_valid_until
+    cert_expired = cert_valid_until is not None and cert_valid_until < date.today()
+    ready = bool(health.token_connected and not cert_expired)
+    if ready:
+        status = "ready"
+        error_code = None
+        message = "Agente remoto pronto: token A3 conectado."
+    elif cert_expired:
+        status = "cert_expired"
+        error_code = "agent_cert_expired"
+        message = "Agente remoto alcançável, mas o certificado do token está vencido."
+    else:
+        status = "token_absent"
+        error_code = "agent_token_missing"
+        message = "Agente remoto alcançável, mas o token A3 não foi detectado."
 
     payload.update(
         {
             "reachable": True,
             "token_connected": health.token_connected,
-            "cert_valid_until": health.cert_valid_until.isoformat() if health.cert_valid_until else None,
+            "cert_valid_until": cert_valid_until.isoformat() if cert_valid_until else None,
             "version": health.version,
+            "ready": ready,
+            "status": status,
+            "message": message,
+            "error_code": error_code,
         }
     )
     return payload
@@ -516,6 +548,24 @@ def _agent_health_error_code(message: str) -> str:
     if "inacessível" in lower or "inacessivel" in lower or "connection" in lower:
         return "agent_offline"
     return "agent_unavailable"
+
+
+def _agent_health_status(error_code: str) -> str:
+    return {
+        "agent_missing": "missing_binding",
+        "agent_token_missing": "token_absent",
+        "agent_cert_expired": "cert_expired",
+        "agent_offline": "offline",
+    }.get(error_code, "unavailable")
+
+
+def _agent_health_message(error_code: str) -> str:
+    return {
+        "agent_missing": "Tenant sem binding de agente remoto.",
+        "agent_token_missing": "Agente remoto sem token A3 conectado.",
+        "agent_cert_expired": "Agente remoto com certificado do token vencido.",
+        "agent_offline": "Agente remoto configurado, mas inacessível.",
+    }.get(error_code, "Agente remoto indisponível.")
 
 
 @app.get("/api/connect/{job_id}")
