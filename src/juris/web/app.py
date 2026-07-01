@@ -469,7 +469,9 @@ async def agent_relay_socket(ws: WebSocket) -> None:
     from juris.api.ws_schemas import AgentResponse
 
     tenant_id = ws.query_params.get("tenant", "public")
-    token = ws.headers.get("x-agent-token") or ws.query_params.get("token")
+    # The relay is cloud-facing: never accept the shared secret in the URL, which
+    # can be captured by access logs, browser history, or intermediary telemetry.
+    token = ws.headers.get("x-agent-token")
     if not relay_token_ok(tenant_id, token):
         await ws.close(code=4001, reason="Unauthorized")
         return
