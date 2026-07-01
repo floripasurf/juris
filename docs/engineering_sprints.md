@@ -93,9 +93,14 @@ Fatia entregue agora:
   corpus; a aba `Piloto` mostra esse resumo.
 - Exportação Markdown (`format=md`) gera relatório do piloto para decisão
   comercial e priorização de corpus.
+- CLI `juris pilot summary` / `juris pilot report -o piloto.md` gera as métricas e o
+  relatório (evidência + backlog priorizado) sem a web.
 
-Próximas entregas:
-- Rodar 5-10 casos reais com o advogado e alimentar o feedback estruturado.
+Próxima entrega (HUMANA, não código — a instrumentação acima está pronta e testada):
+- Rodar 5-10 casos reais com o advogado (exige e-CPF A3 + backend LLM) e alimentar o
+  feedback estruturado → então `juris pilot report`. Passo a passo em
+  **`docs/pilot_runbook.md`**. Sem casos reais não há evidência de valor pago; nenhum
+  código substitui esse passo.
 
 ## Sprint 6 — Corpus Dirigido pelo Piloto
 
@@ -196,6 +201,38 @@ Critério atendido:
   split-trust.
 
 Próximas entregas:
-- Amarrar o protocolo diretamente à página do caso/processo selecionado.
+- ~~Amarrar o protocolo diretamente à página do caso/processo selecionado.~~ **Feito**
+  (detalhe do caso → seção Protocolo + retomar filing pendente por caso).
 - Só considerar retry automático de `_pending` depois de desenhar salvaguarda
-  contra protocolo duplicado.
+  contra protocolo duplicado. **(pendente — ver Sprint 11 abaixo)**
+
+
+## Estado atual (pós-hardening + auditoria adversária)
+
+Entregues e testados (código): segurança da browser session (token validado no native
+host, de-id imposta), health multi-tenant v2 (`/api/health?deep=1`, painel admin, cache),
+guard fail-closed do relay + `JURIS_RELAY_STICKY`, rate-limit **Redis** distribuído
+(`JURIS_RATE_LIMIT_REDIS_URL`), `tom_minuta` no prompt + mini-benchmark, busca de corpus
+explicável + `juris repertory ingest-file`, harness `corpus_improvement`, UX de caso
+(paginação/filtros persistentes/protocolo por caso), + correções da auditoria adversária
+(vazamento de nomes p/ claude.ai no fallback local, CPF só-dígitos, bypasses do guard,
+isolamento fail-safe do corpus, thread-safety do search cacheado).
+
+Bloqueado por dependência humana: **evidência de piloto** (rodar casos com A3 — ver
+`docs/pilot_runbook.md`) e **fonte real de inteiro teor** (decisão de ToS).
+
+## Próxima sequência proposta
+
+- **Sprint 8 — Broker de canal reverso.** Sticky routing já entregue; o broker Redis/NATS
+  do relay é a alternativa para escala horizontal sem afinidade de LB. Roteia filing →
+  exige teste de integração contra Redis real antes de produção (determinismo em caminho
+  legal-crítico), não só double in-memory.
+- **Sprint 9 — Zero-PII-to-cloud completo.** Fechar o loop do `JURIS_AGENT_DEID_READS`:
+  render + re-id + sign no agente, para que a nuvem SaaS nunca veja nome/CPF cru.
+- **Sprint 10 — Escopo de tenant no path denso (Qdrant).** O FTS é tenant-scoped; o denso
+  não. Escopar por `tenant_id` antes de ativar o Qdrant.
+- **Sprint 11 — Loop noturno automático.** Overnight sync agendado por tenant, entrega de
+  alertas (email/WhatsApp) com dedupe, e retry de `_pending` **com salvaguarda
+  anti-duplicata**.
+- **Sprint 12 — Entendimento de documento.** Ler acórdão/decisão/intimação recebidos →
+  fatos estruturados para análise, minuta e corpus.

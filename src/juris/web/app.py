@@ -22,7 +22,7 @@ from juris.web.auth import Tenant, current_tenant, require_admin, tenant_db_path
 from juris.web.connect_jobs import ConnectJobStore
 from juris.web.demo_service import DemoRunError, WebDemoRunRequest, execute_demo_run
 from juris.web.processos_service import get_processo_detail, list_prazos, list_processos
-from juris.web.rate_limit import FixedWindowRateLimiter
+from juris.web.rate_limit import RateLimiter, build_rate_limiter
 from juris.web.workbench_service import build_workbench
 
 if TYPE_CHECKING:
@@ -100,9 +100,12 @@ def _env_flag(name: str) -> bool:
 
 
 @lru_cache(maxsize=1)
-def _api_rate_limiter() -> FixedWindowRateLimiter:
+def _api_rate_limiter() -> RateLimiter:
+    # Shared Redis quota when JURIS_RATE_LIMIT_REDIS_URL is set (multi-worker SaaS);
+    # process-local otherwise (single-worker pilot).
     limit = int(os.environ.get("JURIS_API_RATE_LIMIT_PER_MINUTE", "120"))
-    return FixedWindowRateLimiter(limit=limit, window_seconds=60)
+    redis_url = os.environ.get("JURIS_RATE_LIMIT_REDIS_URL") or None
+    return build_rate_limiter(limit=limit, window_seconds=60, redis_url=redis_url)
 
 
 @app.middleware("http")

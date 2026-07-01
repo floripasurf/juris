@@ -45,9 +45,15 @@ Good enough for a handful of firms. It does **not** survive a worker restart mid
 `test_two_tenants_survive_agent_reconnect`, which proves the hub re-routes correctly to
 the new socket and the stale one can't hijack).
 
-## Scaling option B — external broker (real horizontal scale)
+## Scaling option B — external broker (real horizontal scale) — RELAY BROKER NOT YET BUILT
 
-Replace the in-memory maps with a broker so any worker can reach any agent:
+Status: **sticky routing (Option A) is the supported multi-worker path today** — the
+reverse-channel relay hub is still in-memory (the fail-closed guard makes multi-worker
+without sticky/broker error loudly, never silently misroute). A Redis/NATS **relay** broker
+is a scoped follow-up: it routes signing/filing ops, so it must be integration-tested
+against a real broker before production (determinism for legal-critical paths), not merely
+against an in-memory double. The **rate-limit** Redis backend below, by contrast, IS built
+and enabled by config. When the relay broker is built:
 
 1. **Relay:** Redis pub/sub or NATS keyed by tenant. The worker holding the agent
    socket subscribes to `agent:<tenant>`; `send()` publishes the `AgentRequest` there
@@ -60,12 +66,16 @@ Replace the in-memory maps with a broker so any worker can reach any agent:
 
 ## Rate limit for production
 
-`web/rate_limit.py` is process-local by design. For multi-worker:
+`web/rate_limit.py` is process-local by default (fine single-worker). For multi-worker,
+pick one:
 
-- **Reverse proxy** (simplest): enforce at nginx (`limit_req_zone` by `$http_x_api_key`)
-  or the API gateway, and treat the app limiter as a local safety net.
-- **Redis** (shared quota): move the counter to Redis (`INCR` + `EXPIRE` per
-  tenant+window) so the limit is global across workers.
+- **Redis (shared quota) — built in:** set `JURIS_RATE_LIMIT_REDIS_URL=redis://host:6379/0`.
+  `build_rate_limiter` then uses `RedisFixedWindowRateLimiter` (atomic `INCR`+`EXPIRE` per
+  tenant+window) so N workers enforce ONE global quota. Fails OPEN if Redis is unreachable
+  (the API stays up; the proxy is the hard backstop). Tune with
+  `JURIS_API_RATE_LIMIT_PER_MINUTE`.
+- **Reverse proxy:** additionally/alternatively enforce at nginx (`limit_req_zone` by
+  `$http_x_api_key`) or the gateway, treating the app limiter as a local safety net.
 
 ## Operational health
 
