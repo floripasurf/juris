@@ -46,10 +46,13 @@ _CNJ_NUM = r"\d{1,7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}"
 # TST/labor siglas — RR/RO/AIRR collide with prose, so they anchor ONLY on a CNJ tail.
 _LABOR_SIGLAS = r"RRAg|RR|ROT|RO|AIRO|AIRR|AIRE|ED-RR|Ag-AIRR|ARR"
 # Court/recurso indicators that turn a following CNJ number into a precedent citation.
+# Only *appellate* types are here — Mandado de Segurança / Reclamação / Habeas Corpus /
+# Conflito are just as often the petition's OWN action (its caption), so matching them
+# on a bare CNJ over-blocked valid drafts. Cited precedents of those types carry a
+# [CITE:] marker and are handled by the anchoring logic instead.
 _RECURSO_PREFIX = (
     r"Apela[çc][ãa]o(?:\s+C[íi]vel)?|Agravo(?:\s+de\s+Instrumento|\s+Interno|\s+Regimental)?"
-    r"|Recurso\s+\w+|Embargos(?:\s+\w+)?|Mandado\s+de\s+Seguran[çc]a|Conflito\s+de\s+Compet[êe]ncia"
-    r"|Reclama[çc][ãa]o|Habeas\s+Corpus"
+    r"|Recurso\s+\w+|Embargos(?:\s+\w+)?"
 )
 _FULL_RECURSO_PREFIX = (
     r"Recurso\s+(?:Especial|Extraordin[áa]rio|Ordin[áa]rio|em\s+Habeas\s+Corpus"
@@ -58,10 +61,15 @@ _FULL_RECURSO_PREFIX = (
     r"|Habeas\s+Corpus|Mandado\s+de\s+Seguran[çc]a"
 )
 _RAW_CASE_PATTERNS = [
-    # strong siglas, with an optional "AgInt/AgRg/AgR no/na" compound prefix
+    # strong siglas, with an optional "AgInt/AgRg/AgR no/na" compound prefix.
+    # No \b after the sigla — the number may abut it ("REsp123456", an LLM typo).
     re.compile(
-        rf"\b(?:Ag(?:Int|Rg|R)\s+n[oa]\s+)?(?:{_STRONG_SIGLAS})\b\.?\s*{_NUM_TAIL}", re.IGNORECASE
+        rf"\b(?:Ag(?:Int|Rg|R)\s+n[oa]\s+)?(?:{_STRONG_SIGLAS})\.?\s*{_NUM_TAIL}", re.IGNORECASE
     ),
+    # Acórdão / Ac. + number (a core way to cite BR case law)
+    re.compile(r"\b(?:Ac[óo]rd[ãa]o|Ac\.)\s*(?:n[º°.]?\s*)?\d[\d.]*", re.IGNORECASE),
+    # OJ (Orientação Jurisprudencial, labor) — uppercase abbrev + number
+    re.compile(r"\bOJ\s+(?:SDI-?[I\d]+\s+)?(?:n[º°.]?\s*)?\d+"),
     # ambiguous siglas: case-sensitive + a qualified number only (avoids "MS 365" etc.)
     re.compile(rf"\b(?:{_AMBIGUOUS_SIGLAS})\b\.?\s*{_QUALIFIED_NUM}"),
     # TST/labor siglas anchored on a CNJ number (RR-1000-12.2020.5.03.0001)
@@ -235,9 +243,23 @@ class MarkerCitationVerifier:
         def _inside_marker(start: int, end: int) -> bool:
             return any(s <= start and end <= e for s, e in cite_spans)
 
+        def _followed_by_marker(end: int) -> bool:
+            # The readable name of a grounded source is cited THEN marked, e.g.
+            # "Súmula 297 do STJ [CITE:src-1]". A [CITE:] marker within the same sentence
+            # AFTER the reference anchors it. (The evasion is the opposite order — a fake
+            # AFTER a marker — so a *preceding* marker never anchors here.)
+            for s, _e in cite_spans:
+                if s < end:
+                    continue
+                between = draft[end:s]
+                if len(between) > 60:
+                    break
+                return re.search(r"[.!?;]\s", between) is None
+            return False
+
         for pattern in _RAW_CASE_PATTERNS:
             for match in pattern.finditer(draft):
-                if _inside_marker(match.start(), match.end()):
+                if _inside_marker(match.start(), match.end()) or _followed_by_marker(match.end()):
                     continue
                 raw_text = match.group(0).strip()
                 if raw_text not in spurious:

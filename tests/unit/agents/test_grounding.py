@@ -260,3 +260,44 @@ def test_spurious_no_false_positive_on_own_case_number(text) -> None:
 
     verifier = MarkerCitationVerifier(cast(RepertoryService, object()))
     assert verifier.verify(text, {"src-1"}).spurious_citations == []
+
+
+# --- adversarial: false negatives + grounded-name over-block ---
+
+
+@_pytest.mark.parametrize("text", ["Acórdão 1234567", "REsp123456", "OJ 415", "Ac. 987654"])
+def test_spurious_catches_previously_missed_formats(text) -> None:
+    from juris.repertory.retrieval.service import RepertoryService
+
+    verifier = MarkerCitationVerifier(cast(RepertoryService, object()))
+    assert verifier.verify(f"conforme {text}, a tese procede", {"src-1"}).spurious_citations, text
+
+
+def test_grounded_name_followed_by_its_marker_is_not_blocked() -> None:
+    # "A Súmula 297 do STJ [CITE:src-1]" — the readable name is backed by the FOLLOWING
+    # marker; it must NOT be flagged (this over-block killed the natural grounded path).
+    from juris.repertory.retrieval.service import RepertoryService
+
+    verifier = MarkerCitationVerifier(cast(RepertoryService, object()))
+    result = verifier.verify("A Súmula 297 do STJ [CITE:src-1] aplica-se ao caso.", {"src-1"})
+    assert result.spurious_citations == []
+
+
+def test_own_case_reclamacao_or_ms_caption_not_blocked() -> None:
+    # the petition's OWN action being a Reclamação/MS must not trip the gate
+    from juris.repertory.retrieval.service import RepertoryService
+
+    verifier = MarkerCitationVerifier(cast(RepertoryService, object()))
+    assert verifier.verify(
+        "Trata-se de Reclamação nº 0001234-56.2024.5.03.0001 ajuizada pela parte.", {"src-1"}
+    ).spurious_citations == []
+
+
+def test_proximity_evasion_still_caught_marker_before_fake() -> None:
+    # regression: a fake AFTER a marker (marker does NOT follow the fake) stays flagged
+    from juris.repertory.retrieval.service import RepertoryService
+
+    verifier = MarkerCitationVerifier(cast(RepertoryService, object()))
+    assert "REsp 9.999.999" in verifier.verify(
+        "Conforme [CITE:src-1], o REsp 9.999.999 também confirma.", {"src-1"}
+    ).spurious_citations
