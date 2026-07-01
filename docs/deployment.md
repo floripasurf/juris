@@ -17,12 +17,14 @@ Two pieces of state live **in process memory** today:
 rate limiting is in use (`uvicorn ... --workers 1`; no horizontal replicas). Health
 `GET /api/health?deep=1` and the admin panel make a broken agent visible immediately.
 
-**Fail-closed guard (enforced in code):** `RelayHub.send()` refuses to route when
-`WEB_CONCURRENCY`/`JURIS_WEB_WORKERS > 1` and no `JURIS_RELAY_BROKER` is set
-(`reverse_channel_scaling_ok`). So misconfiguring the deploy to multi-worker **fails
+**Fail-closed guard (enforced in code):** `RelayHub.send()` refuses to route under
+multi-worker (`WEB_CONCURRENCY`/`JURIS_WEB_WORKERS > 1`) unless you explicitly opt into a
+safe topology — either `JURIS_RELAY_BROKER=<url>` (a real broker) or `JURIS_RELAY_STICKY=1`
+(you assert LB affinity by tenant is configured). Plain multi-worker with neither **fails
 loudly** — an MNI read / filing raises a clear error instead of silently landing on a
 worker that isn't holding the agent's connection. Scaling therefore never *silently*
 breaks MNI/filing; it either works (single worker / sticky / broker) or errors visibly.
+Note `JURIS_RELAY_STICKY` is an *assertion*, not a verification — you own the LB affinity.
 
 ## Scaling option A — sticky sessions (smallest change)
 
@@ -35,6 +37,8 @@ tenant, so the in-memory hub always has the connection.
   `hash` on the WS `location /ws/agent-relay` using `$arg_tenant`.
 - **Traefik/Envoy:** consistent-hash LB on the same header/query.
 - WebSockets must stick for the whole connection (they already do with hash-LB).
+- **Then set `JURIS_RELAY_STICKY=1`** on the workers so the fail-closed guard
+  (`reverse_channel_scaling_ok`) allows routing — without it, multi-worker `send()` refuses.
 
 Good enough for a handful of firms. It does **not** survive a worker restart mid-session
 (the agent reconnects and re-registers — see

@@ -113,13 +113,21 @@ def reverse_channel_scaling_ok() -> tuple[bool, str]:
         workers = int(os.environ.get("WEB_CONCURRENCY") or os.environ.get("JURIS_WEB_WORKERS") or "1")
     except ValueError:
         workers = 1
-    if workers > 1 and not os.environ.get("JURIS_RELAY_BROKER"):
-        return False, (
-            "canal reverso inseguro com múltiplos workers sem broker: a conexão do "
-            "agente vive em um worker e a requisição pode cair em outro. Use 1 worker, "
-            "sticky sessions por tenant, ou configure JURIS_RELAY_BROKER (docs/deployment.md)."
-        )
-    return True, ""
+    if workers <= 1:
+        return True, ""
+    # Multi-worker is safe with an external broker OR with sticky routing the operator
+    # asserts is configured at the LB (affinity by tenant). Both are explicit opt-ins so
+    # a plain multi-worker misconfig still fails loudly. ``JURIS_RELAY_STICKY`` is an
+    # assertion, not a verification — the operator owns the LB affinity (docs/deployment.md).
+    broker = bool(os.environ.get("JURIS_RELAY_BROKER"))
+    sticky = os.environ.get("JURIS_RELAY_STICKY", "").strip().lower() in {"1", "true", "yes"}
+    if broker or sticky:
+        return True, ""
+    return False, (
+        "canal reverso inseguro com múltiplos workers sem broker nem sticky: a conexão do "
+        "agente vive em um worker e a requisição pode cair em outro. Use 1 worker, declare "
+        "sticky routing com JURIS_RELAY_STICKY=1, ou configure JURIS_RELAY_BROKER (docs/deployment.md)."
+    )
 
 
 def relay_token_ok(tenant_id: str, presented: str | None) -> bool:

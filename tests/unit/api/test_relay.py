@@ -328,3 +328,17 @@ async def test_relay_send_fails_closed_under_multiworker(monkeypatch) -> None:
     # Fail LOUDLY (protect MNI/filing) instead of silently misrouting to a stale worker.
     with pytest.raises(RuntimeError, match="múltiplos workers"):
         await hub.send("t", req, timeout=1)
+
+
+def test_reverse_channel_scaling_ok_allows_asserted_sticky_sessions(monkeypatch) -> None:
+    """A sticky-session deploy (LB affinity by tenant) is a VALID scaling path — the
+    guard must not falsely block it just because there's no broker."""
+    from juris.api.relay import reverse_channel_scaling_ok
+
+    monkeypatch.setenv("WEB_CONCURRENCY", "4")
+    monkeypatch.delenv("JURIS_RELAY_BROKER", raising=False)
+    monkeypatch.delenv("JURIS_RELAY_STICKY", raising=False)
+    assert reverse_channel_scaling_ok()[0] is False  # multi-worker, no broker, no sticky assertion
+
+    monkeypatch.setenv("JURIS_RELAY_STICKY", "1")
+    assert reverse_channel_scaling_ok()[0] is True  # operator asserts sticky routing → allowed
