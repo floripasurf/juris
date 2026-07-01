@@ -50,12 +50,11 @@ class WebSocketAgentTransport:
     def send(self, request: AgentRequest) -> AgentResponse:
         from websockets.sync.client import connect
 
-        sep = "&" if "?" in self._url else "?"
-        full_url = f"{self._url}{sep}token={self._token}"
+        headers = {"x-agent-token": self._token}  # token in a header, never the logged URL
         last_exc: Exception | None = None
         for _attempt in range(self._retries + 1):
             try:
-                with connect(full_url, open_timeout=self._timeout) as ws:
+                with connect(self._url, additional_headers=headers, open_timeout=self._timeout) as ws:
                     ws.send(request.model_dump_json())
                     raw = ws.recv(timeout=self._timeout)
                 return AgentResponse.model_validate_json(raw)

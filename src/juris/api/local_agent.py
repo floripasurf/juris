@@ -246,15 +246,40 @@ async def health() -> HealthResponse:
     return agent_health()
 
 
+_LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1", "[::1]", ""}
+
+
+def _ws_authorized(ws: WebSocket) -> bool:
+    """Authorize a WS handshake: non-foreign Origin (+ loopback Host) and a valid token.
+
+    Only browsers send an ``Origin`` header — that's the DNS-rebinding / CSRF surface
+    against the loopback-bound agent. When Origin is present it (and the Host) MUST be
+    loopback, so a malicious page the lawyer has open can't reach the agent even if it
+    steals the token. A legit orchestrator client sends no Origin and is unaffected.
+    The token comes from the ``x-agent-token`` header (preferred — never lands in an
+    access-logged URL) or the legacy ``?token=`` query param.
+    """
+    origin = ws.headers.get("origin")
+    if origin is not None:
+        from urllib.parse import urlparse
+
+        if (urlparse(origin).hostname or "") not in _LOOPBACK_HOSTS:
+            return False
+        if ws.headers.get("host", "").split(":")[0] not in _LOOPBACK_HOSTS:
+            return False
+    token = ws.headers.get("x-agent-token") or ws.query_params.get("token")
+    return token is not None and secrets.compare_digest(token, get_signing_token())
+
+
 @app.websocket("/ws/sign")
 async def signing_socket(ws: WebSocket) -> None:
     """WebSocket endpoint for signing requests (token-authenticated).
 
-    Protocol: client connects with ``?token=``, sends a ``SignRequest`` JSON, the
-    agent signs locally and replies with a ``SignResponse`` JSON; repeat or close.
+    Protocol: client connects (token in the ``x-agent-token`` header), sends a
+    ``SignRequest`` JSON, the agent signs locally and replies with a ``SignResponse``
+    JSON; repeat or close.
     """
-    token = ws.query_params.get("token")
-    if token is None or not secrets.compare_digest(token, get_signing_token()):
+    if not _ws_authorized(ws):
         await ws.close(code=4001, reason="Unauthorized")
         return
     await ws.accept()
@@ -289,8 +314,7 @@ async def mni_socket(ws: WebSocket) -> None:
     lawyer's credentials locally, runs the mTLS read, and replies with an
     ``AgentResponse`` carrying the serialised result.
     """
-    token = ws.query_params.get("token")
-    if token is None or not secrets.compare_digest(token, get_signing_token()):
+    if not _ws_authorized(ws):
         await ws.close(code=4001, reason="Unauthorized")
         return
     await ws.accept()
@@ -334,8 +358,7 @@ async def filing_socket(ws: WebSocket) -> None:
     The agent runs the whole pipeline (render → preflight → sign → peticionar) with
     locally-resolved credentials, and replies with the chain-of-custody proof.
     """
-    token = ws.query_params.get("token")
-    if token is None or not secrets.compare_digest(token, get_signing_token()):
+    if not _ws_authorized(ws):
         await ws.close(code=4001, reason="Unauthorized")
         return
     await ws.accept()

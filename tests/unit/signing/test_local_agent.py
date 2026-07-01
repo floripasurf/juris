@@ -183,3 +183,40 @@ def test_health_endpoint_uses_agent_health(monkeypatch) -> None:
     data = client.get("/health").json()
     assert data["token_connected"] is True
     assert data["cert_valid_until"] == "2030-05-01"
+
+
+def test_ws_sign_accepts_token_via_header(monkeypatch):
+    """Token in the x-agent-token header (preferred — not in the URL) is accepted."""
+    monkeypatch.setattr(local_agent, "agent_signer", lambda: _FakeSigner())
+    monkeypatch.setenv("JURIS_AGENT_PIN", "1234")
+    client = TestClient(app)
+    with client.websocket_connect("/ws/sign", headers={"x-agent-token": get_signing_token()}) as ws:
+        req = SignRequest(request_id="h-1", pdf_bytes_b64=base64.b64encode(b"PDF").decode())
+        ws.send_text(req.model_dump_json())
+        resp = SignResponse.model_validate_json(ws.receive_text())
+        assert resp.success is True
+
+
+def test_ws_sign_rejects_foreign_origin(monkeypatch):
+    """A browser page (foreign Origin) can't reach the loopback agent even with the token."""
+    client = TestClient(app)
+    token = get_signing_token()
+    with pytest.raises(WebSocketDisconnect), client.websocket_connect(
+        "/ws/sign",
+        headers={"origin": "https://evil.example", "host": "127.0.0.1:8765", "x-agent-token": token},
+    ):
+        pass
+
+
+def test_ws_sign_allows_loopback_origin(monkeypatch):
+    """A same-origin (loopback) request with the token is allowed."""
+    monkeypatch.setattr(local_agent, "agent_signer", lambda: _FakeSigner())
+    monkeypatch.setenv("JURIS_AGENT_PIN", "1234")
+    client = TestClient(app)
+    with client.websocket_connect(
+        "/ws/sign",
+        headers={"origin": "http://127.0.0.1:8765", "host": "127.0.0.1:8765", "x-agent-token": get_signing_token()},
+    ) as ws:
+        req = SignRequest(request_id="lo-1", pdf_bytes_b64=base64.b64encode(b"PDF").decode())
+        ws.send_text(req.model_dump_json())
+        assert SignResponse.model_validate_json(ws.receive_text()).success is True

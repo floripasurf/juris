@@ -2293,6 +2293,8 @@ def agent_serve(
     127.0.0.1. Set ``JURIS_AGENT_TOKEN`` (pairing), ``JURIS_AGENT_CPF/SENHA/PIN``
     (the lawyer's secrets, resolved here) before serving.
     """
+    import os
+
     from juris.api.local_agent import app as agent_asgi
     from juris.api.local_agent import get_signing_token, validate_local_agent_host
 
@@ -2301,6 +2303,14 @@ def agent_serve(
     except ValueError as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=2) from None
+
+    # Fail closed: a token-holding boundary must not start with an unknown random token.
+    if not os.environ.get("JURIS_AGENT_TOKEN"):
+        console.print(
+            "[red]JURIS_AGENT_TOKEN não definido.[/red] Rode 'juris agent pair' e exporte "
+            "o token antes de servir (sem isso, ninguém consegue autenticar)."
+        )
+        raise typer.Exit(code=2)
 
     token = get_signing_token()
     masked = f"{token[:4]}…{token[-2:]}" if len(token) > 8 else "configurado"
@@ -2312,7 +2322,9 @@ def agent_serve(
 
     import uvicorn
 
-    uvicorn.run(agent_asgi, host=bind_host, port=port, log_level="info")
+    # access_log off: the request line (which could carry a legacy ?token=) must never
+    # be written to the agent's log file.
+    uvicorn.run(agent_asgi, host=bind_host, port=port, log_level="warning", access_log=False)
 
 
 browser_app = typer.Typer(name="browser", help="Browser-session AI bridge (ADR-0018).")

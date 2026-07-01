@@ -29,12 +29,24 @@ def test_agent_serve_rejects_non_loopback() -> None:
 def test_agent_serve_binds_loopback(monkeypatch) -> None:
     import uvicorn
 
+    from juris.api import local_agent
+
+    monkeypatch.setenv("JURIS_AGENT_TOKEN", "paired-token")
+    local_agent._resolve_signing_token.cache_clear()
     captured: dict[str, object] = {}
     monkeypatch.setattr(uvicorn, "run", lambda _app, **kw: captured.update(kw))
     result = CliRunner().invoke(app, ["agent", "serve", "--port", "9999"])
     assert result.exit_code == 0
     assert captured["host"] == "127.0.0.1"
     assert captured["port"] == 9999
+    assert captured["access_log"] is False  # request line (legacy ?token=) never logged
+
+
+def test_agent_serve_fails_closed_without_token(monkeypatch) -> None:
+    monkeypatch.delenv("JURIS_AGENT_TOKEN", raising=False)
+    result = CliRunner().invoke(app, ["agent", "serve"])
+    assert result.exit_code == 2  # refuses to start with an unknown random token
+    assert "JURIS_AGENT_TOKEN" in result.output
 
 
 def test_agent_serve_masks_the_token(monkeypatch) -> None:

@@ -45,9 +45,10 @@ class WebSocketSignTransport:
     def send(self, request: SignRequest) -> SignResponse:
         from websockets.sync.client import connect
 
-        sep = "&" if "?" in self._url else "?"
-        full_url = f"{self._url}{sep}token={self._token}"
-        with connect(full_url, open_timeout=self._timeout) as ws:
+        # Token in a header, not the URL query — so it never lands in an access log.
+        with connect(
+            self._url, additional_headers={"x-agent-token": self._token}, open_timeout=self._timeout
+        ) as ws:
             ws.send(request.model_dump_json())
             raw = ws.recv(timeout=self._timeout)
         return SignResponse.model_validate_json(raw)

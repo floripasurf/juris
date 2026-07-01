@@ -99,3 +99,21 @@ def test_binding_fails_closed_when_require_tenants(monkeypatch) -> None:
 
     with pytest.raises(RuntimeError, match="sem binding"):
         tenant_agent_binding("qualquer")
+
+
+def test_binding_reloads_when_agents_file_changes(tmp_path, monkeypatch) -> None:
+    import json
+    import os
+
+    from juris.api.agent_config import tenant_agent_binding
+
+    agents = tmp_path / "agents.json"
+    agents.write_text(json.dumps({"a": {"url": "ws://one:8765", "token": "t"}}), encoding="utf-8")
+    os.utime(agents, (1000, 1000))
+    monkeypatch.setenv("JURIS_AGENTS_FILE", str(agents))
+    assert tenant_agent_binding("a").base_url == "ws://one:8765"
+
+    # rewrite with a NEW url + bump mtime — no explicit cache_clear
+    agents.write_text(json.dumps({"a": {"url": "ws://two:8765", "token": "t"}}), encoding="utf-8")
+    os.utime(agents, (2000, 2000))
+    assert tenant_agent_binding("a").base_url == "ws://two:8765"  # rotation without restart

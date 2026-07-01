@@ -72,15 +72,28 @@ class AgentBinding:
     token: str
 
 
-@lru_cache(maxsize=1)
-def _load_agent_bindings() -> dict[str, dict[str, str]]:
-    """Load the per-tenant agent map from ``$JURIS_AGENTS_FILE`` (empty if unset)."""
-    path = os.environ.get("JURIS_AGENTS_FILE")
-    if not path or not os.path.exists(path):
-        return {}
+@lru_cache(maxsize=4)
+def _read_agent_bindings(path: str, _mtime: float) -> dict[str, dict[str, str]]:
+    """Parse the agent map; keyed by (path, mtime) so a rewrite auto-invalidates."""
     with open(path, encoding="utf-8") as fh:
         data: dict[str, dict[str, str]] = json.load(fh)
     return data
+
+
+def _load_agent_bindings() -> dict[str, dict[str, str]]:
+    """Load the per-tenant agent map from ``$JURIS_AGENTS_FILE`` (empty if unset).
+
+    Cached by file mtime, so rotating a token / onboarding a firm takes effect on the
+    next request without an orchestrator restart (revocation isn't stuck behind a boot).
+    """
+    path = os.environ.get("JURIS_AGENTS_FILE")
+    if not path or not os.path.exists(path):
+        return {}
+    return _read_agent_bindings(path, os.path.getmtime(path))
+
+
+# Keep the historical `_load_agent_bindings.cache_clear()` API (tests/fixtures use it).
+_load_agent_bindings.cache_clear = _read_agent_bindings.cache_clear  # type: ignore[attr-defined]
 
 
 def _require_tenants() -> bool:
