@@ -151,12 +151,14 @@ async def _handle_uncaught(request: Request, exc: Exception) -> JSONResponse:
     )
 
 
-def _operational_http_error(*, code: str, message: str, exc: Exception) -> HTTPException:
+def _operational_http_error(
+    *, code: str, message: str, exc: Exception, internal_detail: str | None = None
+) -> HTTPException:
     """Build a sanitized 400 while logging the internal operational detail."""
     from juris.core.observability import get_logger
 
     get_logger("juris.web").warning(
-        "operational_http_error", code=code, error=str(exc), exc_info=exc
+        "operational_http_error", code=code, error=internal_detail or str(exc), exc_info=exc
     )
     return HTTPException(
         status_code=400,
@@ -970,7 +972,12 @@ async def create_demo_run(
     try:
         result = await execute_demo_run(request)
     except DemoRunError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise _operational_http_error(
+            code=exc.code,
+            message=str(exc),
+            exc=exc,
+            internal_detail=exc.internal_detail,
+        ) from exc
 
     return {
         "succeeded": result.succeeded,

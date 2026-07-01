@@ -68,7 +68,21 @@ def test_handle_sign_request_maps_errors_to_response() -> None:
     resp = handle_sign_request(req, _Boom(), pin_resolver=lambda: "x")
 
     assert resp.success is False
-    assert "token ausente" in (resp.error or "")
+    assert "Falha ao assinar" in (resp.error or "")
+
+
+def test_handle_sign_request_does_not_leak_internal_error() -> None:
+    class _Boom(SigningService):
+        def sign_pdf(self, *a, **k):  # noqa: ANN001, ANN002, ANN003, ANN201
+            raise RuntimeError("pkcs11 /var/private/token token=abc pin=1234")
+
+    req = SignRequest(request_id="r2", pdf_bytes_b64=base64.b64encode(b"PDF").decode())
+    resp = handle_sign_request(req, _Boom(), pin_resolver=lambda: "x")
+
+    assert resp.success is False
+    assert "token=abc" not in (resp.error or "")
+    assert "pin=1234" not in (resp.error or "")
+    assert "/var/private/token" not in (resp.error or "")
 
 
 def test_ws_sign_round_trip_signs_via_agent(monkeypatch):

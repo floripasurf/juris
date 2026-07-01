@@ -34,6 +34,10 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 _LOCAL_AGENT_HOST = "127.0.0.1"
+_SIGN_ERROR = "Falha ao assinar no agente local. Verifique token e PIN no agente."
+_MNI_ERROR = "Falha ao consultar MNI no agente local. Verifique credenciais, token e tribunal."
+_INVALID_REQUEST_ERROR = "Requisição inválida para o agente local."
+_AGENT_PROCESSING_ERROR = "Falha ao processar requisição no agente local."
 
 
 @lru_cache(maxsize=1)
@@ -104,7 +108,7 @@ def handle_sign_request(
             tenant_id=request.tenant_id,
             error=str(exc),
         )
-        return SignResponse(request_id=request.request_id, success=False, error=str(exc))
+        return SignResponse(request_id=request.request_id, success=False, error=_SIGN_ERROR)
 
     logger.info(
         "agent_sign_ok",
@@ -185,7 +189,7 @@ def handle_mni_request(
             operation=request.operation,
             error=str(exc),
         )
-        return AgentResponse(request_id=request.request_id, success=False, error=str(exc))
+        return AgentResponse(request_id=request.request_id, success=False, error=_MNI_ERROR)
 
     logger.info(
         "agent_mni_ok",
@@ -289,11 +293,11 @@ async def signing_socket(ws: WebSocket) -> None:
             data = await ws.receive_text()
             try:
                 request = SignRequest.model_validate_json(data)
-            except Exception as e:
+            except Exception:
                 response = SignResponse(
                     request_id="unknown",
                     success=False,
-                    error=f"Invalid request: {e}",
+                    error=_INVALID_REQUEST_ERROR,
                 )
                 await ws.send_text(response.model_dump_json())
                 continue
@@ -326,10 +330,10 @@ async def mni_socket(ws: WebSocket) -> None:
             data = await ws.receive_text()
             try:
                 request = AgentRequest.model_validate_json(data)
-            except Exception as e:  # noqa: BLE001 — malformed input → typed error reply
+            except Exception:  # noqa: BLE001 — malformed input → typed error reply
                 await ws.send_text(
                     AgentResponse(
-                        request_id="unknown", success=False, error=f"Invalid request: {e}"
+                        request_id="unknown", success=False, error=_INVALID_REQUEST_ERROR
                     ).model_dump_json()
                 )
                 continue
@@ -370,10 +374,10 @@ async def filing_socket(ws: WebSocket) -> None:
             data = await ws.receive_text()
             try:
                 request = AgentRequest.model_validate_json(data)
-            except Exception as e:  # noqa: BLE001 — malformed input → typed error reply
+            except Exception:  # noqa: BLE001 — malformed input → typed error reply
                 await ws.send_text(
                     AgentResponse(
-                        request_id="unknown", success=False, error=f"Invalid request: {e}"
+                        request_id="unknown", success=False, error=_INVALID_REQUEST_ERROR
                     ).model_dump_json()
                 )
                 continue
@@ -440,6 +444,6 @@ def run_relay_agent(
             try:
                 request = AgentRequest.model_validate_json(text)
                 response = asyncio.run(handler(request))
-            except Exception as exc:  # noqa: BLE001 — typed error back to the orchestrator
-                response = AgentResponse(request_id="unknown", success=False, error=str(exc))
+            except Exception:  # noqa: BLE001 — typed error back to the orchestrator
+                response = AgentResponse(request_id="unknown", success=False, error=_AGENT_PROCESSING_ERROR)
             ws.send(response.model_dump_json())

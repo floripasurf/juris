@@ -98,6 +98,32 @@ async def test_handle_file_request_resolves_credentials_locally() -> None:
     assert fake.seen_pin == "agent-pin"
 
 
+@pytest.mark.asyncio
+async def test_handle_file_request_does_not_leak_internal_error() -> None:
+    class _BoomFiling(FilingService):
+        async def file(self, request, *, pin=None):  # noqa: ANN001, ANN201
+            raise RuntimeError("protocolo /var/private/a3 token=abc pin=1234")
+
+    req = AgentRequest(
+        request_id="f2",
+        operation="file",
+        payload={
+            "numero_cnj": "123", "tribunal": "tjmg", "tipo_documento": "manifestacao",
+            "draft_markdown": "# P", "tipo_peticao": "contestacao",
+        },
+    )
+
+    resp = await handle_file_request(
+        req, _BoomFiling(), credentials_resolver=lambda: ("agent-cpf", "agent-senha", "agent-pin")
+    )
+
+    assert resp.success is False
+    assert "Falha ao protocolar" in (resp.error or "")
+    assert "token=abc" not in (resp.error or "")
+    assert "pin=1234" not in (resp.error or "")
+    assert "/var/private/a3" not in (resp.error or "")
+
+
 def test_filing_factory_inprocess_by_default(monkeypatch) -> None:
     from juris.signing.filing_service import InProcessFilingService, get_filing_service
 

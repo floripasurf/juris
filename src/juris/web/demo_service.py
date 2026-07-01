@@ -20,7 +20,22 @@ if TYPE_CHECKING:
 
 
 class DemoRunError(Exception):
-    """Raised when a local web demo run cannot be completed."""
+    """Raised when a local web demo run cannot be completed.
+
+    ``message`` is safe to serialize to the browser. ``internal_detail`` is for
+    logs only and may include local paths, dependency errors, or transport text.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "demo_run_failed",
+        internal_detail: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.internal_detail = internal_detail or message
 
 
 @dataclass(frozen=True, slots=True)
@@ -217,11 +232,19 @@ async def execute_demo_run(request: WebDemoRunRequest) -> WebDemoRun:
             tenant_id=request.tenant_id,  # source=mni routes to the tenant's agent
         )
     except (LookupError, NotImplementedError, ValueError) as exc:
-        raise DemoRunError(str(exc)) from exc
+        raise DemoRunError(
+            "Falha ao carregar o processo. Verifique CNJ, tribunal e origem selecionada.",
+            code="process_load_failed",
+            internal_detail=str(exc),
+        ) from exc
     except (RuntimeError, ConnectionError, TimeoutError, OSError) as exc:
         # Missing tenant binding, agent unavailable, or remote transport failure —
         # an operational problem, not a 500. Surface it as a controlled message.
-        raise DemoRunError(f"Falha ao consultar o agente/MNI: {exc}") from exc
+        raise DemoRunError(
+            "Falha ao consultar o agente/MNI. Verifique se o agente local está configurado e conectado.",
+            code="agent_mni_failed",
+            internal_detail=str(exc),
+        ) from exc
 
     demo_request = DemoRequest(
         numero_cnj=numero_cnj,
@@ -247,7 +270,11 @@ async def execute_demo_run(request: WebDemoRunRequest) -> WebDemoRun:
             processo=processo,
         )
     except Exception as exc:  # noqa: BLE001
-        raise DemoRunError(f"Falha no pipeline demo: {exc}") from exc
+        raise DemoRunError(
+            "Falha no pipeline demo. Verifique logs do servidor para diagnóstico.",
+            code="demo_pipeline_failed",
+            internal_detail=str(exc),
+        ) from exc
 
     artifact_hashes = write_artifacts(result)
     artifacts = tuple(_artifact_preview(case_dir, name, sha256) for name, sha256 in sorted(artifact_hashes.items()))
@@ -345,7 +372,11 @@ def _build_repertory(repertory_path: Path) -> RepertoryService:
         )
         return RepertoryService(retriever)
     except Exception as exc:  # noqa: BLE001
-        raise DemoRunError(f"Falha ao inicializar repertório: {exc}") from exc
+        raise DemoRunError(
+            "Falha ao inicializar repertório. Verifique a configuração do corpus local.",
+            code="repertory_init_failed",
+            internal_detail=str(exc),
+        ) from exc
 
 
 def _artifact_preview(case_dir: Path, name: str, sha256: str) -> WebDemoArtifact:

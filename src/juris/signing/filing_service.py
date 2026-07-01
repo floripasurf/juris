@@ -28,6 +28,8 @@ from juris.signing.filing import ChainOfCustody, FilingRequest, FilingResult
 if TYPE_CHECKING:
     from juris.mni.operations.peticionamento import FilingReceipt
 
+_REMOTE_FILING_AGENT_ERROR = "Falha ao protocolar no agente local. Verifique credenciais, token e tribunal no agente."
+
 
 async def run_filing(
     request: FilingRequest, *, pin: str | None, storage_root: Path | None = None
@@ -270,6 +272,6 @@ async def handle_file_request(
         cpf, senha, pin = credentials_resolver()
         filing_request = build_filing_request(request.payload, cpf=cpf, senha=senha)
         result = await service.file(filing_request, pin=pin)
-    except Exception as exc:  # noqa: BLE001 — typed error back to the orchestrator
-        return AgentResponse(request_id=request.request_id, success=False, error=str(exc))
+    except Exception:  # noqa: BLE001 — typed error back to the orchestrator
+        return AgentResponse(request_id=request.request_id, success=False, error=_REMOTE_FILING_AGENT_ERROR)
     return AgentResponse(request_id=request.request_id, success=True, payload=_custody_to_payload(result))

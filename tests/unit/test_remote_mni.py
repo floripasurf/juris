@@ -130,6 +130,23 @@ def test_handle_mni_unknown_operation_errors() -> None:
     assert "bogus" in (resp.error or "")
 
 
+def test_handle_mni_request_does_not_leak_internal_error() -> None:
+    from juris.api.local_agent import handle_mni_request
+
+    class _BoomMNI:
+        def consultar_avisos(self, *args, **kwargs):  # noqa: ANN002, ANN003, ANN201
+            raise RuntimeError("mTLS /var/private/cert senha=abc pin=1234")
+
+    req = AgentRequest(request_id="r3", operation="mni.consultar_avisos", payload={"tribunal_id": "tjmg"})
+    resp = handle_mni_request(req, _BoomMNI(), credentials_resolver=_creds, tribunal_resolver=get_tribunal)
+
+    assert resp.success is False
+    assert "Falha ao consultar MNI" in (resp.error or "")
+    assert "senha=abc" not in (resp.error or "")
+    assert "pin=1234" not in (resp.error or "")
+    assert "/var/private/cert" not in (resp.error or "")
+
+
 # --- factory + /ws/mni integration ---
 
 

@@ -965,7 +965,10 @@ def test_demo_run_remote_agent_failure_is_controlled_not_500(monkeypatch, tmp_pa
     )
 
     assert response.status_code == 400, response.status_code  # controlled, not a 500
-    assert "binding" in response.json()["detail"]
+    assert response.json()["detail"]["code"] == "agent_mni_failed"
+    assert "agente/MNI" in response.json()["detail"]["message"]
+    assert "binding" not in response.text
+    assert "fail-closed" not in response.text
 
 
 def test_agent_mode_endpoint_reports_remote(monkeypatch) -> None:
