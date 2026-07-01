@@ -22,6 +22,7 @@ from juris.web.pilot_feedback import list_feedback
 _FILENAME = "corpus-sources.jsonl"
 _TEXT_DIR = "corpus-source-text"
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+_REINGEST_SOURCE_ERROR = "Falha ao reingerir esta fonte. Verifique texto, tipo e corpus local."
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,7 +195,15 @@ def reingest_pending_sources(root: Path, repertory_path: Path) -> ReingestReport
             processed += 1
             total_chunks += stored
         except Exception as exc:  # noqa: BLE001 - report per-source failures
-            errors.append({"source_id": source_id, "error": str(exc)})
+            from juris.core.observability import get_logger
+
+            get_logger("juris.web").warning(
+                "corpus_reingest_source_error",
+                source_id=source_id,
+                error=str(exc),
+                exc_info=exc,
+            )
+            errors.append({"source_id": source_id, "error": _REINGEST_SOURCE_ERROR})
     return ReingestReport(processed=processed, chunks=total_chunks, errors=errors)
 
 

@@ -178,3 +178,37 @@ def test_reingest_pending_sources_writes_repertory_chunks(tmp_path) -> None:
         row = conn.execute("SELECT source_id, metadata FROM chunks LIMIT 1").fetchone()
     assert row[0] == f"pilot-{source['id']}"
     assert "content_sha256" in row[1]
+
+
+def test_reingest_pending_sources_sanitizes_internal_errors(tmp_path, monkeypatch) -> None:
+    append_accepted_source(
+        tmp_path,
+        {
+            "numero_cnj": "0001234-56.2026.8.13.0001",
+            "title": "Acórdão aprovado",
+            "source_url": "https://example.test/acordao",
+            "source_date": "2026-06-30",
+            "source_type": "acordao_publicado",
+            "tribunal": "STJ",
+            "area": "civel",
+            "tema": "cobranca",
+            "status": "vigente",
+            "source_text": "EMENTA. Cobrança. VOTO.",
+        },
+    )
+
+    import juris.repertory.chunking as chunking
+
+    def _boom(_fonte):
+        raise RuntimeError("sqlite /var/private/repertory.db token=abc pin=1234")
+
+    monkeypatch.setattr(chunking, "chunk_fonte", _boom)
+
+    report = reingest_pending_sources(tmp_path, tmp_path / "repertory.db")
+
+    assert report.processed == 0
+    assert report.errors
+    assert "Falha ao reingerir" in report.errors[0]["error"]
+    assert "token=abc" not in report.errors[0]["error"]
+    assert "pin=1234" not in report.errors[0]["error"]
+    assert "/var/private/repertory.db" not in report.errors[0]["error"]
