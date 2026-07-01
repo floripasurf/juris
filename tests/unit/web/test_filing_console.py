@@ -262,3 +262,40 @@ def test_archive_pending_recovery_json_is_private(tmp_path) -> None:
 
     recovery = tmp_path / "0001234" / "20260630_manual_resolution" / "recovery.json"
     assert stat.S_IMODE(recovery.stat().st_mode) == 0o600
+
+
+def test_remote_result_serialization_keeps_sensitive_bytes_at_agent() -> None:
+    """In remote mode only hashes + protocol metadata cross to the console —
+    the signed PDF and receipt bytes stay at the agent (signing_result=None)."""
+    from juris.mni.operations.peticionamento import FilingReceipt
+    from juris.signing.filing import ChainOfCustody, FilingResult
+    from juris.web.filing_console import serialize_filing_result
+
+    result = FilingResult(
+        success=True,
+        receipt=FilingReceipt(sucesso=True, mensagem="protocolado", protocolo="PJE-123", numero_processo="123"),
+        signing_result=None,  # the signer ran at the agent — no local PDF/signature
+        preflight=None,
+        audit_entry_ids=["a1"],
+        chain_of_custody=ChainOfCustody(
+            pdf_hash="p", signed_pdf_hash="s", submitted_payload_hash="sub", receipt_hash="r"
+        ),
+    )
+
+    payload = serialize_filing_result(result)
+
+    assert payload["signing"] is None  # no local signer block → bytes stayed at the agent
+    assert payload["chain_of_custody"]["signed_pdf_hash"] == "s"  # auditable proof still crosses
+    assert payload["receipt"]["protocolo"] == "PJE-123"  # protocol metadata only
+
+    def _leaves(v):
+        if isinstance(v, dict):
+            for x in v.values():
+                yield from _leaves(x)
+        elif isinstance(v, list):
+            for x in v:
+                yield from _leaves(x)
+        else:
+            yield v
+
+    assert all(not isinstance(v, (bytes, bytearray)) for v in _leaves(payload))  # no raw bytes anywhere

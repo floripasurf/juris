@@ -1663,6 +1663,17 @@
     filingSubmitBtn.addEventListener("click", () => runFiling("/api/filing/submit", filingSubmitBtn));
     filingLoadArtifactBtn.addEventListener("click", loadSelectedFilingArtifact);
 
+    // Explicit consent gate: "assinar e protocolar" stays disabled until the lawyer
+    // confirms human review AND authorizes signing (defense-in-depth over the API 400).
+    function syncFilingConsent() {
+      const ready = document.querySelector("#fl_review").checked && document.querySelector("#fl_consent").checked;
+      filingSubmitBtn.disabled = !ready;
+      filingSubmitBtn.title = ready ? "" : "Marque revisão humana + consentimento para assinar.";
+    }
+    document.querySelector("#fl_review").addEventListener("change", syncFilingConsent);
+    document.querySelector("#fl_consent").addEventListener("change", syncFilingConsent);
+    syncFilingConsent();
+
     const pilotForm = document.querySelector("#pilot-form");
     const pilotFeedbackEl = document.querySelector("#pilot-feedback");
     const pilotSummaryEl = document.querySelector("#pilot-summary");
