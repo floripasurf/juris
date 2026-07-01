@@ -335,3 +335,15 @@ def test_every_tom_reaches_the_drafter_prompt() -> None:
         for r in (True, False)
     }
     assert tones <= set(_TONE_INSTRUCTIONS), f"tom sem instrução no prompt: {tones - set(_TONE_INSTRUCTIONS)}"
+
+
+def test_low_confidence_or_review_never_gets_assertive_tone() -> None:
+    # Sprint 6 invariant: low-confidence or mandatory-review lines never draft "forte".
+    from juris.agents.drafter import _TONE_INSTRUCTIONS
+    from juris.agents.estrategia import tom_minuta
+
+    assert tom_minuta("baixa", revisao_obrigatoria=False) != "forte"
+    assert tom_minuta("media", revisao_obrigatoria=True) != "forte"
+    assert tom_minuta("alta", revisao_obrigatoria=True) == "não protocolar"
+    # And the assertive instruction itself must forbid promising an outcome.
+    assert "garantid" in _TONE_INSTRUCTIONS["forte"].lower()  # "nunca prometa êxito garantido"
