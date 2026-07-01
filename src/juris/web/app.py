@@ -411,7 +411,7 @@ async def create_connect(
     job_id = uuid.uuid4().hex
     store = _connect_job_store()
     store.create(job_id, tenant.tenant_id)
-    store.evict_old(_MAX_CONNECT_JOBS)
+    store.evict_old(_MAX_CONNECT_JOBS, tenant_id=tenant.tenant_id)
     # Retain a reference so the task isn't garbage-collected mid-run (asyncio caveat)
     # and use create_task (not the deprecated get_event_loop().create_task).
     task = asyncio.create_task(_run_connect_job(job_id, tribunal_cfg, payload, tenant))

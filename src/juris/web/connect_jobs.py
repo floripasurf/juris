@@ -9,19 +9,23 @@ poll after a restart still finds it, and ownership can be checked on read.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import time
 from pathlib import Path
 from typing import Any
 
-_DEFAULT_PATH = Path.home() / ".juris" / "connect_jobs.db"
+
+def default_connect_jobs_path() -> Path:
+    """Default durable job DB path, aligned with the web app's ``JURIS_HOME``."""
+    return Path(os.environ.get("JURIS_HOME", str(Path.home() / ".juris"))) / "connect_jobs.db"
 
 
 class ConnectJobStore:
     """SQLite-backed store for ``/api/connect`` background jobs."""
 
     def __init__(self, db_path: Path | None = None) -> None:
-        self._path = db_path or _DEFAULT_PATH
+        self._path = db_path or default_connect_jobs_path()
         self._path.parent.mkdir(parents=True, exist_ok=True)
         with self._conn() as conn:
             conn.execute(
@@ -48,7 +52,7 @@ class ConnectJobStore:
         """
         with self._conn() as conn:
             conn.execute(
-                "INSERT OR REPLACE INTO connect_jobs "
+                "INSERT INTO connect_jobs "
                 "(job_id, tenant_id, status, result_json, error, created_at) "
                 "VALUES (?, ?, 'running', NULL, NULL, ?)",
                 (job_id, tenant_id, time.time()),
@@ -101,13 +105,26 @@ class ConnectJobStore:
             )
             return int(cur.rowcount)
 
-    def evict_old(self, max_jobs: int = 200) -> None:
-        """Drop the oldest jobs beyond ``max_jobs`` (FIFO) so the table stays bounded."""
+    def evict_old(self, max_jobs: int = 200, *, tenant_id: str | None = None) -> None:
+        """Drop the oldest jobs beyond ``max_jobs`` (FIFO) so the table stays bounded.
+
+        When ``tenant_id`` is provided, eviction is scoped to that tenant. A busy
+        tenant should not erase another firm's recent connect history.
+        """
         with self._conn() as conn:
+            if tenant_id is None:
+                conn.execute(
+                    "DELETE FROM connect_jobs WHERE job_id IN ("
+                    "  SELECT job_id FROM connect_jobs "
+                    "  ORDER BY created_at DESC, rowid DESC LIMIT -1 OFFSET ?"  # rowid breaks epoch ties
+                    ")",
+                    (max_jobs,),
+                )
+                return
             conn.execute(
                 "DELETE FROM connect_jobs WHERE job_id IN ("
-                "  SELECT job_id FROM connect_jobs "
+                "  SELECT job_id FROM connect_jobs WHERE tenant_id = ? "
                 "  ORDER BY created_at DESC, rowid DESC LIMIT -1 OFFSET ?"  # rowid breaks epoch ties
                 ")",
-                (max_jobs,),
+                (tenant_id, max_jobs),
             )
