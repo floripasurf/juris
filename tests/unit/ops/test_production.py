@@ -25,9 +25,13 @@ def test_require_tenants_unset_is_an_error(tmp_path) -> None:
 
 
 def test_full_inprocess_prod_config_passes(tmp_path) -> None:
+    import os
+
     from juris.web.auth import hash_api_key
 
     tenants = _write_tenants(tmp_path, {"escritorio-a": hash_api_key("secret-a")})
+    os.chmod(tenants, 0o600)  # secure config: owner-only secrets + storage
+    os.chmod(tmp_path, 0o700)
     env = {
         "JURIS_REQUIRE_TENANTS": "1",
         "JURIS_TENANTS_FILE": str(tenants),
@@ -64,3 +68,54 @@ def test_remote_mode_requires_agents_file_with_bindings(tmp_path) -> None:
     }
     c = _by_name(check_production_readiness(env=env))["agent_bindings"]
     assert c.ok is False
+
+
+def _blocking_errors(checks):
+    return {c.name for c in checks if c.severity == "error" and not c.ok}
+
+
+def test_world_readable_secrets_and_storage_block(tmp_path) -> None:
+    import os
+
+    from juris.web.auth import hash_api_key
+
+    tenants = _write_tenants(tmp_path, {"a": hash_api_key("k")})
+    os.chmod(tenants, 0o644)  # world-readable secrets  # noqa: S103
+    os.chmod(tmp_path, 0o755)  # world-readable storage  # noqa: S103
+    env = {"JURIS_REQUIRE_TENANTS": "1", "JURIS_TENANTS_FILE": str(tenants), "JURIS_HOME": str(tmp_path)}
+    errors = _blocking_errors(check_production_readiness(env=env))
+    assert "tenants_file_perms" in errors  # was warn-only
+    assert "storage_private" in errors  # inverted-severity bug
+
+
+def test_garbage_hash_and_duplicate_keys_block(tmp_path) -> None:
+    from juris.web.auth import hash_api_key
+
+    # garbage sha256 value
+    bad = _write_tenants(tmp_path, {"a": "sha256:NOT_A_REAL_HASH"})
+    assert "hashed_keys" in _blocking_errors(check_production_readiness(
+        env={"JURIS_REQUIRE_TENANTS": "1", "JURIS_TENANTS_FILE": str(bad), "JURIS_HOME": str(tmp_path)}
+    ))
+    # two tenants sharing one key
+    dup_key = hash_api_key("same")
+    dup = _write_tenants(tmp_path, {"a": dup_key, "b": dup_key})
+    assert "hashed_keys" in _blocking_errors(check_production_readiness(
+        env={"JURIS_REQUIRE_TENANTS": "1", "JURIS_TENANTS_FILE": str(dup), "JURIS_HOME": str(tmp_path)}
+    ))
+
+
+def test_cross_wired_agent_binding_blocks(tmp_path) -> None:
+    import json
+
+    from juris.web.auth import hash_api_key
+
+    tenants = _write_tenants(tmp_path, {"acme": hash_api_key("ka"), "globex": hash_api_key("kg")})
+    agents = tmp_path / "agents.json"
+    # globex's binding is IDENTICAL to acme's — globex filings would route to acme's agent
+    shared = {"url": "wss://acme:8765", "token": "tok-acme"}
+    agents.write_text(json.dumps({"acme": shared, "globex": shared}), encoding="utf-8")
+    env = {
+        "JURIS_REQUIRE_TENANTS": "1", "JURIS_TENANTS_FILE": str(tenants),
+        "JURIS_AGENT_MODE": "remote", "JURIS_AGENTS_FILE": str(agents), "JURIS_HOME": str(tmp_path),
+    }
+    assert "agent_bindings" in _blocking_errors(check_production_readiness(env=env))

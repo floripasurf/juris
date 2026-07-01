@@ -80,20 +80,26 @@ def check_production_readiness(env: Mapping[str, str] | None = None) -> list[Che
                 Check("tenants_file", ok, f"{len(tenant_keys)} tenant(s) configurado(s)" if ok else "vazio")
             )
 
-    # 3. API keys are hashed (never plaintext at rest).
+    # 3. API keys are hashed (never plaintext) AND pass the REAL registry validation
+    #    (well-formed sha256, no duplicate keys, no reserved ids). Doctor must not accept
+    #    a weaker model than TenantRegistry — a garbage hash / dup key would boot-crash.
     if tenant_keys:
-        plaintext = [tid for tid, key in tenant_keys.items() if not key.startswith("sha256:")]
-        checks.append(
-            Check(
-                "hashed_keys",
-                not plaintext,
-                "todas as chaves estão hashadas (sha256:)"
-                if not plaintext
-                else f"chaves em texto puro: {', '.join(plaintext)} — use 'juris tenant hash-key'",
+        plaintext = [tid for tid, key in tenant_keys.items() if not str(key).startswith("sha256:")]
+        if plaintext:
+            checks.append(
+                Check("hashed_keys", False, f"chaves em texto puro: {', '.join(plaintext)} — use hash-key")
             )
-        )
+        else:
+            try:
+                from juris.web.auth import TenantRegistry
 
-    # 4. Secrets files are owner-only (0600).
+                TenantRegistry(tenant_keys)
+            except (ValueError, TypeError) as exc:
+                checks.append(Check("hashed_keys", False, f"registro de tenants inválido: {exc}"))
+            else:
+                checks.append(Check("hashed_keys", True, "chaves hashadas e válidas (sha256:)"))
+
+    # 4. Secrets files are owner-only (0600) — world/group-readable secrets BLOCK.
     for label, path in (("tenants_file_perms", tenants_path), ("agents_file_perms", _agents_path(env))):
         if path is not None and path.exists():
             accessible = _is_group_or_world_accessible(path)
@@ -102,7 +108,6 @@ def check_production_readiness(env: Mapping[str, str] | None = None) -> list[Che
                     label,
                     not accessible,
                     "permissões owner-only" if not accessible else f"{path} legível por grupo/outros — chmod 600",
-                    severity="warn",
                 )
             )
 
@@ -149,12 +154,25 @@ def _check_remote_bindings(env: Mapping[str, str], tenant_keys: dict[str, str]) 
         for tid, b in bindings.items()
         if not (isinstance(b, dict) and b.get("url") and b.get("token"))
     ]
-    ok = not missing and not incomplete
+    # Cross-wired: two tenants must NOT share the same agent (a firm's A3-signed filings
+    # routing to another firm's machine is a split-trust breach doctor previously missed).
+    seen: dict[tuple[str, str], str] = {}
+    crosswired: list[str] = []
+    for tid, b in bindings.items():
+        if isinstance(b, dict) and b.get("url") and b.get("token"):
+            key = (str(b["url"]), str(b["token"]))
+            if key in seen:
+                crosswired.append(f"{tid}={seen[key]}")
+            else:
+                seen[key] = tid
+    ok = not missing and not incomplete and not crosswired
     parts = []
     if missing:
         parts.append(f"sem binding: {', '.join(missing)}")
     if incomplete:
         parts.append(f"binding incompleto (precisa url+token): {', '.join(incomplete)}")
+    if crosswired:
+        parts.append(f"agente compartilhado entre tenants (cross-wired): {', '.join(crosswired)}")
     return [Check("agent_bindings", ok, "; ".join(parts) if parts else "todos os tenants têm agente próprio")]
 
 
@@ -167,7 +185,7 @@ def _check_storage_private(env: Mapping[str, str]) -> Check:
         "storage_private",
         not accessible,
         "storage owner-only" if not accessible else f"{home} legível por grupo/outros — chmod 700",
-        severity="warn" if accessible else "error",
+        severity="error",  # world/group-readable storage (every tenant's DB + receipts) must BLOCK
     )
 
 
