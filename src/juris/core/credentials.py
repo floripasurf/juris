@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 
 _SECURITY_BIN = "/usr/bin/security"
 _KEYCHAIN_SERVICE = "juris-legal-ai"
-_FALLBACK_DIR = Path.home() / ".juris" / "credentials"
+_FALLBACK_DIR: Path | None = None
 _FALLBACK_WARNING_EMITTED = False
 _KDF_ITERATIONS = 390_000
 
@@ -118,26 +118,29 @@ def _try_keychain_delete(key: str) -> None:
 def _file_store(key: str, value: str) -> None:
     """Fallback: store in an encrypted local file with restricted permissions."""
     _warn_file_fallback()
-    _FALLBACK_DIR.mkdir(parents=True, exist_ok=True)
-    os.chmod(_FALLBACK_DIR, 0o700)
+    fallback_dir = _fallback_dir()
+    fallback_dir.mkdir(parents=True, exist_ok=True)
+    os.chmod(fallback_dir, 0o700)
 
-    cred_file = _FALLBACK_DIR / "credentials.json"
+    cred_file = fallback_dir / "credentials.json"
     data: dict[str, str | dict[str, str]] = {}
     if cred_file.exists():
-        data = json.loads(cred_file.read_text())
+        _restrict_file_permissions(cred_file)
+        data = json.loads(cred_file.read_text(encoding="utf-8"))
 
     data[key] = _encrypt_value(value)
-    cred_file.write_text(json.dumps(data))
-    os.chmod(cred_file, 0o600)
+    cred_file.write_text(json.dumps(data), encoding="utf-8")
+    _restrict_file_permissions(cred_file)
 
 
 def _file_get(key: str) -> str | None:
     """Fallback: get from local encrypted file."""
-    cred_file = _FALLBACK_DIR / "credentials.json"
+    cred_file = _fallback_dir() / "credentials.json"
     if not cred_file.exists():
         return None
     _warn_file_fallback()
-    data = json.loads(cred_file.read_text())
+    _restrict_file_permissions(cred_file)
+    data = json.loads(cred_file.read_text(encoding="utf-8"))
     stored_value = data.get(key)
     if stored_value is None:
         return None
@@ -150,12 +153,27 @@ def _file_get(key: str) -> str | None:
 
 def _file_delete(key: str) -> None:
     """Fallback: delete from local encrypted file."""
-    cred_file = _FALLBACK_DIR / "credentials.json"
+    cred_file = _fallback_dir() / "credentials.json"
     if not cred_file.exists():
         return
-    data = json.loads(cred_file.read_text())
+    _restrict_file_permissions(cred_file)
+    data = json.loads(cred_file.read_text(encoding="utf-8"))
     data.pop(key, None)
-    cred_file.write_text(json.dumps(data))
+    cred_file.write_text(json.dumps(data), encoding="utf-8")
+    _restrict_file_permissions(cred_file)
+
+
+def _fallback_dir() -> Path:
+    """Directory for file fallback, overridable in tests and by ``JURIS_HOME``."""
+    if _FALLBACK_DIR is not None:
+        return _FALLBACK_DIR
+    return Path(os.environ.get("JURIS_HOME", str(Path.home() / ".juris"))) / "credentials"
+
+
+def _restrict_file_permissions(path: Path) -> None:
+    """Ensure the fallback credential file is owner-read/write only."""
+    os.chmod(path.parent, 0o700)
+    os.chmod(path, 0o600)
 
 
 def _warn_file_fallback() -> None:
