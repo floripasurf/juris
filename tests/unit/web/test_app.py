@@ -40,6 +40,8 @@ def test_index_renders_local_ui() -> None:
     assert "Agenda de prazos" in response.text
     assert "renderEstrategia" in response.text  # strategy panel wired into the console
     assert "openProcessoDetail" in response.text  # per-process detail wired
+    assert "resumeFilingFromCase" in response.text  # resume a pending filing from the case page
+    assert "Protocolar peça" in response.text  # protocolo linked to the case page
     assert "renderReview" in response.text  # structured review panel wired
     assert "openAudit" in response.text  # audit viewer wired
     assert "showView" in response.text  # section navigation wired
