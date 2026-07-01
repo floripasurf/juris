@@ -2236,6 +2236,19 @@ def escavacao_run(
         f"[green]Coletados:[/green] {len(paths)} inteiros teores "
         f"({len(result.falhas)} falhas) → {out}/"
     )
+
+    # Bridge the harvest INTO the searchable corpus (else the moat is JSON on disk).
+    from juris.escavacao.executor import ingest_inteiro_teor
+    from juris.repertory.readiness import resolve_repertory_path
+    from juris.repertory.vector_store import LocalFTSStore
+
+    store = LocalFTSStore(resolve_repertory_path())
+    try:
+        ingested = ingest_inteiro_teor(result.coletados, store)
+    finally:
+        store.close()
+    console.print(f"[green]Corpus:[/green] {ingested} chunks de inteiro teor ingeridos (buscáveis)")
+
     if result.falhas:
         amostra = ", ".join(result.falhas[:5])
         console.print(f"[yellow]Falhas:[/yellow] {amostra}{'…' if len(result.falhas) > 5 else ''}")

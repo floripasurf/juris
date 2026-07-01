@@ -110,6 +110,46 @@ async def executar_escavacao(
     return EscavacaoResult(coletados=coletados, falhas=falhas, pulados=len(fila) - len(alvos))
 
 
+def _to_fonte(it: InteiroTeor) -> Any:
+    """Map a harvested full text onto a corpus source for chunking/retrieval."""
+    from juris.repertory.corpus.models import FonteJurisprudencia, TipoFonte
+
+    tribunal = str(it.metadata.get("tribunal") or it.fonte).upper()
+    ementa = str(it.metadata.get("ementa") or it.texto[:500])
+    return FonteJurisprudencia(
+        id=f"escavacao_{it.fonte}_{it.content_hash[:16]}",
+        tribunal=tribunal,
+        tipo=TipoFonte.ACORDAO_PUBLICADO,
+        numero=it.numero_cnj,
+        ementa=ementa,
+        texto_integral=it.texto,
+        temas=[it.origem_tema] if it.origem_tema else [],
+        situacao="vigente",
+        hierarquia=5,
+        source_url=it.url,
+    )
+
+
+def ingest_inteiro_teor(coletados: list[InteiroTeor], store: Any) -> int:
+    """Bridge the escavação output INTO the searchable corpus (closes the dead-end).
+
+    Each full acórdão is mapped to a corpus source, chunked, and upserted into
+    ``store`` (embeddings are placeholders for the FTS store). Partial trails
+    (``parcial=True``, DataJud movements) are skipped — they aren't real decisions and
+    would pollute retrieval. Returns the number of chunks ingested.
+    """
+    from juris.repertory.chunking import chunk_fonte
+
+    total = 0
+    for it in coletados:
+        if it.parcial:
+            continue
+        chunks = chunk_fonte(_to_fonte(it))
+        store.upsert(chunks, [[] for _ in chunks])
+        total += len(chunks)
+    return total
+
+
 def write_inteiro_teor(coletados: list[InteiroTeor], out_dir: Path) -> list[Path]:
     """Write each harvested full text as one JSON file (the engine then ingests).
 
