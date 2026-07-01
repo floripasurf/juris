@@ -16,6 +16,7 @@ import hmac
 import json
 import os
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -37,6 +38,7 @@ def _validate_tenant_id(tenant_id: str) -> str:
 
 
 _HASH_PREFIX = "sha256:"
+_HASHED_API_KEY_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
 def hash_api_key(api_key: str) -> str:
@@ -46,6 +48,30 @@ def hash_api_key(api_key: str) -> str:
     plaintext key.
     """
     return _HASH_PREFIX + hashlib.sha256(api_key.encode("utf-8")).hexdigest()
+
+
+def _validate_configured_tenant_id(tenant_id: object) -> str:
+    if not isinstance(tenant_id, str):
+        msg = f"tenant_id inválido (string obrigatória): {tenant_id!r}"
+        raise ValueError(msg)
+    validated = _validate_tenant_id(tenant_id)
+    if validated == PUBLIC_TENANT_ID:
+        msg = "tenant_id 'public' é reservado para modo aberto; configure um tenant próprio."
+        raise ValueError(msg)
+    return validated
+
+
+def _validate_api_key_config(tenant_id: str, api_key: object) -> str:
+    if not isinstance(api_key, str) or not api_key.strip():
+        msg = f"API key inválida para tenant {tenant_id!r}: valor vazio ou não textual."
+        raise ValueError(msg)
+    if api_key != api_key.strip():
+        msg = f"API key inválida para tenant {tenant_id!r}: remova espaços nas extremidades."
+        raise ValueError(msg)
+    if api_key.startswith(_HASH_PREFIX) and _HASHED_API_KEY_RE.fullmatch(api_key) is None:
+        msg = f"API key inválida para tenant {tenant_id!r}: hash sha256 malformado."
+        raise ValueError(msg)
+    return api_key
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,18 +85,28 @@ class Tenant:
 class TenantRegistry:
     """Maps API keys to tenants. Empty ⇒ open deployment."""
 
-    def __init__(self, tenants: dict[str, str]) -> None:
+    def __init__(self, tenants: Mapping[str, str]) -> None:
         # config is {tenant_id: api_key}; index by key for O(1) auth.
-        self._by_key: dict[str, Tenant] = {
-            key: Tenant(_validate_tenant_id(tenant_id)) for tenant_id, key in tenants.items()
-        }
+        by_key: dict[str, Tenant] = {}
+        for tenant_id, raw_key in tenants.items():
+            validated_tenant_id = _validate_configured_tenant_id(tenant_id)
+            key = _validate_api_key_config(validated_tenant_id, raw_key)
+            if key in by_key:
+                msg = "API key duplicada em JURIS_TENANTS_FILE; cada tenant precisa de chave própria."
+                raise ValueError(msg)
+            by_key[key] = Tenant(validated_tenant_id)
+        self._by_key = by_key
 
     @classmethod
     def from_file(cls, path: Path) -> TenantRegistry:
         """Load ``{tenant_id: api_key}`` from JSON; missing file ⇒ open."""
         if not path.exists():
             return cls({})
-        return cls(json.loads(path.read_text(encoding="utf-8")))
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            msg = "JURIS_TENANTS_FILE deve conter um objeto JSON {tenant_id: api_key}."
+            raise ValueError(msg)
+        return cls(data)
 
     @property
     def is_open(self) -> bool:

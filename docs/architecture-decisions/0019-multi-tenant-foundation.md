@@ -42,6 +42,10 @@ SaaS. Implemented in `web/auth.py`:
   is 404 for non-owners; the demo/audit output root is **server-controlled**
   (`$JURIS_OUT_ROOT`, client `out_root` ignored); `tenant_id` is validated
   (`^[a-zA-Z0-9_-]+$`) before it becomes a path segment.
+- **Config hardening**: configured tenants cannot use the reserved `public`
+  tenant id; API keys must be non-empty, without edge spaces, unique, and valid
+  `sha256:<64 hex>` when hashed. Invalid tenant config fails at load/startup
+  instead of silently weakening isolation.
 - **Fail-closed switch**: `JURIS_REQUIRE_TENANTS=1` makes an open registry (no
   tenants file) reject every request instead of falling back to `public` — set it
   in production so a missing config can't silently open the deployment.

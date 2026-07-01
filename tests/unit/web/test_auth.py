@@ -74,6 +74,40 @@ def test_rejects_unsafe_tenant_id_in_config() -> None:
         TenantRegistry({"../etc": "key"})
 
 
+def test_rejects_reserved_public_tenant_id_in_config() -> None:
+    with pytest.raises(ValueError, match="reservado"):
+        TenantRegistry({"public": "key"})
+
+
+def test_rejects_empty_api_key_in_config() -> None:
+    with pytest.raises(ValueError, match="API key inválida"):
+        TenantRegistry({"escritorio-a": ""})
+
+
+def test_rejects_api_key_with_edge_spaces_in_config() -> None:
+    with pytest.raises(ValueError, match="espaços"):
+        TenantRegistry({"escritorio-a": " key "})
+
+
+def test_rejects_malformed_hashed_api_key_in_config() -> None:
+    with pytest.raises(ValueError, match="sha256"):
+        TenantRegistry({"escritorio-a": "sha256:not-a-valid-hex-digest"})
+
+
+def test_rejects_duplicate_api_key_in_config() -> None:
+    with pytest.raises(ValueError, match="duplicada"):
+        TenantRegistry({"escritorio-a": "same-key", "escritorio-b": "same-key"})
+
+
+def test_from_file_rejects_non_object_json(tmp_path) -> None:
+    import json
+
+    path = tmp_path / "tenants.json"
+    path.write_text(json.dumps(["not", "a", "map"]), encoding="utf-8")
+    with pytest.raises(ValueError, match="objeto JSON"):
+        TenantRegistry.from_file(path)
+
+
 def test_tenant_scoped_dir_rejects_unsafe_id(tmp_path) -> None:
     from juris.web.auth import tenant_scoped_dir
 
