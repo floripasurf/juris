@@ -286,9 +286,8 @@ async def test_two_tenants_survive_agent_reconnect() -> None:
     assert id_a2 != id_a1
 
     # A request for A goes to the reconnected socket, never the stale one.
-    task = asyncio.create_task(
-        hub.send("escritorio-a", AgentRequest(request_id="r", tenant_id="escritorio-a", operation="mni", payload={}), timeout=5)
-    )
+    req_a = AgentRequest(request_id="r", tenant_id="escritorio-a", operation="mni", payload={})
+    task = asyncio.create_task(hub.send("escritorio-a", req_a, timeout=5))
     await asyncio.sleep(0)
     hub.resolve("escritorio-a", AgentResponse(request_id="r", success=True, payload={"who": "a2"}))
     assert (await task).payload == {"who": "a2"}
