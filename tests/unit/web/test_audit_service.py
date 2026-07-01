@@ -19,6 +19,9 @@ def test_audit_view_returns_entries_and_intact(tmp_path) -> None:
     assert view["total"] == 2
     assert view["intact"] is True
     assert view["corrupted"] == []
+    assert view["audit_file"] == "audit.jsonl"
+    assert "path" not in view
+    assert str(tmp_path) not in str(view)
     assert view["entries"][0]["event_type"] == "draft"
     assert view["entries"][1]["actor"] == "user:123"
     assert view["entries"][0]["corrupted"] is False

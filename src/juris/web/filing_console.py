@@ -90,7 +90,7 @@ def filing_artifacts(out_root: Path, *, max_items: int = 20) -> dict[str, object
                         "tipo_peticao": request.get("tipo_peticao"),
                         "output_mode": manifest.get("output_mode"),
                         "finished_at": manifest.get("finished_at"),
-                        "output_dir": str(case_dir),
+                        "output_dir": _relative_key(case_dir, root),
                         "artifact_name": name,
                         "sha256": expected_sha,
                         "sha256_verified": True,
@@ -125,7 +125,7 @@ def read_filing_artifact(out_root: Path, *, output_dir: str, artifact_name: str)
         raise ValueError(msg)
     text = path.read_text(encoding="utf-8", errors="replace")
     return {
-        "output_dir": str(case_dir),
+        "output_dir": _relative_key(case_dir, base),
         "artifact_name": name,
         "sha256": expected_sha,
         "sha256_verified": True,
@@ -352,3 +352,8 @@ def _is_regular_file_under(path: Path, root: Path) -> bool:
     except OSError:
         return False
     return resolved.is_relative_to(root) and resolved.is_file()
+
+
+def _relative_key(path: Path, root: Path) -> str:
+    """Stable public key for a path under ``root``; never an absolute filesystem path."""
+    return path.resolve().relative_to(root.resolve()).as_posix()

@@ -353,10 +353,14 @@ def test_filing_artifact_endpoints_are_confined(monkeypatch, tmp_path) -> None:
 
     assert listed.status_code == 200
     assert listed.json()["artifacts"][0]["artifact_name"] == "draft.md"
+    assert listed.json()["artifacts"][0]["output_dir"] == "CASE-1"
     assert listed.json()["artifacts"][0]["sha256_verified"] is True
+    assert str(tmp_path) not in listed.text
     assert content.status_code == 200
     assert content.json()["content"] == "# Minuta pronta"
+    assert content.json()["output_dir"] == "CASE-1"
     assert content.json()["sha256"] == digest
+    assert str(tmp_path) not in content.text
     assert traversal.status_code == 400
 
 
@@ -749,7 +753,10 @@ def test_create_demo_run_executes_real_service_path(monkeypatch, tmp_path: Path)
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["succeeded"] is True
+    assert body["output_dir"].startswith("DEMO-")
+    assert str(tmp_path) not in body["output_dir"]
     assert body["artifacts"][0]["name"] == "rascunho-pesquisa.md"
+    assert body["artifacts"][0]["path"] == "rascunho-pesquisa.md"
     assert body["artifacts"][0]["preview"].startswith("# Rascunho real")
 
 

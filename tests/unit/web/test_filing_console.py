@@ -175,6 +175,8 @@ def test_filing_artifacts_lists_primary_drafts(tmp_path) -> None:
     assert artifact["numero_cnj"] == "0001234"
     assert artifact["grounding_status"] == "verified"
     assert artifact["sha256_verified"] is True
+    assert artifact["output_dir"] == "CASE-1"
+    assert str(tmp_path) not in json.dumps(payload)
 
 
 def test_filing_artifacts_skips_hash_mismatch(tmp_path) -> None:
@@ -202,8 +204,10 @@ def test_read_filing_artifact_is_confined_to_root(tmp_path) -> None:
     payload = read_filing_artifact(tmp_path, output_dir="CASE-1", artifact_name="draft.md")
 
     assert payload["content"] == "# Minuta"
+    assert payload["output_dir"] == "CASE-1"
     assert payload["sha256"] == _sha256_text(content)
     assert payload["sha256_verified"] is True
+    assert str(tmp_path) not in json.dumps(payload)
 
     try:
         read_filing_artifact(tmp_path, output_dir="../", artifact_name="draft.md")

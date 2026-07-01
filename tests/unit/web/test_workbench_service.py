@@ -47,7 +47,8 @@ def test_workbench_reads_persistent_manifests(tmp_path) -> None:
     assert workbench["blocked_cases"][0]["numero_cnj"] == "0001234-56.2026.8.13.0001"
     assert workbench["blocked_cases"][0]["grounding_blocked_reason"] == "citacoes_sem_fonte"
     assert workbench["recent_artifacts"][0]["artifact_count"] == 2
-    assert workbench["recent_artifacts"][0]["output_dir"] == str(case_dir)
+    assert workbench["recent_artifacts"][0]["output_dir"] == "CASE-1"
+    assert str(tmp_path) not in json.dumps(workbench)
     assert workbench["recent_artifacts"][0]["review"]["critical"] == 1
 
 

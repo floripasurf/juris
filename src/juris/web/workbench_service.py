@@ -113,11 +113,11 @@ def _recent_run_manifests(out_root: Path, *, max_items: int) -> list[dict[str, o
             payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
-        runs.append(_run_payload(payload, path.parent))
+        runs.append(_run_payload(payload, path.parent, root))
     return runs
 
 
-def _run_payload(manifest: dict[str, Any], case_dir: Path) -> dict[str, object]:
+def _run_payload(manifest: dict[str, Any], case_dir: Path, root: Path) -> dict[str, object]:
     request = ensure_dict(manifest.get("request"))
     draft = ensure_dict(manifest.get("draft"))
     reviewer = ensure_dict(manifest.get("reviewer"))
@@ -129,7 +129,7 @@ def _run_payload(manifest: dict[str, Any], case_dir: Path) -> dict[str, object]:
         "source": request.get("source"),
         "output_mode": manifest.get("output_mode"),
         "finished_at": manifest.get("finished_at"),
-        "output_dir": str(case_dir),
+        "output_dir": case_dir.resolve().relative_to(root).as_posix(),
         "artifact_count": len(artifacts),
         "artifacts": artifacts,
         "grounding_status": draft.get("grounding_status"),

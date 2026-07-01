@@ -284,7 +284,7 @@ async def execute_demo_run(request: WebDemoRunRequest) -> WebDemoRun:
         degradation_reason=result.degradation_reason,
         errors=tuple(result.errors),
         duration_seconds=result.duration_seconds,
-        output_dir=str(case_dir),
+        output_dir=_relative_key(case_dir, request.out_root),
         artifacts=artifacts,
         estrategia=estrategia_payload(getattr(result, "draft", None)),
         review=review_payload(getattr(result, "draft", None)),
@@ -384,4 +384,12 @@ def _artifact_preview(case_dir: Path, name: str, sha256: str) -> WebDemoArtifact
     preview = ""
     if path.exists() and path.is_file():
         preview = path.read_text(encoding="utf-8", errors="replace")[:12000]
-    return WebDemoArtifact(name=name, path=str(path), sha256=sha256, preview=preview)
+    return WebDemoArtifact(name=name, path=name, sha256=sha256, preview=preview)
+
+
+def _relative_key(path: Path, root: Path) -> str:
+    """Stable public key for a path under the tenant output root."""
+    try:
+        return path.relative_to(root).as_posix()
+    except ValueError:
+        return path.resolve().relative_to(root.resolve()).as_posix()

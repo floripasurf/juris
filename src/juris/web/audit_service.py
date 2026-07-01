@@ -53,7 +53,7 @@ def audit_view(path: Path) -> dict[str, object]:
         for entry in AuditLog(path).read_all()
     ]
     return {
-        "path": str(path),
+        "audit_file": path.name,
         "total": report.total_entries,
         "intact": report.is_intact,
         "corrupted": report.corrupted_entry_ids,
