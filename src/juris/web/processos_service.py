@@ -72,9 +72,9 @@ def list_prazos(db: LocalDB | None = None) -> list[PrazoView]:
 
     return [
         PrazoView(
-            numero_cnj=cast(str, p.numero_cnj),
+            numero_cnj=p.numero_cnj,
             data_limite=cast("datetime | None", p.data_limite),
-            urgencia=cast("str | None", p.urgencia),
+            urgencia=p.urgencia,
             status=cast("str | None", p.status),
             rule_nome=cast("str | None", p.rule_nome),
             tipo_acao=cast("str | None", getattr(p, "tipo_acao", None)),
@@ -95,20 +95,20 @@ def list_processos(db: LocalDB | None = None) -> list[ProcessoView]:
     # sqlalchemy plugin). Prazo rows flow through Any (dict value type).
     pending_by_cnj: dict[str, list[Any]] = {}
     for prazo in db.get_pending_prazos():
-        pending_by_cnj.setdefault(cast(str, prazo.numero_cnj), []).append(prazo)
+        pending_by_cnj.setdefault(prazo.numero_cnj, []).append(prazo)
 
     views: list[ProcessoView] = []
     for p in db.get_all_processos():
-        cnj = cast(str, p.numero_cnj)
+        cnj = p.numero_cnj
         prazos = pending_by_cnj.get(cnj, [])
         proximo = min(prazos, key=lambda pr: pr.data_limite) if prazos else None
         views.append(
             ProcessoView(
                 numero_cnj=cnj,
-                tribunal=cast(str, p.tribunal_id),
-                classe=cast("str | None", p.classe),
-                assunto=cast("str | None", p.assunto),
-                last_sync_at=cast("datetime | None", p.last_sync_at),
+                tribunal=p.tribunal_id,
+                classe=p.classe,
+                assunto=p.assunto,
+                last_sync_at=p.last_sync_at,
                 prazos_pendentes=len(prazos),
                 proximo_prazo=proximo.data_limite if proximo else None,
                 proximo_prazo_urgencia=proximo.urgencia if proximo else None,
@@ -177,17 +177,17 @@ def get_processo_detail(numero_cnj: str, db: LocalDB | None = None) -> ProcessoD
     movimentos = [
         MovimentoView(
             data_hora=cast("datetime | None", m.data_hora),
-            descricao=cast("str | None", m.descricao),
-            tipo=cast("str | None", m.tipo),
+            descricao=m.descricao,
+            tipo=m.tipo,
             categoria=cast("str | None", getattr(m, "categoria_semantica", None)),
         )
         for m in db.get_movimentos_by_cnj(numero_cnj)
     ]
     prazos = [
         PrazoView(
-            numero_cnj=cast(str, p.numero_cnj),
+            numero_cnj=p.numero_cnj,
             data_limite=cast("datetime | None", p.data_limite),
-            urgencia=cast("str | None", p.urgencia),
+            urgencia=p.urgencia,
             status=cast("str | None", p.status),
             rule_nome=cast("str | None", p.rule_nome),
             tipo_acao=cast("str | None", getattr(p, "tipo_acao", None)),
@@ -195,13 +195,13 @@ def get_processo_detail(numero_cnj: str, db: LocalDB | None = None) -> ProcessoD
         for p in db.get_pending_prazos(numero_cnj=numero_cnj)
     ]
     return ProcessoDetailView(
-        numero_cnj=cast(str, proc.numero_cnj),
+        numero_cnj=proc.numero_cnj,
         tribunal=cast("str | None", proc.tribunal_id),
-        classe=cast("str | None", proc.classe),
-        assunto=cast("str | None", proc.assunto),
+        classe=proc.classe,
+        assunto=proc.assunto,
         orgao_julgador=cast("str | None", getattr(proc, "orgao_julgador", None)),
         valor_causa=cast("float | None", getattr(proc, "valor_causa", None)),
-        last_sync_at=cast("datetime | None", proc.last_sync_at),
+        last_sync_at=proc.last_sync_at,
         movimentos=movimentos,
         prazos=prazos,
     )

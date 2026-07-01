@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import (
-    Column,
     DateTime,
     Float,
     Integer,
@@ -21,7 +20,7 @@ from sqlalchemy import (
     create_engine,
     text,
 )
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 from juris.core.observability import get_logger
 
@@ -34,85 +33,93 @@ class LocalBase(DeclarativeBase):
     pass
 
 
+def _uuid() -> str:
+    return str(uuid.uuid4())
+
+
+def _now() -> datetime:
+    return datetime.now(UTC)
+
+
 class ProcessoLocal(LocalBase):
     __tablename__ = "processos"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    numero_cnj = Column(String(25), unique=True, index=True, nullable=False)
-    tribunal_id = Column(String(20), nullable=False)
-    classe = Column(String(200))
-    assunto = Column(Text)
-    valor_causa = Column(Float)
-    orgao_julgador = Column(String(300))
-    last_sync_at = Column(DateTime)
-    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
-    updated_at = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    numero_cnj: Mapped[str] = mapped_column(String(25), unique=True, index=True)
+    tribunal_id: Mapped[str] = mapped_column(String(20))
+    classe: Mapped[str | None] = mapped_column(String(200))
+    assunto: Mapped[str | None] = mapped_column(Text)
+    valor_causa: Mapped[float | None] = mapped_column(Float)
+    orgao_julgador: Mapped[str | None] = mapped_column(String(300))
+    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
 
 
 class MovimentoLocal(LocalBase):
     __tablename__ = "movimentos"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    processo_id = Column(String(36), nullable=False, index=True)
-    data_hora = Column(DateTime, nullable=False)
-    tipo = Column(String(20))
-    codigo_nacional = Column(Integer)
-    complemento = Column(Text)
-    descricao = Column(Text)
-    id_movimento = Column(String(100))
-    categoria_semantica = Column(String(50))
-    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    processo_id: Mapped[str] = mapped_column(String(36), index=True)
+    data_hora: Mapped[datetime] = mapped_column(DateTime)
+    tipo: Mapped[str | None] = mapped_column(String(20))
+    codigo_nacional: Mapped[int | None] = mapped_column(Integer)
+    complemento: Mapped[str | None] = mapped_column(Text)
+    descricao: Mapped[str | None] = mapped_column(Text)
+    id_movimento: Mapped[str | None] = mapped_column(String(100))
+    categoria_semantica: Mapped[str | None] = mapped_column(String(50))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
 class PrazoLocal(LocalBase):
     __tablename__ = "prazos"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    processo_id = Column(String(36), nullable=False, index=True)
-    numero_cnj = Column(String(25), index=True, nullable=False)
-    rule_nome = Column(String(200), nullable=False)
-    rule_base_legal = Column(String(200))
-    tipo_acao = Column(String(50))
-    categoria = Column(String(50))
-    data_inicio = Column(DateTime, nullable=False)
-    data_limite = Column(DateTime, nullable=False, index=True)
-    dias_uteis_total = Column(Integer)
-    status = Column(String(20), default="aberto")
-    urgencia = Column(String(20))
-    cumprido_at = Column(DateTime)
-    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
-    updated_at = Column(DateTime, default=lambda: datetime.now(UTC))
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    processo_id: Mapped[str] = mapped_column(String(36), index=True)
+    numero_cnj: Mapped[str] = mapped_column(String(25), index=True)
+    rule_nome: Mapped[str] = mapped_column(String(200))
+    rule_base_legal: Mapped[str | None] = mapped_column(String(200))
+    tipo_acao: Mapped[str | None] = mapped_column(String(50))
+    categoria: Mapped[str | None] = mapped_column(String(50))
+    data_inicio: Mapped[datetime] = mapped_column(DateTime)
+    data_limite: Mapped[datetime] = mapped_column(DateTime, index=True)
+    dias_uteis_total: Mapped[int | None] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(20), default="aberto")
+    urgencia: Mapped[str | None] = mapped_column(String(20))
+    cumprido_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
 class SyncLogLocal(LocalBase):
     __tablename__ = "sync_logs"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    numero_cnj = Column(String(25), nullable=False)
-    tribunal_id = Column(String(20), nullable=False)
-    source = Column(String(20))
-    started_at = Column(DateTime)
-    finished_at = Column(DateTime)
-    success = Column(Integer, default=0)  # SQLite boolean
-    had_changes = Column(Integer, default=0)
-    new_movimentos = Column(Integer, default=0)
-    error = Column(Text)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    numero_cnj: Mapped[str] = mapped_column(String(25))
+    tribunal_id: Mapped[str] = mapped_column(String(20))
+    source: Mapped[str | None] = mapped_column(String(20))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+    success: Mapped[int] = mapped_column(Integer, default=0)  # SQLite boolean
+    had_changes: Mapped[int] = mapped_column(Integer, default=0)
+    new_movimentos: Mapped[int] = mapped_column(Integer, default=0)
+    error: Mapped[str | None] = mapped_column(Text)
 
 
 class JurisprudenciaLocal(LocalBase):
     __tablename__ = "jurisprudencia"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    tipo = Column(String(50))
-    numero = Column(String(50))
-    tribunal = Column(String(20))
-    ementa = Column(Text)
-    texto_integral = Column(Text)
-    hierarquia = Column(Integer)
-    temas = Column(Text)  # JSON string
-    base_legal = Column(Text)  # JSON string
-    situacao = Column(String(20))
-    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    tipo: Mapped[str | None] = mapped_column(String(50))
+    numero: Mapped[str | None] = mapped_column(String(50))
+    tribunal: Mapped[str | None] = mapped_column(String(20))
+    ementa: Mapped[str | None] = mapped_column(Text)
+    texto_integral: Mapped[str | None] = mapped_column(Text)
+    hierarquia: Mapped[int | None] = mapped_column(Integer)
+    temas: Mapped[str | None] = mapped_column(Text)  # JSON string
+    base_legal: Mapped[str | None] = mapped_column(Text)  # JSON string
+    situacao: Mapped[str | None] = mapped_column(String(20))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
 
 class TrackedProcessoLocal(LocalBase):
@@ -120,8 +127,8 @@ class TrackedProcessoLocal(LocalBase):
 
     __tablename__ = "tracked_processos"
 
-    numero_cnj = Column(String(25), primary_key=True)
-    tribunal_id = Column(String(20), nullable=False)
+    numero_cnj: Mapped[str] = mapped_column(String(25), primary_key=True)
+    tribunal_id: Mapped[str] = mapped_column(String(20))
 
 
 class LocalDB:
@@ -282,7 +289,7 @@ class LocalDB:
             )
             return row.finished_at if row else None
 
-    def get_known_movimento_keys(self, processo_id: str) -> set[tuple]:
+    def get_known_movimento_keys(self, processo_id: str) -> set[tuple[datetime | None, int | None, str | None]]:
         """Get existing movement keys for dedup."""
         with self.session() as s:
             rows = s.query(MovimentoLocal).filter_by(processo_id=processo_id).all()
