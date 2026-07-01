@@ -100,10 +100,7 @@ async def _rate_limit_api(request: Request, call_next: Any) -> Any:
     """Basic per-API-key burst protection for web API routes."""
     if not request.url.path.startswith("/api/"):
         return await call_next(request)
-    from juris.web.auth import hash_api_key
-
-    raw_key = request.headers.get("X-API-Key")
-    key = hash_api_key(raw_key) if raw_key else "public"
+    key = _api_rate_limit_key(request)
     decision = _api_rate_limiter().check(key)
     if decision.allowed:
         return await call_next(request)
@@ -118,6 +115,21 @@ async def _rate_limit_api(request: Request, call_next: Any) -> Any:
             }
         },
     )
+
+
+def _api_rate_limit_key(request: Request) -> str:
+    """Rate-limit valid API keys individually; group invalid keys by client IP."""
+    from juris.web.auth import default_registry, hash_api_key
+
+    raw_key = request.headers.get("X-API-Key")
+    registry = default_registry()
+    if registry.is_open:
+        return hash_api_key(raw_key) if raw_key else "public"
+    tenant = registry.authenticate(raw_key)
+    if tenant is not None:
+        return f"tenant:{tenant.tenant_id}:{hash_api_key(raw_key or '')}"
+    client_host = request.client.host if request.client else "unknown"
+    return f"invalid:{client_host}"
 
 
 @app.exception_handler(Exception)

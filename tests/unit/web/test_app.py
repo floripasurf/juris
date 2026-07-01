@@ -740,6 +740,29 @@ def test_api_rate_limit_is_per_api_key(monkeypatch) -> None:
     assert other_key.status_code == 200
 
 
+def test_api_rate_limit_groups_invalid_keys_by_client(tmp_path, monkeypatch) -> None:
+    app_module = importlib.import_module("juris.web.app")
+    from juris.web import auth
+    from juris.web.rate_limit import FixedWindowRateLimiter
+
+    tenants = tmp_path / "tenants.json"
+    tenants.write_text(json.dumps({"escritorio-a": "valid-key"}), encoding="utf-8")
+    monkeypatch.setenv("JURIS_TENANTS_FILE", str(tenants))
+    auth.default_registry.cache_clear()
+    limiter = FixedWindowRateLimiter(limit=1, window_seconds=60)
+    monkeypatch.setattr(app_module, "_api_rate_limiter", lambda: limiter)
+
+    try:
+        first = client.get("/api/prazos", headers={"X-API-Key": "wrong-a"})
+        blocked = client.get("/api/prazos", headers={"X-API-Key": "wrong-b"})
+    finally:
+        auth.default_registry.cache_clear()
+
+    assert first.status_code == 401
+    assert blocked.status_code == 429
+    assert blocked.json()["detail"]["code"] == "rate_limited"
+
+
 def test_connect_job_hidden_from_non_owner(monkeypatch, tmp_path) -> None:
     app_module = importlib.import_module("juris.web.app")
     from juris.web.connect_jobs import ConnectJobStore
