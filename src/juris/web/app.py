@@ -246,10 +246,34 @@ class PendingArchivePayload(PendingRecoveryPayload):
     confirm_manual_resolution: bool = False
 
 
+def _readiness() -> dict[str, object]:
+    """Probe the real dependencies (DB + jobs store), not just liveness."""
+    from juris.web.auth import PUBLIC_TENANT_ID
+
+    def _probe_db() -> None:
+        _localdb_for_path(str(tenant_db_path(Tenant(PUBLIC_TENANT_ID)))).ping()
+
+    def _probe_jobs() -> None:
+        _connect_job_store().get("__health__")
+
+    checks: dict[str, str] = {}
+    healthy = True
+    for name, probe in (("database", _probe_db), ("connect_jobs", _probe_jobs)):
+        try:
+            probe()
+            checks[name] = "ok"
+        except Exception:  # noqa: BLE001 — any failure ⇒ this dependency is down
+            checks[name] = "error"
+            healthy = False
+    return {"status": "ok" if healthy else "degraded", "checks": checks}
+
+
 @app.get("/health")
-async def health() -> dict[str, str]:
-    """Health check for the local web UI."""
-    return {"status": "ok", "version": __version__}
+async def health() -> Response:
+    """Readiness probe: liveness + real DB/jobs-store connectivity (503 when degraded)."""
+    result = _readiness()
+    code = 200 if result["status"] == "ok" else 503
+    return JSONResponse(status_code=code, content={"version": __version__, **result})
 
 
 @app.get("/api/ai-session")

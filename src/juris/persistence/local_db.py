@@ -154,6 +154,11 @@ class LocalDB:
     def session(self) -> Session:
         return self._Session()
 
+    def ping(self) -> None:
+        """Cheap connectivity probe for readiness checks (raises if the DB is unreachable)."""
+        with self._engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+
     def upsert_processo(
         self,
         numero_cnj: str,

@@ -1065,3 +1065,26 @@ def test_agent_relay_registers_then_unregisters(monkeypatch) -> None:
     while hub.is_connected("public") and time.time() < deadline:
         time.sleep(0.02)
     assert hub.is_connected("public") is False  # unregistered on disconnect
+
+
+def test_health_ok_when_dependencies_reachable() -> None:
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "ok"
+    assert body["checks"]["database"] == "ok"
+    assert body["checks"]["connect_jobs"] == "ok"
+
+
+def test_health_degraded_when_database_down(monkeypatch) -> None:
+    app_module = importlib.import_module("juris.web.app")
+
+    def _boom(_path):
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(app_module, "_localdb_for_path", _boom)
+    resp = client.get("/health")
+    assert resp.status_code == 503  # readiness fails so an LB can route away
+    body = resp.json()
+    assert body["status"] == "degraded"
+    assert body["checks"]["database"] == "error"
