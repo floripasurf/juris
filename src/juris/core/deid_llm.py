@@ -18,6 +18,7 @@ from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
 from juris.core.deid import deidentify, ensure_cloud_safe, reidentify
+from juris.llm.base import AbstractLLM, LLMResponse
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -25,12 +26,12 @@ if TYPE_CHECKING:
 _SEP = "\n\x00SYS\x00\n"  # de-id prompt + system together (single re-id map)
 
 
-class DeidentifyingLLM:
+class DeidentifyingLLM(AbstractLLM):
     """Wraps a delegate LLM so case PII never leaves de-identified."""
 
     def __init__(
         self,
-        delegate: Any,
+        delegate: AbstractLLM,
         *,
         allow_partial: bool = True,
         ner_redactor: Callable[[str], list[str]] | None = None,
@@ -46,7 +47,7 @@ class DeidentifyingLLM:
         schema: dict[str, Any] | None = None,
         max_tokens: int = 1024,
         temperature: float = 0.0,
-    ) -> Any:
+    ) -> LLMResponse:
         deid = deidentify(prompt + _SEP + (system or ""), ner_redactor=self._ner)
         ensure_cloud_safe(deid, allow_partial=self._allow_partial)
         deid_prompt, _, deid_system = deid.text.partition(_SEP)
