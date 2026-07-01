@@ -24,15 +24,28 @@ class RelayHub:
     """Routes orchestrator → agent requests over each tenant's dialed-in connection."""
 
     def __init__(self) -> None:
-        self._agents: dict[str, SendJson] = {}
-        self._pending: dict[str, asyncio.Future[AgentResponse]] = {}
+        self._agents: dict[str, tuple[int, SendJson]] = {}
+        self._pending: dict[tuple[str, str], asyncio.Future[AgentResponse]] = {}
+        self._next_connection_id = 0
 
-    def register(self, tenant_id: str, send_json: SendJson) -> None:
-        """Record a connected agent's outbound send function (its WebSocket writer)."""
-        self._agents[tenant_id] = send_json
+    def register(self, tenant_id: str, send_json: SendJson) -> int:
+        """Record a connected agent's outbound send function (its WebSocket writer).
 
-    def unregister(self, tenant_id: str) -> None:
-        self._agents.pop(tenant_id, None)
+        Returns an opaque connection id. When a tenant reconnects, the newest
+        connection replaces the previous one; the older connection's eventual
+        ``unregister`` call must not remove the newer binding.
+        """
+        self._next_connection_id += 1
+        connection_id = self._next_connection_id
+        self._agents[tenant_id] = (connection_id, send_json)
+        return connection_id
+
+    def unregister(self, tenant_id: str, connection_id: int | None = None) -> None:
+        current = self._agents.get(tenant_id)
+        if current is None:
+            return
+        if connection_id is None or current[0] == connection_id:
+            self._agents.pop(tenant_id, None)
 
     def is_connected(self, tenant_id: str) -> bool:
         return tenant_id in self._agents
@@ -43,23 +56,29 @@ class RelayHub:
         Raises ``RuntimeError`` if no agent is connected and ``TimeoutError`` if the
         agent doesn't answer within ``timeout``.
         """
-        send_json = self._agents.get(tenant_id)
-        if send_json is None:
+        send_entry = self._agents.get(tenant_id)
+        if send_entry is None:
             msg = f"nenhum agente conectado para o tenant {tenant_id!r} (reverse-channel)"
             raise RuntimeError(msg)
+        _connection_id, send_json = send_entry
 
         loop = asyncio.get_event_loop()
         fut: asyncio.Future[AgentResponse] = loop.create_future()
-        self._pending[request.request_id] = fut
+        pending_key = (tenant_id, request.request_id)
+        if pending_key in self._pending:
+            msg = f"request_id duplicado em andamento para o tenant {tenant_id!r}: {request.request_id}"
+            raise RuntimeError(msg)
+        self._pending[pending_key] = fut
+        routed_request = request.model_copy(update={"tenant_id": tenant_id})
         try:
-            await send_json(request.model_dump_json())
+            await send_json(routed_request.model_dump_json())
             return await asyncio.wait_for(fut, timeout)
         finally:
-            self._pending.pop(request.request_id, None)
+            self._pending.pop(pending_key, None)
 
-    def resolve(self, response: AgentResponse) -> None:
-        """Complete the pending request whose id matches ``response`` (agent → cloud)."""
-        fut = self._pending.get(response.request_id)
+    def resolve(self, tenant_id: str, response: AgentResponse) -> None:
+        """Complete this tenant's pending request whose id matches ``response``."""
+        fut = self._pending.get((tenant_id, response.request_id))
         if fut is not None and not fut.done():
             fut.set_result(response)
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 import pytest
 
@@ -23,7 +24,7 @@ async def test_hub_routes_request_to_agent_and_resolves_by_id() -> None:
 
     task = asyncio.create_task(hub.send("escritorio-a", req, timeout=5))
     await asyncio.sleep(0)  # let send register the pending future
-    hub.resolve(AgentResponse(request_id="r1", success=True, payload={"ok": 1}))
+    hub.resolve("escritorio-a", AgentResponse(request_id="r1", success=True, payload={"ok": 1}))
     resp = await task
 
     assert resp.success is True
@@ -63,6 +64,87 @@ def test_hub_tracks_connection_state() -> None:
     assert hub.is_connected("t") is True
     hub.unregister("t")
     assert hub.is_connected("t") is False
+
+
+@pytest.mark.asyncio
+async def test_hub_correlates_same_request_id_per_tenant() -> None:
+    hub = RelayHub()
+
+    async def fake_send(_payload: str) -> None:
+        pass
+
+    hub.register("tenant-a", fake_send)
+    hub.register("tenant-b", fake_send)
+    req_a = AgentRequest(request_id="same-id", tenant_id="tenant-a", operation="mni", payload={})
+    req_b = AgentRequest(request_id="same-id", tenant_id="tenant-b", operation="mni", payload={})
+
+    task_a = asyncio.create_task(hub.send("tenant-a", req_a, timeout=5))
+    task_b = asyncio.create_task(hub.send("tenant-b", req_b, timeout=5))
+    await asyncio.sleep(0)
+    hub.resolve("tenant-b", AgentResponse(request_id="same-id", success=True, payload={"tenant": "b"}))
+    hub.resolve("tenant-a", AgentResponse(request_id="same-id", success=True, payload={"tenant": "a"}))
+
+    assert (await task_a).payload == {"tenant": "a"}
+    assert (await task_b).payload == {"tenant": "b"}
+
+
+@pytest.mark.asyncio
+async def test_hub_rewrites_wire_tenant_to_routed_tenant() -> None:
+    hub = RelayHub()
+    sent: list[dict[str, object]] = []
+
+    async def fake_send(payload: str) -> None:
+        sent.append(json.loads(payload))
+
+    hub.register("tenant-a", fake_send)
+    req = AgentRequest(request_id="r1", tenant_id="spoofed", operation="mni", payload={})
+    task = asyncio.create_task(hub.send("tenant-a", req, timeout=5))
+    await asyncio.sleep(0)
+    hub.resolve("tenant-a", AgentResponse(request_id="r1", success=True, payload={}))
+    await task
+
+    assert sent[0]["tenant_id"] == "tenant-a"
+
+
+@pytest.mark.asyncio
+async def test_hub_rejects_duplicate_pending_request_id_for_same_tenant() -> None:
+    hub = RelayHub()
+    first_send_started = asyncio.Event()
+    release_first = asyncio.Event()
+
+    async def fake_send(_payload: str) -> None:
+        first_send_started.set()
+        await release_first.wait()
+
+    hub.register("tenant-a", fake_send)
+    req = AgentRequest(request_id="same-id", tenant_id="tenant-a", operation="mni", payload={})
+
+    task = asyncio.create_task(hub.send("tenant-a", req, timeout=5))
+    await first_send_started.wait()
+    with pytest.raises(RuntimeError, match="request_id duplicado"):
+        await hub.send("tenant-a", req, timeout=5)
+
+    hub.resolve("tenant-a", AgentResponse(request_id="same-id", success=True, payload={}))
+    release_first.set()
+    await task
+
+
+def test_hub_old_connection_cannot_unregister_new_connection() -> None:
+    hub = RelayHub()
+
+    async def old_send(payload: str) -> None:
+        del payload
+
+    async def new_send(payload: str) -> None:
+        del payload
+
+    old_id = hub.register("tenant-a", old_send)
+    new_id = hub.register("tenant-a", new_send)
+
+    hub.unregister("tenant-a", old_id)
+    assert hub.is_connected("tenant-a") is True
+    hub.unregister("tenant-a", new_id)
+    assert hub.is_connected("tenant-a") is False
 
 
 @pytest.mark.asyncio

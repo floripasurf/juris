@@ -439,14 +439,14 @@ async def agent_relay_socket(ws: WebSocket) -> None:
     async def _send(payload: str) -> None:
         await ws.send_text(payload)
 
-    hub.register(tenant_id, _send)
+    connection_id = hub.register(tenant_id, _send)
     try:
         while True:  # agent → cloud replies, correlated by request_id
-            hub.resolve(AgentResponse.model_validate_json(await ws.receive_text()))
+            hub.resolve(tenant_id, AgentResponse.model_validate_json(await ws.receive_text()))
     except WebSocketDisconnect:
         pass
     finally:
-        hub.unregister(tenant_id)
+        hub.unregister(tenant_id, connection_id)
 
 
 @app.get("/api/agent-mode")
