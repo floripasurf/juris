@@ -1556,6 +1556,63 @@ def repertory_ingest(
     console.print("[green]Done.[/green]")
 
 
+@repertory_app.command("ingest-file")
+def repertory_ingest_file(
+    path: str = typer.Argument(..., help="Arquivo de texto com o inteiro teor da decisão."),
+    data: str = typer.Option(..., "--data", help="Data da fonte (ISO, ex. 2020-05-13)."),
+    url: str = typer.Option(..., "--url", help="URL oficial pública (http/https) da fonte."),
+    tipo: str = typer.Option("acordao_publicado", "--tipo", help="Tipo da fonte (source_type)."),
+    tribunal: str | None = typer.Option(None, "--tribunal", help="Tribunal (ou use --publisher)."),
+    publisher: str | None = typer.Option(None, "--publisher", help="Publicador (se não for tribunal)."),
+    titulo: str | None = typer.Option(None, "--titulo", help="Título/identificação (ex. REsp 1.234.567)."),
+    tema: str | None = typer.Option(None, "--tema", help="Tema/área."),
+) -> None:
+    """Ingere um arquivo de INTEIRO TEOR (documento do próprio escritório) no corpus.
+
+    Fonte real, ToS inequívoco (arquivos que o escritório já possui). Proveniência
+    obrigatória (URL/fonte/data/tipo/hash) é validada antes de qualquer ingestão; o
+    conteúdo é tagueado como semente local (single-tenant) e fica pesquisável.
+    """
+    import os
+    from pathlib import Path
+
+    from juris.repertory.readiness import resolve_repertory_path
+    from juris.web.auth import PUBLIC_TENANT_ID, Tenant, tenant_scoped_dir
+    from juris.web.corpus_queue import append_accepted_source, reingest_pending_sources
+
+    file_path = Path(path)
+    if not file_path.is_file():
+        console.print(f"[red]Arquivo não encontrado:[/red] {path}")
+        raise typer.Exit(code=1)
+    text = file_path.read_text(encoding="utf-8").strip()
+    if not text:
+        console.print("[red]Arquivo vazio — nada a ingerir.[/red]")
+        raise typer.Exit(code=1)
+
+    out_root = Path(os.environ.get("JURIS_OUT_ROOT", "juris-out"))
+    root = tenant_scoped_dir(Tenant(PUBLIC_TENANT_ID), out_root)
+    payload: dict[str, object] = {
+        "source_type": tipo,
+        "source_date": data,
+        "source_url": url,
+        "tribunal": tribunal or "",
+        "source_publisher": publisher or "",
+        "title": titulo or file_path.stem,
+        "tema": tema or "",
+        "source_text": text,
+    }
+    try:
+        append_accepted_source(root, payload)
+    except ValueError as exc:
+        console.print(f"[red]Proveniência incompleta:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    report = reingest_pending_sources(root, resolve_repertory_path(), tenant_id=None)
+    console.print(f"[green]Ingerido com proveniência:[/green] {report.processed} fonte(s), {report.chunks} chunk(s).")
+    if report.errors:
+        console.print(f"[yellow]{len(report.errors)} erro(s) de reingestão — verifique o log.[/yellow]")
+
+
 @repertory_app.command("sources")
 def repertory_sources(
     corpus_dir: str = typer.Option(None, "--corpus-dir", help="Path to corpus JSON directory"),

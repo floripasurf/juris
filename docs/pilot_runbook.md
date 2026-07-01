@@ -65,8 +65,13 @@ The gaps to fill come straight from Sprint 4's backlog (`missing_source`). Pick 
 
 Then:
 
-1. **Ingest with provenance** (mandatory URL/fonte/data/hash/tipo enforced):
-   console → "Fila de corpus" → aceitar fonte → `POST /api/corpus/reingest`.
+1. **Ingest with provenance** (mandatory URL/fonte/data/hash/tipo enforced). For the
+   firm's own inteiro-teor files (the ToS-clear default), one command per document:
+   ```bash
+   uv run juris repertory ingest-file caminho/decisao.txt \
+     --tribunal STJ --data 2020-05-13 --url https://www.stj.jus.br/... --titulo "REsp 1.234.567"
+   ```
+   Or, in the console → "Fila de corpus" → aceitar fonte → `POST /api/corpus/reingest`.
 2. **Check coverage:** console → "Cobertura do corpus dirigido" (`/api/corpus/coverage`)
    — área/tribunal/tema.
 3. **Re-run the same pilot cases** and compare grounding with the harness:
