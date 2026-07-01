@@ -22,12 +22,15 @@ logger = logging.getLogger(__name__)
 # Fixed FTS5 search statements. Kept as module constants (not built at call time) so
 # the tenant filter can never be confused with an interpolation point: the tenant value
 # is always a bound parameter (?), never string-formatted into the SQL.
+# tenant_id=None is FAIL-SAFE: it returns only the shared public seed (tenant_id IS NULL),
+# never another tenant's private uploads — so a caller that forgets to pass a tenant can
+# never leak across firms (adversarial finding). Pass an explicit tenant_id for that firm.
 _SEARCH_SQL = """
             SELECT c.chunk_id, c.source_id, c.text, c.metadata,
                    rank * -1 AS score
             FROM chunks_fts f
             JOIN chunks c ON c.rowid = f.rowid
-            WHERE chunks_fts MATCH ?
+            WHERE chunks_fts MATCH ? AND c.tenant_id IS NULL
             ORDER BY rank
             LIMIT ?
             """
@@ -211,7 +214,10 @@ class LocalFTSStore(VectorStore):
 
     def __init__(self, db_path: Path | None = None) -> None:
         self._db_path = str(db_path) if db_path else ":memory:"
-        self._conn = sqlite3.connect(self._db_path)
+        # check_same_thread=False so a cached store (e.g. the /api/corpus/search service)
+        # can be read from FastAPI's threadpool without sqlite3.ProgrammingError. Safe
+        # because sqlite3.threadsafety==3 (serialized): SQLite locks access internally.
+        self._conn = sqlite3.connect(self._db_path, check_same_thread=False)
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._init_tables()
 

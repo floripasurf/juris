@@ -174,3 +174,11 @@ def test_install_native_host_rejects_placeholder_extension_id(tmp_path) -> None:
             install_root=tmp_path / "install",
             manifest_dir=tmp_path / "manifests",
         )
+
+
+def test_authorize_bridge_request_rejects_non_dict_frame() -> None:
+    # Adversarial (agent A): a bare null/list/number must not crash the gate.
+    assert authorize_bridge_request(None, None) is not None
+    assert authorize_bridge_request([1, 2], "tok") is not None
+    assert authorize_bridge_request("string", None) is not None
+    assert authorize_bridge_request(42, "tok") is not None

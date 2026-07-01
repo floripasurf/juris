@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from juris.core.observability import get_logger
+from juris.core.sanitize import safe_error_text
 from juris.repertory.peticoes.extractor import extract_structure
 from juris.repertory.peticoes.models import TemplatePeticao, TipoPeticao
 
@@ -78,18 +79,16 @@ async def ingest_peticoes(
 
     for pdf_path in pdfs:
         petition_id = f"tpl_{pdf_path.stem}"
-        logger.info("ingest_peticao_start", path=str(pdf_path), id=petition_id)
+        logger.info("ingest_peticao_start", path=safe_error_text(str(pdf_path)), id=petition_id)
 
         try:
             text = extract_text_from_pdf(pdf_path)
         except Exception as exc:
-            from juris.core.sanitize import safe_error_text
-
-            logger.warning("ingest_peticao_pdf_error", path=str(pdf_path), error=safe_error_text(exc))
+            logger.warning("ingest_peticao_pdf_error", path=safe_error_text(str(pdf_path)), error=safe_error_text(exc))
             continue
 
         if not text.strip():
-            logger.warning("ingest_peticao_empty_text", path=str(pdf_path))
+            logger.warning("ingest_peticao_empty_text", path=safe_error_text(str(pdf_path)))
             continue
 
         tipo = _detect_tipo_from_filename(pdf_path.stem, tipo_default)
@@ -108,9 +107,11 @@ async def ingest_peticoes(
                 sections=len(template.estrutura),
             )
         except Exception as exc:
-            from juris.core.sanitize import safe_error_text
-
-            logger.warning("ingest_peticao_extract_error", path=str(pdf_path), error=safe_error_text(exc))
+            logger.warning(
+                "ingest_peticao_extract_error",
+                path=safe_error_text(str(pdf_path)),
+                error=safe_error_text(exc),
+            )
 
     return templates
 

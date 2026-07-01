@@ -112,7 +112,11 @@ def _check_agent(tenant: Tenant, *, deep: bool) -> dict[str, Any]:
     if not deep:
         return _component(True, f"binding configurado → {binding.base_url}")
 
-    ok, detail = _cached_probe(("agent", binding.base_url), lambda: _probe_agent(binding.base_url))
+    # Key the cache on the tenant too, not just the URL — two tenants that (mis)share an
+    # agent base_url must not read each other's cached health (adversarial finding).
+    ok, detail = _cached_probe(
+        ("agent", tenant.tenant_id, binding.base_url), lambda: _probe_agent(binding.base_url)
+    )
     return _component(ok, detail)
 
 

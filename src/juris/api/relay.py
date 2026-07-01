@@ -109,17 +109,27 @@ def reverse_channel_scaling_ok() -> tuple[bool, str]:
     """
     import os
 
-    try:
-        workers = int(os.environ.get("WEB_CONCURRENCY") or os.environ.get("JURIS_WEB_WORKERS") or "1")
-    except ValueError:
-        workers = 1
-    if workers <= 1:
+    # Parse each worker-count env INDEPENDENTLY: a malformed WEB_CONCURRENCY must not
+    # mask a real JURIS_WEB_WORKERS, and a present-but-unparseable value fails CLOSED
+    # (treated as unsafe) rather than silently collapsing to "single worker".
+    workers = 1
+    unparseable = False
+    for name in ("WEB_CONCURRENCY", "JURIS_WEB_WORKERS"):
+        raw = os.environ.get(name, "").strip()
+        if not raw:
+            continue
+        try:
+            workers = max(workers, int(raw))
+        except ValueError:
+            unparseable = True
+
+    if workers <= 1 and not unparseable:
         return True, ""
-    # Multi-worker is safe with an external broker OR with sticky routing the operator
-    # asserts is configured at the LB (affinity by tenant). Both are explicit opt-ins so
-    # a plain multi-worker misconfig still fails loudly. ``JURIS_RELAY_STICKY`` is an
-    # assertion, not a verification — the operator owns the LB affinity (docs/deployment.md).
-    broker = bool(os.environ.get("JURIS_RELAY_BROKER"))
+    # Multi-worker (or an unparseable count) is safe only with an external broker OR with
+    # sticky routing the operator asserts at the LB. Both are explicit opt-ins so a plain
+    # multi-worker misconfig still fails loudly. ``JURIS_RELAY_STICKY`` is an assertion, not
+    # a verification — the operator owns the LB affinity (docs/deployment.md).
+    broker = bool(os.environ.get("JURIS_RELAY_BROKER", "").strip())
     sticky = os.environ.get("JURIS_RELAY_STICKY", "").strip().lower() in {"1", "true", "yes"}
     if broker or sticky:
         return True, ""

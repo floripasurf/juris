@@ -1566,6 +1566,7 @@ def repertory_ingest_file(
     publisher: str | None = typer.Option(None, "--publisher", help="Publicador (se não for tribunal)."),
     titulo: str | None = typer.Option(None, "--titulo", help="Título/identificação (ex. REsp 1.234.567)."),
     tema: str | None = typer.Option(None, "--tema", help="Tema/área."),
+    encoding: str = typer.Option("utf-8", "--encoding", help="Codificação do arquivo (ex.: utf-8, cp1252, latin-1)."),
 ) -> None:
     """Ingere um arquivo de INTEIRO TEOR (documento do próprio escritório) no corpus.
 
@@ -1584,7 +1585,16 @@ def repertory_ingest_file(
     if not file_path.is_file():
         console.print(f"[red]Arquivo não encontrado:[/red] {path}")
         raise typer.Exit(code=1)
-    text = file_path.read_text(encoding="utf-8").strip()
+    try:
+        text = file_path.read_text(encoding=encoding).strip()
+    except (UnicodeDecodeError, LookupError) as exc:
+        # Brazilian legal exports are often cp1252/latin-1 — a clean message beats a
+        # raw traceback, and never silently ingests mojibake into a legal corpus.
+        console.print(
+            f"[red]Falha ao ler o arquivo como {encoding!r}:[/red] {exc.__class__.__name__}. "
+            "Reexecute com --encoding cp1252 (ou latin-1), ou salve o arquivo como UTF-8."
+        )
+        raise typer.Exit(code=1) from exc
     if not text:
         console.print("[red]Arquivo vazio — nada a ingerir.[/red]")
         raise typer.Exit(code=1)

@@ -21,26 +21,33 @@ from juris.core.deid import Deidentifier
 from juris.mni.parsers.processo import ProcessoDomain
 
 
-def _known_names(processo: ProcessoDomain) -> list[str]:
-    """Every party and lawyer name the processo names — the deterministic redaction set."""
-    names: list[str] = []
+def _known_entities(processo: ProcessoDomain) -> list[str]:
+    """Every party/lawyer name AND document number the processo carries — the
+    deterministic redaction set. Documents are included as KNOWN values because MNI
+    returns them unformatted (bare digits), which the structured CPF/CNPJ regexes
+    (dotted-only) would otherwise miss — so redacting the literal value is what stops a
+    digits-only CPF/CNPJ from crossing raw.
+    """
+    entities: list[str] = []
     for parte in processo.partes:
         if parte.nome:
-            names.append(parte.nome)
-        names.extend(adv for adv in parte.advogados if adv)
-    return names
+            entities.append(parte.nome)
+        if parte.documento:
+            entities.append(parte.documento)
+        entities.extend(adv for adv in parte.advogados if adv)
+    return entities
 
 
 def deidentify_processo(processo: ProcessoDomain) -> tuple[ProcessoDomain, dict[str, str]]:
     """Return a de-identified copy of ``processo`` plus the local re-identification map.
 
     ``numero_cnj`` (the routing/correlation key, not a party identifier) is preserved;
-    names, documents (CPF/CNPJ) and free-text movements are redacted to reversible
-    placeholders sharing one map. Apply :func:`juris.core.deid.reidentify` with the
-    returned map to restore the originals on the agent side.
+    names, documents (CPF/CNPJ — formatted OR bare digits) and free-text movements are
+    redacted to reversible placeholders sharing one map. Apply
+    :func:`juris.core.deid.reidentify` with the returned map to restore the originals.
     """
     engine = Deidentifier()
-    known = _known_names(processo)
+    known = _known_entities(processo)
 
     def _txt(value: str | None) -> str | None:
         return engine.redact(value, known_entities=known) if value else value
@@ -49,7 +56,7 @@ def deidentify_processo(processo: ProcessoDomain) -> tuple[ProcessoDomain, dict[
         replace(
             parte,
             nome=engine.redact(parte.nome, known_entities=known) if parte.nome else parte.nome,
-            documento=engine.redact(parte.documento) if parte.documento else None,
+            documento=engine.redact(parte.documento, known_entities=known) if parte.documento else None,
             advogados=[engine.redact(adv, known_entities=known) for adv in parte.advogados],
         )
         for parte in processo.partes

@@ -105,7 +105,8 @@ def list_processos(db: LocalDB | None = None) -> list[ProcessoView]:
     for p in db.get_all_processos():
         cnj = p.numero_cnj
         prazos = pending_by_cnj.get(cnj, [])
-        proximo = min(prazos, key=lambda pr: pr.data_limite) if prazos else None
+        # .timestamp() keeps this tz-mix-safe (see _prazo_key below).
+        proximo = min(prazos, key=lambda pr: pr.data_limite.timestamp()) if prazos else None
         views.append(
             ProcessoView(
                 numero_cnj=cnj,
@@ -118,7 +119,13 @@ def list_processos(db: LocalDB | None = None) -> list[ProcessoView]:
                 proximo_prazo_urgencia=proximo.urgencia if proximo else None,
             )
         )
-    views.sort(key=lambda v: (v.proximo_prazo is None, v.proximo_prazo or datetime.max, v.numero_cnj))
+    # Sort by soonest prazo. Use .timestamp() (a float) rather than comparing datetimes
+    # so a mix of tz-aware and naive proximo_prazo can never raise (the SQLite path is
+    # always naive, but an injected/alternate db could return tz-aware rows).
+    def _prazo_key(v: ProcessoView) -> tuple[bool, float, str]:
+        return (v.proximo_prazo is None, v.proximo_prazo.timestamp() if v.proximo_prazo else float("inf"), v.numero_cnj)
+
+    views.sort(key=_prazo_key)
     return views
 
 

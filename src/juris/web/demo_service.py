@@ -382,8 +382,16 @@ def _build_ai_of_preference_llm(*, use_cloud: bool) -> AbstractLLM:
         )
     from juris.llm.ollama import OllamaLLM
 
-    # Local fallback stays on-device (PII in perimeter) — skip its redaction.
-    return build_ai_of_preference(browser, OllamaLLM(), fallback_is_local=True)
+    # The browser session is a CLOUD service (claude.ai/ChatGPT), so it ALWAYS needs full
+    # NER de-id, fail-closed (names never leave raw) — even when the FALLBACK is the local
+    # Ollama (which stays on-device via fallback_is_local, so its redaction is skipped).
+    return build_ai_of_preference(
+        browser,
+        OllamaLLM(),
+        ner_redactor=default_ner_redactor(),
+        allow_partial=False,
+        fallback_is_local=True,
+    )
 
 
 def _build_llm(*, use_cloud: bool) -> AbstractLLM:

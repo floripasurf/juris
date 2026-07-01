@@ -69,3 +69,22 @@ def test_numero_cnj_preserved_for_routing() -> None:
     # of a party, so it stays intact (still a placeholder-free CNJ for correlation).
     deid, _mapping = deidentify_processo(_processo())
     assert deid.numero_cnj == "5082351-40.2017.8.13.0024"
+
+
+def test_bare_digit_cpf_is_redacted() -> None:
+    # Adversarial (agent A): MNI returns unformatted documents; the dotted-CPF regex
+    # misses "12345678909", so it must be redacted as a KNOWN document value instead.
+    from juris.mni.parsers.processo import Parte
+
+    processo = ProcessoDomain(
+        numero_cnj="5082351-40.2017.8.13.0024",
+        partes=[Parte(nome="João da Silva", tipo="autor", documento="12345678909")],
+        movimentos=[
+            Movimento(data_hora=None, tipo="movimentoNacional", descricao="réu doc 12345678909 intimado")
+        ],
+    )
+    deid, mapping = deidentify_processo(processo)
+
+    assert "12345678909" not in (deid.partes[0].documento or "")  # bare CPF gone from the field
+    assert "12345678909" not in (deid.movimentos[0].descricao or "")  # and from free text
+    assert reidentify(deid.partes[0].documento or "", mapping) == "12345678909"  # reversible

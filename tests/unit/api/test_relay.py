@@ -342,3 +342,26 @@ def test_reverse_channel_scaling_ok_allows_asserted_sticky_sessions(monkeypatch)
 
     monkeypatch.setenv("JURIS_RELAY_STICKY", "1")
     assert reverse_channel_scaling_ok()[0] is True  # operator asserts sticky routing → allowed
+
+
+def test_reverse_channel_scaling_guard_no_silent_bypass(monkeypatch) -> None:
+    """Adversarial (agent A): env-parsing must not silently DISARM the guard."""
+    from juris.api.relay import reverse_channel_scaling_ok
+
+    for var in ("WEB_CONCURRENCY", "JURIS_WEB_WORKERS", "JURIS_RELAY_BROKER", "JURIS_RELAY_STICKY"):
+        monkeypatch.delenv(var, raising=False)
+
+    # (1) malformed WEB_CONCURRENCY must NOT mask a real JURIS_WEB_WORKERS=8.
+    monkeypatch.setenv("WEB_CONCURRENCY", "notanint")
+    monkeypatch.setenv("JURIS_WEB_WORKERS", "8")
+    assert reverse_channel_scaling_ok()[0] is False
+
+    # (2) an unparseable count alone fails CLOSED (can't prove single-worker).
+    monkeypatch.delenv("JURIS_WEB_WORKERS", raising=False)
+    monkeypatch.setenv("WEB_CONCURRENCY", "4.0")
+    assert reverse_channel_scaling_ok()[0] is False
+
+    # (3) whitespace-only broker is NOT a configured broker.
+    monkeypatch.setenv("WEB_CONCURRENCY", "4")
+    monkeypatch.setenv("JURIS_RELAY_BROKER", "   ")
+    assert reverse_channel_scaling_ok()[0] is False

@@ -151,6 +151,8 @@ def authorize_bridge_request(message: dict[str, Any], expected_token: str | None
     With no token configured the bridge is loopback-only (backward-compatible), which
     only the local machine can reach.
     """
+    if not isinstance(message, dict):
+        return "requisição inválida"
     if expected_token is None:
         return None
     presented = message.get("token")
@@ -178,6 +180,11 @@ async def run_websocket_bridge(
         try:
             message = json.loads(raw)
         except json.JSONDecodeError:
+            message = None
+        if not isinstance(message, dict):
+            # Reject a non-object frame (null / list / number / string) with a clean
+            # error instead of crashing the handler on message.get(...) — a local peer
+            # could otherwise DoS the bridge with a bare `null`.
             await websocket.send(
                 json.dumps(
                     {"request_id": "", "success": False, "content": None, "error": "JSON inválido no bridge"},
