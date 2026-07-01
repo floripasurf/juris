@@ -974,6 +974,7 @@ def test_ai_session_endpoint_returns_mode() -> None:
     assert "deidentify" in body
     assert body["browser"]["status"] in {"ready", "agent_offline", "needs_native_host", "disabled"}
     assert "message" in body["browser"]
+    assert "native_host_manifest" not in body["browser"]
 
 
 def test_index_renders_ai_session_badge() -> None:

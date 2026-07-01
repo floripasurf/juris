@@ -53,7 +53,6 @@ def ai_session_status(
             "configured": browser_bridge,
             "bridge_url": browser_bridge_url,
             "native_host_installed": native_host_installed,
-            "native_host_manifest": native_host_manifest,
             "bridge_reachable": browser_bridge_reachable,
             "status": browser_status,
             "message": browser_message,
