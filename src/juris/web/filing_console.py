@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from juris.core.paths import juris_home
+from juris.core.paths import juris_home, restrict_file
 from juris.signing.filing import FilingResult
 from juris.web.jsonutil import ensure_dict, ensure_list
 
 _PRIMARY_DRAFTS = frozenset({"draft.md", "rascunho-pesquisa.md"})
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 def default_filing_root() -> Path:
@@ -62,6 +65,8 @@ def filing_artifacts(out_root: Path, *, max_items: int = 20) -> dict[str, object
             reverse=True,
         )
         for manifest_path in manifests:
+            if not _is_regular_file_under(manifest_path, root):
+                continue
             manifest = ensure_dict(_read_json(manifest_path))
             case_dir = manifest_path.parent
             request = ensure_dict(manifest.get("request"))
@@ -70,11 +75,14 @@ def filing_artifacts(out_root: Path, *, max_items: int = 20) -> dict[str, object
             for artifact in listed:
                 if not isinstance(artifact, dict):
                     continue
-                name = str(artifact.get("name") or "")
-                if name not in _PRIMARY_DRAFTS:
+                name = _primary_artifact_name(str(artifact.get("name") or ""))
+                if name is None:
                     continue
-                path = case_dir / name
-                if not path.exists():
+                path = (case_dir / name).resolve()
+                if not _is_regular_file_under(path, root):
+                    continue
+                expected_sha = str(artifact.get("sha256") or "")
+                if not _sha256_matches(path, expected_sha):
                     continue
                 artifacts.append(
                     {
@@ -85,7 +93,8 @@ def filing_artifacts(out_root: Path, *, max_items: int = 20) -> dict[str, object
                         "finished_at": manifest.get("finished_at"),
                         "output_dir": str(case_dir),
                         "artifact_name": name,
-                        "sha256": artifact.get("sha256"),
+                        "sha256": expected_sha,
+                        "sha256_verified": True,
                         "grounding_status": draft.get("grounding_status"),
                     }
                 )
@@ -96,8 +105,8 @@ def filing_artifacts(out_root: Path, *, max_items: int = 20) -> dict[str, object
 
 def read_filing_artifact(out_root: Path, *, output_dir: str, artifact_name: str) -> dict[str, object]:
     """Read one primary draft artifact, confined to the tenant output root."""
-    name = Path(artifact_name).name
-    if name not in _PRIMARY_DRAFTS:
+    name = _primary_artifact_name(artifact_name)
+    if name is None:
         msg = "artefato não permitido para protocolo"
         raise ValueError(msg)
 
@@ -108,13 +117,19 @@ def read_filing_artifact(out_root: Path, *, output_dir: str, artifact_name: str)
         msg = "artefato fora do diretório de saída permitido"
         raise ValueError(msg)
     path = (case_dir / name).resolve()
-    if not path.is_relative_to(base):
+    if not _is_regular_file_under(path, base):
         msg = "artefato fora do diretório de saída permitido"
+        raise ValueError(msg)
+    expected_sha = _manifest_sha_for(case_dir / "run-manifest.json", name)
+    if not _sha256_matches(path, expected_sha):
+        msg = "hash do artefato não confere com o run-manifest"
         raise ValueError(msg)
     text = path.read_text(encoding="utf-8", errors="replace")
     return {
         "output_dir": str(case_dir),
         "artifact_name": name,
+        "sha256": expected_sha,
+        "sha256_verified": True,
         "content": text,
     }
 
@@ -223,7 +238,9 @@ def archive_pending(root: Path | None, pending_key: str, *, reason: str) -> dict
         "reason": reason,
         "original_pending_key": pending_key,
     }
-    (pending / "recovery.json").write_text(json.dumps(recovery, indent=2, ensure_ascii=False), encoding="utf-8")
+    recovery_path = pending / "recovery.json"
+    recovery_path.write_text(json.dumps(recovery, indent=2, ensure_ascii=False), encoding="utf-8")
+    restrict_file(recovery_path)
     archived = pending.with_name(pending.name.replace("_pending", "_manual_resolution"))
     suffix = 1
     while archived.exists():
@@ -295,3 +312,45 @@ def _read_json(path: Path) -> dict[str, object]:
     except (OSError, json.JSONDecodeError):
         return {}
     return data if isinstance(data, dict) else {}
+
+
+def _primary_artifact_name(name: str) -> str | None:
+    """Return an allowed primary artifact name, rejecting path components."""
+    candidate = Path(name)
+    if candidate.name != name or len(candidate.parts) != 1:
+        return None
+    return name if name in _PRIMARY_DRAFTS else None
+
+
+def _manifest_sha_for(manifest_path: Path, artifact_name: str) -> str:
+    manifest = ensure_dict(_read_json(manifest_path))
+    for artifact in ensure_list(manifest.get("artifacts")):
+        if not isinstance(artifact, dict):
+            continue
+        if artifact.get("name") == artifact_name:
+            digest = str(artifact.get("sha256") or "")
+            if _SHA256_RE.fullmatch(digest):
+                return digest
+    msg = "hash do artefato ausente no run-manifest"
+    raise ValueError(msg)
+
+
+def _sha256_matches(path: Path, expected: str) -> bool:
+    if not _SHA256_RE.fullmatch(expected):
+        return False
+    h = hashlib.sha256()
+    try:
+        with path.open("rb") as fh:
+            for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+                h.update(chunk)
+    except OSError:
+        return False
+    return h.hexdigest() == expected
+
+
+def _is_regular_file_under(path: Path, root: Path) -> bool:
+    try:
+        resolved = path.resolve()
+    except OSError:
+        return False
+    return resolved.is_relative_to(root) and resolved.is_file()

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import stat
 from datetime import UTC, datetime
 
 from juris.mni.operations.peticionamento import FilingReceipt
@@ -17,6 +19,10 @@ from juris.web.filing_console import (
     read_filing_artifact,
     serialize_filing_result,
 )
+
+
+def _sha256_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def test_default_filing_root_honors_juris_home(tmp_path, monkeypatch) -> None:
@@ -133,7 +139,8 @@ def test_serialize_filing_result_does_not_expose_pdf_bytes() -> None:
 def test_filing_artifacts_lists_primary_drafts(tmp_path) -> None:
     case_dir = tmp_path / "CASE-1"
     case_dir.mkdir()
-    (case_dir / "draft.md").write_text("# Minuta", encoding="utf-8")
+    draft = "# Minuta"
+    (case_dir / "draft.md").write_text(draft, encoding="utf-8")
     (case_dir / "other.md").write_text("não listar", encoding="utf-8")
     (case_dir / "run-manifest.json").write_text(
         json.dumps(
@@ -143,7 +150,7 @@ def test_filing_artifacts_lists_primary_drafts(tmp_path) -> None:
                 "request": {"numero_cnj": "0001234", "tribunal": "tjmg", "tipo_peticao": "contestacao"},
                 "draft": {"grounding_status": "verified"},
                 "artifacts": [
-                    {"name": "draft.md", "sha256": "draft-hash"},
+                    {"name": "draft.md", "sha256": _sha256_text(draft)},
                     {"name": "other.md", "sha256": "other-hash"},
                 ],
             }
@@ -158,16 +165,36 @@ def test_filing_artifacts_lists_primary_drafts(tmp_path) -> None:
     assert artifact["artifact_name"] == "draft.md"
     assert artifact["numero_cnj"] == "0001234"
     assert artifact["grounding_status"] == "verified"
+    assert artifact["sha256_verified"] is True
+
+
+def test_filing_artifacts_skips_hash_mismatch(tmp_path) -> None:
+    case_dir = tmp_path / "CASE-1"
+    case_dir.mkdir()
+    (case_dir / "draft.md").write_text("# Minuta adulterada", encoding="utf-8")
+    (case_dir / "run-manifest.json").write_text(
+        json.dumps({"artifacts": [{"name": "draft.md", "sha256": "0" * 64}]}),
+        encoding="utf-8",
+    )
+
+    assert filing_artifacts(tmp_path)["artifacts"] == []
 
 
 def test_read_filing_artifact_is_confined_to_root(tmp_path) -> None:
     case_dir = tmp_path / "CASE-1"
     case_dir.mkdir()
-    (case_dir / "draft.md").write_text("# Minuta", encoding="utf-8")
+    content = "# Minuta"
+    (case_dir / "draft.md").write_text(content, encoding="utf-8")
+    (case_dir / "run-manifest.json").write_text(
+        json.dumps({"artifacts": [{"name": "draft.md", "sha256": _sha256_text(content)}]}),
+        encoding="utf-8",
+    )
 
     payload = read_filing_artifact(tmp_path, output_dir="CASE-1", artifact_name="draft.md")
 
     assert payload["content"] == "# Minuta"
+    assert payload["sha256"] == _sha256_text(content)
+    assert payload["sha256_verified"] is True
 
     try:
         read_filing_artifact(tmp_path, output_dir="../", artifact_name="draft.md")
@@ -177,8 +204,48 @@ def test_read_filing_artifact_is_confined_to_root(tmp_path) -> None:
         raise AssertionError("path traversal deveria falhar")
 
     try:
+        read_filing_artifact(tmp_path, output_dir="CASE-1", artifact_name="../draft.md")
+    except ValueError as exc:
+        assert "não permitido" in str(exc)
+    else:
+        raise AssertionError("path traversal no nome do artefato deveria falhar")
+
+    try:
         read_filing_artifact(tmp_path, output_dir="CASE-1", artifact_name="run-manifest.json")
     except ValueError as exc:
         assert "não permitido" in str(exc)
     else:
         raise AssertionError("artefato não primário deveria falhar")
+
+
+def test_read_filing_artifact_rejects_symlink_escape(tmp_path) -> None:
+    case_dir = tmp_path / "CASE-1"
+    case_dir.mkdir()
+    outside = tmp_path.parent / f"{tmp_path.name}-outside.md"
+    outside.write_text("# Fora", encoding="utf-8")
+    try:
+        (case_dir / "draft.md").symlink_to(outside)
+        (case_dir / "run-manifest.json").write_text(
+            json.dumps({"artifacts": [{"name": "draft.md", "sha256": _sha256_text("# Fora")}]}),
+            encoding="utf-8",
+        )
+
+        try:
+            read_filing_artifact(tmp_path, output_dir="CASE-1", artifact_name="draft.md")
+        except ValueError as exc:
+            assert "fora do diretório" in str(exc)
+        else:
+            raise AssertionError("symlink para fora do root deveria falhar")
+    finally:
+        outside.unlink(missing_ok=True)
+
+
+def test_archive_pending_recovery_json_is_private(tmp_path) -> None:
+    cnj_dir = tmp_path / "0001234"
+    pending = cnj_dir / "20260630_pending"
+    pending.mkdir(parents=True)
+
+    archive_pending(tmp_path, "0001234/20260630_pending", reason="resolvido")
+
+    recovery = tmp_path / "0001234" / "20260630_manual_resolution" / "recovery.json"
+    assert stat.S_IMODE(recovery.stat().st_mode) == 0o600
