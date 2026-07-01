@@ -57,6 +57,8 @@ def test_index_renders_local_ui() -> None:
     assert "filteredProcessos" in response.text
     assert "prazos-urgency" in response.text
     assert "filteredPrazos" in response.text
+    assert "persistFilter" in response.text  # filters persist across reloads (localStorage)
+    assert "juris.filter.processos" in response.text
     assert "Piloto instrumentado" in response.text
     assert "pilot-form" in response.text
     assert "/api/pilot-feedback" in response.text
@@ -91,7 +93,7 @@ def test_index_renders_local_ui() -> None:
 
 
 def test_list_processos_endpoint_returns_views(monkeypatch) -> None:
-    app_module = importlib.import_module("juris.web.app")
+    import juris.web.processos_service as ps
     from juris.web.processos_service import ProcessoView
 
     view = ProcessoView(
@@ -104,7 +106,8 @@ def test_list_processos_endpoint_returns_views(monkeypatch) -> None:
         proximo_prazo=None,
         proximo_prazo_urgencia="alta",
     )
-    monkeypatch.setattr(app_module, "list_processos", lambda db=None: [view])
+    # list_processos_page() paginates over processos_service.list_processos.
+    monkeypatch.setattr(ps, "list_processos", lambda db=None: [view])
 
     response = client.get("/api/processos")
 
@@ -1322,9 +1325,11 @@ def test_uncaught_exception_returns_sanitized_500(monkeypatch) -> None:
     def _boom(*a, **k):
         raise RuntimeError("internal secret: token=abc123")
 
+    import juris.web.processos_service as ps
+
     monkeypatch.setattr(observability, "get_logger", lambda _name: capture)
     monkeypatch.setattr(app_module, "_tenant_db", lambda tenant: object())
-    monkeypatch.setattr(app_module, "list_processos", _boom)
+    monkeypatch.setattr(ps, "list_processos", _boom)  # list_processos_page() calls through here
     app_module.app.dependency_overrides[app_module.current_tenant] = lambda: Tenant("t")
     # a non-raising client so we observe the handler's 500 response, not a re-raise
     quiet_client = TestClient(app, raise_server_exceptions=False)
@@ -1479,3 +1484,38 @@ def test_corpus_search_exposes_explain_ranking(monkeypatch) -> None:
     assert hit["source_id"] == "resp_1"
     assert "motivo" in hit["explain"]  # WHY it ranked, surfaced to the UI
     assert hit["explain"]["autoridade"] == 0.5
+
+
+def test_processos_pagination_returns_page_and_total(monkeypatch) -> None:
+    import juris.web.processos_service as ps
+    from juris.web.processos_service import ProcessoView
+
+    views = [
+        ProcessoView(
+            numero_cnj=f"case-{i}", tribunal="tjmg", classe="", assunto="",
+            last_sync_at=None, prazos_pendentes=0, proximo_prazo=None, proximo_prazo_urgencia=None,
+        )
+        for i in range(5)
+    ]
+    monkeypatch.setattr(ps, "list_processos", lambda db=None: views)
+
+    body = client.get("/api/processos?limit=2&offset=2").json()
+    assert body["total"] == 5
+    assert body["limit"] == 2
+    assert body["offset"] == 2
+    assert len(body["processos"]) == 2
+
+
+def test_daily_routine_endpoints_respond_e2e() -> None:
+    """Basic end-to-end smoke of the daily routine — every screen the lawyer uses in
+    the UI answers 200 against a fresh app (no terminal needed)."""
+    assert client.get("/").status_code == 200  # console loads
+    for path in (
+        "/api/processos?limit=10&offset=0",
+        "/api/prazos",
+        "/api/workbench",
+        "/api/filing/status",
+        "/api/corpus/coverage",
+        "/api/health?deep=false",
+    ):
+        assert client.get(path).status_code == 200, path

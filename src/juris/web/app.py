@@ -374,9 +374,23 @@ async def get_ai_session() -> dict[str, object]:
 
 
 @app.get("/api/processos")
-async def get_processos(tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
-    """List the lawyer's imported processos with their nearest pending prazo."""
-    return {"processos": [v.to_dict() for v in list_processos(db=_tenant_db(tenant))]}
+async def get_processos(
+    limit: int = 50, offset: int = 0, tenant: Tenant = Depends(current_tenant)
+) -> dict[str, object]:
+    """List the lawyer's imported processos (paginated) with their nearest pending prazo.
+
+    Backend pagination: ``limit`` (clamped 1–200) + ``offset``, plus ``total`` so the UI
+    can page a large acervo without loading it all.
+    """
+    from juris.web.processos_service import list_processos_page
+
+    page, total = list_processos_page(db=_tenant_db(tenant), limit=limit, offset=offset)
+    return {
+        "processos": [v.to_dict() for v in page],
+        "total": total,
+        "limit": max(1, min(limit, 200)),
+        "offset": max(0, offset),
+    }
 
 
 @app.get("/api/processos/{numero_cnj}")

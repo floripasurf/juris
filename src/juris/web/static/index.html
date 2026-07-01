@@ -1297,8 +1297,19 @@
         processosEl.textContent = "Não foi possível carregar os processos.";
       }
     }
-    processosFilter.addEventListener("input", () => renderProcessos(filteredProcessos()));
-    processosSort.addEventListener("change", () => renderProcessos(filteredProcessos()));
+    function persistFilter(key, val) { try { localStorage.setItem(key, val); } catch (_) { /* private mode */ } }
+    function restoreFilter(key) { try { return localStorage.getItem(key) || ""; } catch (_) { return ""; } }
+    // Restore persisted filters so the daily view survives a reload.
+    processosFilter.value = restoreFilter("juris.filter.processos");
+    if (restoreFilter("juris.sort.processos")) processosSort.value = restoreFilter("juris.sort.processos");
+    processosFilter.addEventListener("input", () => {
+      persistFilter("juris.filter.processos", processosFilter.value);
+      renderProcessos(filteredProcessos());
+    });
+    processosSort.addEventListener("change", () => {
+      persistFilter("juris.sort.processos", processosSort.value);
+      renderProcessos(filteredProcessos());
+    });
 
     const connectForm = document.querySelector("#connect-form");
     const connectBtn = document.querySelector("#connect-btn");
@@ -1425,7 +1436,11 @@
       }
     }
     prazosFilter.addEventListener("input", () => renderPrazos(filteredPrazos()));
-    prazosUrgency.addEventListener("change", () => renderPrazos(filteredPrazos()));
+    if (restoreFilter("juris.filter.prazos")) prazosUrgency.value = restoreFilter("juris.filter.prazos");
+    prazosUrgency.addEventListener("change", () => {
+      persistFilter("juris.filter.prazos", prazosUrgency.value);
+      renderPrazos(filteredPrazos());
+    });
 
     const filingStatusEl = document.querySelector("#filing-status");
     const filingResultEl = document.querySelector("#filing-result");

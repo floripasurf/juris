@@ -84,7 +84,11 @@ def list_prazos(db: LocalDB | None = None) -> list[PrazoView]:
 
 
 def list_processos(db: LocalDB | None = None) -> list[ProcessoView]:
-    """Build the processos list: each imported processo + its nearest pending prazo."""
+    """Build the processos list, sorted by the nearest pending prazo first.
+
+    Deterministic order (soonest deadline → no deadline → CNJ) so backend pagination
+    (:func:`list_processos_page`) is stable across requests.
+    """
     if db is None:
         from juris.persistence.local_db import LocalDB as _LocalDB
 
@@ -114,7 +118,22 @@ def list_processos(db: LocalDB | None = None) -> list[ProcessoView]:
                 proximo_prazo_urgencia=proximo.urgencia if proximo else None,
             )
         )
+    views.sort(key=lambda v: (v.proximo_prazo is None, v.proximo_prazo or datetime.max, v.numero_cnj))
     return views
+
+
+def list_processos_page(
+    db: LocalDB | None = None, *, limit: int = 50, offset: int = 0
+) -> tuple[list[ProcessoView], int]:
+    """Return one page of processos plus the total count (backend pagination).
+
+    ``limit`` is clamped to [1, 200]; ``offset`` to >= 0. The total lets the UI show
+    "page X of N" without fetching everything.
+    """
+    all_views = list_processos(db)
+    limit = max(1, min(limit, 200))
+    offset = max(0, offset)
+    return all_views[offset : offset + limit], len(all_views)
 
 
 @dataclass(frozen=True, slots=True)
