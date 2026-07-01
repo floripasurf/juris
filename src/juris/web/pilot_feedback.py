@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -23,9 +24,10 @@ def append_feedback(root: Path, payload: dict[str, object]) -> dict[str, object]
     """Append one structured pilot feedback record under the tenant root."""
     ensure_private_dir(root)
     record = {
+        **payload,
         "id": uuid.uuid4().hex,
         "created_at": datetime.now(UTC).isoformat(),
-        **payload,
+        "output_dir": _public_output_dir(payload.get("output_dir")),
     }
     path = feedback_path(root)
     with path.open("a", encoding="utf-8") as fh:
@@ -239,6 +241,29 @@ def _float_value(value: object) -> float:
         except ValueError:
             return 0.0
     return 0.0
+
+
+def _public_output_dir(value: object) -> str | None:
+    """Return a public run key for UI/export, never an absolute filesystem path."""
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    normalized = raw.replace("\\", "/")
+    parts = [part for part in normalized.split("/") if part and part != "."]
+    unsafe = normalized.startswith("/") or any(part == ".." for part in parts) or (
+        bool(parts) and parts[0].endswith(":")
+    )
+    safe_parts = [_safe_path_segment(part) for part in parts if part != ".." and not part.endswith(":")]
+    safe_parts = [part for part in safe_parts if part]
+    if not safe_parts:
+        return None
+    if unsafe:
+        return safe_parts[-1]
+    return "/".join(safe_parts)
+
+
+def _safe_path_segment(value: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("._")
 
 
 def _counts(records: list[dict[str, object]], key: str) -> dict[str, int]:

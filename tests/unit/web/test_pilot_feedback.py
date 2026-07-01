@@ -62,6 +62,45 @@ def test_append_list_and_export_feedback(tmp_path) -> None:
     assert summary["corpus_candidates"][0]["numero_cnj"] == "0001234-56.2026.8.13.0001"
 
 
+def test_append_feedback_sanitizes_output_dir_and_internal_metadata(tmp_path) -> None:
+    raw_output = tmp_path / "juris-out" / "CASE sigiloso"
+
+    record = append_feedback(
+        tmp_path,
+        {
+            "id": "attacker-controlled-id",
+            "created_at": "1900-01-01T00:00:00+00:00",
+            "numero_cnj": "0001234",
+            "output_dir": str(raw_output),
+            "time_saved_minutes": 1,
+            "mode_used": "rascunho",
+            "citations_accepted": 0,
+            "citations_rejected": 0,
+            "missing_source": "",
+            "deadline_or_analysis_error": "",
+            "perceived_utility": 3,
+            "corpus_usable": True,
+            "notes": "",
+        },
+    )
+
+    dumped = json.dumps(
+        {
+            "record": record,
+            "list": list_feedback(tmp_path),
+            "json": export_feedback_json(tmp_path),
+            "csv": export_feedback_csv(tmp_path),
+            "summary": summarize_feedback(tmp_path),
+        },
+        ensure_ascii=False,
+    )
+    assert record["id"] != "attacker-controlled-id"
+    assert record["created_at"] != "1900-01-01T00:00:00+00:00"
+    assert record["output_dir"] == "CASE_sigiloso"
+    assert str(tmp_path) not in dumped
+    assert "juris-out" not in dumped
+
+
 def test_compare_feedback_runs_first_vs_latest(tmp_path) -> None:
     base = {
         "numero_cnj": "0001234-56.2026.8.13.0001",

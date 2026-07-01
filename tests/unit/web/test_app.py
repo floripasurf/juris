@@ -532,7 +532,7 @@ def test_pilot_feedback_endpoints_are_tenant_scoped(monkeypatch, tmp_path) -> No
     monkeypatch.setattr(app_module, "_out_root", lambda: tmp_path)
     payload = {
         "numero_cnj": "0001234-56.2026.8.13.0001",
-        "output_dir": "juris-out/CASE",
+        "output_dir": str(tmp_path / "juris-out" / "CASE sigiloso"),
         "time_saved_minutes": 30,
         "mode_used": "minuta",
         "citations_accepted": 2,
@@ -553,15 +553,20 @@ def test_pilot_feedback_endpoints_are_tenant_scoped(monkeypatch, tmp_path) -> No
 
     assert created.status_code == 201, created.text
     assert created.json()["feedback"]["time_saved_minutes"] == 30
+    assert created.json()["feedback"]["output_dir"] == "CASE_sigiloso"
+    assert str(tmp_path) not in created.text
     assert listed.status_code == 200
     assert listed.json()["feedback"][0]["numero_cnj"] == "0001234-56.2026.8.13.0001"
+    assert str(tmp_path) not in listed.text
     assert summary.status_code == 200
     assert summary.json()["total_time_saved_minutes"] == 30
     assert summary.json()["prioritized_gaps"][0]["label"] == "TJMG acórdão"
+    assert str(tmp_path) not in summary.text
     assert comparison.status_code == 200
     assert comparison.json()["compared_cases"] == 0
     assert exported.status_code == 200
     assert "TJMG acórdão" in exported.text
+    assert str(tmp_path) not in exported.text
     assert report.status_code == 200
     assert "# Relatório do Piloto Juris" in report.text
 
