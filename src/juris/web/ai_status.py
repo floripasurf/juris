@@ -11,6 +11,8 @@ import socket
 from pathlib import Path
 from urllib.parse import urlparse
 
+from juris.api.browser_bridge import validate_bridge_url
+
 
 def ai_session_status(
     *,
@@ -26,20 +28,33 @@ def ai_session_status(
     Precedence: the lawyer's browser session (ADR-0018) > cloud API (de-identified)
     > local model. De-id is on for any off-device AI; local keeps PII on the box.
     """
+    bridge_valid = False
+    bridge_error: str | None = None
     if browser_bridge:
+        try:
+            validate_bridge_url(browser_bridge_url or "")
+            bridge_valid = True
+        except ValueError as exc:
+            bridge_error = str(exc)
+
+    if bridge_valid:
         mode = "browser_session"
     elif anthropic_key:
         mode = "cloud_deid"
     else:
         mode = "local"
     native_host_installed = bool(native_host_manifest and Path(native_host_manifest).exists())
-    if browser_bridge and native_host_installed and browser_bridge_reachable:
+    effective_bridge_reachable = bool(browser_bridge_reachable) if bridge_valid else False
+    if browser_bridge and not bridge_valid:
+        browser_status = "invalid_url"
+        browser_message = bridge_error or "configure JURIS_BROWSER_BRIDGE_URL para ws://127.0.0.1:<porta>"
+    elif bridge_valid and native_host_installed and effective_bridge_reachable:
         browser_status = "ready"
         browser_message = "bridge ativo; mantenha Claude.ai/ChatGPT logado e aberto"
-    elif browser_bridge and native_host_installed:
+    elif bridge_valid and native_host_installed:
         browser_status = "agent_offline"
         browser_message = "host instalado, mas bridge WS não respondeu; recarregue a extensão e abra Claude.ai/ChatGPT"
-    elif browser_bridge:
+    elif bridge_valid:
         browser_status = "needs_native_host"
         browser_message = "configure o host nativo com `juris browser install-native-host`"
     else:
@@ -48,11 +63,12 @@ def ai_session_status(
     return {
         "mode": mode,
         "deidentify": mode != "local",
-        "providers": {"cloud": anthropic_key, "browser": browser_bridge, "local": ollama_reachable},
+        "providers": {"cloud": anthropic_key, "browser": bridge_valid, "local": ollama_reachable},
         "browser": {
             "configured": browser_bridge,
+            "valid_url": bridge_valid,
             "native_host_installed": native_host_installed,
-            "bridge_reachable": browser_bridge_reachable,
+            "bridge_reachable": effective_bridge_reachable,
             "status": browser_status,
             "message": browser_message,
         },
@@ -62,9 +78,11 @@ def ai_session_status(
 def _bridge_reachable(url: str | None, *, timeout: float = 0.2) -> bool:
     if not url:
         return False
-    parsed = urlparse(url)
-    if parsed.scheme not in {"ws", "wss"} or not parsed.hostname or not parsed.port:
+    try:
+        bridge_url = validate_bridge_url(url)
+    except ValueError:
         return False
+    parsed = urlparse(bridge_url)
     try:
         with socket.create_connection((parsed.hostname, parsed.port), timeout=timeout):
             return True

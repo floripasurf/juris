@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, Any
 
+from juris.api.browser_bridge import validate_bridge_host
 from juris.core.paths import ensure_private_dir, juris_home
 
 _LEN = struct.Struct("<I")  # Chrome uses a 4-byte little-endian length prefix
@@ -145,6 +146,7 @@ async def run_websocket_bridge(
     """Expose the Native Messaging pipe as the localhost WS bridge used by juris."""
     import websockets
 
+    host = validate_bridge_host(host)
     bridge = relay or NativeMessagingRelay()
 
     async def _handle(websocket: Any) -> None:
@@ -232,6 +234,7 @@ def install_native_host(
     if not extension_id or extension_id == "REPLACE_WITH_EXTENSION_ID":
         msg = "extension_id obrigatório: copie o id em chrome://extensions após carregar a extensão"
         raise ValueError(msg)
+    ws_host = validate_bridge_host(ws_host)
 
     root = install_root or (juris_home() / "browser-session")
     bin_dir = root / "bin"

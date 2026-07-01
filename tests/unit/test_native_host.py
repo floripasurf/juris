@@ -8,7 +8,14 @@ import struct
 
 import pytest
 
-from juris.api.native_host import HOST_NAME, NativeMessagingRelay, install_native_host, read_message, write_message
+from juris.api.native_host import (
+    HOST_NAME,
+    NativeMessagingRelay,
+    install_native_host,
+    read_message,
+    run_websocket_bridge,
+    write_message,
+)
 
 
 def test_write_then_read_round_trips() -> None:
@@ -116,6 +123,22 @@ def test_install_native_host_writes_manifest_and_launcher(tmp_path) -> None:
     launcher = installation.launcher_path.read_text(encoding="utf-8")
     assert "/opt/juris/python" in launcher
     assert "juris.api.native_host serve-ws" in launcher
+
+
+def test_install_native_host_rejects_non_loopback_bridge_host(tmp_path) -> None:
+    with pytest.raises(ValueError, match="loopback"):
+        install_native_host(
+            extension_id="abcdefghijklmnopabcdefghijklmnop",
+            install_root=tmp_path / "install",
+            manifest_dir=tmp_path / "manifests",
+            ws_host="0.0.0.0",  # noqa: S104
+        )
+
+
+@pytest.mark.asyncio
+async def test_run_websocket_bridge_rejects_non_loopback_host() -> None:
+    with pytest.raises(ValueError, match="loopback"):
+        await run_websocket_bridge(host="0.0.0.0", port=8787)  # noqa: S104
 
 
 def test_install_native_host_default_root_honors_juris_home(tmp_path, monkeypatch) -> None:

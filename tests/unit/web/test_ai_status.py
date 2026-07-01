@@ -11,16 +11,35 @@ def test_browser_session_mode_when_bridge_configured() -> None:
     status = ai_session_status(
         anthropic_key=False,
         browser_bridge=True,
-        browser_bridge_url="ws://127.0.0.1:8787?token=secret",
+        browser_bridge_url="ws://127.0.0.1:8787",
         native_host_manifest="/var/empty/juris-nao-existe",
         ollama_reachable=True,
     )
     assert status["mode"] == "browser_session"
     assert status["deidentify"] is True  # de-id always on for off-device AI (ADR-0016)
     assert status["browser"]["status"] == "needs_native_host"
+    assert status["browser"]["valid_url"] is True
     assert "native_host_manifest" not in status["browser"]
     assert "bridge_url" not in status["browser"]
     assert "/var/empty" not in json.dumps(status)
+
+
+def test_invalid_browser_bridge_url_is_not_selected_or_echoed() -> None:
+    status = ai_session_status(
+        anthropic_key=False,
+        browser_bridge=True,
+        browser_bridge_url="ws://127.0.0.1:8787?token=secret",
+        native_host_manifest="/var/empty/juris-nao-existe",
+        browser_bridge_reachable=True,
+        ollama_reachable=True,
+    )
+
+    assert status["mode"] == "local"
+    assert status["providers"]["browser"] is False
+    assert status["browser"]["configured"] is True
+    assert status["browser"]["valid_url"] is False
+    assert status["browser"]["bridge_reachable"] is False
+    assert status["browser"]["status"] == "invalid_url"
     assert "token=secret" not in json.dumps(status)
 
 
@@ -37,7 +56,12 @@ def test_local_mode_when_neither_cloud_nor_browser() -> None:
 
 
 def test_reports_provider_availability() -> None:
-    status = ai_session_status(anthropic_key=True, browser_bridge=True, ollama_reachable=False)
+    status = ai_session_status(
+        anthropic_key=True,
+        browser_bridge=True,
+        browser_bridge_url="ws://127.0.0.1:8787",
+        ollama_reachable=False,
+    )
     assert status["providers"] == {"cloud": True, "browser": True, "local": False}
 
 

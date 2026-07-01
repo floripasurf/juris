@@ -1033,7 +1033,7 @@ def test_ai_session_endpoint_returns_mode() -> None:
     body = client.get("/api/ai-session").json()
     assert body["mode"] in {"browser_session", "cloud_deid", "local"}
     assert "deidentify" in body
-    assert body["browser"]["status"] in {"ready", "agent_offline", "needs_native_host", "disabled"}
+    assert body["browser"]["status"] in {"ready", "agent_offline", "needs_native_host", "invalid_url", "disabled"}
     assert "message" in body["browser"]
     assert "native_host_manifest" not in body["browser"]
     assert "bridge_url" not in body["browser"]

@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from juris.api.browser_bridge import NativeBridgeTransport, WebSocketBridgeChannel
+from juris.api.browser_bridge import NativeBridgeTransport, WebSocketBridgeChannel, validate_bridge_url
 
 
 class _FakeConn:
@@ -82,6 +82,27 @@ async def test_send_rejects_mismatched_request_id() -> None:
 
     with pytest.raises(RuntimeError, match="pedido errado"):
         await transport.send(prompt="Tese?", system=None)
+
+
+def test_validate_bridge_url_accepts_loopback_without_secret_material() -> None:
+    assert validate_bridge_url("ws://127.0.0.1:8787") == "ws://127.0.0.1:8787"
+    assert validate_bridge_url("ws://[::1]:8787/") == "ws://[::1]:8787/"
+
+
+def test_validate_bridge_url_rejects_remote_or_credentialed_urls() -> None:
+    for url in (
+        "ws://bridge.example.test:8787",
+        "ws://127.0.0.1:8787?token=secret",
+        "ws://user:secret@127.0.0.1:8787",
+        "ws://127.0.0.1:8787/path",
+    ):
+        with pytest.raises(ValueError):
+            validate_bridge_url(url)
+
+
+def test_ws_channel_to_localhost_rejects_remote_bridge_url() -> None:
+    with pytest.raises(ValueError, match="loopback"):
+        WebSocketBridgeChannel.to_localhost("ws://bridge.example.test:8787")
 
 
 @pytest.mark.asyncio

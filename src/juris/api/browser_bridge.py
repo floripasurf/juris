@@ -12,9 +12,11 @@ This satisfies the ``BrowserTransport`` protocol structurally, so a
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 import uuid
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from urllib.parse import urlparse, urlunparse
 
 from juris.api.ws_schemas import CompletionRequest, CompletionResponse
 from juris.core.observability import get_logger
@@ -23,6 +25,44 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
 logger = get_logger(__name__)
+
+
+def _is_loopback_host(host: str | None) -> bool:
+    if host is None:
+        return False
+    cleaned = host.strip().strip("[]").lower()
+    if cleaned == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(cleaned).is_loopback
+    except ValueError:
+        return False
+
+
+def validate_bridge_host(host: str) -> str:
+    """Ensure the browser bridge binds/dials only loopback interfaces."""
+    if not _is_loopback_host(host):
+        msg = "browser bridge deve usar apenas loopback (127.0.0.1, ::1 ou localhost)."
+        raise ValueError(msg)
+    return host
+
+
+def validate_bridge_url(url: str) -> str:
+    """Validate the localhost WS URL used to reach the Native Messaging bridge."""
+    parsed = urlparse(url)
+    if parsed.scheme not in {"ws", "wss"} or not parsed.hostname or parsed.port is None:
+        msg = "JURIS_BROWSER_BRIDGE_URL deve ser ws://127.0.0.1:<porta>."
+        raise ValueError(msg)
+    if not _is_loopback_host(parsed.hostname):
+        msg = "JURIS_BROWSER_BRIDGE_URL deve apontar para loopback, nunca host remoto."
+        raise ValueError(msg)
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        msg = "JURIS_BROWSER_BRIDGE_URL não deve conter credenciais, query ou fragmento."
+        raise ValueError(msg)
+    if parsed.path not in {"", "/"}:
+        msg = "JURIS_BROWSER_BRIDGE_URL deve apontar para a raiz do bridge."
+        raise ValueError(msg)
+    return urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
 
 
 @runtime_checkable
@@ -58,11 +98,12 @@ class WebSocketBridgeChannel:
     @classmethod
     def to_localhost(cls, url: str, *, timeout: float = 60.0) -> WebSocketBridgeChannel:
         """Build a channel that dials ``url`` (e.g. ws://127.0.0.1:8765) via websockets."""
+        bridge_url = validate_bridge_url(url)
 
         async def _connect() -> _WSConnection:
             import websockets
 
-            return await websockets.connect(url)  # type: ignore[return-value]
+            return await websockets.connect(bridge_url)  # type: ignore[return-value]
 
         return cls(_connect, timeout=timeout)
 
