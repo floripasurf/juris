@@ -80,11 +80,13 @@ class ReviewerAgent:
         llm: AbstractLLM,
         retriever: RepertoryService,
         audit_log: AuditLog | None = None,
+        tenant_id: str | None = None,
     ) -> None:
         self._llm = llm
         self._retriever = retriever
-        self._verifier = RawCitationVerifier(retriever)
+        self._verifier = RawCitationVerifier(retriever, tenant_id=tenant_id)
         self._audit = audit_log
+        self._tenant_id = tenant_id  # scope EVIDENCE retrieval to this firm (+ public seed)
 
     async def review(
         self,
@@ -189,7 +191,9 @@ class ReviewerAgent:
     def _retrieve_context(self, query: str, top_k: int = 5) -> list[RetrievalResult]:
         """Retrieve relevant jurisprudence from the repertory."""
         try:
-            return self._retriever.search_jurisprudencia(query=query, top_k=top_k)
+            return self._retriever.search_jurisprudencia(
+                query=query, top_k=top_k, tenant_id=self._tenant_id
+            )
         except Exception:
             logger.warning("retrieval_failed", query=query[:50])
             return []

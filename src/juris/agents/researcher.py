@@ -46,10 +46,12 @@ class Researcher:
         repertory: RepertoryService,
         llm: AbstractLLM,
         audit: AuditLog | None = None,
+        tenant_id: str | None = None,
     ) -> None:
         self._repertory = repertory
         self._llm = llm
         self._audit = audit
+        self._tenant_id = tenant_id  # scope corpus retrieval to this firm (+ public seed)
 
     async def research(self, query: ResearchQuery) -> ResearchResult:
         """Research supporting and opposing jurisprudence for a thesis."""
@@ -60,6 +62,7 @@ class Researcher:
             use_hyde=True,
             llm=self._llm,
             audit=self._audit,
+            tenant_id=self._tenant_id,
         )
 
         # 2. Opposing: antithesis loop
@@ -123,6 +126,7 @@ class Researcher:
             results = self._repertory.search_jurisprudencia(
                 query=phrasing,
                 top_k=5,
+                tenant_id=self._tenant_id,
             )
             for r in results:
                 if r.source_id not in seen_ids:

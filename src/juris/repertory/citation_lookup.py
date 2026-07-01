@@ -32,12 +32,16 @@ def normalize_citation(raw: str) -> str:
 def resolve_source_id(
     source_id: str,
     repertory: RepertoryService,
+    tenant_id: str | None = None,
 ) -> tuple[bool, str | None]:
     """Check if a source_id exists in the repertory.
 
     Args:
         source_id: The source identifier to look up.
         repertory: The repertory service to search.
+        tenant_id: Scope the lookup to the public seed plus this firm's own uploads,
+            so a citation never verifies against (or leaks an excerpt from) another
+            tenant's private corpus.
 
     Returns:
         (found, excerpt) tuple. excerpt is first 200 chars of text if found.
@@ -46,6 +50,7 @@ def resolve_source_id(
         results = repertory.search_jurisprudencia(
             query=source_id,
             top_k=5,
+            tenant_id=tenant_id,
         )
         for r in results:
             if r.source_id == source_id:
@@ -60,6 +65,7 @@ def resolve_narrative_citation(
     raw: str,
     repertory: RepertoryService,
     threshold: float = 0.3,
+    tenant_id: str | None = None,
 ) -> tuple[bool, str | None]:
     """Normalize and fuzzy-search for prose citations like 'Sumula 297 do STJ'.
 
@@ -67,13 +73,17 @@ def resolve_narrative_citation(
         raw: Raw citation text.
         repertory: The repertory service.
         threshold: Minimum score to consider found.
+        tenant_id: Scope the lookup to the public seed plus this firm's own uploads,
+            so a citation never resolves against another tenant's private corpus.
 
     Returns:
         (found, source_id) tuple.
     """
     normalized = normalize_citation(raw)
     try:
-        results = repertory.search_jurisprudencia(query=normalized, top_k=3)
+        results = repertory.search_jurisprudencia(
+            query=normalized, top_k=3, tenant_id=tenant_id
+        )
         if results and results[0].score >= threshold:
             return True, results[0].source_id
         return False, None

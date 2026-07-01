@@ -274,6 +274,7 @@ async def execute_demo_run(request: WebDemoRunRequest) -> WebDemoRun:
             audit_path=audit_path,
             is_demo_mode=is_demo_mode,
             processo=processo,
+            tenant_id=request.tenant_id,  # scope corpus to this firm (+ public seed)
         )
     except Exception as exc:  # noqa: BLE001
         raise DemoRunError(

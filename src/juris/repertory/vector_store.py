@@ -19,6 +19,28 @@ from juris.repertory.chunking import DocumentChunk
 
 logger = logging.getLogger(__name__)
 
+# Fixed FTS5 search statements. Kept as module constants (not built at call time) so
+# the tenant filter can never be confused with an interpolation point: the tenant value
+# is always a bound parameter (?), never string-formatted into the SQL.
+_SEARCH_SQL = """
+            SELECT c.chunk_id, c.source_id, c.text, c.metadata,
+                   rank * -1 AS score
+            FROM chunks_fts f
+            JOIN chunks c ON c.rowid = f.rowid
+            WHERE chunks_fts MATCH ?
+            ORDER BY rank
+            LIMIT ?
+            """
+_SEARCH_SQL_TENANT = """
+            SELECT c.chunk_id, c.source_id, c.text, c.metadata,
+                   rank * -1 AS score
+            FROM chunks_fts f
+            JOIN chunks c ON c.rowid = f.rowid
+            WHERE chunks_fts MATCH ? AND (c.tenant_id IS NULL OR c.tenant_id = ?)
+            ORDER BY rank
+            LIMIT ?
+            """
+
 
 @dataclass(frozen=True, slots=True)
 class SearchResult:
@@ -202,19 +224,32 @@ class LocalFTSStore(VectorStore):
                 source_type TEXT,
                 text TEXT NOT NULL,
                 metadata TEXT,
-                position INTEGER DEFAULT 0
+                position INTEGER DEFAULT 0,
+                tenant_id TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_chunks_source ON chunks(source_id);
+            CREATE INDEX IF NOT EXISTS idx_chunks_tenant ON chunks(tenant_id);
             CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
                 text,
                 content=chunks,
                 content_rowid=rowid
             );
         """)
+        # Migrate DBs created before tenant scoping (tier-2/3 uploads must not leak
+        # across firms; NULL tenant_id = shared public seed, visible to all).
+        cols = {row[1] for row in self._conn.execute("PRAGMA table_info(chunks)")}
+        if "tenant_id" not in cols:
+            self._conn.execute("ALTER TABLE chunks ADD COLUMN tenant_id TEXT")
         self._conn.commit()
 
-    def upsert(self, chunks: list[DocumentChunk], embeddings: list[list[float]]) -> int:
-        """Insert chunks into SQLite FTS (embeddings ignored for FTS)."""
+    def upsert(
+        self, chunks: list[DocumentChunk], embeddings: list[list[float]], tenant_id: str | None = None
+    ) -> int:
+        """Insert chunks into SQLite FTS (embeddings ignored for FTS).
+
+        ``tenant_id`` scopes tenant-uploaded corpus (tier-2 doutrina / tier-3 petition
+        history) to one firm; leave it ``None`` for the shared public seed (tier-1).
+        """
         count = 0
         for chunk in chunks:
             # Delete existing if any
@@ -230,8 +265,8 @@ class LocalFTSStore(VectorStore):
                 )
 
             self._conn.execute(
-                "INSERT INTO chunks (chunk_id, source_id, source_type, text, metadata, position) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO chunks (chunk_id, source_id, source_type, text, metadata, position, tenant_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
                     chunk.chunk_id,
                     chunk.source_id,
@@ -239,6 +274,7 @@ class LocalFTSStore(VectorStore):
                     chunk.text,
                     json.dumps(chunk.metadata, ensure_ascii=False),
                     chunk.position,
+                    tenant_id,
                 ),
             )
             rowid = self._conn.execute(
@@ -260,12 +296,14 @@ class LocalFTSStore(VectorStore):
         """
         return []
 
-    def search_text(self, query: str, top_k: int = 10) -> list[SearchResult]:
+    def search_text(self, query: str, top_k: int = 10, tenant_id: str | None = None) -> list[SearchResult]:
         """Full-text search using FTS5.
 
         Args:
             query: Search query text.
             top_k: Maximum number of results.
+            tenant_id: If given, restrict to the shared public seed (tenant_id IS NULL)
+                plus THIS tenant's own uploads — never another firm's private corpus.
 
         Returns:
             Ranked list of search results.
@@ -286,18 +324,16 @@ class LocalFTSStore(VectorStore):
         # Double-quote each token to avoid FTS5 syntax errors
         safe_query = " OR ".join(f'"{w}"' for w in words)
 
-        rows = self._conn.execute(
-            """
-            SELECT c.chunk_id, c.source_id, c.text, c.metadata,
-                   rank * -1 AS score
-            FROM chunks_fts f
-            JOIN chunks c ON c.rowid = f.rowid
-            WHERE chunks_fts MATCH ?
-            ORDER BY rank
-            LIMIT ?
-            """,
-            (safe_query, top_k),
-        ).fetchall()
+        # Tenant scope: public seed (NULL) + this tenant's own uploads only. Both SQL
+        # statements are fixed literals (no interpolation) — the tenant value travels as
+        # a bound parameter, so there is no injection surface despite the branch.
+        if tenant_id is None:
+            sql = _SEARCH_SQL
+            params: tuple[object, ...] = (safe_query, top_k)
+        else:
+            sql = _SEARCH_SQL_TENANT
+            params = (safe_query, tenant_id, top_k)
+        rows = self._conn.execute(sql, params).fetchall()
 
         results: list[SearchResult] = []
         for row in rows:

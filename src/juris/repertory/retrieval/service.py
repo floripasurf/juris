@@ -116,8 +116,12 @@ class RepertoryService:
         use_hyde: bool = False,
         llm: AbstractLLM | None = None,
         audit: AuditLog | None = None,
+        tenant_id: str | None = None,
     ) -> list[RetrievalResult]:
         """Search the jurisprudence corpus with optional filters.
+
+        ``tenant_id`` restricts retrieval to the shared public corpus plus this firm's
+        own uploads — never another tenant's private tier-2/3 sources.
 
         Args:
             query: Search query text.
@@ -143,11 +147,15 @@ class RepertoryService:
         # When the composite ranker handles authority, skip the retriever's
         # hierarchy boost so authority isn't counted twice.
         boost = rank_with_scores is None
-        raw_results = self._retriever.search(query, top_k=fetch_k, apply_hierarchy_boost=boost)
+        raw_results = self._retriever.search(
+            query, top_k=fetch_k, apply_hierarchy_boost=boost, tenant_id=tenant_id
+        )
 
         # Merge HyDE results if available
         if hyde_query:
-            hyde_results = self._retriever.search(hyde_query, top_k=fetch_k, apply_hierarchy_boost=boost)
+            hyde_results = self._retriever.search(
+                hyde_query, top_k=fetch_k, apply_hierarchy_boost=boost, tenant_id=tenant_id
+            )
             seen: dict[str, SearchResult] = {}
             for r in raw_results + hyde_results:
                 if r.source_id not in seen or r.score > seen[r.source_id].score:
@@ -256,12 +264,15 @@ class RepertoryService:
         self,
         tipo_peticao: str,
         area_direito: str | None = None,
+        tenant_id: str | None = None,
     ) -> RetrievalResult | None:
         """Search for a matching petition template in the corpus.
 
         Args:
             tipo_peticao: Type of petition (e.g., "contestacao").
             area_direito: Area of law (e.g., "civil").
+            tenant_id: Scope to the public seed plus this firm's own templates, so a
+                firm never scaffolds from another tenant's private petition history.
 
         Returns:
             Best matching template, or None.
@@ -273,6 +284,7 @@ class RepertoryService:
         results = self.search_jurisprudencia(
             query=query,
             top_k=5,
+            tenant_id=tenant_id,
         )
 
         # Filter to MODELO_PETICAO only

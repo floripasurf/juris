@@ -36,7 +36,12 @@ class HybridRetriever:
         self._reranker = reranker
 
     def search(
-        self, query: str, top_k: int = 10, *, apply_hierarchy_boost: bool = True
+        self,
+        query: str,
+        top_k: int = 10,
+        *,
+        apply_hierarchy_boost: bool = True,
+        tenant_id: str | None = None,
     ) -> list[SearchResult]:
         """Hybrid search combining dense and sparse results.
 
@@ -59,7 +64,7 @@ class HybridRetriever:
         # Sparse retrieval
         sparse_results: list[SearchResult] = []
         if isinstance(self._sparse, LocalFTSStore):
-            sparse_results = self._sparse.search_text(query, top_k=top_k * 2)
+            sparse_results = self._sparse.search_text(query, top_k=top_k * 2, tenant_id=tenant_id)
         else:
             # For non-FTS stores, try embedding search as fallback
             if query_embedding is not None:

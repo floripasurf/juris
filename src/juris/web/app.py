@@ -793,7 +793,9 @@ async def reingest_pilot_corpus(tenant: Tenant = Depends(current_tenant)) -> dic
     from juris.web.auth import tenant_scoped_dir
     from juris.web.corpus_queue import reingest_pending_sources
 
-    report = reingest_pending_sources(tenant_scoped_dir(tenant, _out_root()), resolve_repertory_path())
+    report = reingest_pending_sources(
+        tenant_scoped_dir(tenant, _out_root()), resolve_repertory_path(), tenant_id=tenant.tenant_id
+    )
     return report.to_dict()
 
 

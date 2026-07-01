@@ -96,6 +96,7 @@ class DrafterAgent:
         audit: AuditLog | None = None,
         defesa_analyzer: Any | None = None,
         estrategia: EstrategiaAgent | None = None,
+        tenant_id: str | None = None,
     ) -> None:
         self._llm = llm
         self._repertory = repertory
@@ -105,6 +106,7 @@ class DrafterAgent:
         self._audit = audit
         self._defesa_analyzer = defesa_analyzer
         self._estrategia = estrategia
+        self._tenant_id = tenant_id  # scope template lookup to this firm (+ public seed)
 
     async def draft(
         self,
@@ -221,6 +223,7 @@ class DrafterAgent:
                 template_result = self._repertory.find_template(
                     tipo_peticao=request.tipo_peticao.value,
                     area_direito=context.ramo_justica,
+                    tenant_id=self._tenant_id,
                 )
                 if template_result:
                     from juris.prompts.drafter_v1 import format_template_scaffold

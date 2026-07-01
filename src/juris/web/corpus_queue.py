@@ -173,8 +173,14 @@ def mark_reingested(root: Path, source_id: str) -> dict[str, object] | None:
     return updated
 
 
-def reingest_pending_sources(root: Path, repertory_path: Path) -> ReingestReport:
-    """Ingest pending accepted sources into the local FTS repertory."""
+def reingest_pending_sources(
+    root: Path, repertory_path: Path, tenant_id: str | None = None
+) -> ReingestReport:
+    """Ingest pending accepted sources into the local FTS repertory.
+
+    ``tenant_id`` tags the uploaded chunks so a firm's private corpus (tier-2/3) is only
+    retrievable by that firm — never commingled with another tenant's search.
+    """
     from juris.repertory.chunking import chunk_fonte
     from juris.repertory.corpus.models import TIPO_HIERARQUIA, FonteJurisprudencia, TipoFonte
     from juris.repertory.vector_store import LocalFTSStore
@@ -219,7 +225,7 @@ def reingest_pending_sources(root: Path, repertory_path: Path) -> ReingestReport
                         "tema": record.get("tema"),
                     }
                 )
-            stored = store.upsert(chunks, [[] for _ in chunks])
+            stored = store.upsert(chunks, [[] for _ in chunks], tenant_id=tenant_id)
             mark_reingested(root, source_id)
             processed += 1
             total_chunks += stored

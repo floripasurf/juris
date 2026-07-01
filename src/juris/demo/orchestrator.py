@@ -111,11 +111,13 @@ class DemoOrchestrator:
         repertory: RepertoryService,
         audit: AuditLog,
         analysis_llm: AbstractLLM | None = None,
+        tenant_id: str | None = None,
     ) -> None:
         self._llm = llm
         self._repertory = repertory
         self._audit = audit
         self._analysis_llm = analysis_llm
+        self._tenant_id = tenant_id  # scope corpus retrieval to this firm (+ public seed)
 
     async def run(
         self,
@@ -241,12 +243,22 @@ class DemoOrchestrator:
         processo: ProcessoDomain,
     ) -> DraftResult:
         """Wire and run the DrafterAgent against the resolved processo."""
-        researcher = Researcher(repertory=self._repertory, llm=self._llm, audit=self._audit)
-        verifier = MarkerCitationVerifier(repertory=self._repertory)
+        researcher = Researcher(
+            repertory=self._repertory,
+            llm=self._llm,
+            audit=self._audit,
+            tenant_id=self._tenant_id,
+        )
+        verifier = MarkerCitationVerifier(repertory=self._repertory, tenant_id=self._tenant_id)
         defesa_analyzer = DefesaAnalyzer(llm=self._llm)
         reviewer: ReviewerAgent | None = None
         if not request.skip_review:
-            reviewer = ReviewerAgent(llm=self._llm, retriever=self._repertory, audit_log=self._audit)
+            reviewer = ReviewerAgent(
+                llm=self._llm,
+                retriever=self._repertory,
+                audit_log=self._audit,
+                tenant_id=self._tenant_id,
+            )
 
         from juris.agents.estrategia import EstrategiaAgent
 
@@ -259,6 +271,7 @@ class DemoOrchestrator:
             audit=self._audit,
             defesa_analyzer=defesa_analyzer,
             estrategia=EstrategiaAgent(self._llm),
+            tenant_id=self._tenant_id,
         )
 
         context = ProcessoContext(
@@ -493,9 +506,14 @@ async def run_demo(
     is_demo_mode: bool,
     processo: ProcessoDomain | None = None,
     analysis_llm: AbstractLLM | None = None,
+    tenant_id: str | None = None,
 ) -> DemoResult:
     """Top-level entry point. Loads processo (if not provided) and runs the
     pipeline.
+
+    ``tenant_id`` scopes corpus retrieval to the shared public seed plus this firm's
+    own uploads, so a draft never grounds on another tenant's private corpus. Left
+    ``None`` by the single-tenant CLI (public seed only).
 
     Callers (CLI) should use `juris.demo.artifacts.write_artifacts(result)`
     to persist the run.
@@ -509,6 +527,7 @@ async def run_demo(
         repertory=repertory,
         audit=audit,
         analysis_llm=analysis_llm,
+        tenant_id=tenant_id,
     )
     return await orchestrator.run(
         request,

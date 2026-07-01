@@ -170,8 +170,9 @@ class MarkerCitationVerifier:
     Deterministic, no LLM required. Sub-100ms for typical drafts.
     """
 
-    def __init__(self, repertory: RepertoryService) -> None:
+    def __init__(self, repertory: RepertoryService, tenant_id: str | None = None) -> None:
         self._repertory = repertory
+        self._tenant_id = tenant_id  # scope citation resolution to this firm (+ public seed)
 
     def verify(
         self,
@@ -203,7 +204,9 @@ class MarkerCitationVerifier:
                 resolved = source_id in allowed_source_ids
                 excerpt = None
             else:
-                resolved, excerpt = resolve_source_id(source_id, self._repertory)
+                resolved, excerpt = resolve_source_id(
+                    source_id, self._repertory, tenant_id=self._tenant_id
+                )
 
             check = CitationCheck(
                 raw_marker=raw_marker,
