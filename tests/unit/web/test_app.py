@@ -244,8 +244,8 @@ class _FakeFilingService:
 
 
 def test_filing_status_endpoint(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("JURIS_FILING_ROOT", str(tmp_path))
-    (tmp_path / "cnj" / "20260630_pending").mkdir(parents=True)
+    monkeypatch.setenv("JURIS_HOME", str(tmp_path))  # public tenant → <home>/filings
+    (tmp_path / "filings" / "cnj" / "20260630_pending").mkdir(parents=True)
 
     response = client.get("/api/filing/status")
 
@@ -254,8 +254,8 @@ def test_filing_status_endpoint(monkeypatch, tmp_path) -> None:
 
 
 def test_filing_pending_recovery_and_archive_endpoints(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("JURIS_FILING_ROOT", str(tmp_path))
-    pending = tmp_path / "cnj" / "20260630_pending"
+    monkeypatch.setenv("JURIS_HOME", str(tmp_path))  # public tenant → <home>/filings
+    pending = tmp_path / "filings" / "cnj" / "20260630_pending"
     pending.mkdir(parents=True)
     (pending / "signed.pdf").write_bytes(b"%PDF signed")
     (pending / "hashes.json").write_text(json.dumps({"signed_pdf_hash": "signed"}), encoding="utf-8")
@@ -320,7 +320,7 @@ def test_filing_dry_run_uses_service_without_consent_requirement(monkeypatch) ->
     import juris.signing.filing_service as filing_service
 
     service = _FakeFilingService()
-    monkeypatch.setattr(filing_service, "get_filing_service", lambda tenant_id="public": service)
+    monkeypatch.setattr(filing_service, "get_filing_service", lambda tenant_id="public", **kwargs: service)
 
     response = client.post("/api/filing/dry-run", json=_filing_payload(consent=False, review_confirmed=False))
 
@@ -345,7 +345,7 @@ def test_filing_submit_returns_chain_of_custody(monkeypatch) -> None:
     import juris.signing.filing_service as filing_service
 
     service = _FakeFilingService()
-    monkeypatch.setattr(filing_service, "get_filing_service", lambda tenant_id="public": service)
+    monkeypatch.setattr(filing_service, "get_filing_service", lambda tenant_id="public", **kwargs: service)
 
     response = client.post("/api/filing/submit", json=_filing_payload())
 
@@ -367,7 +367,7 @@ def test_filing_remote_mode_does_not_require_or_forward_secrets(monkeypatch) -> 
     monkeypatch.setenv("JURIS_AGENT_MODE", "remote")
     monkeypatch.setenv("JURIS_LOCAL_AGENT_URL", "ws://127.0.0.1:8765")
     monkeypatch.setenv("JURIS_LOCAL_AGENT_TOKEN", "tok")
-    monkeypatch.setattr(filing_service, "get_filing_service", lambda tenant_id="public": service)
+    monkeypatch.setattr(filing_service, "get_filing_service", lambda tenant_id="public", **kwargs: service)
 
     response = client.post(
         "/api/filing/dry-run",
@@ -988,3 +988,24 @@ def test_agent_health_remote_unmapped_tenant_reports_error(tmp_path, monkeypatch
     assert body["remote"] is True
     assert body["reachable"] is False
     assert "sem binding" in body["error"]
+
+
+def test_filing_status_is_scoped_to_the_tenant(monkeypatch, tmp_path) -> None:
+    app_module = importlib.import_module("juris.web.app")
+    from juris.web.auth import Tenant
+
+    monkeypatch.setenv("JURIS_HOME", str(tmp_path))
+    monkeypatch.setattr("juris.web.filing_console.filing_status", lambda root=None: {"root": str(root)})
+
+    app_module.app.dependency_overrides[app_module.current_tenant] = lambda: Tenant("escritorio-a")
+    try:
+        root_a = client.get("/api/filing/status").json()["root"]
+        app_module.app.dependency_overrides[app_module.current_tenant] = lambda: Tenant("escritorio-b")
+        root_b = client.get("/api/filing/status").json()["root"]
+    finally:
+        app_module.app.dependency_overrides.clear()
+
+    # each firm's filing status reads ONLY its own scoped dir — no shared global root
+    assert root_a == str(tmp_path / "tenants" / "escritorio-a" / "filings")
+    assert root_b == str(tmp_path / "tenants" / "escritorio-b" / "filings")
+    assert root_a != root_b

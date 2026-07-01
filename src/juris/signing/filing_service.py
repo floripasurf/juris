@@ -18,6 +18,7 @@ import asyncio
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Callable
+from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 from juris.api.ws_schemas import AgentRequest, AgentResponse
@@ -27,20 +28,25 @@ if TYPE_CHECKING:
     from juris.mni.operations.peticionamento import FilingReceipt
 
 
-async def run_filing(request: FilingRequest, *, pin: str | None) -> FilingResult:
+async def run_filing(
+    request: FilingRequest, *, pin: str | None, storage_root: Path | None = None
+) -> FilingResult:
     """Build the in-process :class:`FilingOrchestrator` and run the pipeline.
 
     A dry-run that also skips preflight needs no token (mock signer); otherwise the
     A3 ``pin`` is required to open the signer.
-    """
-    from pathlib import Path
 
+    ``storage_root`` is the per-tenant ``~/.juris`` (audit chain + filing receipts land
+    under it). Defaults to the shared home — co-located single-tenant. Multi-tenant
+    callers MUST pass the tenant-scoped root so one firm's signed petitions and audit
+    never commingle with another's.
+    """
     from juris.mni.auth import AuthStrategy, PasswordAuth
     from juris.persistence.audit import AuditLog
     from juris.persistence.filing_receipt import FilingReceiptStore
     from juris.signing.filing import FilingOrchestrator
 
-    juris_dir = Path.home() / ".juris"
+    juris_dir = storage_root or Path.home() / ".juris"
     audit = AuditLog(juris_dir / "audit.jsonl")
     receipt_store = FilingReceiptStore(juris_dir / "filings", audit)
     mni_auth = PasswordAuth(cpf=request.cpf, senha=request.senha)
@@ -91,14 +97,24 @@ class FilingService(ABC):
 
 
 class InProcessFilingService(FilingService):
-    """Files in the current process (Phase 1, co-located token)."""
+    """Files in the current process (Phase 1, co-located token).
+
+    ``storage_root`` scopes the audit chain + filing receipts to one tenant.
+    """
+
+    def __init__(self, storage_root: Path | None = None) -> None:
+        self._storage_root = storage_root
 
     async def file(self, request: FilingRequest, *, pin: str | None = None) -> FilingResult:
-        return await run_filing(request, pin=pin)
+        return await run_filing(request, pin=pin, storage_root=self._storage_root)
 
 
-def get_filing_service(tenant_id: str = "public") -> FilingService:
-    """Return the configured :class:`FilingService` (InProcess or Remote by config)."""
+def get_filing_service(tenant_id: str = "public", *, storage_root: Path | None = None) -> FilingService:
+    """Return the configured :class:`FilingService` (InProcess or Remote by config).
+
+    ``storage_root`` (the tenant's ``~/.juris``) isolates in-process receipts/audit;
+    remote mode ignores it — the agent uses its own local storage.
+    """
     from juris.api.agent_config import is_remote, tenant_agent_binding
 
     if is_remote():
@@ -108,7 +124,7 @@ def get_filing_service(tenant_id: str = "public") -> FilingService:
         transport = WebSocketAgentTransport(binding.base_url + "/ws/file", token=binding.token)
         return RemoteFilingService(transport, tenant_id=tenant_id)
 
-    return InProcessFilingService()
+    return InProcessFilingService(storage_root=storage_root)
 
 
 # --- Remote (split-trust) -----------------------------------------------------

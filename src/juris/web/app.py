@@ -45,6 +45,23 @@ def _out_root() -> Path:
     return Path(os.environ.get("JURIS_OUT_ROOT", "juris-out"))
 
 
+def _juris_home() -> Path:
+    """The ``~/.juris`` base for filing receipts + audit chain (JURIS_HOME overridable)."""
+    return Path(os.environ.get("JURIS_HOME", str(Path.home() / ".juris")))
+
+
+def _tenant_juris_home(tenant: Tenant) -> Path:
+    """The tenant's ``~/.juris`` — isolates filing receipts + audit per firm."""
+    from juris.web.auth import tenant_scoped_dir
+
+    return tenant_scoped_dir(tenant, _juris_home())
+
+
+def _tenant_filing_root(tenant: Tenant) -> Path:
+    """The tenant's filing-receipts root (``<tenant home>/filings``)."""
+    return _tenant_juris_home(tenant) / "filings"
+
+
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     validate_startup_config()
@@ -594,11 +611,11 @@ async def get_audit(
 
 
 @app.get("/api/filing/status")
-async def get_filing_status() -> dict[str, object]:
-    """Pending filings and recent custody chains visible to the console."""
+async def get_filing_status(tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
+    """Pending filings and recent custody chains — scoped to THIS tenant's filings."""
     from juris.web.filing_console import filing_status
 
-    return filing_status()
+    return filing_status(_tenant_filing_root(tenant))
 
 
 @app.get("/api/filing/artifacts")
@@ -629,25 +646,29 @@ async def get_filing_artifact_content(
 
 
 @app.post("/api/filing/pending/recovery")
-async def recover_pending_filing(payload: PendingRecoveryPayload) -> dict[str, object]:
+async def recover_pending_filing(
+    payload: PendingRecoveryPayload, tenant: Tenant = Depends(current_tenant)
+) -> dict[str, object]:
     """Recovery checklist for one pending filing, without exposing signed PDF bytes."""
     from juris.web.filing_console import pending_recovery
 
     try:
-        return pending_recovery(None, payload.pending_key)
+        return pending_recovery(_tenant_filing_root(tenant), payload.pending_key)
     except (FileNotFoundError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/filing/pending/archive")
-async def archive_pending_filing(payload: PendingArchivePayload) -> dict[str, object]:
+async def archive_pending_filing(
+    payload: PendingArchivePayload, tenant: Tenant = Depends(current_tenant)
+) -> dict[str, object]:
     """Archive a pending filing only after explicit manual resolution."""
     from juris.web.filing_console import archive_pending
 
     if not payload.confirm_manual_resolution:
         raise HTTPException(status_code=400, detail="confirmação manual é obrigatória para arquivar")
     try:
-        return archive_pending(None, payload.pending_key, reason=payload.reason)
+        return archive_pending(_tenant_filing_root(tenant), payload.pending_key, reason=payload.reason)
     except (FileNotFoundError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -675,7 +696,9 @@ async def dry_run_filing(
         prazo_override=payload.prazo_override,
     )
     try:
-        result = await get_filing_service(tenant.tenant_id).file(
+        result = await get_filing_service(
+            tenant.tenant_id, storage_root=_tenant_juris_home(tenant)
+        ).file(
             request,
             pin=None if remote else payload.pin,
         )
@@ -712,7 +735,9 @@ async def submit_filing(
         prazo_override=payload.prazo_override,
     )
     try:
-        result = await get_filing_service(tenant.tenant_id).file(
+        result = await get_filing_service(
+            tenant.tenant_id, storage_root=_tenant_juris_home(tenant)
+        ).file(
             request,
             pin=None if remote else payload.pin,
         )
