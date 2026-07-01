@@ -18,6 +18,17 @@ from juris.web.demo_service import WebDemoArtifact, WebDemoRun
 client = TestClient(app)
 
 
+class _CaptureLogger:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict[str, object]]] = []
+
+    def warning(self, event: str, **kwargs: object) -> None:
+        self.events.append((event, kwargs))
+
+    def error(self, event: str, **kwargs: object) -> None:
+        self.events.append((event, kwargs))
+
+
 def test_index_renders_local_ui() -> None:
     response = client.get("/")
 
@@ -168,14 +179,17 @@ async def test_connect_job_runner_records_result(monkeypatch, tmp_path) -> None:
 @pytest.mark.asyncio
 async def test_connect_job_runner_sanitizes_internal_errors(monkeypatch, tmp_path) -> None:
     app_module = importlib.import_module("juris.web.app")
+    import juris.core.observability as observability
     from juris.web.auth import Tenant
     from juris.web.connect_jobs import ConnectJobStore
 
+    capture = _CaptureLogger()
     store = ConnectJobStore(tmp_path / "jobs.db")
 
     async def fake_run_connect(*_args, **_kwargs):
         raise RuntimeError("mTLS /var/private/cert token=abc pin=1234")
 
+    monkeypatch.setattr(observability, "get_logger", lambda _name: capture)
     monkeypatch.setattr(app_module, "run_connect", fake_run_connect)
     monkeypatch.setattr(app_module, "_tenant_db", lambda tenant: f"db::{tenant.tenant_id}")
     monkeypatch.setattr(app_module, "_connect_job_store", lambda: store)
@@ -190,6 +204,14 @@ async def test_connect_job_runner_sanitizes_internal_errors(monkeypatch, tmp_pat
     assert "token=abc" not in job["error"]
     assert "pin=1234" not in job["error"]
     assert "/var/private/cert" not in job["error"]
+    assert capture.events
+    logged = capture.events[0][1]
+    dumped = json.dumps(logged, ensure_ascii=False)
+    assert "token=abc" not in dumped
+    assert "pin=1234" not in dumped
+    assert "/var/private/cert" not in dumped
+    assert "exc_info" not in logged
+    assert logged["exception_type"] == "RuntimeError"
 
 
 def test_audit_endpoint_returns_chain(monkeypatch) -> None:
@@ -445,8 +467,11 @@ def test_filing_remote_mode_does_not_require_or_forward_secrets(monkeypatch) -> 
 
 
 def test_filing_errors_are_sanitized(monkeypatch) -> None:
+    import juris.core.observability as observability
     import juris.signing.filing_service as filing_service
 
+    capture = _CaptureLogger()
+    monkeypatch.setattr(observability, "get_logger", lambda _name: capture)
     monkeypatch.setattr(
         filing_service,
         "get_filing_service",
@@ -461,6 +486,13 @@ def test_filing_errors_are_sanitized(monkeypatch) -> None:
     assert "/var/private/juris-token" not in response.text
     assert "token=abc123" not in response.text
     assert "pin=1234" not in response.text
+    assert capture.events
+    logged = capture.events[0][1]
+    dumped = json.dumps(logged, ensure_ascii=False)
+    assert "/var/private/juris-token" not in dumped
+    assert "token=abc123" not in dumped
+    assert "pin=1234" not in dumped
+    assert "exc_info" not in logged
 
 
 def test_processo_detail_endpoint_returns_detail(monkeypatch) -> None:
@@ -1220,11 +1252,15 @@ def test_agent_health_remote_unmapped_tenant_reports_error(tmp_path, monkeypatch
 
 
 def test_agent_health_remote_does_not_leak_internal_error(monkeypatch) -> None:
+    import juris.core.observability as observability
     from juris.api import pairing
+
+    capture = _CaptureLogger()
 
     def _raise(_url):
         raise RuntimeError("connection refused token=abc pin=1234 /var/private/cert")
 
+    monkeypatch.setattr(observability, "get_logger", lambda _name: capture)
     monkeypatch.setenv("JURIS_AGENT_MODE", "remote")
     monkeypatch.setenv("JURIS_LOCAL_AGENT_URL", "ws://127.0.0.1:8765")
     monkeypatch.setenv("JURIS_LOCAL_AGENT_TOKEN", "tok")
@@ -1242,6 +1278,13 @@ def test_agent_health_remote_does_not_leak_internal_error(monkeypatch) -> None:
     assert "token=abc" not in response.text
     assert "pin=1234" not in response.text
     assert "/var/private/cert" not in response.text
+    assert capture.events
+    logged = capture.events[0][1]
+    dumped = json.dumps(logged, ensure_ascii=False)
+    assert "token=abc" not in dumped
+    assert "pin=1234" not in dumped
+    assert "/var/private/cert" not in dumped
+    assert "exc_info" not in logged
 
 
 def test_filing_status_is_scoped_to_the_tenant(monkeypatch, tmp_path) -> None:
@@ -1267,11 +1310,15 @@ def test_filing_status_is_scoped_to_the_tenant(monkeypatch, tmp_path) -> None:
 
 def test_uncaught_exception_returns_sanitized_500(monkeypatch) -> None:
     app_module = importlib.import_module("juris.web.app")
+    import juris.core.observability as observability
     from juris.web.auth import Tenant
+
+    capture = _CaptureLogger()
 
     def _boom(*a, **k):
         raise RuntimeError("internal secret: token=abc123")
 
+    monkeypatch.setattr(observability, "get_logger", lambda _name: capture)
     monkeypatch.setattr(app_module, "_tenant_db", lambda tenant: object())
     monkeypatch.setattr(app_module, "list_processos", _boom)
     app_module.app.dependency_overrides[app_module.current_tenant] = lambda: Tenant("t")
@@ -1285,6 +1332,11 @@ def test_uncaught_exception_returns_sanitized_500(monkeypatch) -> None:
     assert response.status_code == 500
     assert response.json()["detail"]["code"] == "internal_error"
     assert "token=abc123" not in response.text  # never leak the internal detail/traceback
+    assert capture.events
+    logged = capture.events[0][1]
+    assert "token=abc123" not in json.dumps(logged, ensure_ascii=False)
+    assert "exc_info" not in logged
+    assert logged["exception_type"] == "RuntimeError"
 
 
 def test_agent_relay_rejects_bad_token(monkeypatch) -> None:

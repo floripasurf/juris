@@ -16,6 +16,14 @@ from juris.web.corpus_queue import (
 from juris.web.pilot_feedback import append_feedback
 
 
+class _CaptureLogger:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict[str, object]]] = []
+
+    def warning(self, event: str, **kwargs: object) -> None:
+        self.events.append((event, kwargs))
+
+
 def _mode(path) -> int:
     return stat.S_IMODE(path.stat().st_mode)
 
@@ -232,6 +240,10 @@ def test_reingest_pending_sources_writes_repertory_chunks(tmp_path) -> None:
 
 
 def test_reingest_pending_sources_sanitizes_internal_errors(tmp_path, monkeypatch) -> None:
+    import juris.core.observability as observability
+
+    capture = _CaptureLogger()
+    monkeypatch.setattr(observability, "get_logger", lambda _name: capture)
     append_accepted_source(
         tmp_path,
         {
@@ -263,3 +275,9 @@ def test_reingest_pending_sources_sanitizes_internal_errors(tmp_path, monkeypatc
     assert "token=abc" not in report.errors[0]["error"]
     assert "pin=1234" not in report.errors[0]["error"]
     assert "/var/private/repertory.db" not in report.errors[0]["error"]
+    assert capture.events
+    logged = capture.events[0][1]
+    assert "token=abc" not in str(logged)
+    assert "pin=1234" not in str(logged)
+    assert "/var/private/repertory.db" not in str(logged)
+    assert "exc_info" not in logged

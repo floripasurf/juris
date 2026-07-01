@@ -208,12 +208,13 @@ def reingest_pending_sources(root: Path, repertory_path: Path) -> ReingestReport
             total_chunks += stored
         except Exception as exc:  # noqa: BLE001 - report per-source failures
             from juris.core.observability import get_logger
+            from juris.core.sanitize import safe_error_text
 
             get_logger("juris.web").warning(
                 "corpus_reingest_source_error",
                 source_id=source_id,
-                error=str(exc),
-                exc_info=exc,
+                error=safe_error_text(exc),
+                exception_type=exc.__class__.__name__,
             )
             errors.append({"source_id": source_id, "error": _REINGEST_SOURCE_ERROR})
     return ReingestReport(processed=processed, chunks=total_chunks, errors=errors)

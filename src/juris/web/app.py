@@ -141,9 +141,13 @@ async def _handle_uncaught(request: Request, exc: Exception) -> JSONResponse:
     client — a stack trace on the wire leaks paths, config, and secrets.
     """
     from juris.core.observability import get_logger
+    from juris.core.sanitize import safe_error_text
 
     get_logger("juris.web").error(
-        "unhandled_exception", path=request.url.path, error=str(exc), exc_info=exc
+        "unhandled_exception",
+        path=request.url.path,
+        error=safe_error_text(exc),
+        exception_type=exc.__class__.__name__,
     )
     return JSONResponse(
         status_code=500,
@@ -156,9 +160,13 @@ def _operational_http_error(
 ) -> HTTPException:
     """Build a sanitized 400 while logging the internal operational detail."""
     from juris.core.observability import get_logger
+    from juris.core.sanitize import safe_error_text
 
     get_logger("juris.web").warning(
-        "operational_http_error", code=code, error=internal_detail or str(exc), exc_info=exc
+        "operational_http_error",
+        code=code,
+        error=safe_error_text(internal_detail or exc),
+        exception_type=exc.__class__.__name__,
     )
     return HTTPException(
         status_code=400,
@@ -419,13 +427,14 @@ async def _run_connect_job(
         store.mark_error(job_id, "tempo excedido ao conectar/sincronizar (timeout)")
     except Exception as exc:  # noqa: BLE001 — surfaced to the client via the job
         from juris.core.observability import get_logger
+        from juris.core.sanitize import safe_error_text
 
         get_logger("juris.web").warning(
             "connect_job_error",
             job_id=job_id,
             tenant_id=tenant.tenant_id,
-            error=str(exc),
-            exc_info=exc,
+            error=safe_error_text(exc),
+            exception_type=exc.__class__.__name__,
         )
         store.mark_error(job_id, _CONNECT_JOB_ERROR)
 
@@ -550,14 +559,15 @@ async def get_agent_health(tenant: Tenant = Depends(current_tenant)) -> dict[str
     except Exception as exc:  # noqa: BLE001 — health reports readiness, not stack traces
         code = _agent_health_error_code(str(exc))
         from juris.core.observability import get_logger
+        from juris.core.sanitize import safe_error_text
 
         message = _agent_health_message(code)
         get_logger("juris.web").warning(
             "agent_health_error",
             tenant_id=tenant.tenant_id,
             code=code,
-            error=str(exc),
-            exc_info=exc,
+            error=safe_error_text(exc),
+            exception_type=exc.__class__.__name__,
         )
         payload["reachable"] = False
         payload["ready"] = False
