@@ -646,6 +646,30 @@ def test_corpus_source_rejects_excessive_source_text(monkeypatch, tmp_path) -> N
     assert response.status_code == 422
 
 
+def test_corpus_source_rejects_local_source_url(monkeypatch, tmp_path) -> None:
+    app_module = importlib.import_module("juris.web.app")
+
+    monkeypatch.setattr(app_module, "_out_root", lambda: tmp_path)
+    response = client.post(
+        "/api/corpus/sources",
+        json={
+            "numero_cnj": "0001234-56.2026.8.13.0001",
+            "title": "Fonte local",
+            "source_url": "file:///Users/advogado/acordao.pdf",
+            "source_date": "2026-06-30",
+            "source_type": "acordao_publicado",
+            "tribunal": "STJ",
+            "area": "civel",
+            "tema": "cobranca",
+            "source_text": "inteiro teor",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "source_url" in response.text
+    assert "/Users/advogado" not in response.text
+
+
 def test_corpus_reingest_endpoint_writes_repertory(monkeypatch, tmp_path) -> None:
     app_module = importlib.import_module("juris.web.app")
 
@@ -980,6 +1004,7 @@ def test_ai_session_endpoint_returns_mode() -> None:
     assert body["browser"]["status"] in {"ready", "agent_offline", "needs_native_host", "disabled"}
     assert "message" in body["browser"]
     assert "native_host_manifest" not in body["browser"]
+    assert "bridge_url" not in body["browser"]
 
 
 def test_index_renders_ai_session_badge() -> None:

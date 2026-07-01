@@ -15,6 +15,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
+from urllib.parse import urlparse, urlunparse
 
 from juris.core.paths import ensure_private_dir, restrict_file
 from juris.web.pilot_feedback import list_feedback
@@ -68,22 +69,33 @@ def append_accepted_source(root: Path, payload: dict[str, object]) -> dict[str, 
     """Append one lawyer-approved source with mandatory provenance."""
     ensure_private_dir(root)
     content_hash = _resolve_content_hash(payload)
+    source_url = _public_source_url(payload.get("source_url"))
     if any(str(record.get("content_sha256") or "") == content_hash for record in list_accepted_sources(root)):
         msg = "fonte já aceita no corpus com o mesmo content_sha256."
         raise ValueError(msg)
     source_id = uuid.uuid4().hex
     text_path = _write_source_text(root, source_id, payload)
     record = {
+        **{
+            k: v
+            for k, v in payload.items()
+            if k
+            not in {
+                "id",
+                "created_at",
+                "content_sha256",
+                "reingest_status",
+                "reingested_at",
+                "source_text",
+                "source_text_path",
+            }
+        },
         "id": source_id,
         "created_at": datetime.now(UTC).isoformat(),
         "content_sha256": content_hash,
         "reingest_status": "pending",
         "source_text_path": text_path,
-        **{
-            k: v
-            for k, v in payload.items()
-            if k != "source_text" and not (k == "content_sha256" and not v)
-        },
+        "source_url": source_url,
     }
     with sources_path(root).open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
@@ -224,6 +236,19 @@ def _resolve_content_hash(payload: dict[str, object]) -> str:
         msg = "content_sha256 ou source_text é obrigatório para proveniência."
         raise ValueError(msg)
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _public_source_url(value: object) -> str:
+    """Return a provenance URL safe for UI/export/corpus metadata."""
+    raw = str(value or "").strip()
+    parsed = urlparse(raw)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        msg = "source_url deve ser uma URL http(s)."
+        raise ValueError(msg)
+    if parsed.username or parsed.password:
+        msg = "source_url não pode conter credenciais."
+        raise ValueError(msg)
+    return urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, parsed.query, ""))
 
 
 def _write_source_text(root: Path, source_id: str, payload: dict[str, object]) -> str | None:

@@ -11,7 +11,7 @@ def test_browser_session_mode_when_bridge_configured() -> None:
     status = ai_session_status(
         anthropic_key=False,
         browser_bridge=True,
-        browser_bridge_url="ws://127.0.0.1:8787",
+        browser_bridge_url="ws://127.0.0.1:8787?token=secret",
         native_host_manifest="/var/empty/juris-nao-existe",
         ollama_reachable=True,
     )
@@ -19,7 +19,9 @@ def test_browser_session_mode_when_bridge_configured() -> None:
     assert status["deidentify"] is True  # de-id always on for off-device AI (ADR-0016)
     assert status["browser"]["status"] == "needs_native_host"
     assert "native_host_manifest" not in status["browser"]
+    assert "bridge_url" not in status["browser"]
     assert "/var/empty" not in json.dumps(status)
+    assert "token=secret" not in json.dumps(status)
 
 
 def test_cloud_deid_mode_when_only_anthropic() -> None:
@@ -55,6 +57,7 @@ def test_reports_browser_offline_when_manifest_exists_but_bridge_is_not_reachabl
     assert status["browser"]["status"] == "agent_offline"
     assert status["browser"]["native_host_installed"] is True
     assert "native_host_manifest" not in status["browser"]
+    assert "bridge_url" not in status["browser"]
     assert str(tmp_path) not in json.dumps(status)
 
 
@@ -74,4 +77,5 @@ def test_reports_browser_ready_when_bridge_is_reachable(tmp_path) -> None:
     assert status["browser"]["status"] == "ready"
     assert status["browser"]["bridge_reachable"] is True
     assert "native_host_manifest" not in status["browser"]
+    assert "bridge_url" not in status["browser"]
     assert str(tmp_path) not in json.dumps(status)

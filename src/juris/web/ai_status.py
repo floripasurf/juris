@@ -51,7 +51,6 @@ def ai_session_status(
         "providers": {"cloud": anthropic_key, "browser": browser_bridge, "local": ollama_reachable},
         "browser": {
             "configured": browser_bridge,
-            "bridge_url": browser_bridge_url,
             "native_host_installed": native_host_installed,
             "bridge_reachable": browser_bridge_reachable,
             "status": browser_status,

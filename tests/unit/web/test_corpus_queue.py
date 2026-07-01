@@ -146,6 +146,57 @@ def test_append_source_rejects_duplicate_content_hash(tmp_path) -> None:
         raise AssertionError("fonte duplicada deveria falhar")
 
 
+def test_append_source_sanitizes_system_metadata_and_url_fragment(tmp_path) -> None:
+    source = append_accepted_source(
+        tmp_path,
+        {
+            "id": "attacker-id",
+            "created_at": "1900-01-01T00:00:00+00:00",
+            "content_sha256": "",
+            "reingest_status": "done",
+            "reingested_at": "1900-01-01T00:00:00+00:00",
+            "source_text_path": "../../escape.txt",
+            "numero_cnj": "0001234",
+            "title": "Fonte",
+            "source_url": "https://example.test/acordao#local-fragment",
+            "source_date": "2026-06-30",
+            "source_type": "acordao_publicado",
+            "tribunal": "STJ",
+            "area": "civel",
+            "tema": "cobranca",
+            "source_text": "texto aprovado",
+        },
+    )
+
+    assert source["id"] != "attacker-id"
+    assert source["created_at"] != "1900-01-01T00:00:00+00:00"
+    assert source["reingest_status"] == "pending"
+    assert "reingested_at" not in source
+    assert source["source_text_path"] != "../../escape.txt"
+    assert source["source_url"] == "https://example.test/acordao"
+
+
+def test_append_source_rejects_local_or_credentialed_source_url(tmp_path) -> None:
+    payload = {
+        "numero_cnj": "0001234",
+        "title": "Fonte",
+        "source_date": "2026-06-30",
+        "source_type": "acordao_publicado",
+        "tribunal": "STJ",
+        "area": "civel",
+        "tema": "cobranca",
+        "source_text": "texto aprovado",
+    }
+
+    for source_url in ("file:///Users/advogado/acordao.pdf", "https://user:secret@example.test/acordao"):
+        try:
+            append_accepted_source(tmp_path, {**payload, "source_url": source_url})
+        except ValueError as exc:
+            assert "source_url" in str(exc)
+        else:
+            raise AssertionError("source_url local ou com credencial deveria falhar")
+
+
 def test_reingest_pending_sources_writes_repertory_chunks(tmp_path) -> None:
     source = append_accepted_source(
         tmp_path,
