@@ -30,16 +30,22 @@ describe("connectionStatus (handshake)", () => {
 });
 
 describe("de-id enforcement (cloud-safe handshake)", () => {
-  it("flags raw CPF / CNPJ / e-mail / CNJ / OAB as PII", () => {
+  it("flags raw CPF / CNPJ / e-mail / CNJ / OAB / RG / CEP / phone as PII", () => {
     expect(containsRawPII("CPF 123.456.789-09")).toBe(true);
     expect(containsRawPII("CNPJ 12.345.678/0001-90")).toBe(true);
     expect(containsRawPII("contato joao@escritorio.adv.br")).toBe(true);
     expect(containsRawPII("processo 5082351-40.2017.8.13.0024")).toBe(true);
     expect(containsRawPII("OAB/MG 123456")).toBe(true);
+    // These were silently passing before the backstop was aligned with the backend de-id.
+    expect(containsRawPII("RG 12.345.678-9")).toBe(true);
+    expect(containsRawPII("CEP 88010-400")).toBe(true);
+    expect(containsRawPII("telefone (11) 91234-5678")).toBe(true);
   });
 
   it("treats de-identified placeholders (and the bare word OAB) as safe", () => {
-    expect(containsRawPII("Autor [NOME_1], CPF [CPF_1], inscrito na OAB sob [OAB_1]")).toBe(false);
+    expect(
+      containsRawPII("Autor [NOME_1], CPF [CPF_1], RG [RG_1], CEP [CEP_1], tel [TELEFONE_1], OAB sob [OAB_1]"),
+    ).toBe(false);
   });
 
   it("refuses a request without the deidentified attestation", () => {

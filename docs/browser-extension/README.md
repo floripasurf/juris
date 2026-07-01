@@ -73,9 +73,10 @@ native host manifest is installed (`GET /api/ai-session`).
 
 - **De-id is enforced, not assumed.** The content script refuses any request that
   isn't attested `deidentified: true` **and** independently re-scans the prompt for
-  raw structured PII (CPF/CNPJ/CNJ/e-mail/OAB); a match is refused before the DOM is
-  touched. So even a backend de-id regression can't leak raw PII into the session
-  (`assertCloudSafe` / `containsRawPII`, unit-tested).
+  raw structured PII (CPF/CNPJ/CNJ/RG/CEP/e-mail/OAB/phone — the same patterns the
+  backend `deid.py` redacts, so the backstop is never narrower than the primary layer);
+  a match is refused before the DOM is touched. So even a backend de-id regression
+  can't leak raw PII into the session (`assertCloudSafe` / `containsRawPII`, unit-tested).
 - **Sender validation.** `onMessage` only accepts messages whose `sender.id` is our
   own extension (`isTrustedSender`) — never another extension or an injected page script.
 - **Bridge token — validated at the host.** `CompletionRequest` carries a `token`

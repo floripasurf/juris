@@ -25,14 +25,18 @@ function fail(request_id, error) {
 // The prompt must already be de-identified by the juris backend before it reaches
 // the browser LLM. We ENFORCE that here rather than trusting the comment: a request
 // must attest deidentified===true AND carry no raw structured PII. De-id placeholders
-// ([CPF_1], [NOME_1]) are safe; a raw CPF/CNPJ/CNJ/e-mail/OAB number means de-id
-// failed, so we refuse to send it into the chat session.
+// ([CPF_1], [NOME_1]) are safe; raw structured PII means de-id failed, so we refuse.
+// This list MIRRORS the backend de-id patterns (juris/core/deid.py) so the backstop is
+// not narrower than the primary layer it's meant to catch regressions of.
 const RAW_PII = [
-  /\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/, // CPF
-  /\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/, // CNPJ
+  /\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/, // CPF (formatted)
+  /\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/, // CNPJ (formatted)
   /\b\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}\b/, // CNJ
+  /\b\d{2}\.\d{3}\.\d{3}-[\dxX]\b/, // RG
   /\b[\w.+-]+@[\w-]+\.[\w.-]+\b/, // e-mail
   /\bOAB[/\s][A-Z]{2}\s*(?:n[º°.]?\s*)?\d/i, // OAB number (not the bare word "OAB")
+  /\b\d{5}-\d{3}\b/, // CEP
+  /(?<!\d)(?:\+55\s?)?(?:\(\d{2}\)\s?|\d{2}\s)?\d{4,5}-\d{4}(?!\d)/, // Brazilian phone
 ];
 
 export function containsRawPII(text) {
