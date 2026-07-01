@@ -26,6 +26,7 @@ from juris.repertory.readiness import (
     ENV_MIN_SOURCE_TYPES,
     ENV_REPERTORY_PATH,
     LEGACY_REPERTORY_PATH,
+    resolve_repertory_path,
 )
 
 runner = CliRunner()
@@ -61,6 +62,7 @@ def _seed(path: Path, rows: list[tuple[str, str, str, str]]) -> None:
 def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
     for name in (ENV_REPERTORY_PATH, ENV_MIN_CHUNKS, ENV_MIN_SOURCE_TYPES):
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.delenv("JURIS_HOME", raising=False)
 
 
 class TestExitCodes:
@@ -206,6 +208,13 @@ class TestJsonOutput:
 
 
 class TestEnvOverrides:
+    def test_default_repertory_path_honors_juris_home(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("JURIS_HOME", str(tmp_path))
+
+        assert resolve_repertory_path() == tmp_path / "repertory.db"
+
     def test_env_repertory_path_used_when_no_flag(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

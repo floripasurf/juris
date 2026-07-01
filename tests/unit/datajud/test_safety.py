@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import stat
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -14,6 +15,8 @@ from juris.datajud.safety import (
     DataJudRequestMeta,
     RateLimiter,
     audit_datajud_call,
+    default_audit_path,
+    default_cache_dir,
     ensure_batch_allowed,
 )
 from juris.persistence.audit import AuditLog
@@ -50,6 +53,12 @@ class TestRateLimiter:
 
 
 class TestDataJudCache:
+    def test_default_paths_honor_juris_home(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("JURIS_HOME", str(tmp_path))
+
+        assert default_cache_dir() == tmp_path / "cache" / "datajud"
+        assert default_audit_path() == tmp_path / "audit.jsonl"
+
     def test_cache_roundtrip_uses_query_hash_key(self, tmp_path: Path) -> None:
         cache = DataJudCache(tmp_path)
         meta = _meta(query_hash="hash-one")
@@ -59,6 +68,15 @@ class TestDataJudCache:
 
         assert cache.get(meta) == payload
         assert (tmp_path / "tjmg" / "hash-one.json").exists()
+
+    def test_cache_files_are_private(self, tmp_path: Path) -> None:
+        cache = DataJudCache(tmp_path)
+        cache.set(_meta(query_hash="private"), {"ok": True})
+
+        path = tmp_path / "tjmg" / "private.json"
+
+        assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
     def test_expired_cache_entry_is_ignored(self, tmp_path: Path) -> None:
         now = datetime(2026, 5, 9, 12, 0, tzinfo=UTC)
@@ -108,6 +126,19 @@ class TestAudit:
         }
         assert expected.items() <= entry["details"].items()
         assert entry["details"]["duration_ms"] == 12.5
+
+    def test_audit_file_is_private(self, tmp_path: Path) -> None:
+        audit_path = tmp_path / "audit.jsonl"
+
+        audit_datajud_call(
+            AuditLog(audit_path),
+            _meta(),
+            cache_hit=False,
+            status_code=200,
+            duration_ms=1.0,
+        )
+
+        assert stat.S_IMODE(audit_path.stat().st_mode) == 0o600
 
 
 class TestBatchGuard:

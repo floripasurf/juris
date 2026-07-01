@@ -10,12 +10,28 @@ from juris.signing.filing import ChainOfCustody, FilingResult
 from juris.signing.pades import SigningResult
 from juris.web.filing_console import (
     archive_pending,
+    default_filing_root,
     filing_artifacts,
     filing_status,
     pending_recovery,
     read_filing_artifact,
     serialize_filing_result,
 )
+
+
+def test_default_filing_root_honors_juris_home(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("JURIS_HOME", str(tmp_path))
+    monkeypatch.delenv("JURIS_FILING_ROOT", raising=False)
+
+    assert default_filing_root() == tmp_path / "filings"
+
+
+def test_default_filing_root_prefers_explicit_override(tmp_path, monkeypatch) -> None:
+    override = tmp_path / "custom-filings"
+    monkeypatch.setenv("JURIS_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("JURIS_FILING_ROOT", str(override))
+
+    assert default_filing_root() == override
 
 
 def test_filing_status_lists_pending_and_receipts(tmp_path) -> None:

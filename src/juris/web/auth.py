@@ -23,6 +23,8 @@ from pathlib import Path
 
 from fastapi import Header, HTTPException
 
+from juris.core.paths import juris_home
+
 PUBLIC_TENANT_ID = "public"
 
 # A tenant_id becomes a storage path segment — keep it to safe chars so a crafted
@@ -198,5 +200,5 @@ def tenant_scoped_dir(tenant: Tenant, base: Path) -> Path:
 
 def tenant_db_path(tenant: Tenant, *, base: Path | None = None) -> Path:
     """The tenant's LocalDB path — shared ``~/.juris/juris.db`` for public, isolated otherwise."""
-    base = base or Path.home() / ".juris"
+    base = base or juris_home()
     return tenant_scoped_dir(tenant, base) / "juris.db"

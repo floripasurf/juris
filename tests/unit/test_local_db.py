@@ -2,13 +2,24 @@
 
 from __future__ import annotations
 
+import stat
 from datetime import UTC, datetime
 from pathlib import Path
 
-from juris.persistence.local_db import LocalDB
+from juris.persistence.local_db import LocalDB, default_db_path
 
 
 class TestLocalDB:
+    def test_default_path_honors_juris_home(self, tmp_path: Path, monkeypatch) -> None:
+        monkeypatch.setenv("JURIS_HOME", str(tmp_path))
+
+        db = LocalDB()
+
+        assert default_db_path() == tmp_path / "juris.db"
+        assert db.path == tmp_path / "juris.db"
+        assert stat.S_IMODE(db.path.parent.stat().st_mode) == 0o700
+        assert stat.S_IMODE(db.path.stat().st_mode) == 0o600
+
     def test_creates_db_file(self, tmp_path: Path) -> None:
         db = LocalDB(tmp_path / "test.db")
         assert db.path.exists()

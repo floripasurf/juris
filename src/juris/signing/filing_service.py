@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 from juris.api.ws_schemas import AgentRequest, AgentResponse
+from juris.core.paths import juris_home
 from juris.signing.filing import ChainOfCustody, FilingRequest, FilingResult
 
 if TYPE_CHECKING:
@@ -46,7 +47,7 @@ async def run_filing(
     from juris.persistence.filing_receipt import FilingReceiptStore
     from juris.signing.filing import FilingOrchestrator
 
-    juris_dir = storage_root or Path.home() / ".juris"
+    juris_dir = storage_root or juris_home()
     audit = AuditLog(juris_dir / "audit.jsonl")
     receipt_store = FilingReceiptStore(juris_dir / "filings", audit)
     mni_auth = PasswordAuth(cpf=request.cpf, senha=request.senha)

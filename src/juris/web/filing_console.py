@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from juris.core.paths import juris_home
 from juris.signing.filing import FilingResult
 from juris.web.jsonutil import ensure_dict, ensure_list
 
@@ -19,7 +20,7 @@ def default_filing_root() -> Path:
     configured = os.environ.get("JURIS_FILING_ROOT")
     if configured:
         return Path(configured).expanduser()
-    return Path.home() / ".juris" / "filings"
+    return juris_home() / "filings"
 
 
 def filing_status(root: Path | None = None) -> dict[str, object]:

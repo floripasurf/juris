@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import stat
 
 from juris.web.connect_jobs import ConnectJobStore
 
@@ -16,12 +17,14 @@ def test_default_path_honors_juris_home(tmp_path, monkeypatch) -> None:
 
 
 def test_create_then_get_returns_running(tmp_path) -> None:
-    store = ConnectJobStore(tmp_path / "jobs.db")
+    path = tmp_path / "jobs.db"
+    store = ConnectJobStore(path)
     store.create("job-1", "escritorio-a")
     job = store.get("job-1")
     assert job is not None
     assert job["status"] == "running"
     assert job["tenant_id"] == "escritorio-a"
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
 
 def test_create_rejects_duplicate_job_id(tmp_path) -> None:

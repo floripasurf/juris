@@ -45,8 +45,8 @@ a ingestão (`uv run juris repertory ingest`) ou apontar
 pelo `juris pilot preflight` na §0 — esta seção é a explicação do
 "porquê", o pré-flight é a checagem operacional.
 
-Caminho canônico do corpus: `~/.juris/repertory.db`. Override via
-`JURIS_REPERTORY_PATH=/caminho/custom`. Limiares default
+Caminho canônico do corpus: `${JURIS_HOME:-~/.juris}/repertory.db`.
+Override direto via `JURIS_REPERTORY_PATH=/caminho/custom`. Limiares default
 (`min_chunks=100`, `min_source_types=2`) podem ser ajustados via
 `JURIS_MIN_REPERTORY_CHUNKS` / `JURIS_MIN_REPERTORY_SOURCE_TYPES` ou
 flags `--min-chunks`/`--min-source-types` em `juris repertory status`.
@@ -323,7 +323,7 @@ descobrir do zero.
   ruidoso mas não é um falha funcional — o `errors[]` do manifest captura
   corretamente.
 - **Corpus ausente/vazio (Sprint 16, mitigado).** Caminho canônico é
-  agora `~/.juris/repertory.db` (ou `JURIS_REPERTORY_PATH`). Em
+  agora `${JURIS_HOME:-~/.juris}/repertory.db` (ou `JURIS_REPERTORY_PATH`). Em
   `--source datajud|mni`, `juris demo` aborta antes de gerar artefatos
   se o corpus não atinge `min_chunks`/`min_source_types`. Em
   `--source fixture` a saída roda normalmente, marcada DEMO. Validar

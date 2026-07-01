@@ -18,6 +18,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from juris.core.observability import get_logger
+from juris.core.paths import juris_home
 
 logger = get_logger(__name__)
 
@@ -167,7 +168,7 @@ def _fallback_dir() -> Path:
     """Directory for file fallback, overridable in tests and by ``JURIS_HOME``."""
     if _FALLBACK_DIR is not None:
         return _FALLBACK_DIR
-    return Path(os.environ.get("JURIS_HOME", str(Path.home() / ".juris"))) / "credentials"
+    return juris_home() / "credentials"
 
 
 def _restrict_file_permissions(path: Path) -> None:

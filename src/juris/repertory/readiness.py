@@ -3,10 +3,10 @@
 This module is the single source of truth for two questions:
 
 1. *Where does the repertory live?* — `resolve_repertory_path()` enforces a
-   canonical location (`~/.juris/repertory.db`) with one allowed override
-   (`JURIS_REPERTORY_PATH`). It also detects a legacy path (`data/repertory.db`)
-   left behind by older command code so the operator can migrate manually —
-   we never move, copy, or rewrite a corpus DB silently.
+   canonical location (`${JURIS_HOME:-~/.juris}/repertory.db`) with one
+   allowed direct override (`JURIS_REPERTORY_PATH`). It also detects a legacy
+   path (`data/repertory.db`) left behind by older command code so the operator
+   can migrate manually — we never move, copy, or rewrite a corpus DB silently.
 
 2. *Is the corpus usable for a real, lawyer-facing run?* — `read_status()`
    inspects the SQLite `chunks` table and returns a `RepertoryStatus` with
@@ -28,6 +28,8 @@ import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from juris.core.paths import juris_home
+
 UNKNOWN_SOURCE_TYPE: str = "(unknown)"
 """Sentinel for chunks whose ``source_type`` column is NULL.
 
@@ -38,11 +40,10 @@ to ready.
 """
 
 CANONICAL_REPERTORY_PATH: Path = Path.home() / ".juris" / "repertory.db"
-"""Single canonical location for the repertory DB.
+"""Legacy static canonical location for the repertory DB.
 
-Older command code wrote to `data/repertory.db` (project-relative). New code
-must use this path or an explicit override; legacy locations are detected and
-warned about, never silently switched.
+New code should call `resolve_repertory_path()` so `JURIS_HOME` is honored at
+runtime. This constant is kept for compatibility with older imports.
 """
 
 LEGACY_REPERTORY_PATH: Path = Path("data/repertory.db")
@@ -63,6 +64,11 @@ DEFAULT_MIN_SOURCE_TYPES: int = 2
 ENV_REPERTORY_PATH: str = "JURIS_REPERTORY_PATH"
 ENV_MIN_CHUNKS: str = "JURIS_MIN_REPERTORY_CHUNKS"
 ENV_MIN_SOURCE_TYPES: str = "JURIS_MIN_REPERTORY_SOURCE_TYPES"
+
+
+def default_repertory_path() -> Path:
+    """Default repertory DB path under the configured Juris local state root."""
+    return juris_home() / "repertory.db"
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,14 +171,14 @@ def resolve_repertory_path(override: Path | None = None) -> Path:
     """Resolve which repertory DB to use.
 
     Priority: explicit `override` arg > `JURIS_REPERTORY_PATH` env >
-    `CANONICAL_REPERTORY_PATH`.
+    `${JURIS_HOME:-~/.juris}/repertory.db`.
     """
     if override is not None:
         return override
     env = os.environ.get(ENV_REPERTORY_PATH)
     if env:
         return Path(env).expanduser()
-    return CANONICAL_REPERTORY_PATH
+    return default_repertory_path()
 
 
 def detect_legacy_path(canonical: Path | None = None) -> Path | None:

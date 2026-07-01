@@ -23,6 +23,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, Any
 
+from juris.core.paths import ensure_private_dir, juris_home
+
 _LEN = struct.Struct("<I")  # Chrome uses a 4-byte little-endian length prefix
 DEFAULT_MAX_MESSAGE_BYTES = 8 * 1024 * 1024
 HOST_NAME = "com.juris.host"
@@ -231,9 +233,9 @@ def install_native_host(
         msg = "extension_id obrigatório: copie o id em chrome://extensions após carregar a extensão"
         raise ValueError(msg)
 
-    root = install_root or (Path.home() / ".juris" / "browser-session")
+    root = install_root or (juris_home() / "browser-session")
     bin_dir = root / "bin"
-    bin_dir.mkdir(parents=True, exist_ok=True)
+    ensure_private_dir(bin_dir, restrict_existing=install_root is None)
     launcher_path = bin_dir / "juris-native-host"
     launcher_path.write_text(
         _launcher_content(

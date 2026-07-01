@@ -16,6 +16,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from juris import __version__
+from juris.core.paths import juris_home
 from juris.jobs.connect import run_connect
 from juris.web.auth import Tenant, current_tenant, tenant_db_path
 from juris.web.connect_jobs import ConnectJobStore
@@ -49,7 +50,7 @@ def _out_root() -> Path:
 
 def _juris_home() -> Path:
     """The ``~/.juris`` base for filing receipts + audit chain (JURIS_HOME overridable)."""
-    return Path(os.environ.get("JURIS_HOME", str(Path.home() / ".juris")))
+    return juris_home()
 
 
 def _tenant_juris_home(tenant: Tenant) -> Path:

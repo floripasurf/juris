@@ -23,10 +23,14 @@ from sqlalchemy import (
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 from juris.core.observability import get_logger
+from juris.core.paths import ensure_private_dir, juris_home, restrict_file
 
 logger = get_logger(__name__)
 
-_DEFAULT_DB_PATH = Path.home() / ".juris" / "juris.db"
+
+def default_db_path() -> Path:
+    """Default local SQLite DB path."""
+    return juris_home() / "juris.db"
 
 
 class LocalBase(DeclarativeBase):
@@ -135,8 +139,9 @@ class LocalDB:
     """SQLite-backed local database for single-user mode."""
 
     def __init__(self, db_path: Path | None = None) -> None:
-        self._path = db_path or _DEFAULT_DB_PATH
-        self._path.parent.mkdir(parents=True, exist_ok=True)
+        uses_default_path = db_path is None
+        self._path = db_path or default_db_path()
+        ensure_private_dir(self._path.parent, restrict_existing=uses_default_path)
         self._engine = create_engine(f"sqlite:///{self._path}", echo=False)
         LocalBase.metadata.create_all(self._engine)
         self._Session = sessionmaker(bind=self._engine)
@@ -148,6 +153,8 @@ class LocalDB:
                 "USING fts5(ementa, texto_integral, content=jurisprudencia, content_rowid=rowid)"
             ))
             conn.commit()
+        if self._path.exists():
+            restrict_file(self._path)
 
         logger.debug("local_db_init", path=str(self._path))
 

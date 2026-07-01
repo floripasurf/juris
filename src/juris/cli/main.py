@@ -1695,7 +1695,7 @@ def repertory_consolidate(
         False, "--archive", help="Após consolidar, arquiva o banco legado como .bak."
     ),
 ) -> None:
-    """Consolida o banco legado (data/repertory.db) no canônico (~/.juris/repertory.db)."""
+    """Consolida o banco legado (data/repertory.db) no canônico do JURIS_HOME."""
     from juris.repertory.consolidate import consolidate_repertory
 
     result = consolidate_repertory()
@@ -1736,7 +1736,7 @@ def repertory_status(
         None,
         "--path",
         "-p",
-        help="Caminho do repertory.db (default: ~/.juris/repertory.db ou JURIS_REPERTORY_PATH).",
+        help="Caminho do repertory.db (default: ${JURIS_HOME:-~/.juris}/repertory.db ou JURIS_REPERTORY_PATH).",
     ),
     json_output: bool = typer.Option(False, "--json", help="Saída em JSON, sem cores ou tabela."),
     min_chunks: int | None = typer.Option(
@@ -1966,9 +1966,10 @@ def review(
     service = RepertoryService(retriever=retriever)
 
     # Set up audit
+    from juris.core.paths import juris_home
     from juris.persistence.audit import AuditLog
 
-    audit_path = Path.home() / ".juris" / "audit.jsonl"
+    audit_path = juris_home() / "audit.jsonl"
     audit = AuditLog(path=audit_path)
 
     # Parse dimensions
@@ -2561,6 +2562,7 @@ def file_petition(
     from pathlib import Path as FilePath
 
     from juris.core.credentials import get_credential, store_credential
+    from juris.core.paths import juris_home
     from juris.signing.filing import FilingRequest
 
     # 1. Load draft markdown
@@ -2572,7 +2574,7 @@ def file_petition(
     else:
         # Treat as tipo_peticao, look for most recent draft in ~/.juris/drafts/
         tipo_peticao = draft_path_or_tipo
-        drafts_dir = FilePath.home() / ".juris" / "drafts" / numero_cnj.replace(".", "_").replace("-", "_")
+        drafts_dir = juris_home() / "drafts" / numero_cnj.replace(".", "_").replace("-", "_")
         if drafts_dir.exists():
             drafts = sorted(drafts_dir.glob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True)
             if drafts:

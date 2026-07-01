@@ -118,6 +118,17 @@ def test_install_native_host_writes_manifest_and_launcher(tmp_path) -> None:
     assert "juris.api.native_host serve-ws" in launcher
 
 
+def test_install_native_host_default_root_honors_juris_home(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("JURIS_HOME", str(tmp_path / "home"))
+
+    installation = install_native_host(
+        extension_id="abcdefghijklmnopabcdefghijklmnop",
+        manifest_dir=tmp_path / "manifests",
+    )
+
+    assert installation.launcher_path == tmp_path / "home" / "browser-session" / "bin" / "juris-native-host"
+
+
 def test_install_native_host_rejects_placeholder_extension_id(tmp_path) -> None:
     with pytest.raises(ValueError, match="extension_id obrigatório"):
         install_native_host(

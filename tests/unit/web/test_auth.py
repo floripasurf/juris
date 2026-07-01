@@ -60,6 +60,15 @@ def test_tenant_db_path_isolates(tmp_path) -> None:
     )
 
 
+def test_tenant_db_path_default_honors_juris_home(tmp_path, monkeypatch) -> None:
+    from juris.web.auth import tenant_db_path
+
+    monkeypatch.setenv("JURIS_HOME", str(tmp_path))
+
+    assert tenant_db_path(Tenant("public")) == tmp_path / "juris.db"
+    assert tenant_db_path(Tenant("escritorio-a")) == tmp_path / "tenants" / "escritorio-a" / "juris.db"
+
+
 def test_authenticates_hashed_keys_for_production() -> None:
     from juris.web.auth import hash_api_key
 

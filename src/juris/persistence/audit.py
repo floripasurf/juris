@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from juris.core.observability import get_logger
+from juris.core.paths import ensure_private_dir, restrict_file
 
 logger = get_logger(__name__)
 
@@ -85,7 +86,9 @@ class AuditLog:
 
     def __init__(self, path: Path) -> None:
         self._path = path
-        self._path.parent.mkdir(parents=True, exist_ok=True)
+        ensure_private_dir(self._path.parent)
+        if self._path.exists():
+            restrict_file(self._path)
 
     def append(self, entry: AuditEntry) -> None:
         """Append an entry to the audit log.
@@ -103,6 +106,7 @@ class AuditLog:
         line = json.dumps(entry.to_dict(), ensure_ascii=False, default=str)
         with open(self._path, "a", encoding="utf-8") as f:
             f.write(line + "\n")
+        restrict_file(self._path)
         logger.debug("audit_appended", entry_id=entry.entry_id, event_type=entry.event_type)
 
     def _get_last_hash(self) -> str | None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import stat
 from pathlib import Path
 
 from juris.repertory.consolidate import consolidate_repertory
@@ -42,6 +43,7 @@ def test_merges_legacy_into_canonical_deduping(tmp_path: Path) -> None:
     assert result.merged == 1  # only c1 was new
     assert result.skipped == 1  # c2 already present
     assert _count(canonical) == 3  # c1 + c2 + c3
+    assert stat.S_IMODE(canonical.stat().st_mode) == 0o600
 
 
 def test_copies_when_canonical_missing(tmp_path: Path) -> None:
@@ -54,6 +56,8 @@ def test_copies_when_canonical_missing(tmp_path: Path) -> None:
     assert result.merged == 2
     assert canonical.exists()
     assert _count(canonical) == 2
+    assert stat.S_IMODE(canonical.parent.stat().st_mode) == 0o700
+    assert stat.S_IMODE(canonical.stat().st_mode) == 0o600
 
 
 def test_noop_when_legacy_missing(tmp_path: Path) -> None:
