@@ -106,7 +106,10 @@ def estrategia_payload(draft: object) -> dict[str, object] | None:
             "fundamento_consequencialista": getattr(linha, "fundamento_consequencialista", None),
         }
 
-    def _tom_minuta(confianca: str) -> str:
+    def _tom_minuta(confianca: str, *, revisao_obrigatoria: bool) -> str:
+        # Firmeza proporcional à solidez; revisão obrigatória ⇒ não protocolar (só rascunho).
+        if revisao_obrigatoria:
+            return "não protocolar"
         return {
             "alta": "forte",
             "media": "cauteloso",
@@ -135,7 +138,10 @@ def estrategia_payload(draft: object) -> dict[str, object] | None:
         "alternativas": [_linha(a) for a in getattr(est, "alternativas", [])],
         "avisos_deontologicos": list(getattr(est, "avisos_deontologicos", [])),
         "revisao_humana_obrigatoria": bool(getattr(est, "revisao_humana_obrigatoria", False)),
-        "tom_minuta": _tom_minuta(str(escolhida.get("confianca") or "")),
+        "tom_minuta": _tom_minuta(
+            str(escolhida.get("confianca") or ""),
+            revisao_obrigatoria=bool(getattr(est, "revisao_humana_obrigatoria", False)),
+        ),
         "classificacao": [
             {
                 "texto": getattr(item, "texto", ""),

@@ -48,7 +48,7 @@ def test_payload_surfaces_chosen_line_alternatives_and_flags() -> None:
     assert [a["tese"] for a in payload["alternativas"]] == ["vice"]
     assert payload["avisos_deontologicos"]
     assert payload["revisao_humana_obrigatoria"] is True
-    assert payload["tom_minuta"] == "forte"
+    assert payload["tom_minuta"] == "não protocolar"  # revisão obrigatória sobrepõe a confiança
     assert payload["classificacao"] == [{"texto": "contrato assinado", "tipo": "prova"}]
     assert payload["matriz_probatoria"][1]["alegacao"] == "dano material"
     assert payload["lacunas_prova"] == [{"alegacao": "dano material", "lacunas": ["nota fiscal ausente"]}]
@@ -59,7 +59,7 @@ def test_payload_marks_low_confidence_as_draft_tone() -> None:
         escolhida=_linha("fraca", confianca="baixa"),
         alternativas=[],
         avisos_deontologicos=[],
-        revisao_humana_obrigatoria=True,
+        revisao_humana_obrigatoria=False,  # isolate the confidence→tone mapping
         classificacao=[],
         matriz_probatoria=[],
     )
@@ -68,6 +68,22 @@ def test_payload_marks_low_confidence_as_draft_tone() -> None:
 
     assert payload is not None
     assert payload["tom_minuta"] == "rascunho"
+
+
+def test_mandatory_review_forces_do_not_file_tone() -> None:
+    est = SimpleNamespace(
+        escolhida=_linha("forte", confianca="alta"),  # even high confidence
+        alternativas=[],
+        avisos_deontologicos=[],
+        revisao_humana_obrigatoria=True,
+        classificacao=[],
+        matriz_probatoria=[],
+    )
+
+    payload = estrategia_payload(SimpleNamespace(estrategia=est))
+
+    assert payload is not None
+    assert payload["tom_minuta"] == "não protocolar"  # mandatory review ⇒ never auto-file
 
 
 def _issue(severity: str, title: str, dimension: str = "authority", **kw: object) -> SimpleNamespace:
@@ -157,3 +173,17 @@ def test_grounding_payload_surfaces_blocked_with_offending_refs() -> None:
     assert payload["blocked"] is True
     assert payload["blocked_reason"] == "citacoes_sem_marcador"
     assert payload["spurious_citations"] == ["REsp 1.234.567/SP"]
+
+
+def test_tom_minuta_scales_with_confidence() -> None:
+    def _tom(confianca):
+        est = SimpleNamespace(
+            escolhida=_linha("t", confianca=confianca), alternativas=[],
+            avisos_deontologicos=[], revisao_humana_obrigatoria=False,
+            classificacao=[], matriz_probatoria=[],
+        )
+        return estrategia_payload(SimpleNamespace(estrategia=est))["tom_minuta"]
+
+    assert _tom("alta") == "forte"
+    assert _tom("media") == "cauteloso"
+    assert _tom("baixa") == "rascunho"

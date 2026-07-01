@@ -33,6 +33,7 @@ logger = get_logger(__name__)
 _RETRIEVAL_DIMENSIONS = {
     ReviewDimension.COMPLETENESS,
     ReviewDimension.AUTHORITY,
+    ReviewDimension.EVIDENCE,
     ReviewDimension.COUNTERARGUMENTS,
     ReviewDimension.COMPLIANCE,
 }
@@ -41,6 +42,7 @@ _RETRIEVAL_DIMENSIONS = {
 _RETRIEVAL_QUERIES: dict[ReviewDimension, str] = {
     ReviewDimension.COMPLETENESS: "teses juridicas argumentos fundamentacao",
     ReviewDimension.AUTHORITY: "sumula vinculante precedente jurisprudencia",
+    ReviewDimension.EVIDENCE: "onus da prova fato controvertido producao de prova",
     ReviewDimension.COUNTERARGUMENTS: "contra-argumento tese contraria improcedencia",
     ReviewDimension.COMPLIANCE: "litigancia ma-fe CPC artigo 78 79 80 81",
 }

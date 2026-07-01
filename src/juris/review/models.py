@@ -7,6 +7,7 @@ from enum import StrEnum
 class ReviewDimension(StrEnum):
     COMPLETENESS = "completeness"
     AUTHORITY = "authority"
+    EVIDENCE = "evidence"  # alegação sem prova / pedido sem lastro probatório
     COUNTERARGUMENTS = "counterarguments"
     STRUCTURE = "structure"
     COMPLIANCE = "compliance"
