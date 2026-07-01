@@ -6,7 +6,6 @@ from datetime import date, timedelta
 
 from juris.defesas.models import ResultadoDefesa, TipoDefesa
 
-
 # Known decadencia periods
 _PRAZOS_DECADENCIA: dict[str, tuple[int, str]] = {
     # CDC vicios

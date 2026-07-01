@@ -42,7 +42,7 @@ Responda APENAS com o JSON no formato:
 }}
 """
 
-CLASSIFY_SCHEMA: dict = {
+CLASSIFY_SCHEMA: dict[str, object] = {
     "type": "object",
     "properties": {
         "categoria": {"type": "string"},

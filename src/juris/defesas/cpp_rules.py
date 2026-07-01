@@ -9,7 +9,6 @@ from juris.defesas.models import (
     TipoDefesa,
 )
 
-
 # Prescription periods by maximum penalty (Art. 109 CP)
 PRAZOS_PRESCRICAO_PENAL: list[PrazoInstituto] = [
     PrazoInstituto(
@@ -63,8 +62,12 @@ CPP_DEFESAS: list[InstitutoProcessual] = [
         nome="Prescricao penal",
         codigo_processual=CodigoProcessual.CPP,
         artigos=[
-            "Art. 109 CP", "Art. 110 CP", "Art. 111 CP",
-            "Art. 112 CP", "Art. 117 CP", "Art. 119 CP",
+            "Art. 109 CP",
+            "Art. 110 CP",
+            "Art. 111 CP",
+            "Art. 112 CP",
+            "Art. 117 CP",
+            "Art. 119 CP",
         ],
         descricao=(
             "Extincao da punibilidade pelo decurso do tempo. "
@@ -86,15 +89,13 @@ CPP_DEFESAS: list[InstitutoProcessual] = [
             "STF HC 82.424/RS (imprescritibilidade do racismo)",
         ],
     ),
-
     # === Decadencia do direito de queixa ===
     InstitutoProcessual(
         nome="Decadencia do direito de queixa",
         codigo_processual=CodigoProcessual.CPP,
         artigos=["Art. 38 CPP", "Art. 103 CP"],
         descricao=(
-            "Perda do direito de oferecer queixa-crime por decurso do prazo "
-            "de 6 meses a contar da ciencia da autoria."
+            "Perda do direito de oferecer queixa-crime por decurso do prazo de 6 meses a contar da ciencia da autoria."
         ),
         tipo=TipoDefesa.DECADENCIA,
         prazos=[

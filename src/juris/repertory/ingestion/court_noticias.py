@@ -142,7 +142,13 @@ class CourtNoticiasIngester(CorpusIngester):
                 parsed_time = entry.get("published_parsed")
                 if parsed_time:
                     data_julgamento = datetime(
-                        *parsed_time[:6], tzinfo=UTC
+                        parsed_time.tm_year,
+                        parsed_time.tm_mon,
+                        parsed_time.tm_mday,
+                        parsed_time.tm_hour,
+                        parsed_time.tm_min,
+                        parsed_time.tm_sec,
+                        tzinfo=UTC,
                     ).date()
             except (TypeError, ValueError):
                 pass

@@ -107,25 +107,24 @@ class DefesaAnalyzer:
         results: list[ResultadoDefesa] = []
 
         # Look for execution-phase suspension
-        if context.fase_atual and "execu" in context.fase_atual.lower():
+        if context.fase_atual and "execu" in context.fase_atual.lower() and context.movimentos:
             # Find the last meaningful act date
-            if context.movimentos:
-                last_mov = context.movimentos[-1]
-                data_str = last_mov.get("data", "") if isinstance(last_mov, dict) else ""
-                if data_str:
-                    from datetime import date
+            last_mov = context.movimentos[-1]
+            data_str = last_mov.get("data", "") if isinstance(last_mov, dict) else ""
+            if data_str:
+                from datetime import date
 
-                    try:
-                        parts = data_str.split("-")
-                        data_ultimo_ato = date(int(parts[0]), int(parts[1]), int(parts[2][:2]))
-                        result = verificar_prescricao_intercorrente(
-                            data_ultimo_ato=data_ultimo_ato,
-                            data_suspensao=None,
-                            prazo_original_anos=3,  # default, should be inferred
-                        )
-                        results.append(result)
-                    except (ValueError, IndexError):
-                        pass
+                try:
+                    parts = data_str.split("-")
+                    data_ultimo_ato = date(int(parts[0]), int(parts[1]), int(parts[2][:2]))
+                    result = verificar_prescricao_intercorrente(
+                        data_ultimo_ato=data_ultimo_ato,
+                        data_suspensao=None,
+                        prazo_original_anos=3,  # default, should be inferred
+                    )
+                    results.append(result)
+                except (ValueError, IndexError):
+                    pass
 
         return results
 
@@ -137,11 +136,7 @@ class DefesaAnalyzer:
         assuntos_lower = [a.lower() for a in context.assuntos]
         cdc_keywords = ["consumidor", "cdc", "vicio", "produto", "servico"]
 
-        is_cdc = any(
-            kw in assunto
-            for assunto in assuntos_lower
-            for kw in cdc_keywords
-        )
+        is_cdc = any(kw in assunto for assunto in assuntos_lower for kw in cdc_keywords)
 
         if is_cdc and context.data_fato_gerador:
             for tipo in ["cdc vicio duravel", "cdc vicio nao duravel"]:
@@ -222,7 +217,4 @@ class DefesaAnalyzer:
             return f"{numero_cnj}: nenhuma defesa processual identificada automaticamente."
 
         tipos = [d.tipo.value for d in aplicaveis]
-        return (
-            f"{numero_cnj}: {len(aplicaveis)} defesa(s) identificada(s): "
-            f"{', '.join(tipos)}."
-        )
+        return f"{numero_cnj}: {len(aplicaveis)} defesa(s) identificada(s): {', '.join(tipos)}."

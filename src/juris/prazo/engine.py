@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
-from enum import Enum
+from enum import StrEnum
 
 from juris.agents.analyzer import AnalysisResult
 from juris.mni.tpu import CategoriaSemantica, Urgencia
@@ -12,14 +12,14 @@ from juris.prazo.calendar import JudicialCalendar
 from juris.prazo.rules import PrazoRule, find_applicable_rules
 
 
-class StatusPrazo(str, Enum):
+class StatusPrazo(StrEnum):
     """Status of a deadline."""
 
-    ABERTO = "aberto"        # Deadline not yet reached
-    PROXIMO = "proximo"      # Within 3 dias úteis of deadline
-    URGENTE = "urgente"      # Within 1 dia útil or today
-    VENCIDO = "vencido"      # Past the deadline
-    CUMPRIDO = "cumprido"    # Marked as fulfilled
+    ABERTO = "aberto"  # Deadline not yet reached
+    PROXIMO = "proximo"  # Within 3 dias úteis of deadline
+    URGENTE = "urgente"  # Within 1 dia útil or today
+    VENCIDO = "vencido"  # Past the deadline
+    CUMPRIDO = "cumprido"  # Marked as fulfilled
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,8 +29,8 @@ class Prazo:
     movimento_id: str
     numero_cnj: str
     rule: PrazoRule
-    data_inicio: date       # Date the clock starts (dia da intimação/publicação)
-    data_limite: date       # Final date for the action
+    data_inicio: date  # Date the clock starts (dia da intimação/publicação)
+    data_limite: date  # Final date for the action
     dias_uteis_total: int
     dias_uteis_restantes: int
     status: StatusPrazo
@@ -264,12 +264,32 @@ def compute_prazos(
 def _tribunal_to_uf(tribunal_id: str) -> str:
     """Extract UF from tribunal ID."""
     _map = {
-        "tjmg": "mg", "tjsp": "sp", "tjrj": "rj", "tjba": "ba",
-        "tjrs": "rs", "tjpr": "pr", "tjpe": "pe", "tjsc": "sc",
-        "tjgo": "go", "tjdf": "df", "tjce": "ce", "tjpa": "pa",
-        "tjma": "ma", "tjam": "am", "tjmt": "mt", "tjms": "ms",
-        "tjes": "es", "tjpb": "pb", "tjrn": "rn", "tjal": "al",
-        "tjpi": "pi", "tjse": "se", "tjro": "ro", "tjac": "ac",
-        "tjap": "ap", "tjrr": "rr", "tjto": "to",
+        "tjmg": "mg",
+        "tjsp": "sp",
+        "tjrj": "rj",
+        "tjba": "ba",
+        "tjrs": "rs",
+        "tjpr": "pr",
+        "tjpe": "pe",
+        "tjsc": "sc",
+        "tjgo": "go",
+        "tjdf": "df",
+        "tjce": "ce",
+        "tjpa": "pa",
+        "tjma": "ma",
+        "tjam": "am",
+        "tjmt": "mt",
+        "tjms": "ms",
+        "tjes": "es",
+        "tjpb": "pb",
+        "tjrn": "rn",
+        "tjal": "al",
+        "tjpi": "pi",
+        "tjse": "se",
+        "tjro": "ro",
+        "tjac": "ac",
+        "tjap": "ap",
+        "tjrr": "rr",
+        "tjto": "to",
     }
     return _map.get(tribunal_id.lower(), "mg")

@@ -41,7 +41,7 @@ class Processo(Base):
     orgao_julgador: Mapped[str | None] = mapped_column(String(300))
     data_ajuizamento: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     grau: Mapped[str | None] = mapped_column(String(20))
-    dados_extras: Mapped[dict | None] = mapped_column(JSONB)
+    dados_extras: Mapped[dict[str, object] | None] = mapped_column(JSONB)
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -101,7 +101,7 @@ class Parte(Base):
     nome: Mapped[str] = mapped_column(String(300))
     tipo: Mapped[str] = mapped_column(String(50))  # autor, reu, terceiro
     documento: Mapped[str | None] = mapped_column(String(20))  # CPF/CNPJ
-    advogados: Mapped[list | None] = mapped_column(JSONB)
+    advogados: Mapped[list[dict[str, object]] | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     processo: Mapped[Processo] = relationship(back_populates="partes")
@@ -158,7 +158,7 @@ class SyncLog(Base):
     new_movimentos: Mapped[int] = mapped_column(default=0)
     new_documentos: Mapped[int] = mapped_column(default=0)
     error: Mapped[str | None] = mapped_column(Text)
-    details: Mapped[dict | None] = mapped_column(JSONB)
+    details: Mapped[dict[str, object] | None] = mapped_column(JSONB)
 
 
 class JurisprudenciaRecord(Base):
@@ -173,8 +173,8 @@ class JurisprudenciaRecord(Base):
     ementa: Mapped[str] = mapped_column(Text)
     texto_integral: Mapped[str | None] = mapped_column(Text)
     hierarquia: Mapped[int]
-    temas: Mapped[list | None] = mapped_column(JSONB)
-    base_legal: Mapped[list | None] = mapped_column(JSONB)
+    temas: Mapped[list[str] | None] = mapped_column(JSONB)
+    base_legal: Mapped[list[str] | None] = mapped_column(JSONB)
     situacao: Mapped[str] = mapped_column(String(20), default="vigente")
     relator: Mapped[str | None] = mapped_column(String(200))
     data_julgamento: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

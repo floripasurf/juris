@@ -1,4 +1,5 @@
 """Versioned prompt templates for the petition reviewer agent."""
+
 from __future__ import annotations
 
 PROMPT_VERSION = "v1"
@@ -31,7 +32,8 @@ Peticao:
 {petition_text}
 
 Responda com JSON contendo uma lista de "issues" encontradas.
-Cada issue deve ter: severity, title, description, line_anchor (trecho relevante), suggestion, citations (fontes do contexto).
+Cada issue deve ter: severity, title, description, line_anchor (trecho relevante), suggestion,
+citations (fontes do contexto).
 Se nao houver problemas, retorne {{"issues": []}}.
 """
 
@@ -50,7 +52,8 @@ Peticao:
 {petition_text}
 
 Responda com JSON contendo uma lista de "issues" encontradas.
-Cada issue deve ter: severity, title, description, line_anchor (trecho relevante), suggestion, citations (fontes do contexto).
+Cada issue deve ter: severity, title, description, line_anchor (trecho relevante), suggestion,
+citations (fontes do contexto).
 Se nao houver problemas, retorne {{"issues": []}}.
 """
 
@@ -68,7 +71,8 @@ Peticao:
 {petition_text}
 
 Responda com JSON contendo uma lista de "issues" encontradas.
-Cada issue deve ter: severity, title, description, line_anchor (trecho relevante), suggestion (como se preparar), citations (fontes).
+Cada issue deve ter: severity, title, description, line_anchor (trecho relevante),
+suggestion (como se preparar), citations (fontes).
 Se nao houver contra-argumentos relevantes, retorne {{"issues": []}}.
 """
 

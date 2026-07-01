@@ -8,23 +8,23 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
-from enum import Enum
+from enum import StrEnum
 
 
-class TipoFonte(str, Enum):
+class TipoFonte(StrEnum):
     """Type of jurisprudence source, ordered by binding authority."""
 
-    SUMULA_VINCULANTE = "sumula_vinculante"      # hierarquia=1
-    RE_STF = "re_stf"                            # hierarquia=2
-    RESP_REPETITIVO = "resp_repetitivo"          # hierarquia=3
-    SUMULA = "sumula"                            # hierarquia=4
+    SUMULA_VINCULANTE = "sumula_vinculante"  # hierarquia=1
+    RE_STF = "re_stf"  # hierarquia=2
+    RESP_REPETITIVO = "resp_repetitivo"  # hierarquia=3
+    SUMULA = "sumula"  # hierarquia=4
     JURISPRUDENCIA_UNIFORME = "jurisprudencia_uniforme"  # hierarquia=5
-    PRECEDENTE_LOCAL = "precedente_local"        # hierarquia=6
-    MODELO_PETICAO = "modelo_peticao"            # hierarquia=7
-    DOUTRINA_PD = "doutrina_pd"                  # hierarquia=6
-    NOTICIA_TRIBUNAL = "noticia_tribunal"        # hierarquia=7
-    ACORDAO_LANDMARK = "acordao_landmark"        # hierarquia=3
-    ACORDAO_PUBLICADO = "acordao_publicado"      # hierarquia=5
+    PRECEDENTE_LOCAL = "precedente_local"  # hierarquia=6
+    MODELO_PETICAO = "modelo_peticao"  # hierarquia=7
+    DOUTRINA_PD = "doutrina_pd"  # hierarquia=6
+    NOTICIA_TRIBUNAL = "noticia_tribunal"  # hierarquia=7
+    ACORDAO_LANDMARK = "acordao_landmark"  # hierarquia=3
+    ACORDAO_PUBLICADO = "acordao_publicado"  # hierarquia=5
 
 
 TIPO_HIERARQUIA: dict[TipoFonte, int] = {

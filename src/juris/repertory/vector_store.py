@@ -96,7 +96,7 @@ class QdrantVectorStore(VectorStore):
         self._url = url
         self._collection = collection
         self._dimension = dimension
-        self._client: object | None = None
+        self._client: Any | None = None
 
     def _get_client(self) -> Any:
         """Lazy-load Qdrant client and ensure collection exists."""
@@ -106,9 +106,9 @@ class QdrantVectorStore(VectorStore):
         from qdrant_client.models import Distance, VectorParams
 
         self._client = QdrantClient(url=self._url)
-        collections = [c.name for c in self._client.get_collections().collections]  # type: ignore[union-attr]
+        collections = [c.name for c in self._client.get_collections().collections]
         if self._collection not in collections:
-            self._client.create_collection(  # type: ignore[union-attr]
+            self._client.create_collection(
                 collection_name=self._collection,
                 vectors_config=VectorParams(size=self._dimension, distance=Distance.COSINE),
             )

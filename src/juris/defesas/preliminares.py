@@ -39,10 +39,7 @@ def _check_coisa_julgada(context: ProcessoContext) -> ResultadoDefesa:
     """Check for coisa julgada indicators in movements."""
     # Look for transito em julgado in movements
     transito_codes = {970, 22001}
-    has_transito = any(
-        _get_mov_code(m) in transito_codes
-        for m in context.movimentos
-    )
+    has_transito = any(_get_mov_code(m) in transito_codes for m in context.movimentos)
 
     if has_transito:
         return ResultadoDefesa(
@@ -56,8 +53,7 @@ def _check_coisa_julgada(context: ProcessoContext) -> ResultadoDefesa:
             ),
             base_legal="Art. 502-508 CPC",
             recomendacao=(
-                "Alegar coisa julgada em preliminar (Art. 337 VII CPC). "
-                "Necessario comprovar triplice identidade."
+                "Alegar coisa julgada em preliminar (Art. 337 VII CPC). Necessario comprovar triplice identidade."
             ),
         )
 
@@ -84,10 +80,7 @@ def _check_litispendencia(context: ProcessoContext) -> ResultadoDefesa:
             "Analise automatica limitada sem acesso a outros processos."
         ),
         base_legal="Art. 337 par.1-3 CPC",
-        recomendacao=(
-            "Pesquisar no sistema do tribunal se ha acao identica em tramitacao "
-            "contra as mesmas partes."
-        ),
+        recomendacao=("Pesquisar no sistema do tribunal se ha acao identica em tramitacao contra as mesmas partes."),
     )
 
 
@@ -102,31 +95,22 @@ def _check_incompetencia(context: ProcessoContext) -> ResultadoDefesa:
 
     # Trabalhista in justica comum
     if ramo == "trabalho" and not tribunal.startswith("trt"):
-        issues.append(
-            "Acao trabalhista em tribunal que nao e da Justica do Trabalho."
-        )
+        issues.append("Acao trabalhista em tribunal que nao e da Justica do Trabalho.")
 
     # Civel in justica do trabalho
     if ramo == "civel" and tribunal.startswith("trt"):
-        issues.append(
-            "Acao civel em tribunal da Justica do Trabalho."
-        )
+        issues.append("Acao civel em tribunal da Justica do Trabalho.")
 
     # Penal em vara civel
     if ramo == "penal" and "civel" in classe:
-        issues.append(
-            "Materia penal em vara civel."
-        )
+        issues.append("Materia penal em vara civel.")
 
     if issues:
         return ResultadoDefesa(
             tipo=TipoDefesa.INCOMPETENCIA,
             aplicavel=True,
             confianca=0.70,
-            fundamentacao=(
-                "Possivel incompetencia identificada: "
-                + "; ".join(issues)
-            ),
+            fundamentacao=("Possivel incompetencia identificada: " + "; ".join(issues)),
             base_legal="Art. 64 CPC (absoluta) / Art. 65 CPC (relativa)",
             recomendacao=(
                 "Alegar incompetencia. Se absoluta (materia/pessoa/funcional), "
@@ -170,8 +154,7 @@ def _check_inepcia(context: ProcessoContext) -> ResultadoDefesa:
             ),
             base_legal="Art. 330 CPC",
             recomendacao=(
-                "Avaliar se a inicial e inepta (Art. 330 CPC). "
-                "Alegar em preliminar de contestacao se aplicavel."
+                "Avaliar se a inicial e inepta (Art. 330 CPC). Alegar em preliminar de contestacao se aplicavel."
             ),
         )
 
@@ -217,10 +200,7 @@ def _check_falta_interesse(context: ProcessoContext) -> ResultadoDefesa:
             "da via processual eleita. Analise automatica limitada."
         ),
         base_legal="Art. 17 CPC",
-        recomendacao=(
-            "Verificar se a parte tem necessidade da tutela jurisdicional "
-            "e se a via processual e adequada."
-        ),
+        recomendacao=("Verificar se a parte tem necessidade da tutela jurisdicional e se a via processual e adequada."),
     )
 
 

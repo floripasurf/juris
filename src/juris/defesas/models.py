@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 
-class CodigoProcessual(str, Enum):
+class CodigoProcessual(StrEnum):
     """Procedural code systems in Brazilian law."""
 
     CPC = "CPC"
@@ -16,7 +16,7 @@ class CodigoProcessual(str, Enum):
     CC = "CC"
 
 
-class TipoDefesa(str, Enum):
+class TipoDefesa(StrEnum):
     """Types of procedural defenses available."""
 
     PRESCRICAO = "prescricao"

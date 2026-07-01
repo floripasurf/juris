@@ -6,7 +6,7 @@ import asyncio
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import pool
+from sqlalchemy import Connection, pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from juris.persistence.models import Base
@@ -31,7 +31,7 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
-def do_run_migrations(connection):
+def do_run_migrations(connection: Connection) -> None:
     context.configure(connection=connection, target_metadata=target_metadata)
     with context.begin_transaction():
         context.run_migrations()
@@ -39,14 +39,8 @@ def do_run_migrations(connection):
 
 async def run_async_migrations() -> None:
     """Run migrations in 'online' mode with async engine."""
-    connectable = async_engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-        # Use asyncpg for migrations
-    )
-    # Override URL to use asyncpg
     from juris.config import get_settings
+
     settings = get_settings()
     connectable = async_engine_from_config(
         {"sqlalchemy.url": settings.database_url},

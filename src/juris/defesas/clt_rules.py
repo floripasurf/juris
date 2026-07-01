@@ -9,7 +9,6 @@ from juris.defesas.models import (
     TipoDefesa,
 )
 
-
 CLT_DEFESAS: list[InstitutoProcessual] = [
     # === Prescricao bienal ===
     InstitutoProcessual(
@@ -17,8 +16,7 @@ CLT_DEFESAS: list[InstitutoProcessual] = [
         codigo_processual=CodigoProcessual.CLT,
         artigos=["Art. 7 XXIX CF", "Art. 11 CLT"],
         descricao=(
-            "Prazo de 2 anos apos a extincao do contrato de trabalho "
-            "para ajuizamento de reclamacao trabalhista."
+            "Prazo de 2 anos apos a extincao do contrato de trabalho para ajuizamento de reclamacao trabalhista."
         ),
         tipo=TipoDefesa.PRESCRICAO,
         prazos=[
@@ -43,16 +41,12 @@ CLT_DEFESAS: list[InstitutoProcessual] = [
             "Sumula 268 TST",
         ],
     ),
-
     # === Prescricao quinquenal ===
     InstitutoProcessual(
         nome="Prescricao quinquenal trabalhista",
         codigo_processual=CodigoProcessual.CLT,
         artigos=["Art. 7 XXIX CF", "Art. 11 CLT"],
-        descricao=(
-            "Limita a pretensao aos 5 anos anteriores ao ajuizamento "
-            "da reclamacao trabalhista."
-        ),
+        descricao=("Limita a pretensao aos 5 anos anteriores ao ajuizamento da reclamacao trabalhista."),
         tipo=TipoDefesa.PRESCRICAO,
         prazos=[
             PrazoInstituto(
@@ -75,7 +69,6 @@ CLT_DEFESAS: list[InstitutoProcessual] = [
             "STF ARE 709.212 (FGTS)",
         ],
     ),
-
     # === Decadencia trabalhista ===
     InstitutoProcessual(
         nome="Decadencia trabalhista",

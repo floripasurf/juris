@@ -90,10 +90,7 @@ def verificar_prescricao(
         if dias_suspensos > 0:
             fundamentacao += f" Desconsiderados {dias_suspensos} dias de suspensao."
         if causas_interrupcao:
-            fundamentacao += (
-                f" Ultima interrupcao em {inicio_efetivo.strftime('%d/%m/%Y')} "
-                f"(relogio reiniciado)."
-            )
+            fundamentacao += f" Ultima interrupcao em {inicio_efetivo.strftime('%d/%m/%Y')} (relogio reiniciado)."
         recomendacao = (
             "Alegar prescricao em preliminar de contestacao (Art. 487 II CPC). "
             "Direito potestativo do reu, materia de ordem publica."
@@ -111,10 +108,7 @@ def verificar_prescricao(
         if dias_suspensos > 0:
             fundamentacao += f" Desconsiderados {dias_suspensos} dias de suspensao."
         if causas_interrupcao:
-            fundamentacao += (
-                f" Ultima interrupcao em {inicio_efetivo.strftime('%d/%m/%Y')} "
-                f"(relogio reiniciado)."
-            )
+            fundamentacao += f" Ultima interrupcao em {inicio_efetivo.strftime('%d/%m/%Y')} (relogio reiniciado)."
         recomendacao = "Prescricao nao aplicavel. Avaliar outras defesas processuais."
         confianca = 0.90
 

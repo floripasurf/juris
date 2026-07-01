@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 
-class ReviewDimension(str, Enum):
+class ReviewDimension(StrEnum):
     COMPLETENESS = "completeness"
     AUTHORITY = "authority"
     COUNTERARGUMENTS = "counterarguments"
@@ -12,7 +12,7 @@ class ReviewDimension(str, Enum):
     COMPLIANCE = "compliance"
 
 
-class IssueSeverity(str, Enum):
+class IssueSeverity(StrEnum):
     CRITICAL = "critical"
     IMPORTANT = "important"
     SUGGESTION = "suggestion"
@@ -120,7 +120,7 @@ class ReviewReport:
             lines.append(f"### [{icon}] {issue.title}")
             lines.append(f"**Dimensao:** {issue.dimension.value}")
             if issue.line_anchor:
-                lines.append(f"**Trecho:** \"{issue.line_anchor}\"")
+                lines.append(f'**Trecho:** "{issue.line_anchor}"')
             lines.append(issue.description)
             if issue.suggestion:
                 lines.append(f"**Sugestao:** {issue.suggestion}")

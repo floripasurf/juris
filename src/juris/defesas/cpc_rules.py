@@ -9,7 +9,6 @@ from juris.defesas.models import (
     TipoDefesa,
 )
 
-
 CPC_DEFESAS: list[InstitutoProcessual] = [
     # === Prescricao intercorrente ===
     InstitutoProcessual(
@@ -46,7 +45,6 @@ CPC_DEFESAS: list[InstitutoProcessual] = [
             "IAC no REsp 1604412/SC",
         ],
     ),
-
     # === Preclusao temporal ===
     InstitutoProcessual(
         nome="Preclusao temporal",
@@ -63,15 +61,13 @@ CPC_DEFESAS: list[InstitutoProcessual] = [
             "Prazo nao peremptorio",
         ],
     ),
-
     # === Preclusao consumativa ===
     InstitutoProcessual(
         nome="Preclusao consumativa",
         codigo_processual=CodigoProcessual.CPC,
         artigos=["Art. 507 CPC"],
         descricao=(
-            "Perda da faculdade processual por ja ter sido exercida. "
-            "Uma vez praticado o ato, nao pode ser repetido."
+            "Perda da faculdade processual por ja ter sido exercida. Uma vez praticado o ato, nao pode ser repetido."
         ),
         tipo=TipoDefesa.PRECLUSAO_CONSUMATIVA,
         requisitos=[
@@ -82,15 +78,13 @@ CPC_DEFESAS: list[InstitutoProcessual] = [
             "Emenda da inicial por determinacao judicial",
         ],
     ),
-
     # === Preclusao logica ===
     InstitutoProcessual(
         nome="Preclusao logica",
         codigo_processual=CodigoProcessual.CPC,
         artigos=["Art. 1.000 CPC"],
         descricao=(
-            "Perda da faculdade processual por pratica de ato incompativel. "
-            "Ex: aceitar a sentenca e depois recorrer."
+            "Perda da faculdade processual por pratica de ato incompativel. Ex: aceitar a sentenca e depois recorrer."
         ),
         tipo=TipoDefesa.PRECLUSAO_LOGICA,
         requisitos=[
@@ -103,16 +97,12 @@ CPC_DEFESAS: list[InstitutoProcessual] = [
             "STJ REsp 1.223.412/PR",
         ],
     ),
-
     # === Coisa julgada ===
     InstitutoProcessual(
         nome="Coisa julgada",
         codigo_processual=CodigoProcessual.CPC,
         artigos=["Art. 502 CPC", "Art. 503 CPC", "Art. 504 CPC", "Art. 508 CPC"],
-        descricao=(
-            "Autoridade que torna imutavel e indiscutivel a decisao de merito "
-            "nao mais sujeita a recurso."
-        ),
+        descricao=("Autoridade que torna imutavel e indiscutivel a decisao de merito nao mais sujeita a recurso."),
         tipo=TipoDefesa.COISA_JULGADA,
         requisitos=[
             "Decisao de merito transitada em julgado",
@@ -130,16 +120,12 @@ CPC_DEFESAS: list[InstitutoProcessual] = [
             "STJ REsp 1.521.914/PE",
         ],
     ),
-
     # === Litispendencia ===
     InstitutoProcessual(
         nome="Litispendencia",
         codigo_processual=CodigoProcessual.CPC,
         artigos=["Art. 337 par.1 CPC", "Art. 337 par.2 CPC", "Art. 337 par.3 CPC"],
-        descricao=(
-            "Existencia de acao identica em tramitacao, "
-            "com mesmas partes, causa de pedir e pedido."
-        ),
+        descricao=("Existencia de acao identica em tramitacao, com mesmas partes, causa de pedir e pedido."),
         tipo=TipoDefesa.LITISPENDENCIA,
         requisitos=[
             "Acao anterior em tramitacao",
@@ -151,16 +137,12 @@ CPC_DEFESAS: list[InstitutoProcessual] = [
             "Conexao (mesma causa de pedir ou pedido, mas nao ambos)",
         ],
     ),
-
     # === Incompetencia absoluta ===
     InstitutoProcessual(
         nome="Incompetencia absoluta",
         codigo_processual=CodigoProcessual.CPC,
         artigos=["Art. 64 CPC"],
-        descricao=(
-            "Incompetencia em razao da materia, da pessoa ou funcional. "
-            "Pode ser alegada a qualquer tempo."
-        ),
+        descricao=("Incompetencia em razao da materia, da pessoa ou funcional. Pode ser alegada a qualquer tempo."),
         tipo=TipoDefesa.INCOMPETENCIA,
         requisitos=[
             "Materia alheia a competencia do juizo",
@@ -171,7 +153,6 @@ CPC_DEFESAS: list[InstitutoProcessual] = [
             "Sumula 33 STJ",
         ],
     ),
-
     # === Incompetencia relativa ===
     InstitutoProcessual(
         nome="Incompetencia relativa",
@@ -190,7 +171,6 @@ CPC_DEFESAS: list[InstitutoProcessual] = [
             "Prorrogacao por nao-alegacao em tempo habil",
         ],
     ),
-
     # === Inepcia da inicial ===
     InstitutoProcessual(
         nome="Inepcia da inicial",
@@ -208,15 +188,13 @@ CPC_DEFESAS: list[InstitutoProcessual] = [
             "Emenda da inicial deferida pelo juiz (Art. 321 CPC)",
         ],
     ),
-
     # === Ilegitimidade ===
     InstitutoProcessual(
         nome="Ilegitimidade de parte",
         codigo_processual=CodigoProcessual.CPC,
         artigos=["Art. 17 CPC"],
         descricao=(
-            "Ausencia de legitimidade ativa ou passiva. "
-            "Parte nao e titular do direito ou da obrigacao em discussao."
+            "Ausencia de legitimidade ativa ou passiva. Parte nao e titular do direito ou da obrigacao em discussao."
         ),
         tipo=TipoDefesa.ILEGITIMIDADE,
         requisitos=[
@@ -227,7 +205,6 @@ CPC_DEFESAS: list[InstitutoProcessual] = [
             "Legitimidade extraordinaria (substituicao processual)",
         ],
     ),
-
     # === Falta de interesse ===
     InstitutoProcessual(
         nome="Falta de interesse de agir",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 from typing import Any
 
@@ -66,10 +67,8 @@ class OllamaLLM(AbstractLLM):
         # Try to parse structured output
         structured = None
         if schema and content:
-            try:
+            with contextlib.suppress(json.JSONDecodeError):
                 structured = json.loads(content)
-            except json.JSONDecodeError:
-                pass
 
         # Ollama provides eval_count and prompt_eval_count
         usage = {

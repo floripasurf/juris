@@ -17,7 +17,9 @@ from juris.repertory.ingestion.base import IngestionResult
 from juris.repertory.ingestion.seed_loader import SeedLoader
 
 if TYPE_CHECKING:
+    from juris.repertory.embeddings import LegalEmbedder
     from juris.repertory.ingestion.base import CorpusIngester
+    from juris.repertory.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -147,8 +149,8 @@ def _get_class_ingester(
 def ingest_source(
     key: str,
     corpus_dir: Path,
-    store: object,
-    embedder: object | None = None,
+    store: VectorStore,
+    embedder: LegalEmbedder | None = None,
     include_superseded: bool = False,
     limit: int | None = None,
 ) -> IngestionResult:
@@ -181,13 +183,13 @@ def ingest_source(
         return _run_class_ingester(ingester, store, embedder)
 
     loader = SeedLoader(corpus_dir=corpus_dir, include_superseded=include_superseded)
-    return loader.ingest(store, embedder)  # type: ignore[arg-type]
+    return loader.ingest(store, embedder)
 
 
 def _run_class_ingester(
-    ingester: object,
-    store: object,
-    embedder: object | None = None,
+    ingester: CorpusIngester,
+    store: VectorStore,
+    embedder: LegalEmbedder | None = None,
 ) -> IngestionResult:
     """Run a class-based ingester through the standard pipeline.
 
@@ -201,10 +203,10 @@ def _run_class_ingester(
     """
     from juris.repertory.chunking import DocumentChunk
 
-    fontes = ingester.fetch()  # type: ignore[union-attr]
+    fontes = ingester.fetch()
     all_chunks: list[DocumentChunk] = []
     for fonte in fontes:
-        all_chunks.extend(ingester.parse(fonte))  # type: ignore[union-attr]
+        all_chunks.extend(ingester.parse(fonte))
 
     if not all_chunks:
         return IngestionResult(
@@ -214,12 +216,15 @@ def _run_class_ingester(
     # Store chunks
     texts = [c.text for c in all_chunks]
     if embedder is not None:
-        embeddings = embedder.embed_texts(texts)  # type: ignore[union-attr]
-        stored = store.upsert(all_chunks, embeddings)  # type: ignore[union-attr]
+        embeddings = embedder.embed_texts(texts)
+        if embeddings is None:
+            dim = embedder.dimension
+            embeddings = [[0.0] * dim for _ in all_chunks]
+        stored = store.upsert(all_chunks, embeddings)
     else:
-        dim = getattr(embedder, "dimension", 1024) if embedder else 1024
+        dim = 1024
         zero_embeddings = [[0.0] * dim for _ in all_chunks]
-        stored = store.upsert(all_chunks, zero_embeddings)  # type: ignore[union-attr]
+        stored = store.upsert(all_chunks, zero_embeddings)
 
     logger.info(
         "Ingested %d fontes -> %d chunks -> %d stored (class-based)",

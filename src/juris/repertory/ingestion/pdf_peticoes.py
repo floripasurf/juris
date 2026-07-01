@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from juris.core.observability import get_logger
 from juris.repertory.peticoes.extractor import extract_structure
@@ -39,7 +39,7 @@ def extract_text_from_pdf(pdf_path: Path) -> str:
     """
     import pymupdf
 
-    doc = pymupdf.open(str(pdf_path))
+    doc = cast(Any, pymupdf.open(str(pdf_path)))  # type: ignore[no-untyped-call]
     text_parts = []
     for page in doc:
         text_parts.append(page.get_text())

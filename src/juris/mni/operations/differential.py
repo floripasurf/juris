@@ -46,7 +46,7 @@ class DiffResult:
 def detect_new_movements(
     fetched: ProcessoDomain,
     last_sync_at: datetime | None,
-    known_movimento_keys: set[tuple[datetime, int | None, str | None]] | None = None,
+    known_movimento_keys: set[tuple[datetime | None, int | None, str | None]] | None = None,
 ) -> list[Movimento]:
     """Detect movements that are new since the last sync.
 
@@ -116,7 +116,7 @@ def detect_new_documents(
 def diff_processo(
     fetched: ProcessoDomain,
     last_sync_at: datetime | None,
-    known_movimento_keys: set[tuple[datetime, int | None, str | None]] | None = None,
+    known_movimento_keys: set[tuple[datetime | None, int | None, str | None]] | None = None,
     known_doc_ids: set[str] | None = None,
 ) -> DiffResult:
     """Run a full differential comparison for a processo.

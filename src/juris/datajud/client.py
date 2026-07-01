@@ -13,7 +13,7 @@ import os
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -180,7 +180,7 @@ def _post_datajud(
         )
         status_code = response.status_code
         response.raise_for_status()
-        data = response.json()
+        data = cast(dict[str, Any], response.json())
     except Exception:
         audit_datajud_call(
             audit,
@@ -253,7 +253,7 @@ def consultar_processo(
         logger.info("datajud_not_found", numero_cnj=numero_cnj)
         return None
 
-    source = hits[0]["_source"]
+    source = cast(dict[str, Any], hits[0]["_source"])
     logger.info(
         "datajud_found",
         numero_cnj=numero_cnj,

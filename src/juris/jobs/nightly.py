@@ -324,7 +324,7 @@ async def run_nightly(
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     for r in results:
-        if isinstance(r, Exception):
+        if isinstance(r, BaseException):
             err_result = NightlyResult(
                 numero_cnj="unknown",
                 tribunal="unknown",

@@ -62,10 +62,7 @@ def _verificar_temporal(
     # Check if there's a movement indicating the deadline was missed
     # Look for "certidao de decurso de prazo" or similar
     decurso_codes = {493, 123}  # Anotacao, Certificacao
-    has_decurso = any(
-        _get_mov_codigo(m) in decurso_codes
-        for m in movimentos
-    )
+    has_decurso = any(_get_mov_codigo(m) in decurso_codes for m in movimentos)
 
     if has_decurso:
         return ResultadoDefesa(

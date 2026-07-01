@@ -44,7 +44,7 @@ def parse_datajud_processo(source: dict[str, Any]) -> ProcessoDomain:
     data_ajuizamento = _parse_date(data_aj) if data_aj and data_aj != "19000101000000" else None
 
     movimentos = [_parse_movimento(m) for m in movimentos_raw]
-    movimentos.sort(key=lambda m: m.data_hora)
+    movimentos.sort(key=lambda m: m.data_hora or datetime.min)
 
     return ProcessoDomain(
         numero_cnj=numero_fmt,

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import getpass
+from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 import typer
 from rich.table import Table
@@ -16,6 +17,13 @@ from juris.cli.console import console
 from juris.jobs.tracking import get_tracked as _get_tracked_processos
 from juris.jobs.tracking import merge_tracked as _merge_tracked
 from juris.jobs.tracking import parse_cnj_seed as _parse_cnj_seed
+
+if TYPE_CHECKING:
+    from juris.core.types import NumeroCNJ
+    from juris.llm.base import AbstractLLM
+    from juris.mni.parsers.processo import ProcessoDomain
+    from juris.mni.token import TokenMaterial
+    from juris.mni.tribunais import TribunalConfig
 
 app = typer.Typer(
     name="juris",
@@ -149,7 +157,11 @@ def logout(
     console.print(f"[green]Credentials removed for {tribunal.upper()}.[/green]")
 
 
-def _print_processo(processo) -> None:
+def _format_dt(value: datetime | None, fmt: str, fallback: str = "-") -> str:
+    return value.strftime(fmt) if value is not None else fallback
+
+
+def _print_processo(processo: ProcessoDomain) -> None:
     """Pretty-print a ProcessoDomain to the console."""
     console.print(f"\n[bold green]Processo: {processo.numero_cnj}[/bold green]")
     console.print(f"  Classe: {processo.classe or 'N/A'}")
@@ -173,7 +185,7 @@ def _print_processo(processo) -> None:
 
         for m in processo.movimentos[-10:]:  # Last 10
             table.add_row(
-                m.data_hora.strftime("%Y-%m-%d %H:%M"),
+                _format_dt(m.data_hora, "%Y-%m-%d %H:%M"),
                 str(m.codigo_nacional or ""),
                 m.descricao or "",
                 (m.complemento or "")[:60],
@@ -187,7 +199,12 @@ def _print_processo(processo) -> None:
 
 
 def _consulta_mtls(
-    cnj, tribunal_cfg, cpf: str, senha: str | None, com_documentos: bool, pin: str | None = None
+    cnj: NumeroCNJ,
+    tribunal_cfg: TribunalConfig,
+    cpf: str,
+    senha: str | None,
+    com_documentos: bool,
+    pin: str | None = None,
 ) -> None:
     """consultarProcesso against an mTLS tribunal, through the MNIReadService boundary."""
     from juris.mni.service import InProcessMNIReadService
@@ -219,7 +236,9 @@ def _consulta_mtls(
     _print_processo(processo)
 
 
-def _mtls_session(tribunal_cfg, cpf: str, senha: str | None, pin: str | None = None):
+def _mtls_session(
+    tribunal_cfg: TribunalConfig, cpf: str, senha: str | None, pin: str | None = None
+) -> tuple[TokenMaterial, str, str]:
     """Resolve mTLS credentials at the CLI edge, shared by consulta and avisos.
 
     Reads the token cert via :class:`TokenService` (no PIN), resolves the token
@@ -331,7 +350,7 @@ def avisos(
         console.print("[dim]Rode 'juris overnight --cpf " + cpf + "' para calcular os prazos.[/dim]")
 
 
-def _safe_get_tribunal(tribunal_id: str):
+def _safe_get_tribunal(tribunal_id: str) -> TribunalConfig | None:
     """Return the TribunalConfig for an id, or None if unknown."""
     from juris.mni.tribunais import get_tribunal
 
@@ -414,7 +433,7 @@ def consulta_cert(
         raise typer.Exit(code=1) from e
 
     # Resolve PIN: arg > stored > prompt
-    resolved_pin = pin
+    resolved_pin: str | None = pin
     if not resolved_pin:
         resolved_pin = get_credential("token_pin")
     if not resolved_pin:
@@ -835,7 +854,7 @@ def analyze(
     for r in items:
         style = urgency_colors.get(r.urgencia, "")
         table.add_row(
-            r.data_hora.strftime("%Y-%m-%d"),
+            _format_dt(r.data_hora, "%Y-%m-%d"),
             f"[{style}]{r.urgencia.value}[/{style}]",
             r.categoria.value,
             r.metodo,
@@ -1213,7 +1232,7 @@ def defesas(
 
     # Build ProcessoContext from ProcessoDomain
     movimentos_raw = [
-        {"codigo": m.codigo_nacional, "data": m.data_hora.strftime("%Y-%m-%d")} for m in (processo.movimentos or [])
+        {"codigo": m.codigo_nacional, "data": _format_dt(m.data_hora, "%Y-%m-%d")} for m in (processo.movimentos or [])
     ]
     partes_raw = [{"nome": p.nome, "tipo": p.tipo} for p in (processo.partes or [])]
 
@@ -1512,17 +1531,17 @@ def repertory_ingest(
         entry = REGISTRY[source]
         # Class-based ingester (e.g., tjdft-modelos, stf-landmark)
         if entry.source_dir or entry.ingester_class:
-            dir_path = Path(corpus_dir) if corpus_dir else Path(__file__).resolve().parents[3]
-            result = ingest_source(source, dir_path / "data" / "corpus", store, limit=limit)
+            base_dir = Path(corpus_dir) if corpus_dir else Path(__file__).resolve().parents[3]
+            result = ingest_source(source, base_dir / "data" / "corpus", store, limit=limit)
         else:
-            dir_path = Path(corpus_dir) if corpus_dir else None
-            loader = SeedLoader(corpus_dir=dir_path, include_superseded=include_superseded)
+            seed_dir = Path(corpus_dir) if corpus_dir else None
+            loader = SeedLoader(corpus_dir=seed_dir, include_superseded=include_superseded)
             audit_path = fts_path.parent / "audit.jsonl"
             audit = AuditLog(path=audit_path)
             result = loader.ingest(store, audit_log=audit)
     else:
-        dir_path = Path(corpus_dir) if corpus_dir else None
-        loader = SeedLoader(corpus_dir=dir_path, include_superseded=include_superseded)
+        seed_dir = Path(corpus_dir) if corpus_dir else None
+        loader = SeedLoader(corpus_dir=seed_dir, include_superseded=include_superseded)
         audit_path = fts_path.parent / "audit.jsonl"
         audit = AuditLog(path=audit_path)
         result = loader.ingest(store, audit_log=audit)
@@ -1895,6 +1914,7 @@ def review(
         raise typer.Exit(code=1)
 
     # Set up LLM
+    llm: AbstractLLM
     if cloud:
         try:
             from juris.config import get_settings
@@ -2049,6 +2069,7 @@ def draft(
         raise typer.Exit(code=1) from e
 
     # Set up LLM (same pattern as review command)
+    llm: AbstractLLM
     if cloud:
         console.print(
             "[yellow bold]AVISO PII:[/yellow bold] --cloud envia dados do processo para API externa. "
@@ -2355,16 +2376,22 @@ def alerts_send() -> None:
 
         # Build a minimal AlertBatch from pending prazos
         from datetime import date
+        from types import SimpleNamespace
 
         from juris.alerts.deadline_alerts import AlertBatch, AlertLevel, DeadlineAlert
+        from juris.prazo.engine import Prazo
 
         alerts_list = []
         for pr in pending:
             if pr.status in ("vencido", "urgente", "proximo"):
                 level = AlertLevel.CRITICAL if pr.status in ("vencido", "urgente") else AlertLevel.WARNING
+                prazo_view = SimpleNamespace(
+                    rule=SimpleNamespace(nome=pr.rule_nome),
+                    data_limite=pr.data_limite,
+                )
                 alerts_list.append(
                     DeadlineAlert(
-                        prazo=pr,
+                        prazo=cast(Prazo, prazo_view),
                         level=level,
                         message=f"{pr.rule_nome}: {pr.status}",
                     )
@@ -2812,6 +2839,7 @@ def demo(
         )
 
     # Set up LLM (mirrors `draft` command)
+    llm: AbstractLLM
     if cloud:
         console.print(
             "[yellow]AVISO PII:[/yellow] --cloud envia dados do processo "

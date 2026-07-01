@@ -7,10 +7,7 @@ Supports lazy loading and graceful fallback when model is unavailable.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    pass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +30,7 @@ class LegalEmbedder:
     ) -> None:
         self._model_name = model_name
         self._device = device
-        self._model: object | None = None
+        self._model: Any | None = None
         self._dimension: int = _DEFAULT_DIMENSION
 
     def _load_model(self) -> None:
@@ -44,7 +41,7 @@ class LegalEmbedder:
             from sentence_transformers import SentenceTransformer
 
             self._model = SentenceTransformer(self._model_name, device=self._device)
-            dim = self._model.get_sentence_embedding_dimension()  # type: ignore[union-attr]
+            dim = self._model.get_sentence_embedding_dimension()
             if dim is not None:
                 self._dimension = int(dim)
             logger.info("Loaded embedding model %s on %s (dim=%d)", self._model_name, self._device, self._dimension)
@@ -70,7 +67,7 @@ class LegalEmbedder:
         if self._model is None:
             return None
         try:
-            embeddings = self._model.encode(texts, normalize_embeddings=True)  # type: ignore[union-attr]
+            embeddings = self._model.encode(texts, normalize_embeddings=True)
             return [emb.tolist() for emb in embeddings]
         except Exception:
             logger.exception("Failed to embed %d texts", len(texts))

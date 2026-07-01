@@ -13,7 +13,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-import fitz  # pymupdf
+import fitz  # type: ignore[import-untyped]  # pymupdf
 
 from juris.repertory.chunking import DocumentChunk, chunk_fonte
 from juris.repertory.corpus.models import FonteJurisprudencia, TipoFonte

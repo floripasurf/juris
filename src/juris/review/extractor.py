@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Any, cast
 
 from juris.core.observability import get_logger
 
@@ -58,11 +59,11 @@ def _extract_pdf(path: Path) -> str:
     import pymupdf
 
     # pymupdf ships no type stubs; the runtime API is correct (Document is iterable).
-    doc = pymupdf.open(str(path))  # type: ignore[no-untyped-call]
+    doc = cast(Any, pymupdf.open(str(path)))
     parts = []
-    for page in doc:  # type: ignore[attr-defined]
+    for page in doc:
         parts.append(page.get_text())
-    doc.close()  # type: ignore[no-untyped-call]
+    doc.close()
     return "\n".join(parts)
 
 

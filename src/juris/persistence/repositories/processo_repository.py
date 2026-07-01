@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -78,7 +78,8 @@ async def upsert_processo(session: AsyncSession, domain: ProcessoDomain) -> Proc
             )
         )
         result = await session.execute(stmt_mov)
-        if result.rowcount and result.rowcount > 0:
+        rowcount = cast(Any, result).rowcount
+        if rowcount and rowcount > 0:
             new_movs += 1
 
     if new_movs:

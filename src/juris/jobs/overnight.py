@@ -57,7 +57,7 @@ async def sync_processo_mni(
     cpf: str,
     senha: str,
     last_sync_at: datetime | None = None,
-    known_movimento_keys: set[tuple] | None = None,
+    known_movimento_keys: set[tuple[datetime | None, int | None, str | None]] | None = None,
     known_doc_ids: set[str] | None = None,
     token_pin: str | None = None,
     mni_service: MNIReadService | None = None,
@@ -198,7 +198,7 @@ async def sync_processo_datajud(
     numero_cnj: str,
     tribunal_id: str,
     last_sync_at: datetime | None = None,
-    known_movimento_keys: set[tuple] | None = None,
+    known_movimento_keys: set[tuple[datetime | None, int | None, str | None]] | None = None,
     known_doc_ids: set[str] | None = None,
 ) -> DiffResult:
     """Sync a single processo via DataJud (fallback for broken MNI tribunals).
@@ -317,7 +317,7 @@ async def run_overnight_sync(
 
     for r in results:
         summary.processos_checked += 1
-        if isinstance(r, Exception):
+        if isinstance(r, BaseException):
             summary.processos_failed += 1
             summary.errors.append(f"Unexpected: {type(r).__name__}: {r}")
             continue

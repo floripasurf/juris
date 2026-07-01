@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from enum import Enum
+from enum import StrEnum
 
 
-class TipoFeriado(str, Enum):
+class TipoFeriado(StrEnum):
     """Type of holiday."""
 
     NACIONAL = "nacional"
@@ -71,18 +71,22 @@ def recesso_forense(year: int) -> list[Feriado]:
     dates = []
     # Dec 20 to Dec 31 of current year
     for day in range(20, 32):
-        dates.append(Feriado(
-            date(year, 12, day),
-            "Recesso forense",
-            TipoFeriado.FORENSE,
-        ))
+        dates.append(
+            Feriado(
+                date(year, 12, day),
+                "Recesso forense",
+                TipoFeriado.FORENSE,
+            )
+        )
     # Jan 1 to Jan 20 of next year
     for day in range(1, 21):
-        dates.append(Feriado(
-            date(year + 1, 1, day),
-            "Recesso forense",
-            TipoFeriado.FORENSE,
-        ))
+        dates.append(
+            Feriado(
+                date(year + 1, 1, day),
+                "Recesso forense",
+                TipoFeriado.FORENSE,
+            )
+        )
     return dates
 
 
@@ -102,10 +106,7 @@ def feriados_estaduais(year: int, uf: str) -> list[Feriado]:
     """Return state-level holidays for a given UF."""
     uf_lower = uf.lower()
     entries = _FERIADOS_ESTADUAIS.get(uf_lower, [])
-    return [
-        Feriado(date(year, month, day), nome, TipoFeriado.ESTADUAL)
-        for month, day, nome in entries
-    ]
+    return [Feriado(date(year, month, day), nome, TipoFeriado.ESTADUAL) for month, day, nome in entries]
 
 
 @dataclass(slots=True)
