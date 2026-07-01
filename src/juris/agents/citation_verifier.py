@@ -39,6 +39,18 @@ _QUALIFIED_NUM = (
     r"|\d{5,})"  # long bare number
     r"(?:\s*/\s*[A-Z]{2})?"  # optional trailing /UF
 )
+# CNJ unified process number (7-2.4.1.2.4; the first group is 1–7 digits in labor).
+# Distinctive enough to anchor a citation WHEN prefixed by a recurso/court indicator —
+# a *bare* CNJ (the petition's own process number) is deliberately NOT matched.
+_CNJ_NUM = r"\d{1,7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}"
+# TST/labor siglas — RR/RO/AIRR collide with prose, so they anchor ONLY on a CNJ tail.
+_LABOR_SIGLAS = r"RRAg|RR|ROT|RO|AIRO|AIRR|AIRE|ED-RR|Ag-AIRR|ARR"
+# Court/recurso indicators that turn a following CNJ number into a precedent citation.
+_RECURSO_PREFIX = (
+    r"Apela[çc][ãa]o(?:\s+C[íi]vel)?|Agravo(?:\s+de\s+Instrumento|\s+Interno|\s+Regimental)?"
+    r"|Recurso\s+\w+|Embargos(?:\s+\w+)?|Mandado\s+de\s+Seguran[çc]a|Conflito\s+de\s+Compet[êe]ncia"
+    r"|Reclama[çc][ãa]o|Habeas\s+Corpus"
+)
 _RAW_CASE_PATTERNS = [
     # strong siglas, with an optional "AgInt/AgRg/AgR no/na" compound prefix
     re.compile(
@@ -46,8 +58,14 @@ _RAW_CASE_PATTERNS = [
     ),
     # ambiguous siglas: case-sensitive + a qualified number only (avoids "MS 365" etc.)
     re.compile(rf"\b(?:{_AMBIGUOUS_SIGLAS})\b\.?\s*{_QUALIFIED_NUM}"),
+    # TST/labor siglas anchored on a CNJ number (RR-1000-12.2020.5.03.0001)
+    re.compile(rf"\b(?:{_LABOR_SIGLAS})\b\s*-?\s*{_CNJ_NUM}"),
+    # a CNJ number introduced as a precedent by a recurso/court indicator
+    re.compile(rf"\b(?:{_RECURSO_PREFIX})\s+(?:n[º°.]?\s*)?{_CNJ_NUM}", re.IGNORECASE),
     re.compile(r"\bS[uú]mula(?:\s+Vinculante)?\s+(?:n[º°.]?\s*)?\d+", re.IGNORECASE),
     re.compile(r"\bTema(?:\s+Repetitivo)?\s+(?:n[º°.]?\s*)?\d+", re.IGNORECASE),
+    re.compile(r"\b(?:Tese|Precedente|Enunciado)\s+(?:n[º°.]?\s*)?\d+", re.IGNORECASE),
+    re.compile(r"\bOrienta[çc][ãa]o\s+Jurisprudencial\s+(?:n[º°.]?\s*)?\d+", re.IGNORECASE),
 ]
 
 
@@ -195,22 +213,26 @@ class MarkerCitationVerifier:
         )
 
     def _find_spurious_citations(self, draft: str) -> list[str]:
-        """Find raw case references in prose not anchored to [CITE:] markers."""
+        """Find raw case references in prose that are NOT inside a ``[CITE:]`` marker.
+
+        A raw jurisprudence reference is anchored only when its span is *contained*
+        within an actual ``[CITE:...]`` bracket pair — proximity to a marker is not
+        enough (a fabricated ``REsp`` next to a real marker for a different source was
+        the evasion). No doctrine lead-in ("conforme leciona") exempts a case
+        reference — that exception is only for academic citations, handled elsewhere.
+        """
         spurious: list[str] = []
+        cite_spans = [(m.start(), m.end()) for m in _CITE_PATTERN.finditer(draft)]
+
+        def _inside_marker(start: int, end: int) -> bool:
+            return any(s <= start and end <= e for s, e in cite_spans)
 
         for pattern in _RAW_CASE_PATTERNS:
             for match in pattern.finditer(draft):
-                # Check if this match is inside a [CITE:] marker
-                start = match.start()
-                # Look backward for "[CITE:" within 50 chars
-                context_before = draft[max(0, start - 50) : start]
-                if "[CITE:" not in context_before:
-                    # Skip academic-style citations (from doutrina sources)
-                    context_around = draft[max(0, start - 100) : start]
-                    if re.search(r"[Cc]onforme (?:leciona|ensina|destaca)", context_around):
-                        continue
-                    raw_text = match.group(0).strip()
-                    if raw_text not in spurious:
-                        spurious.append(raw_text)
+                if _inside_marker(match.start(), match.end()):
+                    continue
+                raw_text = match.group(0).strip()
+                if raw_text not in spurious:
+                    spurious.append(raw_text)
 
         return spurious

@@ -199,3 +199,58 @@ def test_spurious_still_catches_qualified_ambiguous_siglas(text) -> None:
 
     verifier = MarkerCitationVerifier(cast(RepertoryService, object()))
     assert verifier.verify(f"conforme {text}", {"src-1"}).spurious_citations, text
+
+
+def test_no_proximity_bypass_fake_case_next_to_real_marker() -> None:
+    # a fabricated case number sitting within 50 chars of a real [CITE:] marker was
+    # wrongly treated as "inside the marker" and skipped — it must still be flagged
+    from juris.repertory.retrieval.service import RepertoryService
+
+    verifier = MarkerCitationVerifier(cast(RepertoryService, object()))
+    result = verifier.verify("Conforme [CITE:src-1], o REsp 9.999.999 também confirma.", {"src-1"})
+    assert "REsp 9.999.999" in result.spurious_citations
+
+
+def test_no_doctrine_lead_in_bypass_for_case_ref() -> None:
+    # "conforme lecina/ensina/destaca" must not shield a fabricated CASE reference
+    from juris.repertory.retrieval.service import RepertoryService
+
+    verifier = MarkerCitationVerifier(cast(RepertoryService, object()))
+    result = verifier.verify("Conforme leciona o Ministro, o REsp 9.999.999 firmou a tese.", {"src-1"})
+    assert result.spurious_citations != []
+
+
+@_pytest.mark.parametrize(
+    "text",
+    [
+        "RR-1000-12.2020.5.03.0001",           # TST recurso de revista (CNJ-hyphen)
+        "RO 0001234-56.2020.5.09.0001",        # recurso ordinário trabalhista
+        "AIRR-100-45.2019.5.02.0011",          # agravo de instrumento em RR
+        "Apelação Cível 1234567-89.2020.8.26.0100",  # CNJ cited as precedent
+        "Agravo de Instrumento 2233445-66.2021.8.13.0024",
+        "Tese 987",
+        "Precedente 12",
+        "Enunciado 5",
+        "Orientação Jurisprudencial 415",
+    ],
+)
+def test_spurious_catches_tst_labor_and_cnj_formats(text) -> None:
+    from juris.repertory.retrieval.service import RepertoryService
+
+    verifier = MarkerCitationVerifier(cast(RepertoryService, object()))
+    assert verifier.verify(f"A tese procede, conforme {text}.", {"src-1"}).spurious_citations, text
+
+
+@_pytest.mark.parametrize(
+    "text",
+    [
+        "Trata-se de ação distribuída sob o Processo nº 1234567-89.2020.8.26.0100.",  # own case CNJ
+        "A parte requer a produção de provas.",
+    ],
+)
+def test_spurious_no_false_positive_on_own_case_number(text) -> None:
+    # the petition's OWN process number (no recurso/court precedent prefix) is not a citation
+    from juris.repertory.retrieval.service import RepertoryService
+
+    verifier = MarkerCitationVerifier(cast(RepertoryService, object()))
+    assert verifier.verify(text, {"src-1"}).spurious_citations == []
