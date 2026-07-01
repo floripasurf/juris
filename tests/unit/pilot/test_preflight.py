@@ -6,6 +6,7 @@ deterministic. Network probes (Ollama) are stubbed via dependency injection.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import date
 from pathlib import Path
@@ -318,9 +319,16 @@ class TestCheckToken:
 
     def test_fail_when_token_absent(self) -> None:
         def _raise() -> SimpleNamespace:
-            raise RuntimeError("no token detected")
+            raise RuntimeError("no token detected /var/private/pkcs11 token=abc pin=1234")
 
-        assert check_token(probe=True, reader=_raise).status is CheckStatus.FAIL
+        result = check_token(probe=True, reader=_raise)
+
+        assert result.status is CheckStatus.FAIL
+        assert result.details == {"error": "token_unavailable"}
+        dumped = json.dumps(result.to_dict())
+        assert "/var/private/pkcs11" not in dumped
+        assert "token=abc" not in dumped
+        assert "pin=1234" not in dumped
 
     def test_run_preflight_skips_token_by_default(self) -> None:
         report = run_preflight(real_source_required=False, probe_ollama=False)

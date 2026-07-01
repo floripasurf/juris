@@ -493,12 +493,19 @@ def check_token(
     try:
         material = read()
     except Exception as exc:  # noqa: BLE001 — any failure means the token isn't ready
+        from juris.core.observability import get_logger
+
+        get_logger("juris.pilot.preflight").warning(
+            "preflight_token_probe_failed",
+            error=str(exc),
+            exc_info=exc,
+        )
         return CheckResult(
             name="token_a3",
             status=CheckStatus.FAIL,
             message="token A3 não detectado",
             remediation="Conecte o e-CPF A3 e confira o módulo PKCS#11.",
-            details={"error": str(exc)},
+            details={"error": "token_unavailable"},
         )
     ref = today or date.today()
     try:
