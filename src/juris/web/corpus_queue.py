@@ -65,9 +65,26 @@ def corpus_candidates(root: Path) -> list[dict[str, object]]:
     return candidates
 
 
+def _require_provenance(payload: dict[str, object]) -> None:
+    """Every corpus source must carry full provenance (URL/fonte/data/hash/tipo).
+
+    URL and hash are enforced by _public_source_url / _resolve_content_hash; here we
+    require the type, date, and a fonte (tribunal or publisher) so nothing enters the
+    moat without an auditable origin.
+    """
+    for field in ("source_type", "source_date"):
+        if not str(payload.get(field) or "").strip():
+            msg = f"{field} é obrigatório para proveniência da fonte."
+            raise ValueError(msg)
+    if not (str(payload.get("tribunal") or "").strip() or str(payload.get("source_publisher") or "").strip()):
+        msg = "fonte é obrigatória (tribunal ou source_publisher) para proveniência."
+        raise ValueError(msg)
+
+
 def append_accepted_source(root: Path, payload: dict[str, object]) -> dict[str, object]:
     """Append one lawyer-approved source with mandatory provenance."""
     ensure_private_dir(root)
+    _require_provenance(payload)
     content_hash = _resolve_content_hash(payload)
     source_url = _public_source_url(payload.get("source_url"))
     if any(str(record.get("content_sha256") or "") == content_hash for record in list_accepted_sources(root)):

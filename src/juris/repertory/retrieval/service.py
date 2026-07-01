@@ -57,6 +57,44 @@ class RetrievalResult:
     score_components: dict[str, float] | None = None
 
 
+_MOTIVO_LABEL = {
+    "autoridade": "alta autoridade do tribunal",
+    "vigencia": "precedente vigente",
+    "corroboracao": "corroborado por múltiplas fontes",
+    "relevancia": "alta relevância textual",
+    "pacificacao": "tese pacificada",
+    "recencia": "julgado recente",
+}
+
+
+def explain_ranking(result: RetrievalResult) -> dict[str, object]:
+    """Expose WHY a source ranked: fonte, vigência, autoridade, corroboração, motivo.
+
+    Turns the composite score breakdown (ADR-0017) into the auditable signals the
+    console shows next to a citation, so the lawyer sees not just *what* was retrieved
+    but *why* it was trusted. ``motivo`` names the strongest driver of the score.
+    """
+    comp = result.score_components or {}
+    drivers = {
+        k: comp[k]
+        for k in ("autoridade", "vigencia", "corroboracao", "relevancia", "pacificacao", "recencia")
+        if k in comp
+    }
+    if drivers:
+        top = max(drivers, key=lambda k: drivers[k])
+        motivo = _MOTIVO_LABEL.get(top, top)
+    else:
+        motivo = "relevância textual (ranker composto inativo)"
+    return {
+        "fonte": f"{result.tribunal} · {result.hierarchy_label}",
+        "autoridade": comp.get("autoridade"),
+        "vigencia": comp.get("vigencia"),
+        "corroboracao": comp.get("corroboracao"),
+        "score_total": comp.get("total", result.score),
+        "motivo": motivo,
+    }
+
+
 class RepertoryService:
     """High-level service for searching the jurisprudence repertory.
 

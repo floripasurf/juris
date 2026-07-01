@@ -281,3 +281,34 @@ def test_reingest_pending_sources_sanitizes_internal_errors(tmp_path, monkeypatc
     assert "pin=1234" not in str(logged)
     assert "/var/private/repertory.db" not in str(logged)
     assert "exc_info" not in logged
+
+
+def _full_provenance_payload(**overrides):
+    base = {
+        "numero_cnj": "0001234-56.2026.8.13.0001",
+        "title": "REsp teste",
+        "source_url": "https://example.test/acordao",
+        "source_date": "2026-06-30",
+        "source_type": "acordao_publicado",
+        "tribunal": "STJ",
+        "area": "civel",
+        "tema": "cobranca",
+        "status": "vigente",
+        "source_text": "inteiro teor aprovado",
+    }
+    base.update(overrides)
+    return base
+
+
+def test_source_without_type_is_rejected(tmp_path) -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="source_type"):
+        append_accepted_source(tmp_path, _full_provenance_payload(source_type=""))
+
+
+def test_source_without_date_is_rejected(tmp_path) -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="source_date"):
+        append_accepted_source(tmp_path, _full_provenance_payload(source_date=""))
