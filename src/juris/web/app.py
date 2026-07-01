@@ -369,6 +369,9 @@ def _serialize_connect(result: Any) -> dict[str, object]:
 # in the transient background-task closure, then is GC'd).
 _MAX_CONNECT_JOBS = 200
 _CONNECT_JOB_TIMEOUT_SECONDS = int(os.environ.get("JURIS_CONNECT_TIMEOUT_SECONDS", "900"))
+_CONNECT_JOB_ERROR = (
+    "Falha operacional ao conectar/sincronizar. Verifique agente, token e credenciais locais."
+)
 # Strong refs to in-flight background tasks so the event loop doesn't GC them mid-run.
 _BACKGROUND_TASKS: set[asyncio.Task[None]] = set()
 
@@ -408,7 +411,16 @@ async def _run_connect_job(
     except TimeoutError:
         store.mark_error(job_id, "tempo excedido ao conectar/sincronizar (timeout)")
     except Exception as exc:  # noqa: BLE001 — surfaced to the client via the job
-        store.mark_error(job_id, str(exc))
+        from juris.core.observability import get_logger
+
+        get_logger("juris.web").warning(
+            "connect_job_error",
+            job_id=job_id,
+            tenant_id=tenant.tenant_id,
+            error=str(exc),
+            exc_info=exc,
+        )
+        store.mark_error(job_id, _CONNECT_JOB_ERROR)
 
 
 @app.post("/api/connect", status_code=202)
@@ -528,12 +540,22 @@ async def get_agent_health(tenant: Tenant = Depends(current_tenant)) -> dict[str
         health = check_agent_health(binding.base_url)
     except Exception as exc:  # noqa: BLE001 — health reports readiness, not stack traces
         code = _agent_health_error_code(str(exc))
+        from juris.core.observability import get_logger
+
+        message = _agent_health_message(code)
+        get_logger("juris.web").warning(
+            "agent_health_error",
+            tenant_id=tenant.tenant_id,
+            code=code,
+            error=str(exc),
+            exc_info=exc,
+        )
         payload["reachable"] = False
         payload["ready"] = False
         payload["status"] = _agent_health_status(code)
-        payload["message"] = _agent_health_message(code)
+        payload["message"] = message
         payload["error_code"] = code
-        payload["error"] = str(exc)
+        payload["error"] = message
         return payload
 
     cert_valid_until = health.cert_valid_until
@@ -571,10 +593,16 @@ def _agent_health_error_code(message: str) -> str:
     lower = message.lower()
     if "sem binding" in lower or "incompleto" in lower:
         return "agent_missing"
-    if "token" in lower:
-        return "agent_token_missing"
-    if "inacessível" in lower or "inacessivel" in lower or "connection" in lower:
+    if (
+        "inacessível" in lower
+        or "inacessivel" in lower
+        or "connection" in lower
+        or "refused" in lower
+        or "timeout" in lower
+    ):
         return "agent_offline"
+    if "token ausente" in lower or "sem token" in lower or "token a3" in lower:
+        return "agent_token_missing"
     return "agent_unavailable"
 
 

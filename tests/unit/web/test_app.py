@@ -165,6 +165,33 @@ async def test_connect_job_runner_records_result(monkeypatch, tmp_path) -> None:
     assert captured["db"] == "db::escritorio-a"  # writes scoped to the tenant's store
 
 
+@pytest.mark.asyncio
+async def test_connect_job_runner_sanitizes_internal_errors(monkeypatch, tmp_path) -> None:
+    app_module = importlib.import_module("juris.web.app")
+    from juris.web.auth import Tenant
+    from juris.web.connect_jobs import ConnectJobStore
+
+    store = ConnectJobStore(tmp_path / "jobs.db")
+
+    async def fake_run_connect(*_args, **_kwargs):
+        raise RuntimeError("mTLS /var/private/cert token=abc pin=1234")
+
+    monkeypatch.setattr(app_module, "run_connect", fake_run_connect)
+    monkeypatch.setattr(app_module, "_tenant_db", lambda tenant: f"db::{tenant.tenant_id}")
+    monkeypatch.setattr(app_module, "_connect_job_store", lambda: store)
+    payload = app_module.ConnectPayload(cpf="07671039632", tribunal="tjmg", pin="1234")
+    store.create("job-secret", "escritorio-a")
+
+    await app_module._run_connect_job("job-secret", object(), payload, Tenant("escritorio-a"))
+
+    job = store.get("job-secret")
+    assert job["status"] == "error"
+    assert "Falha operacional" in job["error"]
+    assert "token=abc" not in job["error"]
+    assert "pin=1234" not in job["error"]
+    assert "/var/private/cert" not in job["error"]
+
+
 def test_audit_endpoint_returns_chain(monkeypatch) -> None:
     view = {"total": 2, "intact": True, "corrupted": [], "entries": [{"event_type": "draft"}]}
     import juris.web.audit_service as audit_service
@@ -1109,6 +1136,31 @@ def test_agent_health_remote_unmapped_tenant_reports_error(tmp_path, monkeypatch
     assert body["status"] == "missing_binding"
     assert body["error_code"] == "agent_missing"
     assert "sem binding" in body["error"]
+
+
+def test_agent_health_remote_does_not_leak_internal_error(monkeypatch) -> None:
+    from juris.api import pairing
+
+    def _raise(_url):
+        raise RuntimeError("connection refused token=abc pin=1234 /var/private/cert")
+
+    monkeypatch.setenv("JURIS_AGENT_MODE", "remote")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_URL", "ws://127.0.0.1:8765")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_TOKEN", "tok")
+    monkeypatch.setattr(pairing, "check_agent_health", _raise)
+
+    response = client.get("/api/agent-health")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["reachable"] is False
+    assert body["ready"] is False
+    assert body["status"] == "offline"
+    assert body["error_code"] == "agent_offline"
+    assert "Agente remoto configurado" in body["error"]
+    assert "token=abc" not in response.text
+    assert "pin=1234" not in response.text
+    assert "/var/private/cert" not in response.text
 
 
 def test_filing_status_is_scoped_to_the_tenant(monkeypatch, tmp_path) -> None:
