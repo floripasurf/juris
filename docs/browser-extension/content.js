@@ -82,7 +82,9 @@ async function complete({ request_id, prompt, system }) {
   if (blocker) return fail(request_id, BLOCKER_MESSAGES[blocker]);
 
   const composer = findComposer(document, provider);
-  if (!composer) return fail(request_id, "composer não encontrado — faça login na sessão");
+  // Login was already ruled out by detectBlocker above, so a missing composer means the
+  // provider's DOM changed (its selectors moved) — a distinct, actionable status.
+  if (!composer) return fail(request_id, "dom_changed: composer não encontrado (a interface do provedor mudou)");
 
   try {
     const full = system ? `${system}\n\n${prompt}` : prompt;
@@ -100,9 +102,23 @@ async function complete({ request_id, prompt, system }) {
   }
 }
 
+// Health/handshake — the orchestrator pings before sending work so the console can
+// show a clear status: conectado (ready) / precisa login / DOM mudou / rate-limited.
+export function connectionStatus(doc, host) {
+  const provider = providerFor(host);
+  if (!provider) return { connected: false, provider: null, status: "unsupported" };
+  const blocker = detectBlocker(doc, provider); // not_logged_in | rate_limited | null
+  if (blocker) return { connected: true, provider: host, status: blocker };
+  return { connected: true, provider: host, status: findComposer(doc, provider) ? "ready" : "dom_changed" };
+}
+
 // Background worker relays the request here and awaits the response.
 if (typeof chrome !== "undefined" && chrome.runtime?.onMessage) {
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg?.type === "ping") {
+      sendResponse(connectionStatus(document, location.host));
+      return true;
+    }
     if (msg?.type !== "completion") return false;
     complete(msg.request).then(sendResponse);
     return true; // async response
