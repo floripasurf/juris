@@ -12,6 +12,7 @@ from rich.table import Table
 
 from juris.cli.commands.agent import agent_app
 from juris.cli.commands.doctor import doctor
+from juris.cli.commands.tenant import tenant_app
 from juris.cli.console import console
 
 # Tracked-list helpers are shared with the web layer (juris.jobs.tracking).
@@ -32,6 +33,7 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(agent_app)  # juris agent … (extracted to cli/commands/agent.py)
+app.add_typer(tenant_app)  # juris tenant … (onboarding, cli/commands/tenant.py)
 app.command("doctor")(doctor)  # juris doctor — production readiness (cli/commands/doctor.py)
 
 
