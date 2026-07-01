@@ -3154,5 +3154,55 @@ def pilot_preflight(
     raise typer.Exit(code=1)
 
 
+def _pilot_feedback_root() -> Path:
+    """The default (single-tenant) pilot feedback dir, matching the web console."""
+    import os
+
+    from juris.web.auth import PUBLIC_TENANT_ID, Tenant, tenant_scoped_dir
+
+    out_root = Path(os.environ.get("JURIS_OUT_ROOT", "juris-out"))
+    return tenant_scoped_dir(Tenant(PUBLIC_TENANT_ID), out_root)
+
+
+@pilot_app.command("report")
+def pilot_report(
+    output: str | None = typer.Option(
+        None, "--output", "-o", help="Escreve o relatório Markdown neste arquivo (senão, stdout)."
+    ),
+) -> None:
+    """Gera o relatório do piloto (evidência + backlog priorizado) a partir do feedback coletado."""
+    from juris.web.pilot_feedback import export_feedback_report_markdown, list_feedback
+
+    root = _pilot_feedback_root()
+    if not list_feedback(root):
+        console.print(
+            "[yellow]Nenhum feedback de piloto ainda.[/yellow] Rode casos reais e registre o "
+            "feedback (console web ou /api/pilot-feedback) antes de gerar o relatório."
+        )
+        raise typer.Exit(code=1)
+    markdown = export_feedback_report_markdown(root)
+    if output:
+        Path(output).write_text(markdown, encoding="utf-8")
+        console.print(f"[green]Relatório de piloto escrito em[/green] {output}")
+    else:
+        console.print(markdown)
+
+
+@pilot_app.command("summary")
+def pilot_summary() -> None:
+    """Imprime as métricas-chave do piloto (tempo economizado, aceitação de citações, utilidade, lacunas)."""
+    from juris.web.pilot_feedback import summarize_feedback
+
+    summary = summarize_feedback(_pilot_feedback_root())
+    citations = cast("dict[str, object]", summary["citations"])
+    gaps = summary["prioritized_gaps"]
+    console.print(
+        f"Casos: {summary['total_cases']} · tempo economizado: {summary['total_time_saved_minutes']} min "
+        f"(média {summary['average_time_saved_minutes']}) · utilidade média: {summary['average_utility']}"
+    )
+    console.print(f"Citações aceitas/rejeitadas: {citations['accepted']}/{citations['rejected']}")
+    console.print(f"Lacunas priorizadas: {len(gaps) if isinstance(gaps, list) else 0}")
+
+
 if __name__ == "__main__":
     app()
