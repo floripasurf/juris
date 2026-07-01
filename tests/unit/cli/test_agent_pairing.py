@@ -63,3 +63,15 @@ def test_agent_serve_masks_the_token(monkeypatch) -> None:
         local_agent._resolve_signing_token.cache_clear()
     assert result.exit_code == 0
     assert "super-secret-pairing-token-value" not in result.output  # masked, not echoed
+
+
+def test_agent_connect_relay_rejects_invalid_tenant(monkeypatch) -> None:
+    monkeypatch.setenv("JURIS_AGENT_TOKEN", "paired-token")
+
+    result = CliRunner().invoke(
+        app,
+        ["agent", "connect-relay", "wss://juris.example/ws/agent-relay", "--tenant", "../escape"],
+    )
+
+    assert result.exit_code == 2
+    assert "tenant_id inválido" in result.output

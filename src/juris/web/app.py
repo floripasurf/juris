@@ -483,8 +483,13 @@ async def agent_relay_socket(ws: WebSocket) -> None:
     the agent's NAT. The agent authenticates with its tenant's shared token."""
     from juris.api.relay import get_relay_hub, relay_token_ok
     from juris.api.ws_schemas import AgentResponse
+    from juris.web.auth import validate_tenant_id
 
-    tenant_id = ws.query_params.get("tenant", "public")
+    try:
+        tenant_id = validate_tenant_id(ws.query_params.get("tenant", "public"))
+    except ValueError:
+        await ws.close(code=4001, reason="Unauthorized")
+        return
     # The relay is cloud-facing: never accept the shared secret in the URL, which
     # can be captured by access logs, browser history, or intermediary telemetry.
     token = ws.headers.get("x-agent-token")

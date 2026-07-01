@@ -147,6 +147,52 @@ def test_hub_old_connection_cannot_unregister_new_connection() -> None:
     assert hub.is_connected("tenant-a") is False
 
 
+def test_run_relay_agent_appends_validated_tenant_query(monkeypatch) -> None:
+    from juris.api.local_agent import run_relay_agent
+
+    captured: dict[str, object] = {}
+
+    class _FakeWS:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def __iter__(self):
+            return iter(())
+
+    def fake_connect(url, *, additional_headers):  # noqa: ANN001, ANN202
+        captured["url"] = url
+        captured["headers"] = additional_headers
+        return _FakeWS()
+
+    monkeypatch.setattr("websockets.sync.client.connect", fake_connect)
+
+    run_relay_agent("wss://juris.example/ws/agent-relay?existing=1", "tok", "escritorio-a")
+
+    assert captured["url"] == "wss://juris.example/ws/agent-relay?existing=1&tenant=escritorio-a"
+    assert captured["headers"] == {"x-agent-token": "tok"}
+
+
+def test_run_relay_agent_rejects_unsafe_tenant_before_connect(monkeypatch) -> None:
+    from juris.api.local_agent import run_relay_agent
+
+    called = False
+
+    def fake_connect(*_args, **_kwargs):  # noqa: ANN002, ANN003, ANN202
+        nonlocal called
+        called = True
+        raise AssertionError("connect should not be called")
+
+    monkeypatch.setattr("websockets.sync.client.connect", fake_connect)
+
+    with pytest.raises(ValueError, match="tenant_id inválido"):
+        run_relay_agent("wss://juris.example/ws/agent-relay", "tok", "../escape")
+
+    assert called is False
+
+
 @pytest.mark.asyncio
 async def test_dispatch_routes_mni_operation(monkeypatch) -> None:
     """A relayed mni request is routed to the local MNI handler (agent side)."""

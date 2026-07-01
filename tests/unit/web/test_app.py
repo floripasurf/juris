@@ -1363,6 +1363,18 @@ def test_agent_relay_rejects_token_in_query_string(monkeypatch) -> None:
         pass
 
 
+def test_agent_relay_rejects_unsafe_tenant_id(monkeypatch) -> None:
+    from fastapi import WebSocketDisconnect
+
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_URL", "ws://x:1")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_TOKEN", "right-token")
+    with (
+        pytest.raises(WebSocketDisconnect),
+        client.websocket_connect("/ws/agent-relay?tenant=..%2Fescape", headers={"x-agent-token": "right-token"}),
+    ):
+        pass
+
+
 def test_agent_relay_registers_then_unregisters(monkeypatch) -> None:
     import time
 

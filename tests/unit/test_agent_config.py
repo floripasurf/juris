@@ -103,6 +103,18 @@ def test_tenant_binding_falls_back_to_global_env(tmp_path, monkeypatch) -> None:
     assert binding.token == "global-tok"  # noqa: S105
 
 
+def test_tenant_binding_rejects_unsafe_tenant_id_before_global_fallback(monkeypatch) -> None:
+    from juris.api.agent_config import _load_agent_bindings, tenant_agent_binding
+
+    monkeypatch.delenv("JURIS_AGENTS_FILE", raising=False)
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_URL", "ws://global:8765")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_TOKEN", "global-tok")
+    _load_agent_bindings.cache_clear()
+
+    with pytest.raises(ValueError, match="tenant_id inválido"):
+        tenant_agent_binding("../escape")
+
+
 def test_binding_fails_closed_when_agents_file_set_but_tenant_missing(tmp_path, monkeypatch) -> None:
     import json
 

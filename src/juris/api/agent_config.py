@@ -114,6 +114,9 @@ def tenant_agent_binding(tenant_id: str = "public") -> AgentBinding:
     silently using the global agent/token — a misconfigured tenant must never reach
     another firm's agent. Raises when nothing resolves in remote mode.
     """
+    from juris.web.auth import validate_tenant_id
+
+    tenant_id = validate_tenant_id(tenant_id)
     bindings = _load_agent_bindings()
     entry = bindings.get(tenant_id)
     if entry is not None:

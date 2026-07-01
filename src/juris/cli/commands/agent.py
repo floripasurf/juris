@@ -118,5 +118,8 @@ def agent_connect_relay(
     console.print(f"[bold]Agente[/bold] discando o relay {url} (tenant={tenant})… Ctrl-C para sair.")
     try:
         run_relay_agent(url, token, tenant)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from None
     except KeyboardInterrupt:
         console.print("Encerrado.")

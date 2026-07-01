@@ -32,11 +32,16 @@ PUBLIC_TENANT_ID = "public"
 _TENANT_ID_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
-def _validate_tenant_id(tenant_id: str) -> str:
+def validate_tenant_id(tenant_id: str) -> str:
+    """Validate a tenant id before it is used for routing, storage, or relay state."""
     if not _TENANT_ID_RE.match(tenant_id):
         msg = f"tenant_id inválido (use ^[a-zA-Z0-9_-]+$): {tenant_id!r}"
         raise ValueError(msg)
     return tenant_id
+
+
+def _validate_tenant_id(tenant_id: str) -> str:
+    return validate_tenant_id(tenant_id)
 
 
 _HASH_PREFIX = "sha256:"

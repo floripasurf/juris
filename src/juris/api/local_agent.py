@@ -444,12 +444,16 @@ def run_relay_agent(
     ``AgentResponse``. Reconnection/backoff is the caller's concern.
     """
     import asyncio
+    from urllib.parse import urlencode
 
     from websockets.sync.client import connect
 
+    from juris.web.auth import validate_tenant_id
+
     handler = dispatch or dispatch_agent_request
+    tenant_id = validate_tenant_id(tenant_id)
     sep = "&" if "?" in url else "?"
-    full_url = f"{url}{sep}tenant={tenant_id}"
+    full_url = f"{url}{sep}{urlencode({'tenant': tenant_id})}"
     with connect(full_url, additional_headers={"x-agent-token": token}) as ws:
         for raw in ws:  # each message is a forwarded AgentRequest
             text = raw if isinstance(raw, str) else raw.decode()

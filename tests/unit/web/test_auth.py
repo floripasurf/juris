@@ -83,6 +83,14 @@ def test_rejects_unsafe_tenant_id_in_config() -> None:
         TenantRegistry({"../etc": "key"})
 
 
+def test_validate_tenant_id_rejects_unsafe_runtime_ids() -> None:
+    from juris.web.auth import validate_tenant_id
+
+    assert validate_tenant_id("escritorio-a_1") == "escritorio-a_1"
+    with pytest.raises(ValueError, match="inválido"):
+        validate_tenant_id("../escape")
+
+
 def test_rejects_reserved_public_tenant_id_in_config() -> None:
     with pytest.raises(ValueError, match="reservado"):
         TenantRegistry({"public": "key"})
