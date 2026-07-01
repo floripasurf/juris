@@ -1418,3 +1418,12 @@ def test_health_degraded_when_database_down(monkeypatch) -> None:
     body = resp.json()
     assert body["status"] == "degraded"
     assert body["checks"]["database"] == "error"
+
+
+def test_tenant_health_endpoint(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("JURIS_HOME", str(tmp_path))
+    resp = client.get("/api/health")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["tenant_id"] == "public"
+    assert set(body["components"]) == {"config", "storage", "corpus", "agent", "browser_bridge"}

@@ -1,0 +1,176 @@
+"""Production-readiness validator for a multi-tenant deployment (`juris doctor`).
+
+The biggest operational risk isn't a missing feature — it's a *misconfiguration* that
+silently drops the isolation/split-trust guarantees (open registry, plaintext API keys,
+a remote tenant with no agent binding, world-readable secrets). These pure checks make
+that visible before a firm's data is exposed.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import stat
+from collections.abc import Mapping
+from dataclasses import dataclass
+from pathlib import Path
+
+_TRUTHY = {"1", "true", "yes"}
+
+
+@dataclass(frozen=True, slots=True)
+class Check:
+    """One production-readiness check result."""
+
+    name: str
+    ok: bool
+    detail: str
+    severity: str = "error"  # "error" (blocks) | "warn" (should fix)
+
+
+def _flag(env: Mapping[str, str], name: str) -> bool:
+    return env.get(name, "").strip().lower() in _TRUTHY
+
+
+def _is_group_or_world_accessible(path: Path) -> bool:
+    """True if others/group can read the file (secrets must be owner-only)."""
+    mode = stat.S_IMODE(path.stat().st_mode)
+    return bool(mode & 0o077)
+
+
+def _load_tenant_keys(path: Path) -> dict[str, str]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        msg = "JURIS_TENANTS_FILE deve conter um objeto JSON {tenant_id: api_key}."
+        raise ValueError(msg)
+    return data
+
+
+def check_production_readiness(env: Mapping[str, str] | None = None) -> list[Check]:
+    """Run every production-readiness check and return the results (order = report order)."""
+    env = env if env is not None else os.environ
+    checks: list[Check] = []
+
+    # 1. Fail-closed multi-tenant posture.
+    require = _flag(env, "JURIS_REQUIRE_TENANTS")
+    checks.append(
+        Check(
+            "require_tenants",
+            require,
+            "JURIS_REQUIRE_TENANTS=1" if require else "não definido — fallback ao tenant público é permitido",
+        )
+    )
+
+    # 2. Tenants file present + non-empty (real registry, not open).
+    tenants_path_str = env.get("JURIS_TENANTS_FILE")
+    tenants_path = Path(tenants_path_str) if tenants_path_str else None
+    tenant_keys: dict[str, str] = {}
+    if tenants_path is None:
+        checks.append(Check("tenants_file", False, "JURIS_TENANTS_FILE não definido"))
+    elif not tenants_path.exists():
+        checks.append(Check("tenants_file", False, f"arquivo não encontrado: {tenants_path}"))
+    else:
+        try:
+            tenant_keys = _load_tenant_keys(tenants_path)
+        except (ValueError, OSError) as exc:
+            checks.append(Check("tenants_file", False, f"ilegível: {exc}"))
+        else:
+            ok = len(tenant_keys) >= 1
+            checks.append(
+                Check("tenants_file", ok, f"{len(tenant_keys)} tenant(s) configurado(s)" if ok else "vazio")
+            )
+
+    # 3. API keys are hashed (never plaintext at rest).
+    if tenant_keys:
+        plaintext = [tid for tid, key in tenant_keys.items() if not key.startswith("sha256:")]
+        checks.append(
+            Check(
+                "hashed_keys",
+                not plaintext,
+                "todas as chaves estão hashadas (sha256:)"
+                if not plaintext
+                else f"chaves em texto puro: {', '.join(plaintext)} — use 'juris tenant hash-key'",
+            )
+        )
+
+    # 4. Secrets files are owner-only (0600).
+    for label, path in (("tenants_file_perms", tenants_path), ("agents_file_perms", _agents_path(env))):
+        if path is not None and path.exists():
+            accessible = _is_group_or_world_accessible(path)
+            checks.append(
+                Check(
+                    label,
+                    not accessible,
+                    "permissões owner-only" if not accessible else f"{path} legível por grupo/outros — chmod 600",
+                    severity="warn",
+                )
+            )
+
+    # 5. Remote agent mode: every tenant must have its own binding (no silent global fallback).
+    if env.get("JURIS_AGENT_MODE", "inprocess").strip().lower() == "remote":
+        checks.extend(_check_remote_bindings(env, tenant_keys))
+
+    # 6. Storage root is private.
+    checks.append(_check_storage_private(env))
+
+    # 7. Server-controlled output root.
+    out_root = env.get("JURIS_OUT_ROOT")
+    checks.append(
+        Check(
+            "out_root",
+            bool(out_root),
+            f"JURIS_OUT_ROOT={out_root}" if out_root else "não definido — usa caminho relativo 'juris-out'",
+            severity="warn",
+        )
+    )
+
+    return checks
+
+
+def _agents_path(env: Mapping[str, str]) -> Path | None:
+    p = env.get("JURIS_AGENTS_FILE")
+    return Path(p) if p else None
+
+
+def _check_remote_bindings(env: Mapping[str, str], tenant_keys: dict[str, str]) -> list[Check]:
+    agents_path = _agents_path(env)
+    if agents_path is None:
+        return [Check("agent_bindings", False, "JURIS_AGENT_MODE=remote exige JURIS_AGENTS_FILE")]
+    if not agents_path.exists():
+        return [Check("agent_bindings", False, f"JURIS_AGENTS_FILE não encontrado: {agents_path}")]
+    try:
+        bindings = _load_tenant_keys(agents_path)  # same {id: value} shape
+    except (ValueError, OSError) as exc:
+        return [Check("agent_bindings", False, f"JURIS_AGENTS_FILE ilegível: {exc}")]
+
+    missing = [tid for tid in tenant_keys if tid not in bindings]
+    incomplete = [
+        tid
+        for tid, b in bindings.items()
+        if not (isinstance(b, dict) and b.get("url") and b.get("token"))
+    ]
+    ok = not missing and not incomplete
+    parts = []
+    if missing:
+        parts.append(f"sem binding: {', '.join(missing)}")
+    if incomplete:
+        parts.append(f"binding incompleto (precisa url+token): {', '.join(incomplete)}")
+    return [Check("agent_bindings", ok, "; ".join(parts) if parts else "todos os tenants têm agente próprio")]
+
+
+def _check_storage_private(env: Mapping[str, str]) -> Check:
+    home = Path(env["JURIS_HOME"]) if env.get("JURIS_HOME") else Path.home() / ".juris"
+    if not home.exists():
+        return Check("storage_private", True, f"{home} (será criado com 0700)", severity="warn")
+    accessible = _is_group_or_world_accessible(home)
+    return Check(
+        "storage_private",
+        not accessible,
+        "storage owner-only" if not accessible else f"{home} legível por grupo/outros — chmod 700",
+        severity="warn" if accessible else "error",
+    )
+
+
+def all_blocking_ok(checks: list[Check]) -> bool:
+    """True when no ``error``-severity check failed (warns don't block)."""
+    return all(c.ok for c in checks if c.severity == "error")

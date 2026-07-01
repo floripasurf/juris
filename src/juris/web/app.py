@@ -320,6 +320,17 @@ async def health() -> Response:
     return JSONResponse(status_code=code, content={"version": __version__, **result})
 
 
+@app.get("/api/health")
+async def get_tenant_health(tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
+    """Per-tenant operational health — config, storage, corpus, agent, browser bridge.
+
+    Scoped to the authenticated tenant; never touches another firm's data.
+    """
+    from juris.ops.tenant_health import tenant_operational_status
+
+    return tenant_operational_status(tenant)
+
+
 @app.get("/api/ai-session")
 async def get_ai_session() -> dict[str, object]:
     """Active AI mode + de-id posture, for the operator console badge (ADR-0016/0018)."""
