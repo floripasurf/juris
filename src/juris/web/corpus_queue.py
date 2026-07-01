@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -19,6 +20,7 @@ from juris.web.pilot_feedback import list_feedback
 
 _FILENAME = "corpus-sources.jsonl"
 _TEXT_DIR = "corpus-source-text"
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +66,9 @@ def append_accepted_source(root: Path, payload: dict[str, object]) -> dict[str, 
     """Append one lawyer-approved source with mandatory provenance."""
     root.mkdir(parents=True, exist_ok=True)
     content_hash = _resolve_content_hash(payload)
+    if any(str(record.get("content_sha256") or "") == content_hash for record in list_accepted_sources(root)):
+        msg = "fonte já aceita no corpus com o mesmo content_sha256."
+        raise ValueError(msg)
     source_id = uuid.uuid4().hex
     text_path = _write_source_text(root, source_id, payload)
     record = {
@@ -192,10 +197,18 @@ def reingest_pending_sources(root: Path, repertory_path: Path) -> ReingestReport
 
 
 def _resolve_content_hash(payload: dict[str, object]) -> str:
-    explicit = str(payload.get("content_sha256") or "").strip()
-    if explicit:
-        return explicit
     text = str(payload.get("source_text") or "").strip()
+    explicit = str(payload.get("content_sha256") or "").strip().lower()
+    if explicit:
+        if _SHA256_RE.fullmatch(explicit) is None:
+            msg = "content_sha256 deve ser um SHA-256 hexadecimal de 64 caracteres."
+            raise ValueError(msg)
+        if text:
+            computed = hashlib.sha256(text.encode("utf-8")).hexdigest()
+            if explicit != computed:
+                msg = "content_sha256 não confere com source_text."
+                raise ValueError(msg)
+        return explicit
     if not text:
         msg = "content_sha256 ou source_text é obrigatório para proveniência."
         raise ValueError(msg)

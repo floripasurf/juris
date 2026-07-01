@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+
 from juris.web.corpus_queue import (
     append_accepted_source,
     corpus_candidates,
@@ -64,6 +66,76 @@ def test_candidates_sources_coverage_and_reingest(tmp_path) -> None:
     assert updated is not None
     assert updated["reingest_status"] == "done"
     assert coverage_report(tmp_path)["pending_reingest"] == []
+
+
+def test_append_source_rejects_malformed_explicit_hash(tmp_path) -> None:
+    try:
+        append_accepted_source(
+            tmp_path,
+            {
+                "numero_cnj": "0001234",
+                "title": "Fonte",
+                "source_url": "https://example.test",
+                "source_date": "2026-06-30",
+                "source_type": "acordao_publicado",
+                "tribunal": "STJ",
+                "area": "civel",
+                "tema": "cobranca",
+                "content_sha256": "not-a-hash",
+            },
+        )
+    except ValueError as exc:
+        assert "SHA-256" in str(exc)
+    else:
+        raise AssertionError("hash explícito malformado deveria falhar")
+
+
+def test_append_source_rejects_hash_that_does_not_match_text(tmp_path) -> None:
+    try:
+        append_accepted_source(
+            tmp_path,
+            {
+                "numero_cnj": "0001234",
+                "title": "Fonte",
+                "source_url": "https://example.test",
+                "source_date": "2026-06-30",
+                "source_type": "acordao_publicado",
+                "tribunal": "STJ",
+                "area": "civel",
+                "tema": "cobranca",
+                "content_sha256": "0" * 64,
+                "source_text": "texto aprovado",
+            },
+        )
+    except ValueError as exc:
+        assert "não confere" in str(exc)
+    else:
+        raise AssertionError("hash divergente deveria falhar")
+
+
+def test_append_source_rejects_duplicate_content_hash(tmp_path) -> None:
+    text = "texto aprovado"
+    content_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    payload = {
+        "numero_cnj": "0001234",
+        "title": "Fonte",
+        "source_url": "https://example.test",
+        "source_date": "2026-06-30",
+        "source_type": "acordao_publicado",
+        "tribunal": "STJ",
+        "area": "civel",
+        "tema": "cobranca",
+        "source_text": text,
+    }
+
+    append_accepted_source(tmp_path, payload)
+
+    try:
+        append_accepted_source(tmp_path, {**payload, "title": "Fonte duplicada", "content_sha256": content_hash})
+    except ValueError as exc:
+        assert "mesmo content_sha256" in str(exc)
+    else:
+        raise AssertionError("fonte duplicada deveria falhar")
 
 
 def test_reingest_pending_sources_writes_repertory_chunks(tmp_path) -> None:
