@@ -259,3 +259,42 @@ async def test_dispatch_rejects_unknown_operation() -> None:
     resp = await local_agent.dispatch_agent_request(req)
     assert resp.success is False
     assert "não suportada" in (resp.error or "")
+
+
+@pytest.mark.asyncio
+async def test_two_tenants_survive_agent_reconnect() -> None:
+    """Correctness the sticky-routing/broker must preserve: after a tenant's agent
+    reconnects, requests route to the NEW socket, the stale one can't hijack, and the
+    other tenant is unaffected."""
+    hub = RelayHub()
+    sent_a1: list[str] = []
+    sent_a2: list[str] = []
+    sent_b: list[str] = []
+
+    async def send_a1(p: str) -> None:
+        sent_a1.append(p)
+
+    async def send_a2(p: str) -> None:
+        sent_a2.append(p)
+
+    async def send_b(p: str) -> None:
+        sent_b.append(p)
+
+    id_a1 = hub.register("escritorio-a", send_a1)
+    hub.register("escritorio-b", send_b)
+    id_a2 = hub.register("escritorio-a", send_a2)  # A's agent reconnects → replaces binding
+    assert id_a2 != id_a1
+
+    # A request for A goes to the reconnected socket, never the stale one.
+    task = asyncio.create_task(
+        hub.send("escritorio-a", AgentRequest(request_id="r", tenant_id="escritorio-a", operation="mni", payload={}), timeout=5)
+    )
+    await asyncio.sleep(0)
+    hub.resolve("escritorio-a", AgentResponse(request_id="r", success=True, payload={"who": "a2"}))
+    assert (await task).payload == {"who": "a2"}
+    assert sent_a2 and not sent_a1
+
+    # The stale connection's late unregister must NOT drop the live binding.
+    hub.unregister("escritorio-a", id_a1)
+    assert hub.is_connected("escritorio-a") is True
+    assert hub.is_connected("escritorio-b") is True  # B untouched throughout
