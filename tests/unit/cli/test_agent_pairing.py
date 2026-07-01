@@ -39,7 +39,7 @@ def test_agent_serve_binds_loopback(monkeypatch) -> None:
     assert result.exit_code == 0
     assert captured["host"] == "127.0.0.1"
     assert captured["port"] == 9999
-    assert captured["access_log"] is False  # request line (legacy ?token=) never logged
+    assert captured["access_log"] is False  # request lines are unnecessary on the token holder
 
 
 def test_agent_serve_fails_closed_without_token(monkeypatch) -> None:

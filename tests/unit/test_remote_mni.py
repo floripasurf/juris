@@ -179,7 +179,7 @@ def test_ws_mni_round_trip_with_testclient(monkeypatch) -> None:
     client = TestClient(local_agent.app)
     token = local_agent.get_signing_token()
 
-    with client.websocket_connect(f"/ws/mni?token={token}") as ws:
+    with client.websocket_connect("/ws/mni", headers={"x-agent-token": token}) as ws:
         req = AgentRequest(
             request_id="m1",
             operation="mni.consultar_processo",

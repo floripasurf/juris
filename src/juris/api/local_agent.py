@@ -253,6 +253,15 @@ async def health() -> HealthResponse:
 _LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1", "[::1]", ""}
 
 
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes"}
+
+
+def _allow_query_token() -> bool:
+    """Temporary compatibility switch for old local clients that used ``?token=``."""
+    return _env_flag("JURIS_AGENT_ALLOW_QUERY_TOKEN")
+
+
 def _ws_authorized(ws: WebSocket) -> bool:
     """Authorize a WS handshake: non-foreign Origin (+ loopback Host) and a valid token.
 
@@ -260,8 +269,9 @@ def _ws_authorized(ws: WebSocket) -> bool:
     against the loopback-bound agent. When Origin is present it (and the Host) MUST be
     loopback, so a malicious page the lawyer has open can't reach the agent even if it
     steals the token. A legit orchestrator client sends no Origin and is unaffected.
-    The token comes from the ``x-agent-token`` header (preferred — never lands in an
-    access-logged URL) or the legacy ``?token=`` query param.
+    The token comes from the ``x-agent-token`` header, so it never lands in an
+    access-logged URL. Legacy ``?token=`` is rejected unless explicitly re-enabled
+    with ``JURIS_AGENT_ALLOW_QUERY_TOKEN=1`` during migration.
     """
     origin = ws.headers.get("origin")
     if origin is not None:
@@ -271,7 +281,9 @@ def _ws_authorized(ws: WebSocket) -> bool:
             return False
         if ws.headers.get("host", "").split(":")[0] not in _LOOPBACK_HOSTS:
             return False
-    token = ws.headers.get("x-agent-token") or ws.query_params.get("token")
+    token = ws.headers.get("x-agent-token")
+    if token is None and _allow_query_token():
+        token = ws.query_params.get("token")
     return token is not None and secrets.compare_digest(token, get_signing_token())
 
 

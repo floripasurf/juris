@@ -90,8 +90,8 @@ def agent_serve(
 
     import uvicorn
 
-    # access_log off: the request line (which could carry a legacy ?token=) must never
-    # be written to the agent's log file.
+    # Keep access logs off: request lines are unnecessary for this token-holding process,
+    # and legacy deployments may temporarily re-enable ?token= during migration.
     uvicorn.run(agent_asgi, host=bind_host, port=port, log_level="warning", access_log=False)
 
 

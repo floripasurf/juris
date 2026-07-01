@@ -91,7 +91,7 @@ def test_ws_sign_round_trip_signs_via_agent(monkeypatch):
     monkeypatch.setenv("JURIS_AGENT_PIN", "1234")
     client = TestClient(app)
     token = get_signing_token()
-    with client.websocket_connect(f"/ws/sign?token={token}") as ws:
+    with client.websocket_connect("/ws/sign", headers={"x-agent-token": token}) as ws:
         request = SignRequest(request_id="test-001", pdf_bytes_b64=base64.b64encode(b"PDF").decode())
         ws.send_text(request.model_dump_json())
         response = SignResponse.model_validate_json(ws.receive_text())
@@ -104,7 +104,7 @@ def test_ws_sign_handles_invalid_json():
     """WebSocket handles malformed JSON gracefully."""
     client = TestClient(app)
     token = get_signing_token()
-    with client.websocket_connect(f"/ws/sign?token={token}") as ws:
+    with client.websocket_connect("/ws/sign", headers={"x-agent-token": token}) as ws:
         ws.send_text("not valid json")
         data = ws.receive_text()
         response = SignResponse.model_validate_json(data)
@@ -116,7 +116,7 @@ def test_ws_sign_handles_missing_fields():
     """WebSocket handles JSON missing required fields."""
     client = TestClient(app)
     token = get_signing_token()
-    with client.websocket_connect(f"/ws/sign?token={token}") as ws:
+    with client.websocket_connect("/ws/sign", headers={"x-agent-token": token}) as ws:
         ws.send_text(json.dumps({"not_a_field": "value"}))
         data = ws.receive_text()
         response = SignResponse.model_validate_json(data)
@@ -135,10 +135,40 @@ def test_ws_sign_rejects_missing_token():
 def test_ws_sign_rejects_invalid_token():
     """WebSocket rejects connection when the auth token is invalid."""
     client = TestClient(app)
-    with pytest.raises(WebSocketDisconnect) as exc_info, client.websocket_connect("/ws/sign?token=wrong-token"):
+    with pytest.raises(WebSocketDisconnect) as exc_info, client.websocket_connect(
+        "/ws/sign", headers={"x-agent-token": "wrong-token"}
+    ):
         pass  # should never reach here
 
     assert exc_info.value.code == 4001
+
+
+def test_ws_sign_rejects_query_token_by_default(monkeypatch) -> None:
+    """Tokens in URLs are rejected unless the temporary migration flag is explicit."""
+    monkeypatch.delenv("JURIS_AGENT_ALLOW_QUERY_TOKEN", raising=False)
+    client = TestClient(app)
+
+    with pytest.raises(WebSocketDisconnect) as exc_info, client.websocket_connect(
+        f"/ws/sign?token={get_signing_token()}"
+    ):
+        pass
+
+    assert exc_info.value.code == 4001
+
+
+def test_ws_sign_accepts_query_token_only_when_legacy_flag_is_enabled(monkeypatch) -> None:
+    """Compatibility mode is opt-in and should be removed after old clients migrate."""
+    monkeypatch.setenv("JURIS_AGENT_ALLOW_QUERY_TOKEN", "1")
+    monkeypatch.setattr(local_agent, "agent_signer", lambda: _FakeSigner())
+    monkeypatch.setenv("JURIS_AGENT_PIN", "1234")
+    client = TestClient(app)
+
+    with client.websocket_connect(f"/ws/sign?token={get_signing_token()}") as ws:
+        request = SignRequest(request_id="legacy-1", pdf_bytes_b64=base64.b64encode(b"PDF").decode())
+        ws.send_text(request.model_dump_json())
+        response = SignResponse.model_validate_json(ws.receive_text())
+
+    assert response.success is True
 
 
 def test_sign_request_schema_validation():
