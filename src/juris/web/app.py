@@ -686,6 +686,7 @@ async def get_workbench(tenant: Tenant = Depends(current_tenant)) -> dict[str, o
         processos=list_processos(db=db),
         prazos=list_prazos(db=db),
         out_root=tenant_scoped_dir(tenant, _out_root()),
+        filing_root=_tenant_filing_root(tenant),
     )
 
 

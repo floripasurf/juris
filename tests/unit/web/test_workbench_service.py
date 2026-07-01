@@ -118,3 +118,15 @@ def test_workbench_builds_daily_process_queues(tmp_path) -> None:
     assert workbench["recent_movements"][0]["latest_run"]["grounding_status"] == "verified"
     assert workbench["draft_ready"][0]["prazos_pendentes"] == 2
     assert workbench["draft_ready"][0]["latest_run"]["review"]["important"] == 1
+
+
+def test_workbench_includes_pending_filings(tmp_path) -> None:
+    from juris.web.workbench_service import build_workbench
+
+    # a pending filing under the tenant's filing root
+    pending = tmp_path / "filings" / "5082351-40.2017.8.13.0024" / "20260701_pending"
+    pending.mkdir(parents=True)
+
+    wb = build_workbench(processos=[], prazos=[], out_root=tmp_path, filing_root=tmp_path / "filings")
+    assert "pending_filings" in wb
+    assert any(p["receipt_id"] == "20260701_pending" for p in wb["pending_filings"])

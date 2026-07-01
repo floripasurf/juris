@@ -18,9 +18,10 @@ def build_workbench(
     processos: list[ProcessoView],
     prazos: list[PrazoView],
     out_root: Path,
+    filing_root: Path | None = None,
     max_items: int = 5,
 ) -> dict[str, object]:
-    """Build the daily queues shown by the web console."""
+    """Build the daily queues shown by the web console — what to do today."""
     runs = _recent_run_manifests(out_root, max_items=max_items * 4)
     latest_by_cnj = _latest_run_by_cnj(runs)
     return {
@@ -28,8 +29,19 @@ def build_workbench(
         "recent_movements": _recent_movements(processos, latest_by_cnj=latest_by_cnj, max_items=max_items),
         "draft_ready": _draft_ready(processos, latest_by_cnj=latest_by_cnj, max_items=max_items),
         "blocked_cases": _blocked_cases(runs, max_items=max_items),
+        "pending_filings": _pending_filings(filing_root, max_items=max_items),
         "recent_artifacts": _recent_artifacts(runs, max_items=max_items),
     }
+
+
+def _pending_filings(filing_root: Path | None, *, max_items: int) -> list[dict[str, object]]:
+    """Protocols started but not confirmed — the lawyer must recover or archive them."""
+    if filing_root is None:
+        return []
+    from juris.web.filing_console import filing_status
+
+    pending = filing_status(filing_root).get("pending")
+    return list(pending)[:max_items] if isinstance(pending, list) else []
 
 
 def _latest_run_by_cnj(runs: list[dict[str, object]]) -> dict[str, dict[str, object]]:

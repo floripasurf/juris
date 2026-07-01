@@ -543,11 +543,12 @@ def test_workbench_endpoint_returns_daily_queues(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(
         app_module,
         "build_workbench",
-        lambda *, processos, prazos, out_root: {
+        lambda *, processos, prazos, out_root, filing_root=None: {
             "critical_deadlines": [],
             "recent_movements": [],
             "draft_ready": [],
             "blocked_cases": [{"numero_cnj": "A"}],
+            "pending_filings": [],
             "recent_artifacts": [],
         },
     )

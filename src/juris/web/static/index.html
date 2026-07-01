@@ -1140,6 +1140,12 @@
         [{ label: "abrir caso", run: () => useProcesso(b.numero_cnj, b.tribunal || "tjmg") }]
       ));
 
+      const pending = (wb.pending_filings || []).map((p) => queueItem(
+        p.numero_cnj || p.receipt_id || "protocolo",
+        `protocolo interrompido · ${escHtml(p.receipt_id || "")}`,
+        [{ label: "retomar", run: () => { showView("protocolo"); loadPendingRecovery(p.pending_key); } }]
+      ));
+
       const artifacts = (wb.recent_artifacts || []).map((a) => queueItem(
         a.numero_cnj || "última execução",
         `${a.artifact_count || 0} artefato(s) · ${runMeta(a)} · ${fmtDate(a.finished_at)}`,
@@ -1155,6 +1161,7 @@
         renderQueue("Novas movimentações", updated, "Sem sync recente."),
         renderQueue("Prontos para rascunho", draftReady, "Nenhum processo importado."),
         renderQueue("Bloqueados", blocked, "Nenhum bloqueio nesta sessão."),
+        renderQueue("Protocolos pendentes", pending, "Nenhum protocolo interrompido."),
         renderQueue("Artefatos recentes", artifacts, "Nenhum artefato nesta sessão.")
       );
     }

@@ -27,11 +27,15 @@ def two_tenants(monkeypatch, tmp_path):
     monkeypatch.setenv("JURIS_TENANTS_FILE", str(tenants))
     monkeypatch.setenv("JURIS_HOME", str(tmp_path))
     monkeypatch.setenv("JURIS_OUT_ROOT", str(tmp_path / "out"))
+    from juris.web.app import _connect_job_store
+
     default_registry.cache_clear()
     _localdb_for_path.cache_clear()
+    _connect_job_store.cache_clear()  # else a prior test's (deleted) tmp DB path leaks
     yield {"a": {"X-API-Key": "key-a"}, "b": {"X-API-Key": "key-b"}}
     default_registry.cache_clear()
     _localdb_for_path.cache_clear()
+    _connect_job_store.cache_clear()
 
 
 def test_tenant_b_cannot_see_tenant_a_processos(two_tenants) -> None:
