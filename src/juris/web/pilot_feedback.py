@@ -10,6 +10,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from juris.core.paths import ensure_private_dir, restrict_file
+
 _FILENAME = "pilot-feedback.jsonl"
 
 
@@ -19,7 +21,7 @@ def feedback_path(root: Path) -> Path:
 
 def append_feedback(root: Path, payload: dict[str, object]) -> dict[str, object]:
     """Append one structured pilot feedback record under the tenant root."""
-    root.mkdir(parents=True, exist_ok=True)
+    ensure_private_dir(root)
     record = {
         "id": uuid.uuid4().hex,
         "created_at": datetime.now(UTC).isoformat(),
@@ -28,6 +30,7 @@ def append_feedback(root: Path, payload: dict[str, object]) -> dict[str, object]
     path = feedback_path(root)
     with path.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+    restrict_file(path)
     return record
 
 

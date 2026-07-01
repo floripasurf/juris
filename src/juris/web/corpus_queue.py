@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
 
+from juris.core.paths import ensure_private_dir, restrict_file
 from juris.web.pilot_feedback import list_feedback
 
 _FILENAME = "corpus-sources.jsonl"
@@ -64,7 +65,7 @@ def corpus_candidates(root: Path) -> list[dict[str, object]]:
 
 def append_accepted_source(root: Path, payload: dict[str, object]) -> dict[str, object]:
     """Append one lawyer-approved source with mandatory provenance."""
-    root.mkdir(parents=True, exist_ok=True)
+    ensure_private_dir(root)
     content_hash = _resolve_content_hash(payload)
     if any(str(record.get("content_sha256") or "") == content_hash for record in list_accepted_sources(root)):
         msg = "fonte já aceita no corpus com o mesmo content_sha256."
@@ -85,6 +86,7 @@ def append_accepted_source(root: Path, payload: dict[str, object]) -> dict[str, 
     }
     with sources_path(root).open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+    restrict_file(sources_path(root))
     return record
 
 
@@ -220,9 +222,10 @@ def _write_source_text(root: Path, source_id: str, payload: dict[str, object]) -
     if not text:
         return None
     text_dir = root / _TEXT_DIR
-    text_dir.mkdir(parents=True, exist_ok=True)
+    ensure_private_dir(text_dir)
     path = text_dir / f"{source_id}.txt"
     path.write_text(text, encoding="utf-8")
+    restrict_file(path)
     return str(path.relative_to(root))
 
 
@@ -254,7 +257,9 @@ def _counts(records: list[dict[str, object]], key: str) -> dict[str, int]:
 
 
 def _rewrite_sources(root: Path, records: list[dict[str, object]]) -> None:
-    root.mkdir(parents=True, exist_ok=True)
-    with sources_path(root).open("w", encoding="utf-8") as fh:
+    ensure_private_dir(root)
+    path = sources_path(root)
+    with path.open("w", encoding="utf-8") as fh:
         for record in sorted(records, key=lambda r: str(r.get("created_at", ""))):
             fh.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+    restrict_file(path)

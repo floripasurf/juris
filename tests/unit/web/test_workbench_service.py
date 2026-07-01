@@ -51,6 +51,24 @@ def test_workbench_reads_persistent_manifests(tmp_path) -> None:
     assert workbench["recent_artifacts"][0]["review"]["critical"] == 1
 
 
+def test_workbench_ignores_manifest_symlink_escape(tmp_path) -> None:
+    case_dir = tmp_path / "CASE-1"
+    case_dir.mkdir()
+    outside = tmp_path.parent / f"{tmp_path.name}-manifest.json"
+    outside.write_text(
+        json.dumps({"request": {"numero_cnj": "ESCAPE"}, "artifacts": []}),
+        encoding="utf-8",
+    )
+    try:
+        (case_dir / "run-manifest.json").symlink_to(outside)
+
+        workbench = build_workbench(processos=[], prazos=[], out_root=tmp_path)
+
+        assert workbench["recent_artifacts"] == []
+    finally:
+        outside.unlink(missing_ok=True)
+
+
 def test_workbench_builds_daily_process_queues(tmp_path) -> None:
     case_dir = tmp_path / "CASE-A"
     case_dir.mkdir()

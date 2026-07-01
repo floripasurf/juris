@@ -107,6 +107,8 @@ def _recent_run_manifests(out_root: Path, *, max_items: int) -> list[dict[str, o
     )
     runs: list[dict[str, object]] = []
     for path in paths[:max_items]:
+        if not _is_regular_file_under(path, root):
+            continue
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -149,3 +151,11 @@ def _blocked_cases(runs: list[dict[str, object]], *, max_items: int) -> list[dic
 
 def _recent_artifacts(runs: list[dict[str, object]], *, max_items: int) -> list[dict[str, object]]:
     return runs[:max_items]
+
+
+def _is_regular_file_under(path: Path, root: Path) -> bool:
+    try:
+        resolved = path.resolve()
+    except OSError:
+        return False
+    return resolved.is_relative_to(root) and resolved.is_file()

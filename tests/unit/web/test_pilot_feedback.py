@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import stat
 
 from juris.web.pilot_feedback import (
     append_feedback,
@@ -13,6 +14,10 @@ from juris.web.pilot_feedback import (
     list_feedback,
     summarize_feedback,
 )
+
+
+def _mode(path) -> int:
+    return stat.S_IMODE(path.stat().st_mode)
 
 
 def test_append_list_and_export_feedback(tmp_path) -> None:
@@ -36,6 +41,7 @@ def test_append_list_and_export_feedback(tmp_path) -> None:
     records = list_feedback(tmp_path)
     assert records[0]["id"] == record["id"]
     assert records[0]["time_saved_minutes"] == 42
+    assert _mode(tmp_path / "pilot-feedback.jsonl") == 0o600
 
     exported = json.loads(export_feedback_json(tmp_path))
     assert exported["feedback"][0]["numero_cnj"] == "0001234-56.2026.8.13.0001"

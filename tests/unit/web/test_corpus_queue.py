@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import stat
 
 from juris.web.corpus_queue import (
     append_accepted_source,
@@ -13,6 +14,10 @@ from juris.web.corpus_queue import (
     reingest_pending_sources,
 )
 from juris.web.pilot_feedback import append_feedback
+
+
+def _mode(path) -> int:
+    return stat.S_IMODE(path.stat().st_mode)
 
 
 def test_candidates_sources_coverage_and_reingest(tmp_path) -> None:
@@ -55,6 +60,9 @@ def test_candidates_sources_coverage_and_reingest(tmp_path) -> None:
     sources = list_accepted_sources(tmp_path)
     assert sources[0]["content_sha256"]
     assert sources[0]["reingest_status"] == "pending"
+    assert _mode(tmp_path / "corpus-sources.jsonl") == 0o600
+    assert _mode(tmp_path / "corpus-source-text") == 0o700
+    assert _mode(tmp_path / str(sources[0]["source_text_path"])) == 0o600
     assert corpus_candidates(tmp_path)[0]["accepted"] is True
 
     coverage = coverage_report(tmp_path)
