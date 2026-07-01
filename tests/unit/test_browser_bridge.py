@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from unittest.mock import AsyncMock
 
@@ -104,6 +105,18 @@ async def test_ws_channel_closes_connection_on_error() -> None:
         await channel.request({"request_id": "x"})
 
     assert conn.closed is True
+
+
+@pytest.mark.asyncio
+async def test_ws_channel_times_out_while_connecting() -> None:
+    async def slow_connect() -> _FakeConn:
+        await asyncio.sleep(1)
+        return _FakeConn("{}")
+
+    channel = WebSocketBridgeChannel(connect=slow_connect, timeout=0.01)
+
+    with pytest.raises(TimeoutError):
+        await channel.request({"request_id": "x"})
 
 
 @pytest.mark.asyncio

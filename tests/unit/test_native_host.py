@@ -31,6 +31,29 @@ def test_read_returns_none_at_eof() -> None:
     assert read_message(io.BytesIO(b"")) is None
 
 
+def test_read_rejects_oversized_frame() -> None:
+    frame = struct.pack("<I", 10)
+
+    with pytest.raises(ValueError, match="excede"):
+        read_message(io.BytesIO(frame), max_bytes=1)
+
+
+def test_write_rejects_oversized_message() -> None:
+    with pytest.raises(ValueError, match="excede"):
+        write_message(io.BytesIO(), {"content": "grande"}, max_bytes=4)
+
+
+def test_read_rejects_non_object_json() -> None:
+    buffer = io.BytesIO()
+    raw = b'["not", "object"]'
+    buffer.write(struct.pack("<I", len(raw)))
+    buffer.write(raw)
+    buffer.seek(0)
+
+    with pytest.raises(ValueError, match="objeto JSON"):
+        read_message(buffer)
+
+
 @pytest.mark.asyncio
 async def test_relay_writes_request_and_reads_reply() -> None:
     stdin = io.BytesIO()
@@ -44,6 +67,22 @@ async def test_relay_writes_request_and_reads_reply() -> None:
     assert result["content"] == "resposta"
     stdout.seek(0)
     assert read_message(stdout) == {"request_id": "r1", "prompt": "tese"}
+
+
+@pytest.mark.asyncio
+async def test_relay_returns_failure_on_malformed_extension_reply() -> None:
+    stdin = io.BytesIO()
+    raw = b"not-json"
+    stdin.write(struct.pack("<I", len(raw)))
+    stdin.write(raw)
+    stdin.seek(0)
+    relay = NativeMessagingRelay(stdin=stdin, stdout=io.BytesIO())
+
+    result = await relay.request({"request_id": "r1", "prompt": "tese"})
+
+    assert result["request_id"] == "r1"
+    assert result["success"] is False
+    assert "resposta inválida" in result["error"]
 
 
 @pytest.mark.asyncio

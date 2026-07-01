@@ -67,9 +67,9 @@ class WebSocketBridgeChannel:
         return cls(_connect, timeout=timeout)
 
     async def request(self, message: dict[str, object]) -> dict[str, object]:
-        conn = await self._connect()
+        conn = await asyncio.wait_for(self._connect(), self._timeout)
         try:
-            await conn.send(json.dumps(message))
+            await asyncio.wait_for(conn.send(json.dumps(message)), self._timeout)
             raw = await asyncio.wait_for(conn.recv(), self._timeout)
         finally:
             await conn.close()

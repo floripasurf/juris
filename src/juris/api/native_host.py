@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import platform
 import struct
 import sys
@@ -23,27 +24,54 @@ from pathlib import Path
 from typing import IO, Any
 
 _LEN = struct.Struct("<I")  # Chrome uses a 4-byte little-endian length prefix
+DEFAULT_MAX_MESSAGE_BYTES = 8 * 1024 * 1024
 HOST_NAME = "com.juris.host"
 DEFAULT_WS_HOST = "127.0.0.1"
 DEFAULT_WS_PORT = 8787
 
 
-def read_message(stream: IO[bytes]) -> dict[str, Any] | None:
+def _max_message_bytes() -> int:
+    raw = os.environ.get("JURIS_NATIVE_MESSAGE_MAX_BYTES")
+    if raw is None:
+        return DEFAULT_MAX_MESSAGE_BYTES
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        msg = "JURIS_NATIVE_MESSAGE_MAX_BYTES deve ser inteiro."
+        raise ValueError(msg) from exc
+    if value <= 0:
+        msg = "JURIS_NATIVE_MESSAGE_MAX_BYTES deve ser positivo."
+        raise ValueError(msg)
+    return value
+
+
+def read_message(stream: IO[bytes], *, max_bytes: int | None = None) -> dict[str, Any] | None:
     """Read one Native Messaging frame; return None at EOF."""
     header = stream.read(4)
     if len(header) < 4:
         return None
     (length,) = _LEN.unpack(header)
+    limit = max_bytes if max_bytes is not None else _max_message_bytes()
+    if length > limit:
+        msg = f"mensagem native messaging excede o limite de {limit} bytes"
+        raise ValueError(msg)
     body = stream.read(length)
     if len(body) < length:
         return None
-    parsed: dict[str, Any] = json.loads(body.decode("utf-8"))
+    parsed = json.loads(body.decode("utf-8"))
+    if not isinstance(parsed, dict):
+        msg = "mensagem native messaging deve ser um objeto JSON"
+        raise ValueError(msg)
     return parsed
 
 
-def write_message(stream: IO[bytes], message: dict[str, Any]) -> None:
+def write_message(stream: IO[bytes], message: dict[str, Any], *, max_bytes: int | None = None) -> None:
     """Write one Native Messaging frame (length prefix + JSON)."""
     body = json.dumps(message, ensure_ascii=False).encode("utf-8")
+    limit = max_bytes if max_bytes is not None else _max_message_bytes()
+    if len(body) > limit:
+        msg = f"mensagem native messaging excede o limite de {limit} bytes"
+        raise ValueError(msg)
     stream.write(_LEN.pack(len(body)))
     stream.write(body)
     stream.flush()
@@ -99,6 +127,8 @@ class NativeMessagingRelay:
                 )
             except TimeoutError:
                 return _failure(message, "timeout aguardando resposta da extensão")
+            except (OSError, UnicodeDecodeError, ValueError, json.JSONDecodeError) as exc:
+                return _failure(message, f"resposta inválida da extensão: {exc}")
             if reply is None:
                 return _failure(message, "extensão encerrou o canal nativo")
             return reply
