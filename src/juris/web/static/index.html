@@ -526,6 +526,13 @@
           <div id="corpus-coverage" class="proc-empty">Carregando…</div>
         </div>
       </div>
+      <h2>Busca explicável na jurisprudência</h2>
+      <p class="lede">Cada resultado mostra <strong>por que</strong> ranqueou: fonte, autoridade, vigência, corroboração.</p>
+      <form id="corpus-search-form" class="row">
+        <input id="corpus-search-q" type="text" placeholder="ex.: honorários sucumbenciais fazenda pública" />
+        <button type="submit">Buscar</button>
+      </form>
+      <div id="corpus-search-results" class="proc-empty">Digite uma consulta.</div>
       <h2>Segunda execução dos casos</h2>
       <div id="pilot-comparison" class="proc-empty">Carregando…</div>
       <div id="pilot-feedback" class="proc-empty">Carregando…</div>
@@ -1804,6 +1811,34 @@
       }
     }
 
+    async function searchCorpus(query) {
+      const el = document.querySelector("#corpus-search-results");
+      if (!query.trim()) { el.className = "proc-empty"; el.textContent = "Digite uma consulta."; return; }
+      el.className = "proc-empty";
+      el.textContent = "Buscando…";
+      try {
+        const resp = await fetch(`/api/corpus/search?q=${encodeURIComponent(query)}`);
+        if (!resp.ok) throw new Error(await apiErrorMessage(resp));
+        const data = await resp.json();
+        const results = data.results || [];
+        if (!results.length) { el.className = "proc-empty"; el.textContent = data.detail || "Nenhum resultado."; return; }
+        el.className = "proc-list";
+        el.innerHTML = "";
+        results.forEach((r) => {
+          const ex = r.explain || {};
+          const row = document.createElement("div");
+          row.className = "queue-item";
+          row.innerHTML = `<strong>${escHtml(r.source_id)}</strong>
+            <div class="meta">${escHtml(ex.fonte || r.tribunal || "—")} · <em>${escHtml(ex.motivo || "relevância textual")}</em> · score ${escHtml(String(r.score))}</div>
+            <div class="meta">${escHtml((r.texto || "").slice(0, 180))}…</div>`;
+          el.appendChild(row);
+        });
+      } catch (err) {
+        el.className = "proc-empty";
+        el.textContent = `Falha na busca: ${err.message}`;
+      }
+    }
+
     function renderPilotComparison(data) {
       const items = data.comparisons || [];
       if (!items.length) {
@@ -1910,6 +1945,11 @@
     loadAiSession();
     loadWorkbench();
     loadProcessos();
+    document.querySelector("#corpus-search-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      searchCorpus(document.querySelector("#corpus-search-q").value);
+    });
+
     loadPrazos();
     loadPilotFeedback();
     loadPilotSummary();

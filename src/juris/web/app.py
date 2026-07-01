@@ -48,6 +48,15 @@ def _out_root() -> Path:
     return Path(os.environ.get("JURIS_OUT_ROOT", "juris-out"))
 
 
+@lru_cache(maxsize=1)
+def _corpus_search_service(repertory_path: Path) -> Any:
+    """Cached repertory service for /api/corpus/search — the heavy embedder/reranker
+    load once, not per request. Tenant scoping happens per-query (shared store)."""
+    from juris.web.demo_service import _build_repertory
+
+    return _build_repertory(repertory_path)
+
+
 def _juris_home() -> Path:
     """The ``~/.juris`` base for filing receipts + audit chain (JURIS_HOME overridable)."""
     return juris_home()
@@ -795,6 +804,43 @@ async def get_corpus_coverage(tenant: Tenant = Depends(current_tenant)) -> dict[
     from juris.web.corpus_queue import coverage_report
 
     return coverage_report(tenant_scoped_dir(tenant, _out_root()))
+
+
+@app.get("/api/corpus/search")
+async def search_corpus(
+    q: str, top_k: int = 8, tenant: Tenant = Depends(current_tenant)
+) -> dict[str, object]:
+    """Explainable jurisprudence search (Sprint 5): each hit carries WHY it ranked.
+
+    Tenant-scoped (public seed + this firm's own uploads only). Every result exposes
+    the ranking signals — fonte, autoridade, vigência, corroboração and the strongest
+    ``motivo`` — so the console shows not just *what* was retrieved but *why* it was
+    trusted (``explain_ranking``, ADR-0017).
+    """
+    from juris.repertory.readiness import read_status, resolve_repertory_path
+    from juris.repertory.retrieval.service import explain_ranking
+
+    if not read_status().is_ready:
+        return {"query": q, "results": [], "detail": "corpus não ingerido ainda"}
+
+    repertory = _corpus_search_service(resolve_repertory_path())
+    results = repertory.search_jurisprudencia(
+        query=q, top_k=max(1, min(top_k, 20)), tenant_id=tenant.tenant_id
+    )
+    return {
+        "query": q,
+        "results": [
+            {
+                "source_id": r.source_id,
+                "score": r.score,
+                "tribunal": r.tribunal,
+                "hierarquia": r.hierarchy_label,
+                "texto": r.texto[:400],
+                "explain": explain_ranking(r),
+            }
+            for r in results
+        ],
+    }
 
 
 @app.post("/api/corpus/sources/{source_id}/reingested")

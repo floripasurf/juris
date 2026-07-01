@@ -68,6 +68,9 @@ def test_index_renders_local_ui() -> None:
     assert "/api/corpus/candidates" in response.text
     assert "/api/corpus/coverage" in response.text
     assert "renderCorpusCoverage" in response.text
+    assert "Busca explicável na jurisprudência" in response.text  # explainable ranking panel
+    assert "searchCorpus" in response.text
+    assert "/api/corpus/search" in response.text
     assert "/api/pilot-feedback/comparison" in response.text
     assert "renderPilotComparison" in response.text
     assert "Protocolo controlado" in response.text
@@ -1442,3 +1445,37 @@ def test_admin_health_requires_token(monkeypatch) -> None:
     assert resp.status_code == 200
     body = resp.json()
     assert "tenants" in body and "degraded" in body
+
+
+def test_corpus_search_exposes_explain_ranking(monkeypatch) -> None:
+    import importlib
+
+    from juris.repertory.retrieval.service import RetrievalResult
+
+    app_module = importlib.import_module("juris.web.app")
+
+    class _StubRepertory:
+        def search_jurisprudencia(self, query, top_k=8, tenant_id=None):  # noqa: ANN001, ANN201
+            return [
+                RetrievalResult(
+                    source_id="resp_1",
+                    score=0.9,
+                    hierarchy=2,
+                    hierarchy_label="STJ",
+                    tribunal="STJ",
+                    texto="ementa sobre honorários",
+                    score_components={"autoridade": 0.5, "relevancia": 0.3, "total": 0.9},
+                )
+            ]
+
+    import juris.repertory.readiness as rd
+
+    monkeypatch.setattr(app_module, "_corpus_search_service", lambda p: _StubRepertory())
+    monkeypatch.setattr(rd, "read_status", lambda: type("S", (), {"is_ready": True})())
+
+    resp = client.get("/api/corpus/search?q=honorarios")
+    assert resp.status_code == 200
+    hit = resp.json()["results"][0]
+    assert hit["source_id"] == "resp_1"
+    assert "motivo" in hit["explain"]  # WHY it ranked, surfaced to the UI
+    assert hit["explain"]["autoridade"] == 0.5
