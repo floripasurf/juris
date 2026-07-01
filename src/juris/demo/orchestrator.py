@@ -526,7 +526,11 @@ def serialize_processo_summary(processo: ProcessoDomain) -> dict[str, Any]:
         "data_ajuizamento": (processo.data_ajuizamento.isoformat() if processo.data_ajuizamento else None),
         "ultimo_movimento": (
             {
-                "data_hora": processo.ultimo_movimento.data_hora.isoformat(),
+                "data_hora": (
+                    processo.ultimo_movimento.data_hora.isoformat()
+                    if processo.ultimo_movimento.data_hora
+                    else None
+                ),
                 "descricao": processo.ultimo_movimento.descricao,
                 "codigo_nacional": processo.ultimo_movimento.codigo_nacional,
             }

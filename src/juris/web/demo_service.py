@@ -12,6 +12,7 @@ from juris.demo.artifacts import write_artifacts
 from juris.demo.disclaimer import output_dir_name
 from juris.demo.orchestrator import derive_demo_mode, load_processo
 from juris.repertory.peticoes.models import TipoPeticao
+from juris.web.jsonutil import ensure_list
 
 if TYPE_CHECKING:
     from juris.llm.base import AbstractLLM
@@ -108,7 +109,7 @@ def estrategia_payload(draft: object) -> dict[str, object] | None:
     lacunas_prova = [
         {
             "alegacao": str(item.get("alegacao") or ""),
-            "lacunas": list(item.get("lacunas") or ["sem prova indicada"]),
+            "lacunas": ensure_list(item.get("lacunas")) or ["sem prova indicada"],
         }
         for item in matriz
         if not item.get("provas") or item.get("lacunas")

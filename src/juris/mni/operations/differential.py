@@ -69,18 +69,19 @@ def detect_new_movements(
     new_movs: list[Movimento] = []
 
     for mov in fetched.movimentos:
-        # Timestamp-based fast filter
+        # Timestamp-based fast filter. An undated movement can't be filtered by time —
+        # treat it as new (never silently drop it; it goes to manual review downstream).
         mov_time = mov.data_hora
-        if mov_time.tzinfo is None:
-            # Treat naive as UTC for comparison
-            mov_time = mov_time.replace(tzinfo=UTC)
+        if mov_time is not None:
+            if mov_time.tzinfo is None:
+                mov_time = mov_time.replace(tzinfo=UTC)  # treat naive as UTC
 
-        last_sync_aware = last_sync_at
-        if last_sync_aware.tzinfo is None:
-            last_sync_aware = last_sync_aware.replace(tzinfo=UTC)
+            last_sync_aware = last_sync_at
+            if last_sync_aware.tzinfo is None:
+                last_sync_aware = last_sync_aware.replace(tzinfo=UTC)
 
-        if mov_time < last_sync_aware:
-            continue
+            if mov_time < last_sync_aware:
+                continue
 
         # Key-based dedup
         key = (mov.data_hora, mov.codigo_nacional, mov.id_movimento)

@@ -154,7 +154,7 @@ def compare_feedback_runs(root: Path) -> dict[str, object]:
         for c in comparisons
         if _int_value(c.get("delta_time_saved_minutes")) > 0
         or _int_value(c.get("delta_utility")) > 0
-        or (c.get("delta_citation_acceptance") is not None and float(c["delta_citation_acceptance"]) > 0)
+        or (c.get("delta_citation_acceptance") is not None and _float_value(c["delta_citation_acceptance"]) > 0)
     ]
     return {
         "compared_cases": len(comparisons),
@@ -221,10 +221,21 @@ def export_feedback_report_markdown(root: Path) -> str:
 
 
 def _int_value(value: object) -> int:
-    try:
-        return int(value)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        return 0
+    return int(_float_value(value))
+
+
+def _float_value(value: object) -> float:
+    """Coerce an untyped JSON value to a float, or 0.0 when it isn't numeric."""
+    if isinstance(value, bool):
+        return float(value)
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return 0.0
+    return 0.0
 
 
 def _counts(records: list[dict[str, object]], key: str) -> dict[str, int]:

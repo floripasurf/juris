@@ -12,7 +12,7 @@ import hashlib
 import json
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from juris.web.pilot_feedback import list_feedback
@@ -225,9 +225,7 @@ def _read_source_text(root: Path, record: dict[str, object]) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _parse_date(value: str):
-    from datetime import date
-
+def _parse_date(value: str) -> date | None:
     try:
         return date.fromisoformat(value)
     except ValueError:

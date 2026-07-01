@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from juris.web.jsonutil import ensure_dict, ensure_list
 from juris.web.processos_service import PrazoView, ProcessoView
 
 _CRITICAL_URGENCY = {"critica", "crítica", "alta", "urgente"}
@@ -18,7 +19,7 @@ def build_workbench(
     prazos: list[PrazoView],
     out_root: Path,
     max_items: int = 5,
-) -> dict[str, list[dict[str, object]]]:
+) -> dict[str, object]:
     """Build the daily queues shown by the web console."""
     runs = _recent_run_manifests(out_root, max_items=max_items * 4)
     latest_by_cnj = _latest_run_by_cnj(runs)
@@ -66,7 +67,7 @@ def _recent_movements(
     processos: list[ProcessoView], *, latest_by_cnj: dict[str, dict[str, object]], max_items: int
 ) -> list[dict[str, object]]:
     selected = [p for p in processos if p.last_sync_at is not None]
-    selected.sort(key=lambda p: p.last_sync_at, reverse=True)
+    selected.sort(key=lambda p: p.last_sync_at or datetime.min, reverse=True)  # filtered: never None
     return [_processo_payload(p, latest_run=latest_by_cnj.get(p.numero_cnj)) for p in selected[:max_items]]
 
 
@@ -115,11 +116,11 @@ def _recent_run_manifests(out_root: Path, *, max_items: int) -> list[dict[str, o
 
 
 def _run_payload(manifest: dict[str, Any], case_dir: Path) -> dict[str, object]:
-    request = manifest.get("request") if isinstance(manifest.get("request"), dict) else {}
-    draft = manifest.get("draft") if isinstance(manifest.get("draft"), dict) else {}
-    reviewer = manifest.get("reviewer") if isinstance(manifest.get("reviewer"), dict) else {}
-    case_summary = manifest.get("case_summary") if isinstance(manifest.get("case_summary"), dict) else {}
-    artifacts = manifest.get("artifacts") if isinstance(manifest.get("artifacts"), list) else []
+    request = ensure_dict(manifest.get("request"))
+    draft = ensure_dict(manifest.get("draft"))
+    reviewer = ensure_dict(manifest.get("reviewer"))
+    case_summary = ensure_dict(manifest.get("case_summary"))
+    artifacts = ensure_list(manifest.get("artifacts"))
     return {
         "numero_cnj": request.get("numero_cnj") or case_summary.get("numero_cnj"),
         "tribunal": request.get("tribunal"),

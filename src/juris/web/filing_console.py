@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from juris.signing.filing import FilingResult
+from juris.web.jsonutil import ensure_dict, ensure_list
 
 _PRIMARY_DRAFTS = frozenset({"draft.md", "rascunho-pesquisa.md"})
 
@@ -60,11 +61,11 @@ def filing_artifacts(out_root: Path, *, max_items: int = 20) -> dict[str, object
             reverse=True,
         )
         for manifest_path in manifests:
-            manifest = _read_json(manifest_path)
+            manifest = ensure_dict(_read_json(manifest_path))
             case_dir = manifest_path.parent
-            request = manifest.get("request") if isinstance(manifest.get("request"), dict) else {}
-            draft = manifest.get("draft") if isinstance(manifest.get("draft"), dict) else {}
-            listed = manifest.get("artifacts") if isinstance(manifest.get("artifacts"), list) else []
+            request = ensure_dict(manifest.get("request"))
+            draft = ensure_dict(manifest.get("draft"))
+            listed = ensure_list(manifest.get("artifacts"))
             for artifact in listed:
                 if not isinstance(artifact, dict):
                     continue

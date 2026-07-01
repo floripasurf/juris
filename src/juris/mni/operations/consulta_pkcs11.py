@@ -253,7 +253,7 @@ class ConsultaResult:
             valor_causa=self.valor_causa or None,
             orgao_julgador=self.orgao_julgador or None,
             tribunal=tribunal_id,
-            movimentos=sorted(movimentos, key=lambda mv: mv.data_hora),
+            movimentos=sorted(movimentos, key=lambda mv: mv.data_hora.timestamp() if mv.data_hora else 0.0),
             partes=partes,
             documentos=documentos,
         )
