@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import base64
 import os
+import re
 import secrets
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
@@ -38,6 +39,13 @@ _SIGN_ERROR = "Falha ao assinar no agente local. Verifique token e PIN no agente
 _MNI_ERROR = "Falha ao consultar MNI no agente local. Verifique credenciais, token e tribunal."
 _INVALID_REQUEST_ERROR = "Requisição inválida para o agente local."
 _AGENT_PROCESSING_ERROR = "Falha ao processar requisição no agente local."
+_SECRET_ASSIGNMENT_RE = re.compile(
+    r"(?i)\b(token|pin|senha|password|secret|api[_-]?key|authorization)\s*=\s*[^\s,;)&]+"
+)
+_LOCAL_PATH_RE = re.compile(
+    r"(?:(?<=\s)|^)(?:~|/Users|/var|/private|/tmp|/Volumes|/Library|/System)(?:/[^\s,;)]+)+"
+)
+_CPF_RE = re.compile(r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b")
 
 
 @lru_cache(maxsize=1)
@@ -86,6 +94,14 @@ def _default_pin_resolver() -> str:
     return pin
 
 
+def _safe_agent_error(exc: Exception) -> str:
+    """Sanitize exception text before it reaches local-agent logs."""
+    text = str(exc) or exc.__class__.__name__
+    text = _SECRET_ASSIGNMENT_RE.sub(lambda match: f"{match.group(1)}=<redacted>", text)
+    text = _CPF_RE.sub("<cpf>", text)
+    return _LOCAL_PATH_RE.sub("<local-path>", text)
+
+
 def handle_sign_request(
     request: SignRequest,
     service: SigningService,
@@ -106,7 +122,7 @@ def handle_sign_request(
             "agent_sign_failed",
             request_id=request.request_id,
             tenant_id=request.tenant_id,
-            error=str(exc),
+            error=_safe_agent_error(exc),
         )
         return SignResponse(request_id=request.request_id, success=False, error=_SIGN_ERROR)
 
@@ -187,7 +203,7 @@ def handle_mni_request(
             request_id=request.request_id,
             tenant_id=request.tenant_id,
             operation=request.operation,
-            error=str(exc),
+            error=_safe_agent_error(exc),
         )
         return AgentResponse(request_id=request.request_id, success=False, error=_MNI_ERROR)
 

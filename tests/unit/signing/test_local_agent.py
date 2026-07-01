@@ -35,6 +35,14 @@ class _FakeSigner(SigningService):
         )
 
 
+class _CaptureLogger:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict[str, object]]] = []
+
+    def warning(self, event: str, **kwargs: object) -> None:
+        self.events.append((event, kwargs))
+
+
 def test_health_endpoint():
     """Health returns ok status."""
     client = TestClient(app)
@@ -83,6 +91,29 @@ def test_handle_sign_request_does_not_leak_internal_error() -> None:
     assert "token=abc" not in (resp.error or "")
     assert "pin=1234" not in (resp.error or "")
     assert "/var/private/token" not in (resp.error or "")
+
+
+def test_handle_sign_request_sanitizes_local_agent_log(monkeypatch) -> None:
+    capture = _CaptureLogger()
+    monkeypatch.setattr(local_agent, "logger", capture)
+
+    class _Boom(SigningService):
+        def sign_pdf(self, *a, **k):  # noqa: ANN001, ANN002, ANN003, ANN201
+            raise RuntimeError("pkcs11 /var/private/token token=abc pin=1234 cpf=076.710.396-32")
+
+    req = SignRequest(request_id="r-log", pdf_bytes_b64=base64.b64encode(b"PDF").decode())
+    resp = handle_sign_request(req, _Boom(), pin_resolver=lambda: "x")
+
+    assert resp.success is False
+    assert capture.events
+    error = str(capture.events[0][1]["error"])
+    assert "token=abc" not in error
+    assert "pin=1234" not in error
+    assert "076.710.396-32" not in error
+    assert "/var/private/token" not in error
+    assert "token=<redacted>" in error
+    assert "pin=<redacted>" in error
+    assert "<local-path>" in error
 
 
 def test_ws_sign_round_trip_signs_via_agent(monkeypatch):

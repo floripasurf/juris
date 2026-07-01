@@ -26,6 +26,14 @@ class _EchoTransport:
         return AgentResponse(request_id=request.request_id, success=True, payload=self._payload)
 
 
+class _CaptureLogger:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict[str, object]]] = []
+
+    def warning(self, event: str, **kwargs: object) -> None:
+        self.events.append((event, kwargs))
+
+
 def _processo() -> ProcessoDomain:
     return ProcessoDomain(
         numero_cnj="5082351-40.2017.8.13.0024",
@@ -145,6 +153,33 @@ def test_handle_mni_request_does_not_leak_internal_error() -> None:
     assert "senha=abc" not in (resp.error or "")
     assert "pin=1234" not in (resp.error or "")
     assert "/var/private/cert" not in (resp.error or "")
+
+
+def test_handle_mni_request_sanitizes_local_agent_log(monkeypatch) -> None:
+    from juris.api import local_agent
+
+    capture = _CaptureLogger()
+    monkeypatch.setattr(local_agent, "logger", capture)
+
+    class _BoomMNI:
+        def consultar_avisos(self, *args, **kwargs):  # noqa: ANN002, ANN003, ANN201
+            raise RuntimeError("mTLS /Users/adv/token senha=abc pin=1234 07671039632")
+
+    req = AgentRequest(request_id="r-log", operation="mni.consultar_avisos", payload={"tribunal_id": "tjmg"})
+    resp = local_agent.handle_mni_request(
+        req, _BoomMNI(), credentials_resolver=_creds, tribunal_resolver=get_tribunal
+    )
+
+    assert resp.success is False
+    assert capture.events
+    error = str(capture.events[0][1]["error"])
+    assert "senha=abc" not in error
+    assert "pin=1234" not in error
+    assert "07671039632" not in error
+    assert "/Users/adv/token" not in error
+    assert "senha=<redacted>" in error
+    assert "pin=<redacted>" in error
+    assert "<local-path>" in error
 
 
 # --- factory + /ws/mni integration ---
