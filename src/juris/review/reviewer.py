@@ -126,8 +126,12 @@ class ReviewerAgent:
                 report.llm_calls += 1
                 if dim in _RETRIEVAL_DIMENSIONS:
                     report.retrieval_calls += 1
-            except Exception:
-                logger.exception("dimension_analysis_failed", dimension=dim.value)
+            except Exception as exc:
+                from juris.core.sanitize import safe_error_text
+
+                logger.warning(
+                    "dimension_analysis_failed", dimension=dim.value, error=safe_error_text(exc)
+                )
 
         # 3. Sort issues: critical first, then important, then suggestion
         severity_order = {

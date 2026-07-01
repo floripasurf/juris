@@ -59,8 +59,10 @@ class STFAdapter(SearchAdapter):
                 response = await client.get(_SEARCH_URL, params=params)
                 response.raise_for_status()
                 data = response.json()
-        except Exception:
-            logger.exception("STF search request failed for query %r", query.value)
+        except Exception as exc:
+            from juris.core.sanitize import safe_error_text
+
+            logger.warning("STF search request failed for query %r: %s", query.value, safe_error_text(exc))
             return []
 
         results: list[SearchResult] = []

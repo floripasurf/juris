@@ -90,6 +90,18 @@ class EstrategiaResult:
     analise_adversario: str | None = None  # Módulo D (reuso do defesa_analyzer)
 
 
+def tom_minuta(confianca: str, *, revisao_obrigatoria: bool) -> str:
+    """The minuta's firmness — proportional to the line's solidity (legal quality).
+
+    Mandatory human review ⇒ ``"não protocolar"`` (draft only). Otherwise the
+    confidence maps to how assertively the petition is written. Shared by the console
+    label AND the drafter prompt, so what the UI announces matches what was drafted.
+    """
+    if revisao_obrigatoria:
+        return "não protocolar"
+    return {"alta": "forte", "media": "cauteloso", "baixa": "rascunho"}.get(confianca, "cauteloso")
+
+
 # Módulo I — deontological veto. High-precision patterns for conduct the CED/EOAB
 # forbids in a thesis: claiming guaranteed success / inevitability of the outcome
 # (firmeza do tom deve ser proporcional à solidez, never absolute).

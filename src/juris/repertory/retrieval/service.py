@@ -255,8 +255,10 @@ class RepertoryService:
                         },
                     )
                 return hypothetical
-        except Exception:
-            logger.warning("hyde_expansion_failed", exc_info=True)
+        except Exception as exc:
+            from juris.core.sanitize import safe_error_text
+
+            logger.warning("hyde_expansion_failed: %s", safe_error_text(exc))
 
         return None
 

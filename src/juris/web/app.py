@@ -321,14 +321,19 @@ async def health() -> Response:
 
 
 @app.get("/api/health")
-async def get_tenant_health(tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
+async def get_tenant_health(
+    deep: bool = True, tenant: Tenant = Depends(current_tenant)
+) -> dict[str, object]:
     """Per-tenant operational health — config, storage, corpus, agent, browser bridge.
 
-    Scoped to the authenticated tenant; never touches another firm's data.
+    Scoped to the authenticated tenant; never touches another firm's data. ``deep``
+    (default) actually PROBES the remote agent over the network, so a required-but-
+    unreachable agent shows red instead of a falsely-green "binding configured". Pass
+    ``?deep=false`` for a fast shallow check (binding presence only).
     """
     from juris.ops.tenant_health import tenant_operational_status
 
-    return tenant_operational_status(tenant)
+    return tenant_operational_status(tenant, deep=deep)
 
 
 @app.get("/api/ai-session")

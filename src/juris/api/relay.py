@@ -8,6 +8,15 @@ without ever exposing the agent to the public network.
 
 ``RelayHub`` is the orchestrator-side registry + request/response multiplexer. The
 WebSocket endpoint (agent-facing) and the agent's outbound dialer live alongside it.
+
+DEPLOYMENT CONSTRAINT (Phase 2): the hub is an in-process singleton (``_HUB``). The
+agent registers on whichever worker terminated its WebSocket, and ``send()`` only
+finds it on THAT worker. So a multi-worker / multi-instance orchestrator MUST pin an
+agent's reverse-channel connection and its token operations to the same process —
+via sticky routing (LB affinity on the agent's tenant) or, at scale, an external
+broker (Redis pub/sub keyed by tenant) replacing the in-memory maps. Single-worker
+(the pilot) is unaffected. Until one of those is in place, run the reverse channel on
+a single worker.
 """
 
 from __future__ import annotations

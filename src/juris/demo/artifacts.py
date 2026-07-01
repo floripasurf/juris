@@ -258,8 +258,10 @@ def _write_case_summary(out: Path, result: DemoResult, *, demo_mode: bool) -> di
         lines.append("")
         lines.append("## Erros durante a execução")
         lines.append("")
+        from juris.core.sanitize import safe_error_text
+
         for e in result.errors:
-            lines.append(f"- {e}")
+            lines.append(f"- {safe_error_text(e)}")
 
     path = out / "case-summary.md"
     path.write_text(wrap_document("\n".join(lines), demo_mode=demo_mode), encoding="utf-8")

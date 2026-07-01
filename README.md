@@ -6,7 +6,9 @@ calcula prazos, **busca jurisprudência** e seleciona a **linha argumentativa**,
 PAdES — tudo com **trilha de auditoria encadeada** e **de-identificação de PII**.
 
 > Python 3.12 · `uv` · FastAPI · pytest/ruff/mypy. Foco atual: piloto Fase 1
-> (escritório único, co-localizado no Mac Mini).
+> (escritório único, co-localizado no Mac Mini) — com a **fundação multi-tenant**
+> (auth + scoping por tenant) e a **extensão MV3 "IA de preferência"** já
+> construídas e testadas, prontas para a Fase 2.
 
 ## Quick start
 
@@ -97,8 +99,10 @@ GitHub. O checkout público **degrada graciosamente**:
   **não burla** — usa fontes públicas/DataJud).
 - **Escavação**: DataJud entrega a trilha de movimentos (`parcial=True`), não o
   acórdão integral (fonte gated); a fila/executor estão prontos.
-- **Browser session**: o lado Python está pronto e testado; a extensão Chrome
-  (DOM) precisa de Chrome/Node (`docs/browser-extension/`).
+- **Browser session (IA de preferência)**: lado Python **e** extensão MV3 prontos
+  e testados (vitest + pytest), com de-identificação **imposta** no content script,
+  validação de sender e token de bridge validado no native host. Resta apenas o
+  retuning manual de seletores contra o DOM ao vivo (`docs/browser-extension/`).
 - **Multi-tenant**: fundação ativada (auth + scoping de leitura/demo/audit); o
   caminho de escrita do connect + agente Remote são Fase 2.
 

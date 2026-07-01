@@ -11,11 +11,26 @@ import pytest
 from juris.api.native_host import (
     HOST_NAME,
     NativeMessagingRelay,
+    authorize_bridge_request,
     install_native_host,
     read_message,
     run_websocket_bridge,
     write_message,
 )
+
+
+def test_authorize_bridge_request_requires_matching_token_when_configured() -> None:
+    # A configured bridge token MUST match — this is what stops another local process
+    # from driving the lawyer's session over the loopback WS.
+    assert authorize_bridge_request({"token": "s3cret", "request_id": "1"}, "s3cret") is None
+    assert authorize_bridge_request({"token": "wrong", "request_id": "1"}, "s3cret") is not None
+    assert authorize_bridge_request({"request_id": "1"}, "s3cret") is not None  # missing token
+    assert authorize_bridge_request({"token": 123, "request_id": "1"}, "s3cret") is not None  # non-str
+
+
+def test_authorize_bridge_request_loopback_only_when_no_token() -> None:
+    # No token configured → loopback-only mode (backward compatible), allowed.
+    assert authorize_bridge_request({"request_id": "1"}, None) is None
 
 
 def test_write_then_read_round_trips() -> None:

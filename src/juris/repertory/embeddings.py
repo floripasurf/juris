@@ -69,8 +69,10 @@ class LegalEmbedder:
         try:
             embeddings = self._model.encode(texts, normalize_embeddings=True)
             return [emb.tolist() for emb in embeddings]
-        except Exception:
-            logger.exception("Failed to embed %d texts", len(texts))
+        except Exception as exc:
+            from juris.core.sanitize import safe_error_text
+
+            logger.warning("Failed to embed %d texts: %s", len(texts), safe_error_text(exc))
             return None
 
     def embed_single(self, text: str) -> list[float] | None:

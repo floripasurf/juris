@@ -17,6 +17,7 @@ import asyncio
 import json
 import os
 import platform
+import secrets
 import struct
 import sys
 from dataclasses import dataclass
@@ -137,17 +138,40 @@ class NativeMessagingRelay:
             return reply
 
 
+def _bridge_token() -> str | None:
+    """The expected bridge secret (``$JURIS_BROWSER_BRIDGE_TOKEN``), or None if unset."""
+    return os.environ.get("JURIS_BROWSER_BRIDGE_TOKEN") or None
+
+
+def authorize_bridge_request(message: dict[str, Any], expected_token: str | None) -> str | None:
+    """Authorize a bridge request; return None if allowed, else an error string.
+
+    When a token is configured it MUST match (constant-time) — this is what stops
+    another local process from driving the lawyer's session over the loopback WS.
+    With no token configured the bridge is loopback-only (backward-compatible), which
+    only the local machine can reach.
+    """
+    if expected_token is None:
+        return None
+    presented = message.get("token")
+    if not isinstance(presented, str) or not secrets.compare_digest(presented, expected_token):
+        return "token do bridge inválido"
+    return None
+
+
 async def run_websocket_bridge(
     *,
     host: str = DEFAULT_WS_HOST,
     port: int = DEFAULT_WS_PORT,
     relay: NativeMessagingRelay | None = None,
+    token: str | None = None,
 ) -> None:
     """Expose the Native Messaging pipe as the localhost WS bridge used by juris."""
     import websockets
 
     host = validate_bridge_host(host)
     bridge = relay or NativeMessagingRelay()
+    expected_token = token if token is not None else _bridge_token()
 
     async def _handle(websocket: Any) -> None:
         raw = await websocket.recv()
@@ -161,6 +185,21 @@ async def run_websocket_bridge(
                 )
             )
             return
+        unauthorized = authorize_bridge_request(message, expected_token)
+        if unauthorized:
+            await websocket.send(
+                json.dumps(
+                    {
+                        "request_id": message.get("request_id", ""),
+                        "success": False,
+                        "content": None,
+                        "error": unauthorized,
+                    },
+                    ensure_ascii=False,
+                )
+            )
+            return
+        message.pop("token", None)  # never propagate the secret beyond this hop
         reply = await bridge.request(message)
         await websocket.send(json.dumps(reply, ensure_ascii=False))
 

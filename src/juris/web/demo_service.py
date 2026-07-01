@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
+from juris.agents.estrategia import tom_minuta
 from juris.core.types import NumeroCNJ
 from juris.demo import DemoRequest, OutputMode, SourceMode, run_demo
 from juris.demo.artifacts import write_artifacts
@@ -107,15 +108,6 @@ def estrategia_payload(draft: object) -> dict[str, object] | None:
             "fundamento_consequencialista": getattr(linha, "fundamento_consequencialista", None),
         }
 
-    def _tom_minuta(confianca: str, *, revisao_obrigatoria: bool) -> str:
-        # Firmeza proporcional à solidez; revisão obrigatória ⇒ não protocolar (só rascunho).
-        if revisao_obrigatoria:
-            return "não protocolar"
-        return {
-            "alta": "forte",
-            "media": "cauteloso",
-            "baixa": "rascunho",
-        }.get(confianca, "cauteloso")
 
     def _matriz(item: object) -> dict[str, object]:
         return {
@@ -139,7 +131,7 @@ def estrategia_payload(draft: object) -> dict[str, object] | None:
         "alternativas": [_linha(a) for a in getattr(est, "alternativas", [])],
         "avisos_deontologicos": list(getattr(est, "avisos_deontologicos", [])),
         "revisao_humana_obrigatoria": bool(getattr(est, "revisao_humana_obrigatoria", False)),
-        "tom_minuta": _tom_minuta(
+        "tom_minuta": tom_minuta(
             str(escolhida.get("confianca") or ""),
             revisao_obrigatoria=bool(getattr(est, "revisao_humana_obrigatoria", False)),
         ),

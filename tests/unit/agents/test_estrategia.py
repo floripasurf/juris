@@ -311,3 +311,27 @@ class TestParserResilience:
         content = '```json\n[{"texto":"contrato","tipo":"prova"}]\n```'
         elementos = _parse_classificacao(content)
         assert elementos[0].tipo == "prova"
+
+
+def test_tom_minuta_maps_confidence_and_review() -> None:
+    from juris.agents.estrategia import tom_minuta
+
+    assert tom_minuta("alta", revisao_obrigatoria=False) == "forte"
+    assert tom_minuta("media", revisao_obrigatoria=False) == "cauteloso"
+    assert tom_minuta("baixa", revisao_obrigatoria=False) == "rascunho"
+    # Mandatory human review overrides confidence → never a "protocolável" tone.
+    assert tom_minuta("alta", revisao_obrigatoria=True) == "não protocolar"
+
+
+def test_every_tom_reaches_the_drafter_prompt() -> None:
+    # The drafter must carry a prompt instruction for every tone the strategy can emit,
+    # so the firmness genuinely shapes the minuta — not just the console label (P2 fix).
+    from juris.agents.drafter import _TONE_INSTRUCTIONS
+    from juris.agents.estrategia import tom_minuta
+
+    tones = {
+        tom_minuta(c, revisao_obrigatoria=r)
+        for c in ("alta", "media", "baixa")
+        for r in (True, False)
+    }
+    assert tones <= set(_TONE_INSTRUCTIONS), f"tom sem instrução no prompt: {tones - set(_TONE_INSTRUCTIONS)}"

@@ -82,8 +82,10 @@ async def ingest_peticoes(
 
         try:
             text = extract_text_from_pdf(pdf_path)
-        except Exception:
-            logger.exception("ingest_peticao_pdf_error", path=str(pdf_path))
+        except Exception as exc:
+            from juris.core.sanitize import safe_error_text
+
+            logger.warning("ingest_peticao_pdf_error", path=str(pdf_path), error=safe_error_text(exc))
             continue
 
         if not text.strip():
@@ -105,8 +107,10 @@ async def ingest_peticoes(
                 id=petition_id,
                 sections=len(template.estrutura),
             )
-        except Exception:
-            logger.exception("ingest_peticao_extract_error", path=str(pdf_path))
+        except Exception as exc:
+            from juris.core.sanitize import safe_error_text
+
+            logger.warning("ingest_peticao_extract_error", path=str(pdf_path), error=safe_error_text(exc))
 
     return templates
 

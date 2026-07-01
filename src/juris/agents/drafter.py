@@ -13,7 +13,7 @@ from juris.agents.citation_verifier import (
     VerificationResult,
     build_grounding_report,
 )
-from juris.agents.estrategia import EstrategiaAgent, EstrategiaResult
+from juris.agents.estrategia import EstrategiaAgent, EstrategiaResult, tom_minuta
 from juris.agents.researcher import Researcher, ResearchQuery, ResearchResult
 from juris.core.observability import get_logger
 from juris.defesas.context import ProcessoContext
@@ -32,6 +32,29 @@ from juris.repertory.retrieval.service import RepertoryService
 from juris.review.models import ReviewReport
 
 logger = get_logger(__name__)
+
+# How firmly to write the minuta, keyed by the strategy's tom_minuta() output. The tone
+# must never overstate: even "forte" argues with conviction, never guarantees an outcome
+# (deontologia CED/EOAB). "não protocolar" produces a review-only draft.
+_TONE_INSTRUCTIONS: dict[str, str] = {
+    "forte": (
+        "A tese é sólida: redija com firmeza e convicção, afirmando as conclusões "
+        "com base nos precedentes verificados. Nunca prometa êxito garantido."
+    ),
+    "cauteloso": (
+        "A tese tem solidez média: module o tom, prefira 'há elementos que indicam' "
+        "a afirmações categóricas, e sinalize onde a fundamentação depende de prova."
+    ),
+    "rascunho": (
+        "A tese é frágil: trate como rascunho preliminar, evite afirmações categóricas "
+        "e aponte explicitamente as lacunas de fundamentação e prova a resolver."
+    ),
+    "não protocolar": (
+        "NÃO PROTOCOLAR: esta minuta exige revisão humana obrigatória. Redija como "
+        "rascunho de trabalho, marque de forma visível os pontos que precisam ser "
+        "verificados por um advogado antes de qualquer uso, e não conclua com firmeza."
+    ),
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -253,6 +276,17 @@ class DrafterAgent:
         draft_text = ""
         verification: VerificationResult | None = None
         revision_feedback = ""
+        # Firmness the minuta should adopt, from the chosen strategy line — so the
+        # drafted text matches the tone the console announces (forte/cauteloso/
+        # rascunho/não protocolar), instead of the tone being a label-only afterthought.
+        tone = (
+            tom_minuta(
+                result.estrategia.escolhida.confianca,
+                revisao_obrigatoria=result.estrategia.revisao_humana_obrigatoria,
+            )
+            if result.estrategia
+            else ""
+        )
 
         for revision in range(request.max_revision_rounds + 1):
             # Generate
@@ -264,6 +298,7 @@ class DrafterAgent:
                 defesa_text=defesa_text,
                 style_text=style_text,
                 revision_feedback=revision_feedback,
+                tone=tone,
             )
 
             # Verify citations
@@ -370,6 +405,7 @@ class DrafterAgent:
                         defesa_text=defesa_text,
                         style_text=style_text,
                         revision_feedback=revision_feedback,
+                        tone=tone,
                     )
                     verification = self._verifier.verify(
                         draft_text, allowed_source_ids=allowed_ids
@@ -501,8 +537,11 @@ class DrafterAgent:
         defesa_text: str,
         style_text: str,
         revision_feedback: str,
+        tone: str = "",
     ) -> str:
         """Generate a draft via LLM call."""
+        instruction = _TONE_INSTRUCTIONS.get(tone)
+        tone_section = f"## TOM DA MINUTA ({tone})\n{instruction}\n\n" if instruction else ""
         prompt = DRAFT_PROMPT.format(
             case_context=format_case_context(case_context),
             defesa_section=defesa_text,
@@ -516,6 +555,7 @@ class DrafterAgent:
                 else ""
             ),
             revision_feedback=revision_feedback,
+            tone_section=tone_section,
             tipo_peticao=request.tipo_peticao.value,
         )
 

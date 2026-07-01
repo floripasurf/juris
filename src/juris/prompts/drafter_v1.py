@@ -40,6 +40,7 @@ DRAFT_PROMPT = (
     "{style_section}"
     "{custom_instructions}"
     "{revision_feedback}"
+    "{tone_section}"
     "## TAREFA\n"
     "Redija uma peticao de {tipo_peticao} completa seguindo a estrutura adequada. "
     "Use os marcadores [CITE:source_id] conforme o contrato de citacoes. "
