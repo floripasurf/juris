@@ -86,6 +86,13 @@ class CompletionRequest(BaseModel):
     prompt: str
     system: str | None = None
     model: str = "claude.ai (browser session)"
+    # Attestation that juris de-id ran before this left the perimeter (ADR-0016). The
+    # content script refuses to drive the session unless this is True — and independently
+    # re-scans for raw PII (defense-in-depth).
+    deidentified: bool = False
+    # Bridge auth: a shared secret proving the request came from the lawyer's juris agent
+    # (not another loopback process). The native host validates it before relaying.
+    token: str | None = None
 
 
 class CompletionResponse(BaseModel):

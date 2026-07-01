@@ -65,6 +65,31 @@ async def test_send_relays_completion_request_and_returns_content() -> None:
 
 
 @pytest.mark.asyncio
+async def test_send_attests_deidentified_and_carries_bridge_token() -> None:
+    channel = _echo_channel()
+    transport = NativeBridgeTransport(channel, token="bridge-secret")  # noqa: S106 - test fixture
+
+    await transport.send(prompt="Autor [NOME_1]", system=None)
+
+    sent = channel.request.await_args.args[0]
+    # The content script refuses to drive the session unless this attestation is present.
+    assert sent["deidentified"] is True
+    # Bridge auth travels with the request for the native host to validate.
+    assert sent["token"] == "bridge-secret"  # noqa: S105 - test fixture
+
+
+@pytest.mark.asyncio
+async def test_send_bridge_token_falls_back_to_env(monkeypatch) -> None:
+    monkeypatch.setenv("JURIS_BROWSER_BRIDGE_TOKEN", "env-secret")  # noqa: S105 - test fixture
+    channel = _echo_channel()
+    transport = NativeBridgeTransport(channel)
+
+    await transport.send(prompt="x", system=None)
+
+    assert channel.request.await_args.args[0]["token"] == "env-secret"  # noqa: S105 - test fixture
+
+
+@pytest.mark.asyncio
 async def test_send_raises_on_failure() -> None:
     transport = NativeBridgeTransport(_echo_channel(success=False, error="sessão expirada"))
 

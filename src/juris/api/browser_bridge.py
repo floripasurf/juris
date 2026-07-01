@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import json
+import os
 import uuid
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 from urllib.parse import urlparse, urlunparse
@@ -125,9 +126,14 @@ class NativeBridgeTransport:
         self,
         channel: BridgeChannel,
         model: str = "claude.ai (browser session)",
+        *,
+        token: str | None = None,
     ) -> None:
         self._channel = channel
         self._model = model
+        # Bridge auth secret. Falls back to $JURIS_BROWSER_BRIDGE_TOKEN so the agent
+        # and native host can be paired without threading it through every caller.
+        self._token = token or os.environ.get("JURIS_BROWSER_BRIDGE_TOKEN") or None
 
     async def send(self, *, prompt: str, system: str | None) -> str:
         request = CompletionRequest(
@@ -135,6 +141,10 @@ class NativeBridgeTransport:
             prompt=prompt,
             system=system,
             model=self._model,
+            # This transport is only ever used behind DeidentifyingLLM
+            # (build_ai_of_preference), so the payload here is already de-identified.
+            deidentified=True,
+            token=self._token,
         )
         raw = await self._channel.request(request.model_dump())
         response = CompletionResponse(**raw)

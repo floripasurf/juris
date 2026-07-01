@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { JSDOM } from "jsdom";
-import { connectionStatus } from "./content.js";
+import { connectionStatus, containsRawPII, assertCloudSafe, isTrustedSender } from "./content.js";
 
 function docWith(html) {
   return new JSDOM(`<!doctype html><body>${html}</body>`).window.document;
@@ -26,5 +26,41 @@ describe("connectionStatus (handshake)", () => {
 
   it("reports unsupported on an unknown host", () => {
     expect(connectionStatus(docWith(""), "example.com").connected).toBe(false);
+  });
+});
+
+describe("de-id enforcement (cloud-safe handshake)", () => {
+  it("flags raw CPF / CNPJ / e-mail / CNJ / OAB as PII", () => {
+    expect(containsRawPII("CPF 123.456.789-09")).toBe(true);
+    expect(containsRawPII("CNPJ 12.345.678/0001-90")).toBe(true);
+    expect(containsRawPII("contato joao@escritorio.adv.br")).toBe(true);
+    expect(containsRawPII("processo 5082351-40.2017.8.13.0024")).toBe(true);
+    expect(containsRawPII("OAB/MG 123456")).toBe(true);
+  });
+
+  it("treats de-identified placeholders (and the bare word OAB) as safe", () => {
+    expect(containsRawPII("Autor [NOME_1], CPF [CPF_1], inscrito na OAB sob [OAB_1]")).toBe(false);
+  });
+
+  it("refuses a request without the deidentified attestation", () => {
+    expect(assertCloudSafe({ prompt: "oi", deidentified: false })).toMatch(/de-identifica/i);
+    expect(assertCloudSafe({ prompt: "oi" })).toMatch(/de-identifica/i);
+  });
+
+  it("refuses a request that still carries raw PII even if flagged", () => {
+    expect(assertCloudSafe({ prompt: "réu CPF 123.456.789-09", deidentified: true })).toMatch(/PII bruta/i);
+  });
+
+  it("allows a properly de-identified request", () => {
+    expect(assertCloudSafe({ prompt: "Autor [NOME_1] pede…", system: "", deidentified: true })).toBeNull();
+  });
+});
+
+describe("message sender validation", () => {
+  it("accepts only messages from our own extension", () => {
+    expect(isTrustedSender({ id: "abc" }, "abc")).toBe(true);
+    expect(isTrustedSender({ id: "evil" }, "abc")).toBe(false);
+    expect(isTrustedSender(undefined, "abc")).toBe(false);
+    expect(isTrustedSender({}, "abc")).toBe(false);
   });
 });

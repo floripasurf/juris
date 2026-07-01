@@ -3,9 +3,11 @@
 // the chat UI, and returns a CompletionResponse. The DOM details live in
 // selectors.js so this file stays about flow + robustness.
 //
-// Security: the prompt arrives already de-identified (juris de-id runs before the
-// bridge). We never persist it — no localStorage/sessionStorage, just a transient
-// closure that is GC'd after the reply.
+// Security: the prompt must arrive already de-identified — and we ENFORCE that
+// (assertCloudSafe below) rather than trust it, refusing raw PII before touching the
+// DOM. Messages are accepted only from our own extension (isTrustedSender). We never
+// persist the prompt — no localStorage/sessionStorage, just a transient closure GC'd
+// after the reply.
 
 import { providerFor, findComposer, isStreaming, extractResponse, detectBlocker } from "./selectors.js";
 
@@ -17,6 +19,41 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function fail(request_id, error) {
   return { request_id, success: false, content: null, error };
+}
+
+// --- Cloud-safe handshake (defense-in-depth) ---------------------------------
+// The prompt must already be de-identified by the juris backend before it reaches
+// the browser LLM. We ENFORCE that here rather than trusting the comment: a request
+// must attest deidentified===true AND carry no raw structured PII. De-id placeholders
+// ([CPF_1], [NOME_1]) are safe; a raw CPF/CNPJ/CNJ/e-mail/OAB number means de-id
+// failed, so we refuse to send it into the chat session.
+const RAW_PII = [
+  /\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/, // CPF
+  /\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/, // CNPJ
+  /\b\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}\b/, // CNJ
+  /\b[\w.+-]+@[\w-]+\.[\w.-]+\b/, // e-mail
+  /\bOAB[/\s][A-Z]{2}\s*(?:n[º°.]?\s*)?\d/i, // OAB number (not the bare word "OAB")
+];
+
+export function containsRawPII(text) {
+  if (!text) return false;
+  return RAW_PII.some((re) => re.test(text));
+}
+
+export function assertCloudSafe(request) {
+  if (request?.deidentified !== true) {
+    return "recusado: requisição sem atestado de de-identificação (deidentified)";
+  }
+  if (containsRawPII(`${request.system ?? ""}\n${request.prompt ?? ""}`)) {
+    return "recusado: PII bruta detectada — a de-identificação falhou, não enviado à sessão";
+  }
+  return null;
+}
+
+// Only our OWN extension's background worker may drive the session — reject a message
+// from any other extension (or an injected page script that reached this listener).
+export function isTrustedSender(sender, runtimeId) {
+  return !!sender && sender.id === runtimeId;
 }
 
 // Resolve only when generation has stopped AND the text is non-empty and stable.
@@ -74,7 +111,13 @@ const BLOCKER_MESSAGES = {
   rate_limited: "limite de uso da sessão atingido — tente mais tarde",
 };
 
-async function complete({ request_id, prompt, system }) {
+async function complete(request) {
+  const { request_id, prompt, system } = request;
+  // Enforce the de-id handshake BEFORE touching the DOM: never let raw PII reach
+  // the browser LLM, even if the backend de-id regressed.
+  const unsafe = assertCloudSafe(request);
+  if (unsafe) return fail(request_id, unsafe);
+
   const provider = providerFor(location.host);
   if (!provider) return fail(request_id, "provedor não suportado nesta aba");
 
@@ -114,7 +157,9 @@ export function connectionStatus(doc, host) {
 
 // Background worker relays the request here and awaits the response.
 if (typeof chrome !== "undefined" && chrome.runtime?.onMessage) {
-  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    // Reject anything not sent by our own extension's background worker.
+    if (!isTrustedSender(sender, chrome.runtime.id)) return false;
     if (msg?.type === "ping") {
       sendResponse(connectionStatus(document, location.host));
       return true;
