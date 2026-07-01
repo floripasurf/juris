@@ -151,6 +151,19 @@ async def _handle_uncaught(request: Request, exc: Exception) -> JSONResponse:
     )
 
 
+def _operational_http_error(*, code: str, message: str, exc: Exception) -> HTTPException:
+    """Build a sanitized 400 while logging the internal operational detail."""
+    from juris.core.observability import get_logger
+
+    get_logger("juris.web").warning(
+        "operational_http_error", code=code, error=str(exc), exc_info=exc
+    )
+    return HTTPException(
+        status_code=400,
+        detail={"code": code, "message": message},
+    )
+
+
 def validate_startup_config() -> None:
     """Fail closed for production multi-tenant deployments.
 
@@ -853,7 +866,11 @@ async def dry_run_filing(
             pin=None if remote else payload.pin,
         )
     except Exception as exc:  # noqa: BLE001 — operational filing error, not 500
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise _operational_http_error(
+            code="filing_failed",
+            message="Falha operacional no protocolo. Verifique agente, token e tribunal.",
+            exc=exc,
+        ) from exc
     return serialize_filing_result(result)
 
 
@@ -892,7 +909,11 @@ async def submit_filing(
             pin=None if remote else payload.pin,
         )
     except Exception as exc:  # noqa: BLE001 — operational filing error, not 500
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise _operational_http_error(
+            code="filing_failed",
+            message="Falha operacional no protocolo. Verifique agente, token e tribunal.",
+            exc=exc,
+        ) from exc
     return serialize_filing_result(result)
 
 

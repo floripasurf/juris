@@ -244,6 +244,12 @@ class _FakeFilingService:
         )
 
 
+class _FailingFilingService:
+    async def file(self, request, *, pin=None):
+        del request, pin
+        raise RuntimeError("falha interna em /var/private/juris-token com token=abc123 e pin=1234")
+
+
 def test_filing_status_endpoint(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("JURIS_HOME", str(tmp_path))  # public tenant → <home>/filings
     (tmp_path / "filings" / "cnj" / "20260630_pending").mkdir(parents=True)
@@ -384,6 +390,25 @@ def test_filing_remote_mode_does_not_require_or_forward_secrets(monkeypatch) -> 
     assert request.cpf == ""
     assert request.senha == ""
     assert pin is None
+
+
+def test_filing_errors_are_sanitized(monkeypatch) -> None:
+    import juris.signing.filing_service as filing_service
+
+    monkeypatch.setattr(
+        filing_service,
+        "get_filing_service",
+        lambda tenant_id="public", **kwargs: _FailingFilingService(),
+    )
+
+    response = client.post("/api/filing/dry-run", json=_filing_payload(consent=False, review_confirmed=False))
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "filing_failed"
+    assert "Falha operacional" in response.json()["detail"]["message"]
+    assert "/var/private/juris-token" not in response.text
+    assert "token=abc123" not in response.text
+    assert "pin=1234" not in response.text
 
 
 def test_processo_detail_endpoint_returns_detail(monkeypatch) -> None:
