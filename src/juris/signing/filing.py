@@ -23,6 +23,10 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+_PUBLIC_RENDER_ERROR = "Render failed: falha operacional ao gerar o PDF."
+_PUBLIC_SIGNING_ERROR = "Signing failed: falha operacional ao assinar o PDF."
+_PUBLIC_SUBMIT_ERROR = "MNI filing failed: falha operacional ao protocolar no MNI."
+
 
 @dataclass(frozen=True, slots=True)
 class FilingRequest:
@@ -106,6 +110,14 @@ def _count_citations(markdown: str) -> int:
     return count
 
 
+def _public_error_for_step(step: str) -> str:
+    return {
+        "render": _PUBLIC_RENDER_ERROR,
+        "sign": _PUBLIC_SIGNING_ERROR,
+        "submit": _PUBLIC_SUBMIT_ERROR,
+    }[step]
+
+
 class FilingOrchestrator:
     """Orchestrates the full filing pipeline.
 
@@ -146,10 +158,17 @@ class FilingOrchestrator:
                 metadata={"tribunal": request.tribunal, "tipo_documento": request.tipo_documento},
             )
         except (ValueError, RuntimeError) as exc:
+            logger.warning(
+                "filing_render_error",
+                numero_cnj=request.numero_cnj,
+                error=str(exc),
+                exc_info=exc,
+            )
+            public_error = _public_error_for_step("render")
             entry = self._audit.log(
                 "filing.render_error",
                 actor="system",
-                details={"error": str(exc)},
+                details={"error": public_error},
                 processo_cnj=request.numero_cnj,
             )
             return FilingResult(
@@ -158,7 +177,7 @@ class FilingOrchestrator:
                 signing_result=None,
                 preflight=None,
                 audit_entry_ids=[entry.entry_id],
-                error=f"Render failed: {exc}",
+                error=public_error,
             )
 
         entry = self._audit.log(
@@ -302,10 +321,17 @@ class FilingOrchestrator:
         try:
             signing_result = self._signer.sign(render_result.pdf_bytes)
         except Exception as exc:
+            logger.warning(
+                "filing_sign_error",
+                numero_cnj=request.numero_cnj,
+                error=str(exc),
+                exc_info=exc,
+            )
+            public_error = _public_error_for_step("sign")
             entry = self._audit.log(
                 "filing.sign_error",
                 actor=f"user:{request.cpf}",
-                details={"error": str(exc)},
+                details={"error": public_error},
                 processo_cnj=request.numero_cnj,
             )
             audit_ids.append(entry.entry_id)
@@ -315,7 +341,7 @@ class FilingOrchestrator:
                 signing_result=None,
                 preflight=preflight,
                 audit_entry_ids=audit_ids,
-                error=f"Signing failed: {exc}",
+                error=public_error,
             )
 
         entry = self._audit.log(
@@ -355,10 +381,18 @@ class FilingOrchestrator:
                 tipo_documento=request.tipo_documento,
             )
         except Exception as exc:
+            logger.warning(
+                "filing_submit_error",
+                numero_cnj=request.numero_cnj,
+                tribunal=request.tribunal,
+                error=str(exc),
+                exc_info=exc,
+            )
+            public_error = _public_error_for_step("submit")
             entry = self._audit.log(
                 "filing.submit_error",
                 actor=f"user:{request.cpf}",
-                details={"error": str(exc), "pending_path": pending_path},
+                details={"error": public_error, "pending_receipt": True},
                 processo_cnj=request.numero_cnj,
             )
             audit_ids.append(entry.entry_id)
@@ -368,7 +402,7 @@ class FilingOrchestrator:
                 signing_result=signing_result,
                 preflight=preflight,
                 audit_entry_ids=audit_ids,
-                error=f"MNI filing failed: {exc}",
+                error=public_error,
             )
 
         entry = self._audit.log(

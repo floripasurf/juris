@@ -77,7 +77,11 @@ class FilingReceiptStore:
         self._audit.log(
             event_type="filing.receipt_prepared",
             actor="system",
-            details={"pending_path": str(pending_dir), "signed_pdf_hash": signed_hash},
+            details={
+                "pending_id": pending_dir.name,
+                "pending_receipt": True,
+                "signed_pdf_hash": signed_hash,
+            },
             processo_cnj=numero_cnj,
         )
 
