@@ -171,3 +171,46 @@ async def test_ws_channel_drives_transport_end_to_end() -> None:
     transport = NativeBridgeTransport(WebSocketBridgeChannel(connect=AsyncMock(return_value=conn)))
 
     assert await transport.send(prompt="Qual a tese?", system=None) == "A tese"
+
+
+def test_probe_bridge_classifies_pong_token_and_unreachable(monkeypatch) -> None:
+    import json as _json
+
+    from juris.api import browser_bridge
+
+    class _FakeWS:
+        def __init__(self, reply: str) -> None:
+            self._reply = reply
+
+        def __enter__(self):  # noqa: ANN204
+            return self
+
+        def __exit__(self, *args):  # noqa: ANN002, ANN204
+            return None
+
+        def send(self, data):  # noqa: ANN001, ANN201
+            return None
+
+        def recv(self, timeout=None):  # noqa: ANN001, ANN201
+            return self._reply
+
+    def _connect_returning(reply: str):  # noqa: ANN202
+        return lambda url, **kw: _FakeWS(reply)
+
+    pong = _json.dumps({"success": True, "pong": True})
+    monkeypatch.setattr("websockets.sync.client.connect", _connect_returning(pong))
+    assert browser_bridge.probe_bridge("ws://127.0.0.1:8787", "t")[0] is True
+
+    monkeypatch.setattr(
+        "websockets.sync.client.connect",
+        _connect_returning(_json.dumps({"success": False, "error": "token do bridge inválido"})),
+    )
+    ok, detail = browser_bridge.probe_bridge("ws://127.0.0.1:8787", "wrong")
+    assert ok is False and "token" in detail.lower()
+
+    def _boom(url, **kw):  # noqa: ANN001, ANN002, ANN202
+        raise OSError("connection refused")
+
+    monkeypatch.setattr("websockets.sync.client.connect", _boom)
+    ok, detail = browser_bridge.probe_bridge("ws://127.0.0.1:8787", "t")
+    assert ok is False and "inalcançável" in detail

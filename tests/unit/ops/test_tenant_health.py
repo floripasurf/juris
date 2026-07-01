@@ -11,9 +11,44 @@ def test_status_reports_all_components(monkeypatch, tmp_path) -> None:
     monkeypatch.delenv("JURIS_AGENT_MODE", raising=False)  # co-located
     status = tenant_operational_status(Tenant("public"))
     assert status["tenant_id"] == "public"
-    assert set(status["components"]) == {"config", "storage", "corpus", "agent", "browser_bridge"}
+    assert set(status["components"]) == {"config", "storage", "corpus", "agent", "relay", "browser_bridge"}
     assert status["components"]["storage"]["ok"] is True  # DB + filing writable
     assert status["components"]["agent"]["ok"] is True  # co-located
+
+
+def test_deep_browser_bridge_surfaces_invalid_token(monkeypatch, tmp_path) -> None:
+    # A reachable bridge whose token is rejected must show the tenant DEGRADED, not ok.
+    monkeypatch.setenv("JURIS_HOME", str(tmp_path))
+    monkeypatch.delenv("JURIS_AGENT_MODE", raising=False)
+    monkeypatch.setenv("JURIS_BROWSER_BRIDGE_URL", "ws://127.0.0.1:8787")
+    monkeypatch.setenv("JURIS_BROWSER_BRIDGE_TOKEN", "s3cret")
+
+    import juris.api.browser_bridge as bb
+    from juris.ops import tenant_health
+
+    monkeypatch.setattr(bb, "probe_bridge", lambda url, token, **kw: (False, "token do bridge inválido"))
+    tenant_health._probe_cache.clear()
+
+    status = tenant_operational_status(Tenant("public"), deep=True)
+    bridge = status["components"]["browser_bridge"]
+    assert bridge["ok"] is False
+    assert "token" in bridge["detail"].lower()
+    assert status["status"] == "degraded"
+
+
+def test_cached_probe_reuses_within_ttl() -> None:
+    from juris.ops.tenant_health import _cached_probe, _probe_cache
+
+    _probe_cache.clear()
+    calls: list[int] = []
+
+    def probe() -> tuple[bool, str]:
+        calls.append(1)
+        return (True, "ok")
+
+    assert _cached_probe(("k",), probe) == (True, "ok")
+    assert _cached_probe(("k",), probe) == (True, "ok")
+    assert len(calls) == 1  # second call served from the short-TTL cache
 
 
 def test_unrecognized_tenant_flags_config(monkeypatch, tmp_path) -> None:

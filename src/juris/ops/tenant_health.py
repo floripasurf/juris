@@ -7,6 +7,8 @@ authenticated ``/api/health`` route.
 
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -15,6 +17,22 @@ if TYPE_CHECKING:
 
 def _component(ok: bool, detail: str) -> dict[str, Any]:
     return {"ok": ok, "detail": detail}
+
+
+# Short-TTL cache for the EXPENSIVE deep probes (network round-trips to the agent /
+# browser bridge), so a console polling /api/health?deep=1 doesn't hammer them.
+_PROBE_TTL_SECONDS = 10.0
+_probe_cache: dict[Any, tuple[float, tuple[bool, str]]] = {}
+
+
+def _cached_probe(key: Any, probe: Callable[[], tuple[bool, str]]) -> tuple[bool, str]:
+    now = time.monotonic()
+    hit = _probe_cache.get(key)
+    if hit is not None and now - hit[0] < _PROBE_TTL_SECONDS:
+        return hit[1]
+    result = probe()
+    _probe_cache[key] = (now, result)
+    return result
 
 
 def tenant_operational_status(tenant: Tenant, *, deep: bool = False) -> dict[str, Any]:
@@ -28,7 +46,8 @@ def tenant_operational_status(tenant: Tenant, *, deep: bool = False) -> dict[str
     components["storage"] = _check_storage(tenant)
     components["corpus"] = _check_corpus()
     components["agent"] = _check_agent(tenant, deep=deep)
-    components["browser_bridge"] = _check_browser_bridge()
+    components["relay"] = _check_relay(tenant)
+    components["browser_bridge"] = _check_browser_bridge(deep=deep)
 
     healthy = all(c["ok"] for c in components.values())
     return {
@@ -93,19 +112,44 @@ def _check_agent(tenant: Tenant, *, deep: bool) -> dict[str, Any]:
     if not deep:
         return _component(True, f"binding configurado → {binding.base_url}")
 
+    ok, detail = _cached_probe(("agent", binding.base_url), lambda: _probe_agent(binding.base_url))
+    return _component(ok, detail)
+
+
+def _probe_agent(base_url: str) -> tuple[bool, str]:
+    """Real network probe of the remote agent — reachable AND holds the A3 token."""
     from juris.api.pairing import check_agent_health
 
     try:
-        health = check_agent_health(binding.base_url)
+        health = check_agent_health(base_url)
     except RuntimeError as exc:
-        return _component(False, f"agente inacessível: {exc}")
-    return _component(
+        return False, f"agente inacessível: {exc}"
+    return (
         health.token_connected,
         f"agente v{health.version}; token {'conectado' if health.token_connected else 'AUSENTE'}",
     )
 
 
-def _check_browser_bridge() -> dict[str, Any]:
+def _check_relay(tenant: Tenant) -> dict[str, Any]:
+    """Reverse-channel liveness — informational unless the agent must dial in.
+
+    In co-located mode there is no relay. In remote mode the agent may reach the
+    orchestrator directly (WebSocket transport) OR dial in over the reverse channel;
+    we surface whether it is currently registered, without forcing degraded when the
+    direct transport is in use.
+    """
+    from juris.api.agent_config import is_remote
+
+    if not is_remote():
+        return _component(True, "sem canal reverso (modo co-localizado)")
+    from juris.api.relay import get_relay_hub
+
+    connected = get_relay_hub().is_connected(tenant.tenant_id)
+    detail = "canal reverso conectado" if connected else "canal reverso não conectado (ou transporte direto)"
+    return _component(True, detail)
+
+
+def _check_browser_bridge(*, deep: bool) -> dict[str, Any]:
     import os
 
     from juris.api.browser_bridge import validate_bridge_url
@@ -117,4 +161,13 @@ def _check_browser_bridge() -> dict[str, Any]:
         validate_bridge_url(url)
     except (ValueError, RuntimeError) as exc:
         return _component(False, f"URL do bridge inválida: {exc}")
-    return _component(True, f"bridge configurado: {url}")
+
+    token = os.environ.get("JURIS_BROWSER_BRIDGE_TOKEN") or None
+    if not deep:
+        suffix = "" if token else " (sem token — defina JURIS_BROWSER_BRIDGE_TOKEN)"
+        return _component(True, f"bridge configurado: {url}{suffix}")
+
+    from juris.api.browser_bridge import probe_bridge
+
+    ok, detail = _cached_probe(("bridge", url), lambda: probe_bridge(url, token))
+    return _component(ok, detail)

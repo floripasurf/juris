@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 from juris import __version__
 from juris.core.paths import juris_home
 from juris.jobs.connect import run_connect
-from juris.web.auth import Tenant, current_tenant, tenant_db_path
+from juris.web.auth import Tenant, current_tenant, require_admin, tenant_db_path
 from juris.web.connect_jobs import ConnectJobStore
 from juris.web.demo_service import DemoRunError, WebDemoRunRequest, execute_demo_run
 from juris.web.processos_service import get_processo_detail, list_prazos, list_processos
@@ -334,6 +334,26 @@ async def get_tenant_health(
     from juris.ops.tenant_health import tenant_operational_status
 
     return tenant_operational_status(tenant, deep=deep)
+
+
+@app.get("/api/admin/health")
+async def get_admin_health(deep: bool = True, _: None = Depends(require_admin)) -> dict[str, object]:
+    """Cross-tenant operational panel — every firm's health at once (admin-gated).
+
+    Requires ``$JURIS_ADMIN_TOKEN`` via the ``x-admin-token`` header; disabled (404)
+    when unset. Lets the operator see, per tenant, which firm is degraded (agent/token/
+    bridge down) before the firm calls.
+    """
+    from juris.ops.tenant_health import tenant_operational_status
+    from juris.web.auth import Tenant, default_registry
+
+    reg = default_registry()
+    tenant_ids = list(reg.tenant_ids) if not reg.is_open else ["public"]
+    tenants = [tenant_operational_status(Tenant(tid), deep=deep) for tid in sorted(tenant_ids)]
+    return {
+        "tenants": tenants,
+        "degraded": [t["tenant_id"] for t in tenants if t["status"] != "ok"],
+    }
 
 
 @app.get("/api/ai-session")

@@ -200,6 +200,17 @@ async def run_websocket_bridge(
             )
             return
         message.pop("token", None)  # never propagate the secret beyond this hop
+        if message.get("type") == "bridge_ping":
+            # Liveness/token probe: the token already authorized above; answer at the
+            # bridge WITHOUT relaying to the extension, so a health check never drives
+            # the lawyer's chat session.
+            await websocket.send(
+                json.dumps(
+                    {"request_id": message.get("request_id", ""), "success": True, "pong": True},
+                    ensure_ascii=False,
+                )
+            )
+            return
         reply = await bridge.request(message)
         await websocket.send(json.dumps(reply, ensure_ascii=False))
 

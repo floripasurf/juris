@@ -159,3 +159,38 @@ class NativeBridgeTransport:
             raise RuntimeError(msg)
         logger.info("browser_bridge_completion", request_id=request.request_id)
         return response.content or ""
+
+
+def probe_bridge(url: str, token: str | None, *, timeout: float = 3.0) -> tuple[bool, str]:
+    """Probe the local browser bridge for health WITHOUT driving the chat session.
+
+    Sends an authenticated ``bridge_ping`` (the native host answers it directly, never
+    relaying to the extension). Returns ``(ok, detail)`` so the operational health can
+    tell a reachable-but-mis-tokened bridge from an unreachable one:
+
+    * ``(False, "bridge inalcançável")`` — could not connect;
+    * ``(False, "token do bridge inválido …")`` — reachable but the token was rejected;
+    * ``(True,  "bridge conectado; token OK")`` — reachable and the token was accepted.
+    """
+    from websockets.sync.client import connect
+
+    payload: dict[str, object] = {"request_id": "healthcheck", "type": "bridge_ping"}
+    if token:
+        payload["token"] = token
+    try:
+        with connect(url, open_timeout=timeout) as ws:
+            ws.send(json.dumps(payload))
+            raw = ws.recv(timeout=timeout)
+    except Exception:  # noqa: BLE001 — any connection failure ⇒ unreachable
+        return False, "bridge inalcançável"
+
+    try:
+        reply = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return False, "resposta inválida do bridge"
+    if reply.get("success") and reply.get("pong"):
+        return True, "bridge conectado; token OK"
+    error = str(reply.get("error") or "")
+    if "token" in error.lower():
+        return False, "token do bridge inválido (mismatch agente↔native host)"
+    return False, error or "bridge respondeu com falha"

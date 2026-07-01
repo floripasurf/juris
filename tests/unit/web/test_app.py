@@ -1427,4 +1427,18 @@ def test_tenant_health_endpoint(monkeypatch, tmp_path) -> None:
     assert resp.status_code == 200
     body = resp.json()
     assert body["tenant_id"] == "public"
-    assert set(body["components"]) == {"config", "storage", "corpus", "agent", "browser_bridge"}
+    assert set(body["components"]) == {"config", "storage", "corpus", "agent", "relay", "browser_bridge"}
+
+
+def test_admin_health_requires_token(monkeypatch) -> None:
+    # Disabled (404) when no admin token is configured — existence not advertised.
+    monkeypatch.delenv("JURIS_ADMIN_TOKEN", raising=False)
+    assert client.get("/api/admin/health").status_code == 404
+
+    # Configured → wrong/missing header is 401, correct header is 200 with a per-tenant panel.
+    monkeypatch.setenv("JURIS_ADMIN_TOKEN", "adm1n")
+    assert client.get("/api/admin/health", headers={"x-admin-token": "wrong"}).status_code == 401
+    resp = client.get("/api/admin/health?deep=false", headers={"x-admin-token": "adm1n"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "tenants" in body and "degraded" in body

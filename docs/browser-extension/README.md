@@ -78,9 +78,14 @@ native host manifest is installed (`GET /api/ai-session`).
   (`assertCloudSafe` / `containsRawPII`, unit-tested).
 - **Sender validation.** `onMessage` only accepts messages whose `sender.id` is our
   own extension (`isTrustedSender`) — never another extension or an injected page script.
-- **Bridge token.** `CompletionRequest` carries a `token` (the agent's
-  `$JURIS_BROWSER_BRIDGE_TOKEN`); the native host must validate it before relaying, so
-  another loopback process can't drive the lawyer's session.
+- **Bridge token — validated at the host.** `CompletionRequest` carries a `token`
+  (the agent's `$JURIS_BROWSER_BRIDGE_TOKEN`); the native host's WS bridge
+  (`authorize_bridge_request`) checks it **before relaying** and strips it afterwards,
+  so another loopback process without the token can't drive the session. A configured
+  token that mismatches is surfaced as **"token do bridge inválido"** in
+  `GET /api/health?deep=1` (the `browser_bridge` component), via a `bridge_ping` that
+  authorises the token WITHOUT driving the chat. With no token set the bridge is
+  loopback-only (weaker) and the health notes it.
 - **Native-host origin.** `native-host.json` here is a **template** — never ship it as
   live config. `juris browser install-native-host --extension-id <ID>` writes the
   per-user manifest with the **real** extension id into Chrome's NativeMessagingHosts

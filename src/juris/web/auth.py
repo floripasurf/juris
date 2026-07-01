@@ -196,6 +196,22 @@ async def current_tenant(x_api_key: str | None = Header(default=None)) -> Tenant
     return tenant
 
 
+def require_admin(x_admin_token: str | None = Header(default=None)) -> None:
+    """Gate cross-tenant admin routes with ``$JURIS_ADMIN_TOKEN`` (constant-time).
+
+    Fail-closed: with no admin token configured the route is *disabled* (404, so its
+    existence isn't advertised); with one configured, a missing/wrong header is 401.
+    """
+    import os
+    import secrets
+
+    expected = os.environ.get("JURIS_ADMIN_TOKEN")
+    if not expected:
+        raise HTTPException(status_code=404, detail="not found")
+    if not x_admin_token or not secrets.compare_digest(x_admin_token, expected):
+        raise HTTPException(status_code=401, detail={"code": "admin_unauthorized", "message": "token admin inválido"})
+
+
 def tenant_scoped_dir(tenant: Tenant, base: Path) -> Path:
     """Per-account storage root: shared ``base`` for public, ``base/tenants/<id>`` otherwise."""
     if tenant.tenant_id == PUBLIC_TENANT_ID:
