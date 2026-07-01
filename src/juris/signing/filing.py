@@ -11,6 +11,7 @@ from datetime import date
 from typing import TYPE_CHECKING, Any
 
 from juris.core.observability import get_logger
+from juris.core.sanitize import safe_error_text
 from juris.mni.operations.peticionamento import FilingReceipt
 from juris.persistence.audit import AuditLog
 from juris.persistence.filing_receipt import FilingReceiptStore
@@ -161,8 +162,8 @@ class FilingOrchestrator:
             logger.warning(
                 "filing_render_error",
                 numero_cnj=request.numero_cnj,
-                error=str(exc),
-                exc_info=exc,
+                error=safe_error_text(exc),
+                exception_type=exc.__class__.__name__,
             )
             public_error = _public_error_for_step("render")
             entry = self._audit.log(
@@ -324,8 +325,8 @@ class FilingOrchestrator:
             logger.warning(
                 "filing_sign_error",
                 numero_cnj=request.numero_cnj,
-                error=str(exc),
-                exc_info=exc,
+                error=safe_error_text(exc),
+                exception_type=exc.__class__.__name__,
             )
             public_error = _public_error_for_step("sign")
             entry = self._audit.log(
@@ -385,8 +386,8 @@ class FilingOrchestrator:
                 "filing_submit_error",
                 numero_cnj=request.numero_cnj,
                 tribunal=request.tribunal,
-                error=str(exc),
-                exc_info=exc,
+                error=safe_error_text(exc),
+                exception_type=exc.__class__.__name__,
             )
             public_error = _public_error_for_step("submit")
             entry = self._audit.log(

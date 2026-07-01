@@ -35,6 +35,14 @@ from juris.persistence.audit import AuditLog
 from juris.repertory.peticoes.models import TipoPeticao
 
 
+class _CaptureLogger:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict[str, object]]] = []
+
+    def warning(self, event: str, **kwargs: object) -> None:
+        self.events.append((event, kwargs))
+
+
 def _processo() -> ProcessoDomain:
     return ProcessoDomain(
         numero_cnj="0001234-56.2026.8.13.0001",
@@ -253,7 +261,11 @@ class TestOrchestratorErrorPaths:
         assert result.draft is not None
         assert result.succeeded is False
 
-    def test_rascunho_mode_degrades_when_local_llm_unavailable(self, tmp_path: Path) -> None:
+    def test_rascunho_mode_degrades_when_local_llm_unavailable(self, tmp_path: Path, monkeypatch) -> None:
+        import juris.demo.orchestrator as orchestrator
+
+        capture = _CaptureLogger()
+        monkeypatch.setattr(orchestrator, "logger", capture)
         skeleton, audit_path = _result_skeleton(tmp_path, is_demo_mode=False)
         request = replace(
             skeleton.request,
@@ -263,7 +275,7 @@ class TestOrchestratorErrorPaths:
         orch, audit = self._build(audit_path)
 
         request_error = httpx.ConnectError(
-            "All connection attempts failed",
+            "All connection attempts failed /var/private/ollama token=abc pin=1234",
             request=httpx.Request("POST", "http://localhost:11434/api/chat"),
         )
         orch._run_drafter = AsyncMock(  # type: ignore[method-assign]
@@ -301,10 +313,15 @@ class TestOrchestratorErrorPaths:
         assert result.succeeded is True
         assert result.degraded is True
         assert "All connection attempts failed" in result.degradation_reason
-        assert any(
-            e.event_type == "demo.rascunho_deterministic_fallback"
-            for e in audit.read_all()
-        )
+        assert "/var/private/ollama" not in result.degradation_reason
+        assert "token=abc" not in result.degradation_reason
+        assert "pin=1234" not in result.degradation_reason
+        fallback = next(e for e in audit.read_all() if e.event_type == "demo.rascunho_deterministic_fallback")
+        dumped = json.dumps({"audit": fallback.details, "logs": [event[1] for event in capture.events]})
+        assert "All connection attempts failed" in dumped
+        assert "/var/private/ollama" not in dumped
+        assert "token=abc" not in dumped
+        assert "pin=1234" not in dumped
 
     def test_rascunho_mode_does_not_hide_non_llm_connection_failure(self, tmp_path: Path) -> None:
         skeleton, audit_path = _result_skeleton(tmp_path, is_demo_mode=False)

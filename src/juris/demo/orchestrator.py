@@ -28,6 +28,7 @@ from juris.agents.citation_verifier import MarkerCitationVerifier
 from juris.agents.drafter import DrafterAgent, DraftRequest, DraftResult
 from juris.agents.researcher import Researcher
 from juris.core.observability import get_logger
+from juris.core.sanitize import safe_error_text
 from juris.defesas.analyzer import DefesaAnalyzer
 from juris.defesas.context import ProcessoContext
 from juris.demo.output_mode import OutputMode
@@ -167,7 +168,7 @@ class DemoOrchestrator:
                 llm=self._analysis_llm if request.use_llm_for_analysis else None,
             )
         except Exception as exc:  # noqa: BLE001 — surface but don't abort
-            logger.warning("demo_analyze_failed", error=str(exc))
+            logger.warning("demo_analyze_failed", error=safe_error_text(exc), exception_type=exc.__class__.__name__)
             result.errors.append(_public_step_error("analyze"))
 
         # Step 2: compute prazos (only if analysis succeeded)
@@ -179,7 +180,7 @@ class DemoOrchestrator:
                     analyses=result.analysis.analyzed,
                 )
             except Exception as exc:  # noqa: BLE001
-                logger.warning("demo_prazos_failed", error=str(exc))
+                logger.warning("demo_prazos_failed", error=safe_error_text(exc), exception_type=exc.__class__.__name__)
                 result.errors.append(_public_step_error("prazos"))
 
         # Step 3: draft petition
@@ -187,25 +188,30 @@ class DemoOrchestrator:
             result.draft = await self._run_drafter(request, processo)
         except Exception as exc:  # noqa: BLE001
             if _can_degrade_to_deterministic_rascunho(request, exc):
-                logger.warning("demo_rascunho_deterministic_fallback", error=str(exc))
+                safe_reason = safe_error_text(exc)
+                logger.warning(
+                    "demo_rascunho_deterministic_fallback",
+                    error=safe_reason,
+                    exception_type=exc.__class__.__name__,
+                )
                 result.draft = _build_deterministic_rascunho_draft(
                     request=request,
                     processo=processo,
                     analysis=result.analysis,
                 )
                 result.degraded = True
-                result.degradation_reason = str(exc)
+                result.degradation_reason = safe_reason
                 self._audit.log(
                     event_type="demo.rascunho_deterministic_fallback",
                     actor="system",
                     processo_cnj=processo.numero_cnj,
                     details={
-                        "reason": str(exc),
+                        "reason": safe_reason,
                         "output_mode": request.output_mode.value,
                     },
                 )
             else:
-                logger.warning("demo_draft_failed", error=str(exc))
+                logger.warning("demo_draft_failed", error=safe_error_text(exc), exception_type=exc.__class__.__name__)
                 result.errors.append(_public_step_error("draft"))
 
         result.finished_at = datetime.now(UTC)

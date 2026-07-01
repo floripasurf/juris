@@ -23,6 +23,14 @@ from juris.signing.pades import CertStatus, SigningResult
 # --- Fixtures ---
 
 
+class _CaptureLogger:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict[str, object]]] = []
+
+    def warning(self, event: str, **kwargs: object) -> None:
+        self.events.append((event, kwargs))
+
+
 def _make_mni_factory() -> MagicMock:
     def factory(tribunal_id: str, auth: object) -> object:
         return object()
@@ -385,8 +393,13 @@ def test_render_failure_returns_error(
     mock_mni_client_factory: MagicMock,
     mock_mni_auth: MagicMock,
     filing_request: FilingRequest,
+    monkeypatch,
 ) -> None:
     """Render failure returns error result."""
+    import juris.signing.filing as filing_module
+
+    capture = _CaptureLogger()
+    monkeypatch.setattr(filing_module, "logger", capture)
     orch = _make_orchestrator(mock_signer, audit_log, receipt_store, mock_mni_client_factory, mock_mni_auth)
 
     with patch(
@@ -402,6 +415,11 @@ def test_render_failure_returns_error(
     assert "/var/private/render" not in dumped
     assert "token=abc" not in dumped
     assert "pin=1234" not in dumped
+    logged = json.dumps([event[1] for event in capture.events], ensure_ascii=False)
+    assert "/var/private/render" not in logged
+    assert "token=abc" not in logged
+    assert "pin=1234" not in logged
+    assert "exc_info" not in capture.events[0][1]
 
 
 def test_signing_failure_returns_error(
@@ -410,8 +428,13 @@ def test_signing_failure_returns_error(
     mock_cert_status: CertStatus,
     mock_mni_auth: MagicMock,
     filing_request: FilingRequest,
+    monkeypatch,
 ) -> None:
     """Signing failure returns error result."""
+    import juris.signing.filing as filing_module
+
+    capture = _CaptureLogger()
+    monkeypatch.setattr(filing_module, "logger", capture)
     signer = MagicMock()
     signer.validate_cert.return_value = mock_cert_status
     signer.sign.side_effect = RuntimeError("Token disconnected /var/private/a3 token=abc pin=1234")
@@ -432,6 +455,11 @@ def test_signing_failure_returns_error(
     assert "/var/private/a3" not in dumped
     assert "token=abc" not in dumped
     assert "pin=1234" not in dumped
+    logged = json.dumps([event[1] for event in capture.events], ensure_ascii=False)
+    assert "/var/private/a3" not in logged
+    assert "token=abc" not in logged
+    assert "pin=1234" not in logged
+    assert "exc_info" not in capture.events[0][1]
 
 
 def test_submit_failure_returns_sanitized_error(
@@ -440,8 +468,13 @@ def test_submit_failure_returns_sanitized_error(
     receipt_store: FilingReceiptStore,
     mock_mni_auth: MagicMock,
     filing_request: FilingRequest,
+    monkeypatch,
 ) -> None:
     """MNI submit failures do not expose local paths or secrets in result/audit."""
+    import juris.signing.filing as filing_module
+
+    capture = _CaptureLogger()
+    monkeypatch.setattr(filing_module, "logger", capture)
     mock_factory = _make_mni_factory()
     orch = _make_orchestrator(mock_signer, audit_log, receipt_store, mock_factory, mock_mni_auth)
 
@@ -470,6 +503,11 @@ def test_submit_failure_returns_sanitized_error(
     assert "token=abc" not in dumped
     assert "pin=1234" not in dumped
     assert "pending_path" not in dumped
+    logged = json.dumps([event[1] for event in capture.events], ensure_ascii=False)
+    assert "/var/private/mni" not in logged
+    assert "token=abc" not in logged
+    assert "pin=1234" not in logged
+    assert "exc_info" not in capture.events[0][1]
 
 
 def test_audit_integrity_after_full_pipeline(
