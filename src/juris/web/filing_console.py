@@ -48,7 +48,6 @@ def filing_status(root: Path | None = None) -> dict[str, object]:
     receipts.sort(key=lambda r: str(r.get("filed_at") or ""), reverse=True)
     pending.sort(key=lambda r: str(r.get("created_at") or ""), reverse=True)
     return {
-        "filing_root": str(root),
         "pending": pending,
         "recent_receipts": receipts[:20],
     }
@@ -174,7 +173,6 @@ def _pending_payload(cnj_dir: Path, filing_dir: Path) -> dict[str, object]:
         "numero_cnj": cnj_dir.name,
         "receipt_id": filing_dir.name,
         "pending_key": f"{cnj_dir.name}/{filing_dir.name}",
-        "path": str(filing_dir),
         "created_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
         "signed_pdf_size": signed_pdf.stat().st_size if signed_pdf.exists() else None,
         "hashes": hashes,
@@ -195,7 +193,7 @@ def _receipt_payload(cnj_dir: Path, filing_dir: Path) -> dict[str, object] | Non
     return {
         "numero_cnj": receipt.get("numero_processo") or cnj_dir.name,
         "receipt_id": filing_dir.name,
-        "path": str(filing_dir),
+        "receipt_key": f"{cnj_dir.name}/{filing_dir.name}",
         "tribunal": metadata.get("tribunal", ""),
         "tipo_documento": metadata.get("tipo_documento", ""),
         "filed_at": metadata.get("filed_at"),
@@ -249,7 +247,7 @@ def archive_pending(root: Path | None, pending_key: str, *, reason: str) -> dict
     pending.rename(archived)
     return {
         "archived": True,
-        "archived_path": str(archived),
+        "archived_key": f"{archived.parent.name}/{archived.name}",
         "reason": reason,
     }
 

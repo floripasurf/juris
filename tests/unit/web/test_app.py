@@ -285,6 +285,9 @@ def test_filing_status_endpoint(monkeypatch, tmp_path) -> None:
 
     assert response.status_code == 200
     assert response.json()["pending"][0]["receipt_id"] == "20260630_pending"
+    assert str(tmp_path) not in response.text
+    assert "filing_root" not in response.text
+    assert '"path"' not in response.text
 
 
 def test_filing_pending_recovery_and_archive_endpoints(monkeypatch, tmp_path) -> None:
@@ -307,10 +310,13 @@ def test_filing_pending_recovery_and_archive_endpoints(monkeypatch, tmp_path) ->
 
     assert recovery.status_code == 200
     assert recovery.json()["safe_to_retry"] is False
+    assert str(tmp_path) not in recovery.text
     assert blocked.status_code == 400
     assert "confirmação" in blocked.json()["detail"]
     assert archived.status_code == 200
     assert archived.json()["archived"] is True
+    assert archived.json()["archived_key"] == "cnj/20260630_manual_resolution"
+    assert str(tmp_path) not in archived.text
     assert client.get("/api/filing/status").json()["pending"] == []
 
 

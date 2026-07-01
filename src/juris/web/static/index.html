@@ -1480,7 +1480,7 @@
         const row = document.createElement("div");
         row.className = "queue-item";
         row.innerHTML = `<strong>Pendente: ${escHtml(p.numero_cnj)}</strong>
-          <div class="meta">${escHtml(p.receipt_id)} · ${escHtml(p.path)}</div>
+          <div class="meta">${escHtml(p.receipt_id)} · ${escHtml(p.pending_key || "")}</div>
           <div class="meta">signed hash: ${escHtml((p.hashes || {}).signed_pdf_hash || "—")}</div>`;
         const actions = document.createElement("div");
         actions.className = "queue-actions";
@@ -1497,7 +1497,7 @@
         const row = document.createElement("div");
         row.className = "queue-item";
         row.innerHTML = `<strong>Recibo: ${escHtml(r.protocolo || r.receipt_id)}</strong>
-          <div class="meta">${escHtml(r.numero_cnj)} · ${escHtml(r.tribunal || "")} · ${escHtml(r.filed_at || "")}</div>
+          <div class="meta">${escHtml(r.numero_cnj)} · ${escHtml(r.tribunal || "")} · ${escHtml(r.filed_at || "")} · ${escHtml(r.receipt_key || "")}</div>
           <div class="meta">PDF: ${escHtml((r.hashes || {}).pdf_hash || "—")} · assinado: ${escHtml((r.hashes || {}).signed_pdf_hash || "—")} · recibo: ${escHtml((r.hashes || {}).receipt_hash || "—")}</div>`;
         filingStatusEl.appendChild(row);
       });
@@ -1563,7 +1563,7 @@
         const data = await response.json();
         if (!response.ok) throw new Error(apiErrorMessage(data, "Falha ao arquivar pendente"));
         filingRecoveryEl.className = "proc-empty";
-        filingRecoveryEl.textContent = `Pendente arquivado: ${data.archived_path}`;
+        filingRecoveryEl.textContent = `Pendente arquivado: ${data.archived_key || ""}`;
         await loadFilingStatus();
       } catch (err) {
         filingRecoveryEl.className = "proc-empty";

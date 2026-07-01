@@ -66,7 +66,13 @@ def test_filing_status_lists_pending_and_receipts(tmp_path) -> None:
     assert status["pending"][0]["pending_key"] == "0001234_56_2026_8_13_0001/20260630_120000_pending"
     assert status["pending"][0]["signed_pdf_size"] is None
     assert status["recent_receipts"][0]["protocolo"] == "PROT-1"
+    assert status["recent_receipts"][0]["receipt_key"] == "0001234_56_2026_8_13_0001/20260630_121000_PROT_1"
     assert status["recent_receipts"][0]["hashes"]["receipt_hash"] == "receipt"
+    dumped = json.dumps(status)
+    assert str(tmp_path) not in dumped
+    assert "filing_root" not in status
+    assert "path" not in status["pending"][0]
+    assert "path" not in status["recent_receipts"][0]
 
 
 def test_pending_recovery_and_archive_preserve_files(tmp_path) -> None:
@@ -83,8 +89,11 @@ def test_pending_recovery_and_archive_preserve_files(tmp_path) -> None:
     assert recovery["pending_key"] == key
     assert recovery["safe_to_retry"] is False
     assert "signed.pdf" not in json.dumps(recovery)
+    assert str(tmp_path) not in json.dumps(recovery)
     archived_path = tmp_path / "0001234_56_2026_8_13_0001" / "20260630_120000_manual_resolution"
     assert archived["archived"] is True
+    assert archived["archived_key"] == "0001234_56_2026_8_13_0001/20260630_120000_manual_resolution"
+    assert str(tmp_path) not in json.dumps(archived)
     assert archived_path.exists()
     assert (archived_path / "signed.pdf").read_bytes() == b"%PDF signed"
     recovery_record = json.loads((archived_path / "recovery.json").read_text(encoding="utf-8"))
