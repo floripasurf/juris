@@ -104,6 +104,18 @@ def _require_tenants() -> bool:
     return os.environ.get("JURIS_REQUIRE_TENANTS", "").strip().lower() in {"1", "true", "yes"}
 
 
+def has_dedicated_binding(tenant_id: str) -> bool:
+    """True when ``tenant_id`` has its OWN entry in ``$JURIS_AGENTS_FILE``.
+
+    Distinguishes a per-tenant token from the global shared fallback — the reverse
+    channel uses this to refuse the shared secret for a firm that has no dedicated
+    binding (a shared secret can't safely identify one firm among many).
+    """
+    from juris.web.auth import validate_tenant_id
+
+    return validate_tenant_id(tenant_id) in _load_agent_bindings()
+
+
 def tenant_agent_binding(tenant_id: str = "public") -> AgentBinding:
     """Resolve the agent a tenant routes to — its own (``$JURIS_AGENTS_FILE``) or the
     single-tenant fallback (``$JURIS_LOCAL_AGENT_URL`` / ``_TOKEN``).

@@ -78,3 +78,57 @@ def test_oab_dotted_and_prefixed_forms_fully_redacted() -> None:
         # the ENTIRE OAB number must be gone — the old \d{1,6} leaked the ".567" tail
         assert "234.567" not in out and "234" not in out and "1.234" not in out, f"leaked: {out!r}"
         assert "[OAB_1]" in out or "[OAB_" in out
+
+
+def test_email_is_redacted_and_reversible() -> None:
+    text = "Contato: joao.silva@escritorio.adv.br para intimações."
+    result = deidentify(text)
+    assert "joao.silva@escritorio.adv.br" not in result.text
+    assert "[EMAIL_1]" in result.text
+    assert reidentify(result.text, result.mapping) == text
+
+
+def test_brazilian_phone_numbers_redacted() -> None:
+    for raw in ["(11) 91234-5678", "(48) 3222-1010", "+55 11 98765-4321"]:
+        out = deidentify(f"Telefone {raw}.").text
+        assert raw not in out, f"phone leaked: {out!r}"
+        assert "[TELEFONE_" in out
+
+
+def test_rg_redacted_without_catching_cpf() -> None:
+    # RG is 2.3.3-1 digits; CPF is 3.3.3-2. They must not be confused.
+    result = deidentify("RG 12.345.678-9 e CPF 123.456.789-09.")
+    assert "12.345.678-9" not in result.text
+    assert "[RG_1]" in result.text
+    assert "[CPF_1]" in result.text  # CPF still handled by its own pattern
+
+
+def test_cep_redacted() -> None:
+    result = deidentify("Endereço na Rua X, CEP 88010-400.")
+    assert "88010-400" not in result.text
+    assert "[CEP_1]" in result.text
+
+
+def test_monetary_value_redacted_and_reversible() -> None:
+    text = "Valor da causa: R$ 1.234.567,89."
+    result = deidentify(text)
+    assert "1.234.567,89" not in result.text
+    assert "[VALOR_1]" in result.text
+    assert reidentify(result.text, result.mapping) == text  # reversible → draft fidelity kept
+
+
+def test_full_date_redacted_and_reversible() -> None:
+    text = "Nascido em 07/09/1985, intimado em 01/12/2024."
+    result = deidentify(text)
+    assert "07/09/1985" not in result.text
+    assert "01/12/2024" not in result.text
+    assert reidentify(result.text, result.mapping) == text
+
+
+def test_cnj_not_misparsed_as_cep_or_date() -> None:
+    # A CNJ must stay a single [CNJ_x] placeholder — the new CEP/date patterns
+    # must not carve pieces out of it.
+    result = deidentify("Processo 5082351-40.2017.8.13.0024.")
+    assert result.text.count("[CNJ_1]") == 1
+    assert "[CEP_" not in result.text
+    assert "[DATA_" not in result.text

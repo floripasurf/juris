@@ -1682,6 +1682,13 @@ def repertory_search(
     for i, r in enumerate(results, 1):
         texto = str(getattr(r, "texto", "") or getattr(r, "text", ""))
         why = format_score_components(getattr(r, "score_components", None))
+        # Prepend the human-readable driver ("alta autoridade do tribunal", …) so the
+        # lawyer sees WHY it ranked, not only the numeric breakdown (ADR-0017).
+        if getattr(r, "score_components", None) and hasattr(r, "hierarchy_label"):
+            from juris.repertory.retrieval.service import explain_ranking
+
+            motivo = str(explain_ranking(r)["motivo"])
+            why = f"{motivo} · {why}" if why else motivo
         table.add_row(
             str(i),
             f"{r.score:.4f}",

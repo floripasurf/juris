@@ -86,14 +86,22 @@ class RelayHub:
 def relay_token_ok(tenant_id: str, presented: str | None) -> bool:
     """Whether a dialing agent's token matches what the orchestrator expects for the tenant.
 
-    The expected token is the tenant's binding token (``JURIS_AGENTS_FILE``) or the
-    global fallback — the same shared secret used to authenticate the other direction.
+    Fail-closed against reverse-channel hijack: the global shared fallback token
+    (``JURIS_LOCAL_AGENT_TOKEN``) authenticates ONLY the single co-located default
+    tenant. Any other firm must present its OWN per-tenant token from
+    ``JURIS_AGENTS_FILE`` — otherwise a leaked shared secret could register as an
+    arbitrary firm and receive that firm's token operations (drafts to sign, filings).
     """
     import secrets
 
-    from juris.api.agent_config import tenant_agent_binding
+    from juris.api.agent_config import has_dedicated_binding, tenant_agent_binding
+    from juris.web.auth import PUBLIC_TENANT_ID
 
     if presented is None:
+        return False
+    # A tenant without its own binding may only use the shared token if it IS the
+    # single default tenant; for any named firm this would be a shared-secret hijack.
+    if not has_dedicated_binding(tenant_id) and tenant_id != PUBLIC_TENANT_ID:
         return False
     try:
         expected = tenant_agent_binding(tenant_id).token

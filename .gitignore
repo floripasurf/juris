@@ -66,42 +66,22 @@ STF_Casos_Relevantes/
 *.zip
 
 # ============================================
-# PROPRIETARY ENGINE — DO NOT PUBLISH
+# Local-only engine internals — kept OUT of this repo by design
 # ============================================
+# NOTE: most former "engine" files (analyzer, drafter, retrieval service,
+# prompts, prazo, review, defesas, corpus, ingestion) are now TRACKED and
+# published — their old "DO NOT PUBLISH" entries were obsolete and were removed
+# (they only produced misleading `git status` and forced `git add -f`). Only
+# genuinely-local pieces remain below: the proprietary composite ranker, the
+# browser-session LLM, and the local-only engine tests that mirror them. Bulk
+# corpus DATA (Decisoes/, Petiçoes/, ...) is ignored separately above.
 
-# Embedding & retrieval engines
-src/juris/repertory/embeddings.py
-src/juris/repertory/vector_store.py
-src/juris/repertory/retrieval/
+# Proprietary bits that stay local (untracked by design)
+src/juris/repertory/retrieval/ranking.py
+src/juris/llm/browser_session.py
 
-# Prompt templates (proprietary AI instructions)
-src/juris/prompts/
-
-# Core NLP analysis agents
-src/juris/agents/analyzer.py
-src/juris/agents/drafter.py
-src/juris/agents/researcher.py
-src/juris/agents/citation_verifier.py
-
-# Defense analysis & legal rules
-src/juris/defesas/
-src/juris/prazo/
-
-# Corpus & ingestion (training data)
-src/juris/repertory/ingestion/
-src/juris/repertory/chunking.py
-src/juris/repertory/peticoes/
-src/juris/repertory/corpus/
-src/juris/repertory/citation_lookup.py
-
-# Review & verification
-src/juris/review/
-
-# LLM routing & integration
-src/juris/llm/
-src/juris/core/llm_router.py
-
-# Tests for engine
+# Local-only engine tests (mirror the local internals; not in public CI).
+# The public EstrategiaAgent test (tests/unit/agents/test_estrategia.py) IS tracked.
 tests/unit/test_analyzer.py
 tests/unit/test_defesa_analyzer.py
 tests/unit/test_embeddings.py
@@ -110,14 +90,12 @@ tests/unit/test_hybrid_retrieval.py
 tests/unit/test_llm.py
 tests/unit/test_browser_session_llm.py
 tests/unit/test_preliminary*.py
-# Engine-agent tests stay local (mirror the src/ ignores); the public
-# EstrategiaAgent (tests/unit/agents/test_estrategia.py) is tracked for CI.
+tests/unit/test_peticao_*.py
+tests/unit/test_defesa_*.py
 tests/unit/agents/test_analyzer.py
 tests/unit/agents/test_drafter.py
 tests/unit/agents/test_researcher.py
 tests/unit/agents/test_citation_verifier.py
-tests/unit/repertory/
-tests/unit/review/
-tests/unit/test_peticao_*.py
-tests/unit/test_defesa_*.py
+tests/unit/repertory/test_ranking.py
+tests/unit/repertory/test_chunking_metadata.py
 tests/unit/benchmark/

@@ -11,6 +11,42 @@ from juris.api.relay import RelayHub
 from juris.api.ws_schemas import AgentRequest, AgentResponse
 
 
+def test_relay_token_rejects_shared_fallback_for_nondefault_tenant(monkeypatch) -> None:
+    """A leaked global shared token must NOT authenticate an arbitrary firm's channel.
+
+    Without a per-tenant agents file, tenant_agent_binding() returns the global
+    fallback token for ANY tenant — so the reverse channel would accept the same
+    secret as 'escritorio-a', letting a leaked token hijack that firm's token ops.
+    Fail-closed: only the single co-located default tenant may use the shared token.
+    """
+    from juris.api.agent_config import _load_agent_bindings
+    from juris.api.relay import relay_token_ok
+
+    monkeypatch.delenv("JURIS_AGENTS_FILE", raising=False)
+    monkeypatch.delenv("JURIS_REQUIRE_TENANTS", raising=False)
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_URL", "ws://x:1")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_TOKEN", "shared-secret")
+    _load_agent_bindings.cache_clear()
+
+    assert relay_token_ok("public", "shared-secret") is True  # single-tenant co-located: OK
+    assert relay_token_ok("escritorio-a", "shared-secret") is False  # hijack blocked
+
+
+def test_relay_token_requires_dedicated_per_tenant_binding(tmp_path, monkeypatch) -> None:
+    agents = tmp_path / "agents.json"
+    agents.write_text(json.dumps({"escritorio-a": {"url": "ws://a:1", "token": "tok-a"}}))
+    monkeypatch.setenv("JURIS_AGENTS_FILE", str(agents))
+
+    from juris.api.agent_config import _load_agent_bindings
+    from juris.api.relay import relay_token_ok
+
+    _load_agent_bindings.cache_clear()
+
+    assert relay_token_ok("escritorio-a", "tok-a") is True
+    assert relay_token_ok("escritorio-a", "wrong") is False
+    assert relay_token_ok("escritorio-b", "tok-a") is False  # no binding → no shared fallback
+
+
 @pytest.mark.asyncio
 async def test_hub_routes_request_to_agent_and_resolves_by_id() -> None:
     hub = RelayHub()

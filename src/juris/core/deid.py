@@ -5,11 +5,12 @@ case content is pseudonymized before it leaves the perimeter: direct identifiers
 become reversible placeholders, and a re-identification map is kept locally so
 the model's output can be restored.
 
-This baseline handles **structured** identifiers (CPF, CNPJ, CNJ, OAB) — the
-highest-risk, reliably regex-detectable ones. Free-text identifiers (party names,
-addresses) are where a NER model adds value: pass a ``ner_redactor`` callable
-(e.g. backed by LeNER-Br) to extend coverage. Imperfect de-id is flagged, never
-assumed complete — the default posture stays "never send raw PII to cloud".
+This baseline handles **structured** identifiers (CPF, CNPJ, CNJ, OAB, RG, CEP,
+e-mail, phone, monetary values, full dates) — the highest-risk, reliably
+regex-detectable ones. Free-text identifiers (party names, street addresses) are
+where a NER model adds value: pass a ``ner_redactor`` callable (e.g. backed by
+LeNER-Br) to extend coverage. Imperfect de-id is flagged, never assumed complete
+— the default posture stays "never send raw PII to cloud".
 """
 
 from __future__ import annotations
@@ -18,11 +19,17 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-# Order matters: CNPJ before CPF-like fragments, CNJ before bare digit runs.
+# Order matters and is load-bearing: the most specific / longest identifiers run
+# first so a later, looser pattern can't carve a fragment out of one already
+# matched. CNJ (dotted) → CNPJ → CPF → RG → OAB → monetary (R$-anchored) → CEP →
+# phone → date → email. Every match becomes a reversible placeholder, so redacting
+# values/dates costs no draft fidelity (reidentify restores them).
 _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("CNJ", re.compile(r"\b\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}\b")),
     ("CNPJ", re.compile(r"\b\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b")),
     ("CPF", re.compile(r"\b\d{3}\.\d{3}\.\d{3}-\d{2}\b")),
+    # RG: 2.3.3-1 (check digit may be X). Distinct from CPF's 3.3.3-2 shape.
+    ("RG", re.compile(r"\b\d{2}\.\d{3}\.\d{3}-[\dxX]\b")),
     # OAB number: optional "nº" lead-in, dotted thousands (234.567) OR plain (123456).
     # The old \d{1,6} stopped at the dot and leaked the ".567" tail.
     (
@@ -31,6 +38,15 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
             r"\bOAB[/\s]?[A-Z]{2}\s*(?:n[º°.]?\s*)?(?:\d{1,3}(?:\.\d{3})+|\d{1,6})\b", re.IGNORECASE
         ),
     ),
+    # Monetary value — anchored on R$ so it never collides with a bare id number.
+    ("VALOR", re.compile(r"R\$\s?\d{1,3}(?:\.\d{3})*(?:,\d{2})?")),
+    # CEP: 5-3 digits (phone is dash-then-4, so no overlap).
+    ("CEP", re.compile(r"\b\d{5}-\d{3}\b")),
+    # Brazilian phone: optional +55, optional (DD)/DD, then 4-4 or 5-4 (mobile).
+    ("TELEFONE", re.compile(r"(?<!\d)(?:\+55\s?)?(?:\(\d{2}\)\s?|\d{2}\s)?\d{4,5}-\d{4}(?!\d)")),
+    # Full date dd/mm/yyyy (weakly identifying, e.g. birth dates); reversible.
+    ("DATA", re.compile(r"\b\d{2}/\d{2}/\d{4}\b")),
+    ("EMAIL", re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b")),
 ]
 
 

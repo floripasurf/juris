@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
@@ -342,20 +343,62 @@ def _resolve_repertory_for_source(is_demo_mode: bool) -> Path:
     return repertory_path
 
 
-def _build_llm(*, use_cloud: bool) -> AbstractLLM:
+def _ai_preference_enabled() -> bool:
+    """ADR-0018: drive the lawyer's own browser LLM session as the primary."""
+    return os.environ.get("JURIS_AI_PREFERENCE", "").strip().lower() in {"1", "true", "yes"}
+
+
+def _build_cloud_llm() -> AbstractLLM:
+    """A de-identified cloud LLM (ADR-0016: names removed via LeNER-Br, gate fails closed)."""
+    from juris.config import get_settings
+    from juris.core.deid_llm import cloud_safe_llm
+    from juris.llm.claude import ClaudeLLM
+
+    settings = get_settings()
+    if not settings.anthropic_api_key:
+        raise DemoRunError("ANTHROPIC_API_KEY não configurada.")
+    return cast("AbstractLLM", cloud_safe_llm(ClaudeLLM(api_key=settings.anthropic_api_key.get_secret_value())))
+
+
+def _build_ai_of_preference_llm(*, use_cloud: bool) -> AbstractLLM:
+    """ADR-0018 AI-of-preference: the lawyer's browser session first, a de-identified
+    backend as the fallback when the session breaks (both PII-safe on egress)."""
+    from juris.api.browser_bridge import (
+        NativeBridgeTransport,
+        WebSocketBridgeChannel,
+        validate_bridge_url,
+    )
+    from juris.core.deid_llm import default_ner_redactor
+    from juris.core.fallback_llm import build_ai_of_preference
+    from juris.llm.browser_session import BrowserSessionLLM
+
+    bridge_url = validate_bridge_url(os.environ.get("JURIS_BROWSER_BRIDGE_URL", ""))
+    browser = BrowserSessionLLM(NativeBridgeTransport(WebSocketBridgeChannel.to_localhost(bridge_url)))
     if use_cloud:
         from juris.config import get_settings
-        from juris.core.deid_llm import cloud_safe_llm
         from juris.llm.claude import ClaudeLLM
 
         settings = get_settings()
         if not settings.anthropic_api_key:
             raise DemoRunError("ANTHROPIC_API_KEY não configurada.")
-        # ADR-0016: case PII (incl. names, via LeNER-Br) is removed before the
-        # cloud model sees it; the gate fails closed. cloud_safe_llm is
-        # structurally an AbstractLLM (complete + model_name).
-        wrapped = cloud_safe_llm(ClaudeLLM(api_key=settings.anthropic_api_key.get_secret_value()))
-        return cast("AbstractLLM", wrapped)
+        # Both browser + cloud fallback fail closed with NER (names never leave raw).
+        return build_ai_of_preference(
+            browser,
+            ClaudeLLM(api_key=settings.anthropic_api_key.get_secret_value()),
+            ner_redactor=default_ner_redactor(),
+            allow_partial=False,
+        )
+    from juris.llm.ollama import OllamaLLM
+
+    # Local fallback stays on-device (PII in perimeter) — skip its redaction.
+    return build_ai_of_preference(browser, OllamaLLM(), fallback_is_local=True)
+
+
+def _build_llm(*, use_cloud: bool) -> AbstractLLM:
+    if _ai_preference_enabled():
+        return _build_ai_of_preference_llm(use_cloud=use_cloud)
+    if use_cloud:
+        return _build_cloud_llm()
 
     from juris.llm.ollama import OllamaLLM
 
