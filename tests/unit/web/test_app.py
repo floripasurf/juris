@@ -1009,3 +1009,25 @@ def test_filing_status_is_scoped_to_the_tenant(monkeypatch, tmp_path) -> None:
     assert root_a == str(tmp_path / "tenants" / "escritorio-a" / "filings")
     assert root_b == str(tmp_path / "tenants" / "escritorio-b" / "filings")
     assert root_a != root_b
+
+
+def test_uncaught_exception_returns_sanitized_500(monkeypatch) -> None:
+    app_module = importlib.import_module("juris.web.app")
+    from juris.web.auth import Tenant
+
+    def _boom(*a, **k):
+        raise RuntimeError("internal secret: token=abc123")
+
+    monkeypatch.setattr(app_module, "_tenant_db", lambda tenant: object())
+    monkeypatch.setattr(app_module, "list_processos", _boom)
+    app_module.app.dependency_overrides[app_module.current_tenant] = lambda: Tenant("t")
+    # a non-raising client so we observe the handler's 500 response, not a re-raise
+    quiet_client = TestClient(app, raise_server_exceptions=False)
+    try:
+        response = quiet_client.get("/api/processos")
+    finally:
+        app_module.app.dependency_overrides.clear()
+
+    assert response.status_code == 500
+    assert response.json()["detail"]["code"] == "internal_error"
+    assert "token=abc123" not in response.text  # never leak the internal detail/traceback

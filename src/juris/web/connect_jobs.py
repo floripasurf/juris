@@ -85,6 +85,22 @@ class ConnectJobStore:
             "error": error,
         }
 
+    def sweep_stale(self, max_age_seconds: float) -> int:
+        """Mark ``running`` jobs older than ``max_age_seconds`` as ``error``.
+
+        Run at startup: a job whose worker died (crash/restart) would otherwise stay
+        ``running`` forever. Returns the number of rows swept.
+        """
+        cutoff = time.time() - max_age_seconds
+        with self._conn() as conn:
+            cur = conn.execute(
+                "UPDATE connect_jobs SET status='error', "
+                "error='interrompido (reinício do servidor)' "
+                "WHERE status='running' AND created_at < ?",
+                (cutoff,),
+            )
+            return int(cur.rowcount)
+
     def evict_old(self, max_jobs: int = 200) -> None:
         """Drop the oldest jobs beyond ``max_jobs`` (FIFO) so the table stays bounded."""
         with self._conn() as conn:

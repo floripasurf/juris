@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -65,6 +66,10 @@ def _tenant_filing_root(tenant: Tenant) -> Path:
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     validate_startup_config()
+    # Recover jobs orphaned by a crash/restart: any 'running' row older than the
+    # per-job timeout can never complete, so mark it errored on boot.
+    with suppress(Exception):  # never block startup on housekeeping
+        _connect_job_store().sweep_stale(_CONNECT_JOB_TIMEOUT_SECONDS)
     yield
 
 
@@ -111,6 +116,24 @@ async def _rate_limit_api(request: Request, call_next: Any) -> Any:
                 "retry_after_seconds": decision.retry_after_seconds,
             }
         },
+    )
+
+
+@app.exception_handler(Exception)
+async def _handle_uncaught(request: Request, exc: Exception) -> JSONResponse:
+    """Turn any uncaught exception into a sanitized 500.
+
+    The traceback/internal message is logged (structlog), never serialized to the
+    client — a stack trace on the wire leaks paths, config, and secrets.
+    """
+    from juris.core.observability import get_logger
+
+    get_logger("juris.web").error(
+        "unhandled_exception", path=request.url.path, error=str(exc), exc_info=exc
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": {"code": "internal_error", "message": "Erro interno no servidor."}},
     )
 
 
@@ -292,6 +315,9 @@ def _serialize_connect(result: Any) -> dict[str, object]:
 # each job to its owning tenant (Phase 2). The PIN is never persisted (it lives only
 # in the transient background-task closure, then is GC'd).
 _MAX_CONNECT_JOBS = 200
+_CONNECT_JOB_TIMEOUT_SECONDS = int(os.environ.get("JURIS_CONNECT_TIMEOUT_SECONDS", "900"))
+# Strong refs to in-flight background tasks so the event loop doesn't GC them mid-run.
+_BACKGROUND_TASKS: set[asyncio.Task[None]] = set()
 
 
 @lru_cache(maxsize=1)
@@ -312,17 +338,22 @@ async def _run_connect_job(
     bind_tenant_log_context(tenant.tenant_id)  # background task runs in its own context
     store = _connect_job_store()
     try:
-        result = await run_connect(
-            tribunal_cfg,
-            payload.cpf or "",  # remote: the agent resolves the lawyer's own CPF
-            payload.senha or payload.cpf or "",
-            token_pin=payload.pin,
-            seed_text=payload.seed_text,
-            do_sync=payload.sync,
-            db=_tenant_db(tenant),
-            tenant_id=tenant.tenant_id,
+        result = await asyncio.wait_for(
+            run_connect(
+                tribunal_cfg,
+                payload.cpf or "",  # remote: the agent resolves the lawyer's own CPF
+                payload.senha or payload.cpf or "",
+                token_pin=payload.pin,
+                seed_text=payload.seed_text,
+                do_sync=payload.sync,
+                db=_tenant_db(tenant),
+                tenant_id=tenant.tenant_id,
+            ),
+            timeout=_CONNECT_JOB_TIMEOUT_SECONDS,  # a hung MNI/agent call can't leave the job "running"
         )
         store.mark_done(job_id, _serialize_connect(result))
+    except TimeoutError:
+        store.mark_error(job_id, "tempo excedido ao conectar/sincronizar (timeout)")
     except Exception as exc:  # noqa: BLE001 — surfaced to the client via the job
         store.mark_error(job_id, str(exc))
 
@@ -332,7 +363,6 @@ async def create_connect(
     payload: ConnectPayload, tenant: Tenant = Depends(current_tenant)
 ) -> dict[str, object]:
     """Start an async import/update; returns a job id to poll (connect can take minutes)."""
-    import asyncio
     import uuid
 
     from juris.mni.tribunais import get_tribunal
@@ -357,7 +387,11 @@ async def create_connect(
     store = _connect_job_store()
     store.create(job_id, tenant.tenant_id)
     store.evict_old(_MAX_CONNECT_JOBS)
-    asyncio.get_event_loop().create_task(_run_connect_job(job_id, tribunal_cfg, payload, tenant))
+    # Retain a reference so the task isn't garbage-collected mid-run (asyncio caveat)
+    # and use create_task (not the deprecated get_event_loop().create_task).
+    task = asyncio.create_task(_run_connect_job(job_id, tribunal_cfg, payload, tenant))
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
     return {"job_id": job_id, "status": "running"}
 
 

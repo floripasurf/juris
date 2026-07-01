@@ -50,3 +50,18 @@ def test_evict_old_caps_the_table(tmp_path) -> None:
     assert len(remaining) <= 5
     # the newest survive (FIFO drop of the oldest)
     assert store.get("job-9") is not None
+
+
+def test_sweep_stale_marks_old_running_jobs_as_error(tmp_path) -> None:
+    store = ConnectJobStore(tmp_path / "jobs.db")
+    store.create("j", "escritorio-a")
+
+    # a generous cutoff leaves a fresh running job alone
+    assert store.sweep_stale(3600) == 0
+    assert store.get("j")["status"] == "running"
+
+    # a negative age treats every running job as stale (crash/restart recovery)
+    assert store.sweep_stale(-1) == 1
+    job = store.get("j")
+    assert job["status"] == "error"
+    assert "interrompido" in job["error"]
