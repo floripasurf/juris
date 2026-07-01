@@ -189,68 +189,75 @@ def validate_startup_config() -> None:
             tenant_agent_binding(tenant_id)
 
 
+_MAX_SHORT_TEXT = 10_000
+_MAX_PATH_TEXT = 512
+_MAX_URL_TEXT = 2_048
+_MAX_DRAFT_MARKDOWN = 1_000_000
+_MAX_CORPUS_SOURCE_TEXT = 2_000_000
+
+
 class DemoRunPayload(BaseModel):
     """JSON payload submitted by the local web UI."""
 
-    numero_cnj: str = Field(min_length=1)
-    tipo: str = "contestacao"
-    tribunal: str = "tjmg"
-    source: str = "fixture"
-    modo: str = "rascunho-pesquisa"
-    out_root: str = "juris-out"
-    thesis: str | None = None
-    instructions: str = ""
+    numero_cnj: str = Field(min_length=1, max_length=64)
+    tipo: str = Field(default="contestacao", max_length=64)
+    tribunal: str = Field(default="tjmg", max_length=32)
+    source: str = Field(default="fixture", max_length=32)
+    modo: str = Field(default="rascunho-pesquisa", max_length=64)
+    out_root: str = Field(default="juris-out", max_length=_MAX_PATH_TEXT)
+    thesis: str | None = Field(default=None, max_length=_MAX_SHORT_TEXT)
+    instructions: str = Field(default="", max_length=_MAX_SHORT_TEXT)
     cloud: bool = False
     skip_review: bool = False
     use_cache: bool = True
-    cpf: str | None = None  # co-located source=mni; in remote the agent resolves it
+    cpf: str | None = Field(default=None, max_length=32)  # co-located; remote agent resolves it
 
 
 class PilotFeedbackPayload(BaseModel):
     """Structured feedback from one real pilot case."""
 
-    numero_cnj: str = Field(min_length=1)
-    output_dir: str | None = None
+    numero_cnj: str = Field(min_length=1, max_length=64)
+    output_dir: str | None = Field(default=None, max_length=_MAX_PATH_TEXT)
     time_saved_minutes: int = Field(ge=0)
     mode_used: str = Field(pattern="^(minuta|rascunho)$")
     citations_accepted: int = Field(default=0, ge=0)
     citations_rejected: int = Field(default=0, ge=0)
-    missing_source: str = ""
-    deadline_or_analysis_error: str = ""
+    missing_source: str = Field(default="", max_length=_MAX_SHORT_TEXT)
+    deadline_or_analysis_error: str = Field(default="", max_length=_MAX_SHORT_TEXT)
     perceived_utility: int = Field(ge=1, le=5)
     corpus_usable: bool = False
-    notes: str = ""
+    notes: str = Field(default="", max_length=_MAX_SHORT_TEXT)
 
 
 class CorpusSourcePayload(BaseModel):
     """Lawyer-approved source to enter the pilot-directed corpus queue."""
 
-    numero_cnj: str = Field(min_length=1)
-    title: str = Field(min_length=1)
-    source_url: str = Field(min_length=1)
-    source_date: str = Field(min_length=1)
-    source_type: str = Field(min_length=1)
-    tribunal: str = Field(min_length=1)
-    area: str = Field(min_length=1)
-    tema: str = Field(min_length=1)
-    status: str = "vigente"
-    content_sha256: str | None = None
-    source_text: str | None = None
-    notes: str = ""
+    numero_cnj: str = Field(min_length=1, max_length=64)
+    title: str = Field(min_length=1, max_length=512)
+    source_url: str = Field(min_length=1, max_length=_MAX_URL_TEXT)
+    source_date: str = Field(min_length=1, max_length=32)
+    source_type: str = Field(min_length=1, max_length=64)
+    tribunal: str = Field(min_length=1, max_length=32)
+    area: str = Field(min_length=1, max_length=128)
+    tema: str = Field(min_length=1, max_length=256)
+    status: str = Field(default="vigente", max_length=64)
+    content_sha256: str | None = Field(default=None, max_length=64)
+    source_text: str | None = Field(default=None, max_length=_MAX_CORPUS_SOURCE_TEXT)
+    notes: str = Field(default="", max_length=_MAX_SHORT_TEXT)
 
 
 class FilingPayload(BaseModel):
     """Controlled filing request from the web console."""
 
-    numero_cnj: str = Field(min_length=1)
-    tribunal: str = "tjmg"
-    tipo_documento: str = "manifestacao"
-    tipo_peticao: str = "manifestacao"
-    draft_markdown: str = Field(min_length=1)
-    cpf: str | None = None
-    senha: str | None = None
-    pin: str | None = None
-    prazo_override: str | None = None
+    numero_cnj: str = Field(min_length=1, max_length=64)
+    tribunal: str = Field(default="tjmg", max_length=32)
+    tipo_documento: str = Field(default="manifestacao", max_length=64)
+    tipo_peticao: str = Field(default="manifestacao", max_length=64)
+    draft_markdown: str = Field(min_length=1, max_length=_MAX_DRAFT_MARKDOWN)
+    cpf: str | None = Field(default=None, max_length=32)
+    senha: str | None = Field(default=None, max_length=256)
+    pin: str | None = Field(default=None, max_length=128)
+    prazo_override: str | None = Field(default=None, max_length=64)
     review_confirmed: bool = False
     consent: bool = False
 
@@ -258,20 +265,20 @@ class FilingPayload(BaseModel):
 class FilingArtifactPayload(BaseModel):
     """Draft artifact selected for controlled filing."""
 
-    output_dir: str = Field(min_length=1)
-    artifact_name: str = Field(min_length=1)
+    output_dir: str = Field(min_length=1, max_length=_MAX_PATH_TEXT)
+    artifact_name: str = Field(min_length=1, max_length=128)
 
 
 class PendingRecoveryPayload(BaseModel):
     """One pending filing selected for recovery."""
 
-    pending_key: str = Field(min_length=1)
+    pending_key: str = Field(min_length=1, max_length=_MAX_PATH_TEXT)
 
 
 class PendingArchivePayload(PendingRecoveryPayload):
     """Explicit manual resolution of a pending filing."""
 
-    reason: str = Field(min_length=1)
+    reason: str = Field(min_length=1, max_length=_MAX_SHORT_TEXT)
     confirm_manual_resolution: bool = False
 
 

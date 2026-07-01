@@ -369,6 +369,21 @@ def test_filing_dry_run_uses_service_without_consent_requirement(monkeypatch) ->
     assert pin == "1234"
 
 
+def test_filing_dry_run_rejects_excessive_draft() -> None:
+    app_module = importlib.import_module("juris.web.app")
+
+    response = client.post(
+        "/api/filing/dry-run",
+        json=_filing_payload(
+            consent=False,
+            review_confirmed=False,
+            draft_markdown="x" * (app_module._MAX_DRAFT_MARKDOWN + 1),
+        ),
+    )
+
+    assert response.status_code == 422
+
+
 def test_filing_submit_requires_review_and_consent() -> None:
     without_review = client.post("/api/filing/submit", json=_filing_payload(review_confirmed=False))
     without_consent = client.post("/api/filing/submit", json=_filing_payload(consent=False))
@@ -592,6 +607,28 @@ def test_corpus_queue_endpoints(monkeypatch, tmp_path) -> None:
     marked = client.post(f"/api/corpus/sources/{source_id}/reingested")
     assert marked.status_code == 200
     assert marked.json()["source"]["reingest_status"] == "done"
+
+
+def test_corpus_source_rejects_excessive_source_text(monkeypatch, tmp_path) -> None:
+    app_module = importlib.import_module("juris.web.app")
+
+    monkeypatch.setattr(app_module, "_out_root", lambda: tmp_path)
+    payload = {
+        "numero_cnj": "0001234-56.2026.8.13.0001",
+        "title": "REsp aprovado",
+        "source_url": "https://example.test/resp",
+        "source_date": "2026-06-30",
+        "source_type": "acordao_publicado",
+        "tribunal": "STJ",
+        "area": "civel",
+        "tema": "cobranca",
+        "status": "vigente",
+        "source_text": "x" * (app_module._MAX_CORPUS_SOURCE_TEXT + 1),
+    }
+
+    response = client.post("/api/corpus/sources", json=payload)
+
+    assert response.status_code == 422
 
 
 def test_corpus_reingest_endpoint_writes_repertory(monkeypatch, tmp_path) -> None:
