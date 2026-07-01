@@ -384,8 +384,8 @@ def _build_manifest(result: DemoResult, artifacts: dict[str, str]) -> dict[str, 
             if review
             else None
         ),
-        "audit_log": str(result.audit_log_path),
-        "out_dir": str(result.out_dir),
+        "audit_log": "audit.jsonl",
+        "out_dir": result.out_dir.name,
         "artifacts": [{"name": name, "sha256": digest} for name, digest in sorted(artifacts.items())],
     }
 

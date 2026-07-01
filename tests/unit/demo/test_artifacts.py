@@ -250,6 +250,9 @@ class TestWriteArtifactsHappyPath:
         assert manifest["request"]["numero_cnj"] == result.request.numero_cnj
         assert manifest["draft"]["grounding_status"] == "verified"
         assert manifest["draft"]["grounding_blocked_reason"] is None
+        assert manifest["audit_log"] == "audit.jsonl"
+        assert manifest["out_dir"] == result.out_dir.name
+        assert str(tmp_path) not in json.dumps(manifest)
 
     def test_run_manifest_records_blocked_grounding(self, tmp_path: Path) -> None:
         result = _build_result(tmp_path)

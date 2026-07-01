@@ -13,6 +13,7 @@ non-zero CLI exit. These tests pin the exact contract:
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -108,6 +109,36 @@ class TestOrchestratorErrorPaths:
         repertory = MagicMock()
         audit = AuditLog(audit_path)
         return DemoOrchestrator(llm=llm, repertory=repertory, audit=audit), audit
+
+    def test_started_audit_event_does_not_record_absolute_out_dir(self, tmp_path: Path) -> None:
+        skeleton, audit_path = _result_skeleton(tmp_path)
+        orch, audit = self._build(audit_path)
+        orch._run_drafter = AsyncMock(return_value=MagicMock(  # type: ignore[method-assign]
+            revisions=0, citations_used=[], audit_entry_ids=[],
+            research_summary="", reviewer_report=None, contraponto_section="",
+        ))
+        fake_analysis = MagicMock(analyzed=[], actionable=[], summary="ok")
+
+        with (
+            patch(
+                "juris.demo.orchestrator.analyze_processo",
+                AsyncMock(return_value=fake_analysis),
+            ),
+            patch("juris.demo.orchestrator.compute_prazos") as mock_prazos,
+        ):
+            mock_prazos.return_value = MagicMock(prazos=[], summary="ok")
+            asyncio.run(
+                orch.run(
+                    skeleton.request,
+                    processo=skeleton.processo,
+                    out_dir=skeleton.out_dir,
+                    is_demo_mode=True,
+                )
+            )
+
+        started = next(e for e in audit.read_all() if e.event_type == "demo.started")
+        assert started.details["out_dir"] == skeleton.out_dir.name
+        assert str(tmp_path) not in json.dumps(started.details)
 
     def test_drafter_failure_records_error_and_keeps_going(
         self, tmp_path: Path

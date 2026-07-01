@@ -154,7 +154,7 @@ class DemoOrchestrator:
                 "source": request.source.value,
                 "demo_mode": is_demo_mode,
                 "output_mode": request.output_mode.value,
-                "out_dir": str(out_dir),
+                "out_dir": out_dir.name,
             },
         )
 
