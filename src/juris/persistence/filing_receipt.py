@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
 from juris.core.observability import get_logger
+from juris.core.paths import ensure_private_dir, restrict_file
 from juris.mni.operations.peticionamento import FilingReceipt
 from juris.persistence.audit import AuditLog
 
@@ -40,7 +43,8 @@ class FilingReceiptStore:
     def __init__(self, storage_dir: Path, audit: AuditLog) -> None:
         self._storage_dir = storage_dir
         self._audit = audit
-        self._storage_dir.mkdir(parents=True, exist_ok=True)
+        ensure_private_dir(self._storage_dir)
+        self._storage_root = self._storage_dir.resolve()
 
     def prepare(self, numero_cnj: str, signed_pdf: bytes, render_hash: str) -> str:
         """Create pending filing directory with signed PDF.
@@ -52,12 +56,15 @@ class FilingReceiptStore:
             pending_path as string
         """
         cnj_dir = self._cnj_to_dirname(numero_cnj)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        pending_dir = self._storage_dir / cnj_dir / f"{timestamp}_pending"
-        pending_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        nonce = uuid.uuid4().hex[:8]
+        processo_dir = self._storage_dir / cnj_dir
+        ensure_private_dir(processo_dir)
+        pending_dir = processo_dir / f"{timestamp}_{nonce}_pending"
+        ensure_private_dir(pending_dir)
 
         # Write signed PDF
-        (pending_dir / "signed.pdf").write_bytes(signed_pdf)
+        self._write_bytes_private(pending_dir / "signed.pdf", signed_pdf)
 
         # Write initial hashes
         signed_hash = hashlib.sha256(signed_pdf).hexdigest()
@@ -65,9 +72,7 @@ class FilingReceiptStore:
             "pdf_hash": render_hash,
             "signed_pdf_hash": signed_hash,
         }
-        (pending_dir / "hashes.json").write_text(
-            json.dumps(hashes, indent=2, ensure_ascii=False)
-        )
+        self._write_json_private(pending_dir / "hashes.json", hashes)
 
         self._audit.log(
             event_type="filing.receipt_prepared",
@@ -94,19 +99,24 @@ class FilingReceiptStore:
         Returns:
             receipt_id (the final directory name)
         """
-        pending = Path(pending_path)
+        pending = self._resolve_pending_path(pending_path)
         if not pending.exists():
             msg = f"Pending path does not exist: {pending_path}"
             raise FileNotFoundError(msg)
+        if not pending.is_dir() or not pending.name.endswith("_pending"):
+            msg = f"Invalid pending filing directory: {pending_path}"
+            raise ValueError(msg)
+        ensure_private_dir(pending, restrict_existing=True)
 
         # Build final directory name
-        timestamp_prefix = pending.name.replace("_pending", "")
+        timestamp_prefix = pending.name.removesuffix("_pending")
         protocolo = receipt.protocolo or "no_protocolo"
-        safe_protocolo = "".join(
-            c if c.isalnum() or c in "-_" else "_" for c in protocolo
-        )
+        safe_protocolo = self._safe_segment(protocolo, fallback="no_protocolo")
         receipt_id = f"{timestamp_prefix}_{safe_protocolo}"
         final_dir = pending.parent / receipt_id
+        if final_dir.exists():
+            msg = f"Receipt directory already exists: {final_dir}"
+            raise FileExistsError(msg)
 
         # Write receipt JSON before rename
         receipt_data = {
@@ -119,19 +129,17 @@ class FilingReceiptStore:
             "numero_processo": receipt.numero_processo,
             "pdf_hash": receipt.pdf_hash,
         }
-        (pending / "receipt.json").write_text(
-            json.dumps(receipt_data, indent=2, ensure_ascii=False)
-        )
+        self._write_json_private(pending / "receipt.json", receipt_data)
 
         # Update hashes with full chain of custody
         hashes_path = pending / "hashes.json"
-        hashes = json.loads(hashes_path.read_text()) if hashes_path.exists() else {}
+        hashes = json.loads(hashes_path.read_text(encoding="utf-8")) if hashes_path.exists() else {}
         receipt_hash = hashlib.sha256(
             json.dumps(receipt_data, sort_keys=True, ensure_ascii=False).encode()
         ).hexdigest()
         hashes["submitted_payload_hash"] = submitted_payload_hash
         hashes["receipt_hash"] = receipt_hash
-        hashes_path.write_text(json.dumps(hashes, indent=2, ensure_ascii=False))
+        self._write_json_private(hashes_path, hashes)
 
         # Write metadata
         metadata = {
@@ -139,9 +147,7 @@ class FilingReceiptStore:
             "tipo_documento": tipo_documento,
             "filed_at": datetime.now().isoformat(),
         }
-        (pending / "metadata.json").write_text(
-            json.dumps(metadata, indent=2, ensure_ascii=False)
-        )
+        self._write_json_private(pending / "metadata.json", metadata)
 
         # Atomic rename
         pending.rename(final_dir)
@@ -162,7 +168,7 @@ class FilingReceiptStore:
     def get(self, numero_cnj: str, receipt_id: str) -> StoredReceipt | None:
         """Retrieve a stored receipt by CNJ and receipt_id."""
         cnj_dir = self._storage_dir / self._cnj_to_dirname(numero_cnj)
-        receipt_dir = cnj_dir / receipt_id
+        receipt_dir = self._receipt_dir(cnj_dir, receipt_id)
         if not receipt_dir.exists():
             return None
         return self._load_receipt(receipt_dir, numero_cnj)
@@ -199,11 +205,11 @@ class FilingReceiptStore:
         if not receipt_path.exists():
             return None
 
-        receipt_data = json.loads(receipt_path.read_text())
+        receipt_data = json.loads(receipt_path.read_text(encoding="utf-8"))
         hashes_path = receipt_dir / "hashes.json"
-        hashes = json.loads(hashes_path.read_text()) if hashes_path.exists() else {}
+        hashes = json.loads(hashes_path.read_text(encoding="utf-8")) if hashes_path.exists() else {}
         metadata_path = receipt_dir / "metadata.json"
-        metadata = json.loads(metadata_path.read_text()) if metadata_path.exists() else {}
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8")) if metadata_path.exists() else {}
 
         data_recebimento = None
         if receipt_data.get("data_recebimento"):
@@ -236,4 +242,39 @@ class FilingReceiptStore:
     @staticmethod
     def _cnj_to_dirname(numero_cnj: str) -> str:
         """Sanitize CNJ number for use as directory name."""
-        return numero_cnj.replace(".", "_").replace("-", "_")
+        normalized = numero_cnj.replace(".", "_").replace("-", "_")
+        return FilingReceiptStore._safe_segment(normalized, fallback="unknown_cnj")
+
+    @staticmethod
+    def _safe_segment(value: str, *, fallback: str) -> str:
+        """Return a path-safe single directory segment."""
+        cleaned = re.sub(r"[^A-Za-z0-9_-]+", "_", value).strip("_")
+        return cleaned or fallback
+
+    @staticmethod
+    def _write_bytes_private(path: Path, data: bytes) -> None:
+        path.write_bytes(data)
+        restrict_file(path)
+
+    @staticmethod
+    def _write_json_private(path: Path, data: object) -> None:
+        path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        restrict_file(path)
+
+    def _resolve_pending_path(self, pending_path: str) -> Path:
+        pending = Path(pending_path).expanduser()
+        try:
+            resolved = pending.resolve()
+        except OSError as exc:
+            msg = f"Invalid pending path: {pending_path}"
+            raise ValueError(msg) from exc
+        if not resolved.is_relative_to(self._storage_root):
+            msg = "Pending path is outside filing storage root."
+            raise ValueError(msg)
+        return resolved
+
+    def _receipt_dir(self, cnj_dir: Path, receipt_id: str) -> Path:
+        if not receipt_id or receipt_id != self._safe_segment(receipt_id, fallback=""):
+            msg = "Invalid receipt_id."
+            raise ValueError(msg)
+        return cnj_dir / receipt_id
