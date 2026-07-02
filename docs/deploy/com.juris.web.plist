@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd template for the juris web console (orchestrator) on the Mac Mini.
+  Binds loopback only; Cloudflare Tunnel publishes it (docs/deploy/blackcube-pilot.md).
+  Port 8000 on purpose: 8765 is the local agent's port (com.juris.agent.plist).
+  Copy to ~/Library/LaunchAgents/com.juris.web.plist, fill in the REPLACE_*
+  values, then: launchctl load ~/Library/LaunchAgents/com.juris.web.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.juris.web</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/uv</string>
+    <string>run</string>
+    <string>juris</string>
+    <string>web</string>
+    <string>--host</string>
+    <string>127.0.0.1</string>
+    <string>--port</string>
+    <string>8000</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>REPLACE_WITH_PATH_TO/juris</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <!-- fail-closed posture for the online pilot (docs/deploy/production.md §1) -->
+    <key>ENVIRONMENT</key>
+    <string>prod</string>
+    <key>JURIS_REQUIRE_TENANTS</key>
+    <string>1</string>
+    <key>JURIS_TENANTS_FILE</key>
+    <string>REPLACE_WITH_PATH_TO/tenants.json</string>
+    <key>JURIS_HOME</key>
+    <string>REPLACE_WITH_PATH_TO/juris-home</string>
+    <key>JURIS_OUT_ROOT</key>
+    <string>REPLACE_WITH_PATH_TO/juris-home/out</string>
+    <!-- python3 -c 'import secrets; print(secrets.token_urlsafe(48))' -->
+    <key>JURIS_AUDIT_HMAC_KEY</key>
+    <string>REPLACE_WITH_LONG_SECRET</string>
+    <!-- co-located pilot: the agent (com.juris.agent.plist) runs on this machine -->
+    <key>JURIS_AGENT_MODE</key>
+    <string>remote</string>
+    <key>JURIS_LOCAL_AGENT_URL</key>
+    <string>ws://127.0.0.1:8765</string>
+    <key>JURIS_LOCAL_AGENT_TOKEN</key>
+    <string>REPLACE_WITH_PAIRING_TOKEN</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/juris-web.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/juris-web.err</string>
+</dict>
+</plist>

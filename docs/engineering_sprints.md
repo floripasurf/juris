@@ -265,7 +265,11 @@ de inexistência de protocolo, `retry.json` com idempotency key e bloqueio de no
 tentativa quando o resultado fica indeterminado; os catálogos de defesas CPC/CPP/CLT agora têm
 registry (`defesas/registry.py`) e entram no `DefesaAnalyzer`, que registra o
 código/institutos consultados no relatório em vez de deixar esses arquivos como
-referência órfã.
+referência órfã. A SPA agora tem gate de login: `apiFetch` anexa `X-API-Key`
+(sessionStorage) em toda chamada `/api/*`, 401 reabre o login e o console passa
+a funcionar em modo prod com tenants exigidos — pré-requisito do endereço de
+teste `juris.blackcube.dev` (runbook em `docs/deploy/blackcube-pilot.md`,
+launchd em `docs/deploy/com.juris.web.plist`).
 
 Bloqueado por dependência humana: **evidência de piloto** (rodar casos com A3 — ver
 `docs/pilot_runbook.md`) e **fonte real de inteiro teor** (decisão de ToS).
