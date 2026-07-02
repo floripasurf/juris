@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import ClassVar
 
+from juris.core.sanitize import safe_error_text
 from juris.search.models import QueryType, SearchQuery, SearchResult
 
 
@@ -84,7 +85,7 @@ class SearchAdapter(ABC):
                 court=self.court_code,
                 healthy=False,
                 latency_ms=latency,
-                error=str(e),
+                error=safe_error_text(e),
             )
 
     def supports(self, query_type: QueryType) -> bool:

@@ -36,10 +36,12 @@ class _FakeFiling(FilingService):
     def __init__(self) -> None:
         self.seen_cpf: str | None = None
         self.seen_pin: str | None = None
+        self.seen_draft_markdown: str | None = None
 
     async def file(self, request: FilingRequest, *, pin: str | None = None) -> FilingResult:
         self.seen_cpf = request.cpf
         self.seen_pin = pin
+        self.seen_draft_markdown = request.draft_markdown
         return FilingResult(
             success=True, receipt=None, signing_result=None, preflight=None,
             audit_entry_ids=["a1"], chain_of_custody=_custody(),
@@ -76,6 +78,38 @@ def test_remote_filing_blanks_credentials_and_round_trips_proof() -> None:
     assert "escritorio-x" in on_wire[0]  # tenant tagged
 
 
+def test_remote_filing_keeps_reid_map_and_raw_pii_off_the_wire() -> None:
+    on_wire: list[str] = []
+
+    class _Transport:
+        def send(self, agent_request: AgentRequest) -> AgentResponse:
+            on_wire.append(agent_request.model_dump_json())
+            return AgentResponse(
+                request_id=agent_request.request_id,
+                success=True,
+                payload={
+                    "success": True,
+                    "audit_entry_ids": ["a1"],
+                    "chain_of_custody": {
+                        "pdf_hash": "p", "signed_pdf_hash": "s",
+                        "submitted_payload_hash": "sub", "receipt_hash": "r",
+                    },
+                },
+            )
+
+    service = RemoteFilingService(_Transport(), tenant_id="escritorio-x")
+    result = asyncio.run(
+        service.file(_req(draft_markdown="# Peça\nAutor: [NOME_1]\nCPF: [CPF_1]"))
+    )
+
+    assert result.success
+    assert "[NOME_1]" in on_wire[0]
+    assert "[CPF_1]" in on_wire[0]
+    assert "João da Silva" not in on_wire[0]
+    assert "123.456.789-09" not in on_wire[0]
+    assert "reid" not in on_wire[0].lower()
+
+
 @pytest.mark.asyncio
 async def test_handle_file_request_resolves_credentials_locally() -> None:
     fake = _FakeFiling()
@@ -96,6 +130,44 @@ async def test_handle_file_request_resolves_credentials_locally() -> None:
     assert resp.payload["chain_of_custody"]["signed_pdf_hash"] == "s"
     assert fake.seen_cpf == "agent-cpf"  # the agent injected ITS credentials
     assert fake.seen_pin == "agent-pin"
+
+
+@pytest.mark.asyncio
+async def test_handle_file_request_reidentifies_draft_locally(monkeypatch, tmp_path) -> None:
+    from juris.api.reid_store import save_reid_map
+
+    monkeypatch.setenv("JURIS_AGENT_DEID_READS", "1")
+    monkeypatch.setenv("JURIS_HOME", str(tmp_path))
+    numero_cnj = "5082351-40.2017.8.13.0024"
+    save_reid_map(
+        "escritorio-x",
+        numero_cnj,
+        {"[NOME_1]": "João da Silva", "[CPF_1]": "123.456.789-09"},
+    )
+    fake = _FakeFiling()
+    req = AgentRequest(
+        request_id="f-reid",
+        tenant_id="escritorio-x",
+        operation="file",
+        payload={
+            "numero_cnj": numero_cnj,
+            "tribunal": "tjmg",
+            "tipo_documento": "manifestacao",
+            "draft_markdown": "# Peça\nAutor: [NOME_1]\nCPF: [CPF_1]",
+            "tipo_peticao": "contestacao",
+        },
+    )
+
+    resp = await handle_file_request(
+        req, fake, credentials_resolver=lambda: ("agent-cpf", "agent-senha", "agent-pin")
+    )
+
+    assert resp.success
+    assert fake.seen_draft_markdown is not None
+    assert "João da Silva" in fake.seen_draft_markdown
+    assert "123.456.789-09" in fake.seen_draft_markdown
+    assert "[NOME_1]" not in fake.seen_draft_markdown
+    assert "[CPF_1]" not in fake.seen_draft_markdown
 
 
 @pytest.mark.asyncio

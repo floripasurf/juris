@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 
+from juris.core.deid import iter_structured_pii
+
 _SECRET_ASSIGNMENT_RE = re.compile(
     r"(?i)\b(token|pin|senha|password|secret|api[_-]?key|authorization)\s*=\s*[^\s,;)&]+"
 )
@@ -14,7 +16,13 @@ _URL_CREDENTIALS_RE = re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://)[^/\s:@]+(?::[^/\
 _LOCAL_PATH_RE = re.compile(
     r"(?:(?<=\s)|^)(?:~|/Users|/var|/private|/tmp|/Volumes|/Library|/System)(?:/[^\s,;)]+)+"
 )
-_CPF_RE = re.compile(r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b")
+
+
+def _redact_structured_pii(text: str) -> str:
+    replacements = sorted(set(iter_structured_pii(text)), key=lambda item: len(item[1]), reverse=True)
+    for label, value in replacements:
+        text = text.replace(value, f"<{label.lower()}>")
+    return text
 
 
 def safe_error_text(value: object) -> str:
@@ -31,5 +39,5 @@ def safe_error_text(value: object) -> str:
     text = _AUTH_HEADER_RE.sub(lambda match: f"{match.group(1)}: <redacted>", text)
     text = _SECRET_ASSIGNMENT_RE.sub(lambda match: f"{match.group(1)}=<redacted>", text)
     text = _URL_CREDENTIALS_RE.sub(r"\1<redacted>@", text)
-    text = _CPF_RE.sub("<cpf>", text)
+    text = _redact_structured_pii(text)
     return _LOCAL_PATH_RE.sub("<local-path>", text)

@@ -16,6 +16,7 @@ import re
 from datetime import datetime
 from typing import Any, ClassVar
 
+from juris.core.sanitize import safe_error_text
 from juris.search.adapters import register_adapter
 from juris.search.adapters.base import SearchAdapter
 from juris.search.http import make_portal_client
@@ -97,8 +98,8 @@ class TSTAdapter(SearchAdapter):
                 response = await client.post(url, json=body)
                 response.raise_for_status()
                 data = response.json()
-        except Exception:
-            logger.exception("TST search request failed for query %r", query.value)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("TST search request failed: %s", safe_error_text(exc))
             return []
 
         results: list[SearchResult] = []
@@ -129,7 +130,7 @@ class TSTAdapter(SearchAdapter):
                     fetched_at=datetime.now(),
                 )
                 results.append(result)
-            except Exception:
-                logger.exception("Failed to parse TST result item: %r", item)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Failed to parse TST result item: %s", safe_error_text(exc))
 
         return results

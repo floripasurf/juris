@@ -28,20 +28,89 @@ function fail(request_id, error) {
 // ([CPF_1], [NOME_1]) are safe; raw structured PII means de-id failed, so we refuse.
 // This list MIRRORS the backend de-id patterns (juris/core/deid.py) so the backstop is
 // not narrower than the primary layer it's meant to catch regressions of.
+function digitsOnly(value) {
+  return `${value ?? ""}`.replace(/\D/g, "");
+}
+
+function allSameDigits(digits) {
+  return digits.length > 0 && digits === digits[0].repeat(digits.length);
+}
+
+function validCPF(value) {
+  const digits = digitsOnly(value);
+  if (digits.length !== 11 || allSameDigits(digits)) return false;
+  for (const pos of [9, 10]) {
+    let total = 0;
+    for (let index = 0; index < pos; index += 1) {
+      total += Number(digits[index]) * (pos + 1 - index);
+    }
+    let check = (total * 10) % 11;
+    if (check === 10) check = 0;
+    if (check !== Number(digits[pos])) return false;
+  }
+  return true;
+}
+
+function validCNPJ(value) {
+  const digits = digitsOnly(value);
+  if (digits.length !== 14 || allSameDigits(digits)) return false;
+  const weightsFirst = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  const weightSets = [weightsFirst, [6, ...weightsFirst]];
+  for (const [round, weights] of weightSets.entries()) {
+    const size = round === 0 ? 12 : 13;
+    let total = 0;
+    for (let index = 0; index < size; index += 1) {
+      total += Number(digits[index]) * weights[index];
+    }
+    const remainder = total % 11;
+    const check = remainder < 2 ? 0 : 11 - remainder;
+    if (check !== Number(digits[size])) return false;
+  }
+  return true;
+}
+
+function mod97(value) {
+  let mod = 0;
+  for (const char of value) {
+    mod = (mod * 10 + Number(char)) % 97;
+  }
+  return mod;
+}
+
+function validCNJ(value) {
+  const digits = digitsOnly(value);
+  if (digits.length !== 20 || allSameDigits(digits)) return false;
+  const sequence = digits.slice(0, 7);
+  const checkDigits = digits.slice(7, 9);
+  const yearAndCourt = digits.slice(9);
+  return mod97(`${sequence}${yearAndCourt}${checkDigits}`) === 1;
+}
+
 const RAW_PII = [
-  /\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/, // CPF (formatted)
-  /\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/, // CNPJ (formatted)
-  /\b\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}\b/, // CNJ
-  /\b\d{2}\.\d{3}\.\d{3}-[\dxX]\b/, // RG
-  /\b[\w.+-]+@[\w-]+\.[\w.-]+\b/, // e-mail
-  /\bOAB[/\s][A-Z]{2}\s*(?:n[º°.]?\s*)?\d/i, // OAB number (not the bare word "OAB")
-  /\b\d{5}-\d{3}\b/, // CEP
-  /(?<!\d)(?:\+55\s?)?(?:\(\d{2}\)\s?|\d{2}\s)?\d{4,5}-\d{4}(?!\d)/, // Brazilian phone
+  { re: /\b\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}\b/ }, // CNJ
+  { re: /\b\d{20}\b/, validate: validCNJ }, // CNJ (raw digits)
+  { re: /\b\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}\b/ }, // CNPJ (formatted)
+  { re: /\b\d{14}\b/, validate: validCNPJ }, // CNPJ (raw digits)
+  { re: /\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/ }, // CPF (formatted)
+  { re: /\b\d{11}\b/, validate: validCPF }, // CPF (raw digits)
+  { re: /\b\d{2}\.\d{3}\.\d{3}-[\dxX]\b/ }, // RG
+  { re: /\b[\w.+-]+@[\w-]+\.[\w.-]+\b/ }, // e-mail
+  { re: /\bOAB[/\s][A-Z]{2}\s*(?:n[º°.]?\s*)?\d/i }, // OAB number (not the bare word "OAB")
+  { re: /\b\d{5}-\d{3}\b/ }, // CEP
+  { re: /(?<!\d)(?:\+55\s?)?(?:\(\d{2}\)\s?|\d{2}\s)?\d{4,5}-\d{4}(?!\d)/ }, // Brazilian phone
 ];
 
 export function containsRawPII(text) {
   if (!text) return false;
-  return RAW_PII.some((re) => re.test(text));
+  return RAW_PII.some(({ re, validate }) => {
+    if (!validate) return re.test(text);
+    const flags = re.flags.includes("g") ? re.flags : `${re.flags}g`;
+    const matcher = new RegExp(re.source, flags);
+    for (const match of text.matchAll(matcher)) {
+      if (validate(match[0])) return true;
+    }
+    return false;
+  });
 }
 
 export function assertCloudSafe(request) {

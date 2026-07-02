@@ -5,9 +5,12 @@ from __future__ import annotations
 import pathlib
 
 from juris.mni.pkcs11_transport import (
+    PKCS11Config,
     SOAPResponse,
+    _build_s_client_cmd,
     _decode_chunked,
     _parse_http_response,
+    _server_verify_failed,
     extract_soap_body,
 )
 
@@ -213,6 +216,69 @@ class TestEngineConf:
             assert oct(os.stat(path).st_mode)[-3:] == "600"
         finally:
             os.unlink(path)
+
+
+class TestPkcs11TLSVerification:
+    """Server TLS verification for token-backed MNI calls."""
+
+    def test_s_client_command_verifies_server_hostname_and_keeps_client_chain_separate(self) -> None:
+        cfg = PKCS11Config(
+            openssl_bin="openssl",
+            key_uri="pkcs11:token=T;id=%01;type=private",
+            cert_pem_path="fixtures/client.pem",
+            chain_pem_path="fixtures/client-chain.pem",
+            server_ca_pem_path="fixtures/server-ca.pem",
+        )
+        cmd = _build_s_client_cmd("pje.example.test", cfg)
+
+        assert "-verify_return_error" in cmd
+        assert cmd[cmd.index("-verify_hostname") + 1] == "pje.example.test"
+        assert cmd[cmd.index("-cert_chain") + 1] == "fixtures/client-chain.pem"
+        assert cmd[cmd.index("-CAfile") + 1] == "fixtures/server-ca.pem"
+
+    def test_s_client_command_can_disable_server_verification_only_explicitly(self) -> None:
+        cfg = PKCS11Config(verify_server=False)
+        cmd = _build_s_client_cmd("pje.example.test", cfg)
+
+        assert "-verify_return_error" not in cmd
+        assert "-verify_hostname" not in cmd
+
+    def test_server_verify_failed_detector(self) -> None:
+        assert not _server_verify_failed("Verification: OK\nVerify return code: 0 (ok)")
+        assert _server_verify_failed("verify error:num=20:unable to get local issuer certificate")
+        assert _server_verify_failed("Verify return code: 18 (self-signed certificate)")
+
+    def test_pkcs11_soap_call_raises_on_server_certificate_failure(self, monkeypatch, tmp_path) -> None:
+        import subprocess
+
+        from juris.mni import pkcs11_transport
+
+        def fake_run(*_args, **_kwargs):
+            return subprocess.CompletedProcess(
+                args=["openssl"],
+                returncode=1,
+                stdout=b"",
+                stderr=b"verify error:num=20:unable to get local issuer certificate\n",
+            )
+
+        monkeypatch.setattr(pkcs11_transport.subprocess, "run", fake_run)
+        cfg = PKCS11Config(
+            pkcs11_module="fixtures/pkcs11.dylib",
+            pin="1234",
+            cert_pem_path=str(tmp_path / "client.pem"),
+            key_uri="pkcs11:token=T;id=%01;type=private",
+            openssl_bin="openssl",
+        )
+
+        import pytest
+
+        with pytest.raises(RuntimeError, match="TLS server certificate verification failed"):
+            pkcs11_transport.pkcs11_soap_call(
+                "pje.example.test",
+                "/pje/intercomunicacao",
+                "<soap/>",
+                cfg,
+            )
 
 
 class TestConsultaResultRealResponse:

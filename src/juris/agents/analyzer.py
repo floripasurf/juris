@@ -211,7 +211,7 @@ async def analyze_processo(
             try:
                 result = await analyze_movimento_llm(mov, numero_cnj, tribunal, llm)
                 llm_calls += 1
-            except Exception:
+            except Exception:  # noqa: BLE001
                 logger.warning("llm_classify_failed", movimento_id=rule_result.movimento_id)
                 result = rule_result
                 rule_classified += 1

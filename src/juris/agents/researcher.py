@@ -114,7 +114,7 @@ class Researcher:
                 for line in response.content.strip().split("\n")
                 if line.strip() and len(line.strip()) > 10
             ][:3]
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning("antithesis_generation_failed")
             phrasings = [f"improcedencia {query.thesis}"]
 

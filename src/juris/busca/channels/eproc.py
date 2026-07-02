@@ -11,6 +11,7 @@ from juris.busca.abc import SearchChannel
 from juris.busca.models import FonteOrigem, ResultadoBusca
 from juris.busca.retry import busca_circuit_breaker
 from juris.core.observability import get_logger
+from juris.core.sanitize import safe_error_text
 
 logger = get_logger(__name__)
 
@@ -124,7 +125,7 @@ class EprocChannel(SearchChannel):
 
         except (httpx.HTTPError, httpx.TimeoutException, ConnectionError, OSError) as exc:
             busca_circuit_breaker.record_failure(tribunal_id)
-            logger.warning("eproc_request_failed", tribunal_id=tribunal_id, error=str(exc))
+            logger.warning("eproc_request_failed", tribunal_id=tribunal_id, error=safe_error_text(exc))
             return []
 
     def _parse_trf4_json(
@@ -191,7 +192,7 @@ class EprocChannel(SearchChannel):
 
         except (httpx.HTTPError, httpx.TimeoutException, ConnectionError, OSError) as exc:
             busca_circuit_breaker.record_failure(tribunal_id)
-            logger.warning("eproc_request_failed", tribunal_id=tribunal_id, error=str(exc))
+            logger.warning("eproc_request_failed", tribunal_id=tribunal_id, error=safe_error_text(exc))
             return []
 
     def _parse_html_results(

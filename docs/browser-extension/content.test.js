@@ -32,9 +32,12 @@ describe("connectionStatus (handshake)", () => {
 describe("de-id enforcement (cloud-safe handshake)", () => {
   it("flags raw CPF / CNPJ / e-mail / CNJ / OAB / RG / CEP / phone as PII", () => {
     expect(containsRawPII("CPF 123.456.789-09")).toBe(true);
+    expect(containsRawPII("CPF 12345678909")).toBe(true);
     expect(containsRawPII("CNPJ 12.345.678/0001-90")).toBe(true);
+    expect(containsRawPII("CNPJ 11222333000181")).toBe(true);
     expect(containsRawPII("contato joao@escritorio.adv.br")).toBe(true);
     expect(containsRawPII("processo 5082351-40.2017.8.13.0024")).toBe(true);
+    expect(containsRawPII("processo 50823514020178130024")).toBe(true);
     expect(containsRawPII("OAB/MG 123456")).toBe(true);
     // These were silently passing before the backstop was aligned with the backend de-id.
     expect(containsRawPII("RG 12.345.678-9")).toBe(true);
@@ -46,6 +49,12 @@ describe("de-id enforcement (cloud-safe handshake)", () => {
     expect(
       containsRawPII("Autor [NOME_1], CPF [CPF_1], RG [RG_1], CEP [CEP_1], tel [TELEFONE_1], OAB sob [OAB_1]"),
     ).toBe(false);
+  });
+
+  it("does not treat arbitrary unformatted numbers as raw CPF/CNPJ/CNJ", () => {
+    expect(containsRawPII("pedido 12345678901, contrato 11111111111")).toBe(false);
+    expect(containsRawPII("nota 12345678901234, lote 12345678901234567890")).toBe(false);
+    expect(containsRawPII("pedido 11111111111 e CPF 12345678909")).toBe(true);
   });
 
   it("refuses a request without the deidentified attestation", () => {

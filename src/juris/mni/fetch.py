@@ -15,6 +15,7 @@ passed in already resolved — it never prompts.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
@@ -147,6 +148,9 @@ def _mtls_pkcs11_config(
 
     material = extract_token_material(settings.pkcs11_module)
     pkcs11_config = build_pkcs11_config(material, pin, settings.pkcs11_module)
+    server_ca = getattr(settings, "mni_server_ca_pem_path", "")
+    if isinstance(server_ca, str) and server_ca.strip():
+        pkcs11_config = replace(pkcs11_config, server_ca_pem_path=server_ca)
 
     service_url = tribunal_cfg.service_url_override or tribunal_cfg.wsdl_url.replace("?wsdl", "")
     parsed = urlparse(service_url)

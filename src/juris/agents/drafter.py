@@ -160,7 +160,7 @@ class DrafterAgent:
                 defesa_report = await self._defesa_analyzer.analyze(context)
                 defesa_text = f"## ANALISE DE DEFESAS\n{defesa_report.summary}\n\n"
                 analise_adversario = defesa_report.summary  # Módulo D — feed the strategy
-            except Exception:
+            except Exception:  # noqa: BLE001
                 logger.warning(
                     "defesa_analysis_failed", numero_cnj=request.numero_cnj
                 )
@@ -213,7 +213,7 @@ class DrafterAgent:
                         numero_cnj=request.numero_cnj,
                         avisos=estrategia.avisos_deontologicos,
                     )
-            except Exception:
+            except Exception:  # noqa: BLE001
                 logger.warning("estrategia_failed", numero_cnj=request.numero_cnj)
 
         # Step 5: Style retrieval (from petition templates if available)
@@ -237,7 +237,7 @@ class DrafterAgent:
                         "template_id": best.id,
                         "template_titulo": best.titulo,
                     }, result)
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.debug("style_retrieval_skipped")
 
         # Step 5b: Template scaffold from corpus (MODELO_PETICAO)
@@ -268,7 +268,7 @@ class DrafterAgent:
                         self._log_audit("draft.template_scaffold", request.numero_cnj, {
                             "template_source_id": template_result.source_id,
                         }, result)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 logger.debug("template_scaffold_skipped")
 
         # Step 6+7: Generate and verify (with revision loop)
@@ -425,7 +425,7 @@ class DrafterAgent:
                         },
                         result,
                     )
-            except Exception:
+            except Exception:  # noqa: BLE001
                 logger.warning(
                     "review_after_draft_failed", numero_cnj=request.numero_cnj
                 )
@@ -586,7 +586,7 @@ class DrafterAgent:
                 max_tokens=256,
             )
             return response.content.strip()
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning("thesis_inference_failed")
             return f"Defesa em {request.tipo_peticao.value}"
 

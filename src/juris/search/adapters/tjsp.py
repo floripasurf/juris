@@ -13,6 +13,7 @@ from typing import ClassVar
 
 from bs4 import BeautifulSoup
 
+from juris.core.sanitize import safe_error_text
 from juris.search.adapters import register_adapter
 from juris.search.adapters.base import SearchAdapter
 from juris.search.http import make_portal_client
@@ -74,8 +75,8 @@ class TJSPAdapter(SearchAdapter):
                 resp.raise_for_status()
 
             return self._parse(resp.text, query)
-        except Exception:
-            logger.warning("TJSP search failed", exc_info=True)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("TJSP search failed: %s", safe_error_text(exc))
             return []
 
     def _extract_viewstate(self, html: str) -> str | None:
@@ -155,8 +156,8 @@ class TJSPAdapter(SearchAdapter):
                         fetched_at=datetime.now(),
                     )
                 )
-            except Exception:
-                logger.debug("TJSP: failed to parse row", exc_info=True)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("TJSP: failed to parse row: %s", safe_error_text(exc))
                 continue
 
         return results[: query.max_results_per_court]

@@ -20,6 +20,7 @@ from juris.busca.providers import get_profile
 from juris.busca.registry import ChannelRegistry
 from juris.busca.retry import busca_circuit_breaker
 from juris.core.observability import get_logger
+from juris.core.sanitize import safe_error_text
 from juris.datajud.safety import ensure_batch_allowed
 from juris.mni.retry import CircuitBreaker
 
@@ -137,9 +138,14 @@ class SearchOrchestrator:
                     self._breaker.record_success(key)
                     canais_set.add(ch.channel_name)
                     return results
-                except Exception:
+                except Exception as exc:  # noqa: BLE001
                     self._breaker.record_failure(key)
-                    logger.exception("channel_error", tribunal=tid, channel=ch.channel_name.value)
+                    logger.warning(
+                        "channel_error",
+                        tribunal=tid,
+                        channel=ch.channel_name.value,
+                        error=safe_error_text(exc),
+                    )
                     if tid not in tribunais_com_erro:
                         tribunais_com_erro.append(tid)
                     return []

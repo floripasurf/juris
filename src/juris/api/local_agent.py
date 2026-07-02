@@ -44,10 +44,10 @@ def _deid_reads_enabled() -> bool:
     """ADR-0016: redact processo PII at the agent BEFORE the read result crosses to
     the cloud (the re-id map stays local, in :mod:`juris.api.reid_store`).
 
-    Off by default. Enabling it in Phase-2 SaaS is only complete once the final
-    petition is rendered/signed on the AGENT side, where the local map re-identifies
-    it — otherwise the cloud would render a placeholder-bearing PDF. Until then the
-    cloud console legitimately shows de-identified case data.
+    Off by default. In Phase-2 SaaS, the final petition is rendered/signed on the
+    AGENT side; the filing handler re-identifies the draft from this local map
+    immediately before render/sign/file, so the cloud console can stay
+    placeholder-bearing without producing a placeholder-bearing PDF.
     """
     return os.environ.get("JURIS_AGENT_DEID_READS", "").strip().lower() in {"1", "true", "yes"}
 _AGENT_PROCESSING_ERROR = "Falha ao processar requisição no agente local."
@@ -326,7 +326,7 @@ async def signing_socket(ws: WebSocket) -> None:
             data = await ws.receive_text()
             try:
                 request = SignRequest.model_validate_json(data)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 response = SignResponse(
                     request_id="unknown",
                     success=False,

@@ -49,6 +49,8 @@ def test_index_renders_local_ui() -> None:
     assert 'data-nav="mesa"' in response.text
     assert 'data-nav="protocolo"' in response.text
     assert "renderWorkbench" in response.text
+    assert "renderSyncStatus" in response.text
+    assert "Nightly sem execução registrada" in response.text
     assert "/api/workbench" in response.text
     assert "Prazos críticos" in response.text
     assert "runMeta" in response.text
@@ -83,6 +85,7 @@ def test_index_renders_local_ui() -> None:
     assert "/api/filing/artifacts/content" in response.text
     assert "/api/filing/pending/recovery" in response.text
     assert "/api/filing/pending/archive" in response.text
+    assert "/api/filing/pending/retry" in response.text
     assert "/api/filing/dry-run" in response.text
     assert "/api/filing/submit" in response.text
     assert "loadFilingArtifacts" in response.text
@@ -350,6 +353,93 @@ def test_filing_pending_recovery_and_archive_endpoints(monkeypatch, tmp_path) ->
     assert client.get("/api/filing/status").json()["pending"] == []
 
 
+def test_filing_pending_retry_endpoint_requires_reconciliation(monkeypatch, tmp_path) -> None:
+    from juris.mni.operations.peticionamento import FilingReceipt
+    from juris.web import filing_console
+
+    monkeypatch.setenv("JURIS_HOME", str(tmp_path))
+    pending = tmp_path / "filings" / "1234567_89_2026_8_13_0001" / "20260701_pending"
+    pending.mkdir(parents=True)
+    signed = b"%PDF signed"
+    signed_hash = hashlib.sha256(signed).hexdigest()
+    (pending / "signed.pdf").write_bytes(signed)
+    (pending / "hashes.json").write_text(
+        json.dumps({"pdf_hash": "render", "signed_pdf_hash": signed_hash}),
+        encoding="utf-8",
+    )
+    (pending / "metadata.json").write_text(
+        json.dumps(
+            {
+                "numero_cnj": "1234567-89.2026.8.13.0001",
+                "tribunal": "tjmg",
+                "tipo_documento": "manifestacao",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_submit(tribunal, cpf, senha, numero_cnj, signed_pdf, tipo_documento):  # noqa: ANN001, ANN202
+        assert tribunal == "tjmg"
+        assert cpf == "07671039632"
+        assert senha == "senha-local"
+        assert numero_cnj == "1234567-89.2026.8.13.0001"
+        assert signed_pdf == signed
+        assert tipo_documento == "manifestacao"
+        return FilingReceipt(
+            sucesso=True,
+            mensagem="protocolado",
+            protocolo="PJE-123",
+            numero_processo=numero_cnj,
+            pdf_hash="pdf",
+        )
+
+    monkeypatch.setattr(filing_console, "_submit_pending_via_mni", fake_submit)
+
+    blocked = client.post(
+        "/api/filing/pending/retry",
+        json={
+            "pending_key": "1234567_89_2026_8_13_0001/20260701_pending",
+            "cpf": "07671039632",
+            "senha": "senha-local",
+            "confirm_no_existing_protocol": False,
+        },
+    )
+    retried = client.post(
+        "/api/filing/pending/retry",
+        json={
+            "pending_key": "1234567_89_2026_8_13_0001/20260701_pending",
+            "cpf": "07671039632",
+            "senha": "senha-local",
+            "confirm_no_existing_protocol": True,
+        },
+    )
+
+    assert blocked.status_code == 400
+    assert "confirmação" in blocked.json()["detail"]
+    assert retried.status_code == 200, retried.text
+    assert retried.json()["receipt"]["protocolo"] == "PJE-123"
+    assert retried.json()["safe_to_retry_again"] is False
+    assert str(tmp_path) not in retried.text
+    assert client.get("/api/filing/status").json()["pending"] == []
+
+
+def test_filing_pending_retry_endpoint_rejects_remote_mode(monkeypatch) -> None:
+    monkeypatch.setenv("JURIS_AGENT_MODE", "remote")
+
+    response = client.post(
+        "/api/filing/pending/retry",
+        json={
+            "pending_key": "cnj/20260701_pending",
+            "cpf": "07671039632",
+            "senha": "senha-local",
+            "confirm_no_existing_protocol": True,
+        },
+    )
+
+    assert response.status_code == 400
+    assert "agente local" in response.json()["detail"]
+
+
 def test_filing_artifact_endpoints_are_confined(monkeypatch, tmp_path) -> None:
     app_module = importlib.import_module("juris.web.app")
     case_dir = tmp_path / "CASE-1"
@@ -392,6 +482,69 @@ def test_filing_artifact_endpoints_are_confined(monkeypatch, tmp_path) -> None:
     assert content.json()["sha256"] == digest
     assert str(tmp_path) not in content.text
     assert traversal.status_code == 400
+
+
+def test_filing_flow_uses_loaded_artifact_for_dry_run_and_submit(monkeypatch, tmp_path) -> None:
+    """E2E web seam: generated draft artifact -> dry-run -> reviewed submit."""
+    import juris.signing.filing_service as filing_service
+
+    app_module = importlib.import_module("juris.web.app")
+    case_dir = tmp_path / "CASE-FILING"
+    case_dir.mkdir()
+    draft = "# Contestação\n\nMinuta revisada pelo advogado."
+    digest = hashlib.sha256(draft.encode("utf-8")).hexdigest()
+    (case_dir / "draft.md").write_text(draft, encoding="utf-8")
+    (case_dir / "run-manifest.json").write_text(
+        json.dumps(
+            {
+                "finished_at": "2026-07-01T09:00:00",
+                "output_mode": "minuta-sugerida",
+                "request": {
+                    "numero_cnj": "0001234-56.2026.8.13.0001",
+                    "tribunal": "tjmg",
+                    "tipo_peticao": "contestacao",
+                },
+                "draft": {"grounding_status": "verified"},
+                "artifacts": [{"name": "draft.md", "sha256": digest}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    service = _FakeFilingService()
+    monkeypatch.setattr(app_module, "_out_root", lambda: tmp_path)
+    monkeypatch.setattr(filing_service, "get_filing_service", lambda tenant_id="public", **kwargs: service)
+
+    listed = client.get("/api/filing/artifacts")
+    artifact = listed.json()["artifacts"][0]
+    loaded = client.post(
+        "/api/filing/artifacts/content",
+        json={"output_dir": artifact["output_dir"], "artifact_name": artifact["artifact_name"]},
+    )
+    loaded_draft = loaded.json()["content"]
+    dry_run = client.post(
+        "/api/filing/dry-run",
+        json=_filing_payload(draft_markdown=loaded_draft, review_confirmed=False, consent=False),
+    )
+    submit = client.post(
+        "/api/filing/submit",
+        json=_filing_payload(draft_markdown=loaded_draft, review_confirmed=True, consent=True),
+    )
+
+    assert listed.status_code == 200
+    assert loaded.status_code == 200
+    assert loaded_draft == draft
+    assert dry_run.status_code == 200, dry_run.text
+    assert submit.status_code == 200, submit.text
+    assert submit.json()["receipt"]["protocolo"] == "PROT-1"
+    assert submit.json()["chain_of_custody"]["signed_pdf_hash"] == "signed"
+    assert len(service.calls) == 2
+    dry_request, _dry_pin = service.calls[0]
+    submit_request, submit_pin = service.calls[1]
+    assert dry_request.dry_run is True
+    assert submit_request.dry_run is False
+    assert dry_request.draft_markdown == draft
+    assert submit_request.draft_markdown == draft
+    assert submit_pin == "1234"
 
 
 def test_filing_dry_run_uses_service_without_consent_requirement(monkeypatch) -> None:
@@ -508,8 +661,13 @@ def test_processo_detail_endpoint_returns_detail(monkeypatch) -> None:
     from juris.web.processos_service import MovimentoView, ProcessoDetailView
 
     detail = ProcessoDetailView(
-        numero_cnj="A", tribunal="tjmg", classe="Apelação", assunto="Dano",
-        orgao_julgador="3ª Câmara", valor_causa=1000.0, last_sync_at=None,
+        numero_cnj="A",
+        tribunal="tjmg",
+        classe="Apelação",
+        assunto="Dano",
+        orgao_julgador="3ª Câmara",
+        valor_causa=1000.0,
+        last_sync_at=None,
         movimentos=[MovimentoView(data_hora=None, descricao="Julgamento", tipo="m", categoria="decisao")],
         prazos=[],
     )
@@ -543,15 +701,17 @@ def test_prazos_endpoint_returns_agenda(monkeypatch) -> None:
 
 def test_workbench_endpoint_returns_daily_queues(monkeypatch, tmp_path) -> None:
     app_module = importlib.import_module("juris.web.app")
+    db = SimpleNamespace(get_sync_overview=lambda: {"last_run": None, "total_runs": 0})
 
-    monkeypatch.setattr(app_module, "_tenant_db", lambda tenant: "db")
+    monkeypatch.setattr(app_module, "_tenant_db", lambda tenant: db)
     monkeypatch.setattr(app_module, "_out_root", lambda: tmp_path)
     monkeypatch.setattr(app_module, "list_processos", lambda db=None: [])
     monkeypatch.setattr(app_module, "list_prazos", lambda db=None: [])
     monkeypatch.setattr(
         app_module,
         "build_workbench",
-        lambda *, processos, prazos, out_root, filing_root=None: {
+        lambda *, processos, prazos, out_root, filing_root=None, sync_status=None: {
+            "sync_status": sync_status,
             "critical_deadlines": [],
             "recent_movements": [],
             "draft_ready": [],
@@ -565,6 +725,7 @@ def test_workbench_endpoint_returns_daily_queues(monkeypatch, tmp_path) -> None:
 
     assert response.status_code == 200
     assert response.json()["blocked_cases"][0]["numero_cnj"] == "A"
+    assert response.json()["sync_status"]["total_runs"] == 0
 
 
 def test_pilot_feedback_endpoints_are_tenant_scoped(monkeypatch, tmp_path) -> None:
@@ -877,6 +1038,21 @@ def test_validate_startup_config_fails_closed_without_tenants(monkeypatch) -> No
         auth.default_registry.cache_clear()
 
 
+def test_validate_startup_config_prod_fails_closed_without_tenants(monkeypatch) -> None:
+    from juris.web import auth
+
+    app_module = importlib.import_module("juris.web.app")
+    monkeypatch.delenv("JURIS_REQUIRE_TENANTS", raising=False)
+    monkeypatch.setenv("ENVIRONMENT", "prod")
+    monkeypatch.delenv("JURIS_TENANTS_FILE", raising=False)
+    auth.default_registry.cache_clear()
+    try:
+        with pytest.raises(RuntimeError, match="JURIS_TENANTS_FILE"):
+            app_module.validate_startup_config()
+    finally:
+        auth.default_registry.cache_clear()
+
+
 def test_validate_startup_config_requires_agent_binding_per_tenant(tmp_path, monkeypatch) -> None:
     from juris.api.agent_config import _load_agent_bindings
     from juris.web import auth
@@ -938,6 +1114,27 @@ def test_api_rate_limit_groups_invalid_keys_by_client(tmp_path, monkeypatch) -> 
     assert first.status_code == 401
     assert blocked.status_code == 429
     assert blocked.json()["detail"]["code"] == "rate_limited"
+
+
+def test_expensive_api_rate_limit_has_separate_bucket(monkeypatch) -> None:
+    app_module = importlib.import_module("juris.web.app")
+    from juris.web.rate_limit import FixedWindowRateLimiter
+
+    standard = FixedWindowRateLimiter(limit=1, window_seconds=60)
+    expensive = FixedWindowRateLimiter(limit=1, window_seconds=60)
+    monkeypatch.setattr(app_module, "_api_rate_limiter", lambda: standard)
+    monkeypatch.setattr(app_module, "_api_expensive_rate_limiter", lambda: expensive)
+
+    first_expensive = client.post("/api/filing/dry-run", headers={"X-API-Key": "a"}, json={})
+    blocked_expensive = client.post("/api/filing/dry-run", headers={"X-API-Key": "a"}, json={})
+    standard_after_expensive = client.get("/api/agent-mode", headers={"X-API-Key": "a"})
+    blocked_standard = client.get("/api/agent-mode", headers={"X-API-Key": "a"})
+
+    assert first_expensive.status_code == 422  # body validation happens after rate-limit
+    assert blocked_expensive.status_code == 429
+    assert blocked_expensive.json()["detail"]["code"] == "rate_limited"
+    assert standard_after_expensive.status_code == 200
+    assert blocked_standard.status_code == 429
 
 
 def test_connect_job_hidden_from_non_owner(monkeypatch, tmp_path) -> None:
@@ -1350,6 +1547,33 @@ def test_uncaught_exception_returns_sanitized_500(monkeypatch) -> None:
     assert logged["exception_type"] == "RuntimeError"
 
 
+def test_agent_relay_rate_limit_blocks_handshake(monkeypatch) -> None:
+    from fastapi import WebSocketDisconnect
+
+    from juris.web.rate_limit import RateLimitDecision
+
+    app_module = importlib.import_module("juris.web.app")
+
+    class _BlockingLimiter:
+        @property
+        def enabled(self) -> bool:
+            return True
+
+        def check(self, key: str, *, now: float | None = None) -> RateLimitDecision:
+            assert key.startswith("tenant:public:host:")
+            return RateLimitDecision(False, 60)
+
+    monkeypatch.setattr(app_module, "_ws_agent_relay_rate_limiter", lambda: _BlockingLimiter())
+
+    with (
+        pytest.raises(WebSocketDisconnect) as excinfo,
+        client.websocket_connect("/ws/agent-relay?tenant=public"),
+    ):
+        pass
+
+    assert excinfo.value.code == 4008
+
+
 def test_agent_relay_rejects_bad_token(monkeypatch) -> None:
     from fastapi import WebSocketDisconnect
 
@@ -1494,8 +1718,14 @@ def test_processos_pagination_returns_page_and_total(monkeypatch) -> None:
 
     views = [
         ProcessoView(
-            numero_cnj=f"case-{i}", tribunal="tjmg", classe="", assunto="",
-            last_sync_at=None, prazos_pendentes=0, proximo_prazo=None, proximo_prazo_urgencia=None,
+            numero_cnj=f"case-{i}",
+            tribunal="tjmg",
+            classe="",
+            assunto="",
+            last_sync_at=None,
+            prazos_pendentes=0,
+            proximo_prazo=None,
+            proximo_prazo_urgencia=None,
         )
         for i in range(5)
     ]

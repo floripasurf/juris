@@ -8,6 +8,7 @@ from typing import Any
 from xml.etree import ElementTree as ET
 
 from juris.core.observability import get_logger
+from juris.core.sanitize import safe_error_text
 from juris.core.types import NumeroCNJ
 from juris.mni.parsers.processo import Documento, Movimento, Parte, ProcessoDomain
 from juris.mni.pkcs11_transport import (
@@ -303,10 +304,10 @@ def _parse_response(response: SOAPResponse, numero_cnj: str) -> ConsultaResult:
     try:
         root = ET.fromstring(xml_body)  # noqa: S314 — tribunal-controlled SOAP, not arbitrary input
     except ET.ParseError as e:
-        logger.error("xml_parse_error", error=str(e), body_preview=xml_body[:200])
+        logger.error("xml_parse_error", error=safe_error_text(e), body_preview=safe_error_text(xml_body[:200]))
         return ConsultaResult(
             sucesso=False,
-            mensagem=f"XML parse error: {e}",
+            mensagem=f"XML parse error: {safe_error_text(e)}",
             raw_xml=xml_body,
         )
 

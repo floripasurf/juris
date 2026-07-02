@@ -8,6 +8,7 @@ from typing import ClassVar
 
 from bs4 import BeautifulSoup
 
+from juris.core.sanitize import safe_error_text
 from juris.search.adapters import register_adapter
 from juris.search.adapters.base import SearchAdapter
 from juris.search.http import make_portal_client
@@ -71,16 +72,16 @@ class STJAdapter(SearchAdapter):
                 response = await client.get(_SEARCH_URL, params=params)
                 response.raise_for_status()
                 html = response.text
-        except Exception:
-            logger.exception("STJ search request failed for query %r", query.value)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("STJ search request failed: %s", safe_error_text(exc))
             return []
 
         results: list[SearchResult] = []
         try:
             soup = BeautifulSoup(html, "html.parser")
             divs = soup.select("div.divResult")
-        except Exception:
-            logger.exception("STJ HTML parsing failed")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("STJ HTML parsing failed: %s", safe_error_text(exc))
             return []
 
         for div in divs:
@@ -129,7 +130,7 @@ class STJAdapter(SearchAdapter):
                     fetched_at=datetime.now(),
                 )
                 results.append(result)
-            except Exception:
-                logger.exception("Failed to parse STJ result div")
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Failed to parse STJ result div: %s", safe_error_text(exc))
 
         return results

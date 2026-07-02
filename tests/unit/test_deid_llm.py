@@ -55,6 +55,13 @@ def test_model_name_passthrough() -> None:
     assert DeidentifyingLLM(_Delegate("x")).model_name == "claude-test"
 
 
+@pytest.mark.asyncio
+async def test_default_constructor_fails_closed_on_partial_deid() -> None:
+    llm = DeidentifyingLLM(_Delegate("x"))
+    with pytest.raises(ValueError, match="parcial"):
+        await llm.complete("Pedido simples sem NER.")
+
+
 def test_cloud_safe_llm_uses_ner_and_fails_closed_by_default() -> None:
     from juris.core.deid_llm import cloud_safe_llm
 

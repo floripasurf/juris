@@ -56,7 +56,7 @@ async def test_ai_of_preference_deidentifies_before_the_browser_and_falls_back()
         def model_name(self):
             return "browser"
 
-    llm = build_ai_of_preference(_CapturingBrowser(), _StubLLM("cloud"))
+    llm = build_ai_of_preference(_CapturingBrowser(), _StubLLM("cloud"), allow_partial=True)
     await llm.complete("O CPF do autor é 529.982.247-25 e o nome é João da Silva.")
     # mandatory de-id: the raw CPF must NOT reach the browser session
     assert "529.982.247-25" not in seen["prompt"]
@@ -66,7 +66,7 @@ async def test_ai_of_preference_deidentifies_before_the_browser_and_falls_back()
 async def test_ai_of_preference_falls_back_when_browser_session_dies() -> None:
     from juris.core.fallback_llm import build_ai_of_preference
 
-    llm = build_ai_of_preference(_StubLLM("browser", fail=True), _StubLLM("cloud"))
+    llm = build_ai_of_preference(_StubLLM("browser", fail=True), _StubLLM("cloud"), allow_partial=True)
     resp = await llm.complete("texto")
     assert resp.content == "cloud:texto"  # browser died → cloud fallback
 
@@ -89,7 +89,7 @@ async def test_fallback_path_is_also_deidentified_by_default() -> None:
             return "cloud"
 
     # browser dies → falls back; the CPF must NOT reach the fallback either
-    llm = build_ai_of_preference(_StubLLM("browser", fail=True), _CapturingFallback())
+    llm = build_ai_of_preference(_StubLLM("browser", fail=True), _CapturingFallback(), allow_partial=True)
     await llm.complete("O CPF do autor é 529.982.247-25.")
     assert "529.982.247-25" not in seen["prompt"]
 
@@ -110,6 +110,11 @@ async def test_local_fallback_opts_out_of_deid() -> None:
             return "ollama"
 
     # a local model keeps PII in-perimeter — de-id is skipped so it isn't redacted needlessly
-    llm = build_ai_of_preference(_StubLLM("browser", fail=True), _CapturingLocal(), fallback_is_local=True)
+    llm = build_ai_of_preference(
+        _StubLLM("browser", fail=True),
+        _CapturingLocal(),
+        allow_partial=True,
+        fallback_is_local=True,
+    )
     await llm.complete("O CPF do autor é 529.982.247-25.")
     assert "529.982.247-25" in seen["prompt"]

@@ -10,6 +10,7 @@ from juris.busca.abc import SearchChannel
 from juris.busca.models import FonteOrigem, ResultadoBusca
 from juris.busca.retry import busca_circuit_breaker
 from juris.core.observability import get_logger
+from juris.core.sanitize import safe_error_text
 
 logger = get_logger(__name__)
 
@@ -261,7 +262,7 @@ class EsajChannel(SearchChannel):
                 "esaj_fetch_error",
                 tribunal=tribunal_id,
                 grau=grau,
-                error=str(exc),
+                error=safe_error_text(exc),
             )
             busca_circuit_breaker.record_failure(tribunal_id)
             return []

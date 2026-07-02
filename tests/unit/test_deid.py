@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from juris.core.deid import deidentify, ensure_cloud_safe, reidentify
+from juris.core.deid import DeidResult, contains_structured_pii, deidentify, ensure_cloud_safe, reidentify
 
 
 def test_strips_structured_identifiers() -> None:
@@ -18,6 +18,28 @@ def test_strips_structured_identifiers() -> None:
     # placeholders are present and reversible
     assert "[CPF_1]" in result.text
     assert result.mapping["[CPF_1]"] == "123.456.789-09"
+
+
+def test_strips_raw_digit_identifiers_with_check_digits() -> None:
+    text = "CPF 12345678909, CNPJ 11222333000181, CNJ 50823514020178130024."
+    result = deidentify(text)
+
+    assert "12345678909" not in result.text
+    assert "11222333000181" not in result.text
+    assert "50823514020178130024" not in result.text
+    assert "[CPF_1]" in result.text
+    assert "[CNPJ_1]" in result.text
+    assert "[CNJ_1]" in result.text
+    assert reidentify(result.text, result.mapping) == text
+
+
+def test_raw_digit_detection_avoids_obvious_false_positives() -> None:
+    text = "Pedido 12345678901, contrato 11111111111, nota 12345678901234."
+    result = deidentify(text)
+
+    assert result.text == text
+    assert result.mapping == {}
+    assert not contains_structured_pii(text)
 
 
 def test_round_trip_restores_original() -> None:
@@ -68,6 +90,12 @@ def test_ensure_cloud_safe_allows_complete_or_explicit_override() -> None:
     ensure_cloud_safe(complete)  # does not raise
     partial = deidentify("CPF 123.456.789-09.")
     ensure_cloud_safe(partial, allow_partial=True)  # explicit opt-in, no raise
+
+
+def test_ensure_cloud_safe_blocks_residual_raw_structured_pii() -> None:
+    unsafe = DeidResult(text="CPF residual 12345678909.", complete=True)
+    with pytest.raises(ValueError, match="CPF"):
+        ensure_cloud_safe(unsafe)
 
 
 def test_oab_dotted_and_prefixed_forms_fully_redacted() -> None:

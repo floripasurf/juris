@@ -36,7 +36,9 @@ class PKCS11Config:
     pkcs11_module: str = _PKCS11_MODULE_DEFAULT
     pin: str = ""
     cert_pem_path: str = ""  # Path to exported user cert PEM
-    chain_pem_path: str = ""  # Path to CA chain PEM (optional)
+    chain_pem_path: str = ""  # Path to client cert chain PEM (optional)
+    server_ca_pem_path: str = ""  # Optional server trust bundle; default OpenSSL store otherwise
+    verify_server: bool = True
     key_uri: str = ""  # PKCS#11 URI for the private key
     openssl_bin: str = _OPENSSL_BIN
 
@@ -101,26 +103,7 @@ def pkcs11_soap_call(
     # engine section is the mechanism the SafeNet token accepts.
     openssl_conf = _write_engine_conf(config)
     try:
-        cmd = [
-            config.openssl_bin,
-            "s_client",
-            "-engine",
-            "pkcs11",
-            "-keyform",
-            "engine",
-            "-key",
-            config.key_uri,
-            "-cert",
-            config.cert_pem_path,
-            "-connect",
-            f"{host}:443",
-            "-servername",
-            host,
-            "-quiet",  # implies -ign_eof, so the full response is read
-        ]
-
-        if config.chain_pem_path:
-            cmd.extend(["-CAfile", config.chain_pem_path])
+        cmd = _build_s_client_cmd(host, config)
 
         env = os.environ.copy()
         env["OPENSSL_CONF"] = openssl_conf
@@ -154,14 +137,62 @@ def pkcs11_soap_call(
     if "pin incorrect" in stderr.lower():
         msg = "Token PIN incorrect — refusing to retry to avoid locking the token."
         raise RuntimeError(msg)
+    if result.returncode != 0 and _server_verify_failed(stderr):
+        msg = "TLS server certificate verification failed in PKCS#11 MNI transport."
+        raise RuntimeError(msg)
+    if _server_verify_failed(stderr):
+        msg = "TLS server certificate verification failed in PKCS#11 MNI transport."
+        raise RuntimeError(msg)
+    if result.returncode != 0:
+        msg = f"PKCS#11 SOAP call failed with openssl exit code {result.returncode}"
+        raise RuntimeError(msg)
     if "error" in stderr.lower() and "verify" not in stderr.lower():
-        # Log non-verification errors (TLS verify warnings are expected: the
-        # server cert chains to DigiCert, not the ICP-Brasil CAs on the token).
         for line in stderr.split("\n"):
             if "error" in line.lower():
                 logger.warning("pkcs11_stderr", line=line.strip())
 
     return _parse_http_response(result.stdout)
+
+
+def _build_s_client_cmd(host: str, config: PKCS11Config) -> list[str]:
+    """Build the OpenSSL command for the token-backed mTLS call."""
+    cmd = [
+        config.openssl_bin,
+        "s_client",
+        "-engine",
+        "pkcs11",
+        "-keyform",
+        "engine",
+        "-key",
+        config.key_uri,
+        "-cert",
+        config.cert_pem_path,
+        "-connect",
+        f"{host}:443",
+        "-servername",
+        host,
+        "-quiet",  # implies -ign_eof, so the full response is read
+    ]
+    if config.chain_pem_path:
+        cmd.extend(["-cert_chain", config.chain_pem_path])
+    if config.verify_server:
+        cmd.extend(["-verify_return_error", "-verify_hostname", host])
+        if config.server_ca_pem_path:
+            cmd.extend(["-CAfile", config.server_ca_pem_path])
+    return cmd
+
+
+def _server_verify_failed(stderr: str) -> bool:
+    """Return True when OpenSSL reports a server certificate verification failure."""
+    lower = stderr.lower()
+    if "verify return code: 0 (ok)" in lower or "verification: ok" in lower:
+        return False
+    return bool(
+        re.search(
+            r"(verify error|verification error|certificate verify failed|verify return code:\s*(?!0\b)\d+)",
+            lower,
+        )
+    )
 
 
 def _write_engine_conf(config: PKCS11Config) -> str:

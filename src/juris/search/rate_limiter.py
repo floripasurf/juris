@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 from juris.core.paths import ensure_private_dir, juris_home, restrict_file
+from juris.core.sanitize import safe_error_text
 
 logger = logging.getLogger(__name__)
 
@@ -68,8 +69,8 @@ class CourtRateLimiter:
             restrict_file(tmp)
             tmp.replace(self._state_file)
             restrict_file(self._state_file)
-        except OSError:
-            logger.debug("Failed to persist rate limit state", exc_info=True)
+        except OSError as exc:
+            logger.debug("Failed to persist rate limit state: %s", safe_error_text(exc))
 
     async def acquire(self, court: str) -> None:
         lock = self._get_lock(court)

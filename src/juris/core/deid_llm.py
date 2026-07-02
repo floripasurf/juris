@@ -33,7 +33,7 @@ class DeidentifyingLLM(AbstractLLM):
         self,
         delegate: AbstractLLM,
         *,
-        allow_partial: bool = True,
+        allow_partial: bool = False,
         ner_redactor: Callable[[str], list[str]] | None = None,
     ) -> None:
         self._delegate = delegate

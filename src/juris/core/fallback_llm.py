@@ -71,7 +71,7 @@ def build_ai_of_preference(
     fallback: AbstractLLM,
     *,
     ner_redactor: Callable[[str], list[str]] | None = None,
-    allow_partial: bool = True,
+    allow_partial: bool = False,
     fallback_is_local: bool = False,
 ) -> AbstractLLM:
     """Compose the ADR-0018 AI-of-preference: a **de-identified** browser session with a
@@ -80,8 +80,10 @@ def build_ai_of_preference(
     BOTH paths are de-identified by default: the browser session AND the fallback are
     each wrapped in ``DeidentifyingLLM``. This matters because failover is exactly where
     the guarantee would otherwise invert — a broken browser session must not dump raw
-    PII to the cloud fallback. Set ``fallback_is_local=True`` only when the fallback is
-    an on-device model (PII stays in-perimeter), to skip its redaction.
+    PII to the cloud fallback. By default this path fails closed unless a NER redactor
+    is supplied; use ``allow_partial=True`` only for a documented structured-only
+    consent/DPA path. Set ``fallback_is_local=True`` only when the fallback is an
+    on-device model (PII stays in-perimeter), to skip its redaction.
     """
     from juris.core.deid_llm import DeidentifyingLLM
 
