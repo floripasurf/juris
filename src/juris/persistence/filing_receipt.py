@@ -46,7 +46,15 @@ class FilingReceiptStore:
         ensure_private_dir(self._storage_dir)
         self._storage_root = self._storage_dir.resolve()
 
-    def prepare(self, numero_cnj: str, signed_pdf: bytes, render_hash: str) -> str:
+    def prepare(
+        self,
+        numero_cnj: str,
+        signed_pdf: bytes,
+        render_hash: str,
+        *,
+        tribunal: str = "",
+        tipo_documento: str = "",
+    ) -> str:
         """Create pending filing directory with signed PDF.
 
         Creates ~/.juris/filings/<cnj>/<timestamp>_pending/
@@ -73,6 +81,15 @@ class FilingReceiptStore:
             "signed_pdf_hash": signed_hash,
         }
         self._write_json_private(pending_dir / "hashes.json", hashes)
+        self._write_json_private(
+            pending_dir / "metadata.json",
+            {
+                "numero_cnj": numero_cnj,
+                "tribunal": tribunal,
+                "tipo_documento": tipo_documento,
+                "prepared_at": datetime.now().isoformat(),
+            },
+        )
 
         self._audit.log(
             event_type="filing.receipt_prepared",

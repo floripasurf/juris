@@ -308,7 +308,7 @@ class PAdESSigner:
         if self._session is not None:
             try:
                 self._session.close()
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 from juris.core.sanitize import safe_error_text
 
                 logger.warning("pkcs11_session_close_error", error=safe_error_text(exc))
@@ -325,7 +325,7 @@ def _get_pin_attempts(token: pkcs11.Token) -> int | None:
         if hasattr(info, "max_pin_len"):
             # Some tokens expose retry count; not standardized
             return None
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         from juris.core.sanitize import safe_error_text
 
         logger.debug("pin_attempts_read_failed", error=safe_error_text(exc))

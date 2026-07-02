@@ -17,6 +17,7 @@ from juris.web.filing_console import (
     filing_status,
     pending_recovery,
     read_filing_artifact,
+    retry_pending_submission,
     serialize_filing_result,
 )
 
@@ -111,6 +112,154 @@ def test_archive_pending_requires_reason(tmp_path) -> None:
         assert "justificativa" in str(exc)
     else:
         raise AssertionError("archive sem justificativa deveria falhar")
+
+
+def _make_retry_pending(root, *, signed_pdf: bytes = b"%PDF signed"):
+    cnj_dir = root / "1234567_89_2026_8_13_0001"
+    pending = cnj_dir / "20260701_120000_abcd1234_pending"
+    pending.mkdir(parents=True)
+    signed_hash = hashlib.sha256(signed_pdf).hexdigest()
+    (pending / "signed.pdf").write_bytes(signed_pdf)
+    (pending / "hashes.json").write_text(
+        json.dumps({"pdf_hash": "render", "signed_pdf_hash": signed_hash}),
+        encoding="utf-8",
+    )
+    (pending / "metadata.json").write_text(
+        json.dumps(
+            {
+                "numero_cnj": "1234567-89.2026.8.13.0001",
+                "tribunal": "tjmg",
+                "tipo_documento": "manifestacao",
+            }
+        ),
+        encoding="utf-8",
+    )
+    return "1234567_89_2026_8_13_0001/20260701_120000_abcd1234_pending", pending
+
+
+def test_retry_pending_submission_confirms_receipt_without_exposing_pdf(tmp_path) -> None:
+    key, pending = _make_retry_pending(tmp_path)
+    seen: dict[str, object] = {}
+
+    def submitter(tribunal, cpf, senha, numero_cnj, signed_pdf, tipo_documento):  # noqa: ANN001, ANN202
+        seen.update(
+            {
+                "tribunal": tribunal,
+                "cpf": cpf,
+                "senha": senha,
+                "numero_cnj": numero_cnj,
+                "signed_pdf": signed_pdf,
+                "tipo_documento": tipo_documento,
+            }
+        )
+        return FilingReceipt(
+            sucesso=True,
+            mensagem="protocolado",
+            protocolo="PJE-123",
+            numero_processo=numero_cnj,
+            pdf_hash="pdf",
+        )
+
+    result = retry_pending_submission(
+        tmp_path,
+        key,
+        cpf="07671039632",
+        senha="senha-local",
+        confirm_no_existing_protocol=True,
+        submitter=submitter,
+    )
+
+    assert result["success"] is True
+    assert result["receipt"]["protocolo"] == "PJE-123"
+    assert result["safe_to_retry_again"] is False
+    assert "idempotency_key" in result
+    assert seen["numero_cnj"] == "1234567-89.2026.8.13.0001"
+    assert seen["signed_pdf"] == b"%PDF signed"
+    assert not pending.exists()
+    receipt_key = str(result["receipt_key"])
+    final_dir = tmp_path / receipt_key
+    assert (final_dir / "receipt.json").exists()
+    assert (final_dir / "retry.json").exists()
+    dumped = json.dumps(result)
+    assert "%PDF signed" not in dumped
+    assert str(tmp_path) not in dumped
+
+
+def test_retry_pending_submission_requires_manual_confirmation(tmp_path) -> None:
+    key, _pending = _make_retry_pending(tmp_path)
+
+    try:
+        retry_pending_submission(
+            tmp_path,
+            key,
+            cpf="07671039632",
+            senha="senha-local",
+            confirm_no_existing_protocol=False,
+            submitter=lambda *_args: FilingReceipt(sucesso=True, mensagem="ok"),
+        )
+    except ValueError as exc:
+        assert "confirmação" in str(exc)
+    else:
+        raise AssertionError("retry sem confirmação manual deveria falhar")
+
+
+def test_retry_pending_submission_marks_indeterminate_and_blocks_repeat(tmp_path) -> None:
+    key, pending = _make_retry_pending(tmp_path)
+
+    def boom(*_args):  # noqa: ANN202
+        raise RuntimeError("timeout /var/private/a3 senha=abc")
+
+    try:
+        retry_pending_submission(
+            tmp_path,
+            key,
+            cpf="07671039632",
+            senha="senha-local",
+            confirm_no_existing_protocol=True,
+            submitter=boom,
+        )
+    except RuntimeError as exc:
+        assert "indeterminado" in str(exc)
+    else:
+        raise AssertionError("falha durante submissão deveria ficar indeterminada")
+
+    retry_state = json.loads((pending / "retry.json").read_text(encoding="utf-8"))
+    assert retry_state["status"] == "indeterminate"
+    assert "/var/private/a3" not in retry_state["error"]
+    assert "senha=abc" not in retry_state["error"]
+
+    try:
+        retry_pending_submission(
+            tmp_path,
+            key,
+            cpf="07671039632",
+            senha="senha-local",
+            confirm_no_existing_protocol=True,
+            submitter=lambda *_args: FilingReceipt(sucesso=True, mensagem="ok"),
+        )
+    except ValueError as exc:
+        assert "duplicado" in str(exc)
+    else:
+        raise AssertionError("retry indeterminado não deve permitir nova tentativa automática")
+
+
+def test_retry_pending_submission_rejects_hash_mismatch(tmp_path) -> None:
+    key, pending = _make_retry_pending(tmp_path)
+    (pending / "signed.pdf").write_bytes(b"%PDF tampered")
+
+    try:
+        retry_pending_submission(
+            tmp_path,
+            key,
+            cpf="07671039632",
+            senha="senha-local",
+            confirm_no_existing_protocol=True,
+            submitter=lambda *_args: FilingReceipt(sucesso=True, mensagem="ok"),
+        )
+    except ValueError as exc:
+        assert "hash" in str(exc)
+    else:
+        raise AssertionError("hash mismatch deveria bloquear retry")
 
 
 def test_serialize_filing_result_does_not_expose_pdf_bytes() -> None:

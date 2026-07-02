@@ -321,7 +321,7 @@ class FilingOrchestrator:
         # 5. Sign PDF
         try:
             signing_result = self._signer.sign(render_result.pdf_bytes)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "filing_sign_error",
                 numero_cnj=request.numero_cnj,
@@ -363,6 +363,8 @@ class FilingOrchestrator:
             numero_cnj=request.numero_cnj,
             signed_pdf=signing_result.signed_pdf,
             render_hash=render_result.pdf_hash,
+            tribunal=request.tribunal,
+            tipo_documento=request.tipo_documento,
         )
 
         # 7. File via MNI
@@ -381,7 +383,7 @@ class FilingOrchestrator:
                 signed_pdf_bytes=signing_result.signed_pdf,
                 tipo_documento=request.tipo_documento,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "filing_submit_error",
                 numero_cnj=request.numero_cnj,

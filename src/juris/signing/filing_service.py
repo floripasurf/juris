@@ -15,6 +15,7 @@ whole :class:`FilingOrchestrator` pipeline runs where the token lives:
 from __future__ import annotations
 
 import asyncio
+import os
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Callable
@@ -29,6 +30,16 @@ if TYPE_CHECKING:
     from juris.mni.operations.peticionamento import FilingReceipt
 
 _REMOTE_FILING_AGENT_ERROR = "Falha ao protocolar no agente local. Verifique credenciais, token e tribunal no agente."
+
+
+def _agent_deid_reads_enabled() -> bool:
+    """Whether MNI reads were de-identified at the agent boundary.
+
+    When enabled, the SaaS/orchestrator only sees placeholder-bearing case data.
+    The final petition must therefore be re-identified here, on the agent, before
+    rendering/signing/protocoling. The re-id map never crosses the wire.
+    """
+    return os.environ.get("JURIS_AGENT_DEID_READS", "").strip().lower() in {"1", "true", "yes"}
 
 
 async def run_filing(
@@ -261,6 +272,32 @@ def build_filing_request(payload: dict[str, object], *, cpf: str, senha: str) ->
     )
 
 
+def _reidentify_agent_draft(payload: dict[str, object], *, tenant_id: str) -> dict[str, object]:
+    """Restore placeholders in draft markdown using the agent-local re-id map.
+
+    This is intentionally agent-side only. The remote orchestrator sends the same
+    de-identified markdown it generated from a de-identified MNI read; the local
+    agent reconstructs the final lawyer-facing/protocolable document immediately
+    before render/sign/file.
+    """
+    if not _agent_deid_reads_enabled():
+        return payload
+    numero_cnj = payload.get("numero_cnj")
+    draft_markdown = payload.get("draft_markdown")
+    if numero_cnj is None or not isinstance(draft_markdown, str):
+        return payload
+
+    from juris.api.reid_store import load_reid_map
+    from juris.core.deid import reidentify
+
+    mapping = load_reid_map(tenant_id, str(numero_cnj))
+    if not mapping:
+        return payload
+    restored = dict(payload)
+    restored["draft_markdown"] = reidentify(draft_markdown, mapping)
+    return restored
+
+
 async def handle_file_request(
     request: AgentRequest,
     service: FilingService,
@@ -270,7 +307,8 @@ async def handle_file_request(
     """Agent side: resolve credentials locally, run the pipeline, return the proof."""
     try:
         cpf, senha, pin = credentials_resolver()
-        filing_request = build_filing_request(request.payload, cpf=cpf, senha=senha)
+        payload = _reidentify_agent_draft(request.payload, tenant_id=request.tenant_id)
+        filing_request = build_filing_request(payload, cpf=cpf, senha=senha)
         result = await service.file(filing_request, pin=pin)
     except Exception:  # noqa: BLE001 — typed error back to the orchestrator
         return AgentResponse(request_id=request.request_id, success=False, error=_REMOTE_FILING_AGENT_ERROR)

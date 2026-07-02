@@ -6,16 +6,25 @@ import hashlib
 import json
 import os
 import re
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from juris.core.paths import juris_home, restrict_file
+from juris.core.sanitize import safe_error_text
+from juris.mni.operations.peticionamento import FilingReceipt
+from juris.persistence.audit import AuditLog
+from juris.persistence.filing_receipt import FilingReceiptStore
 from juris.signing.filing import FilingResult
 from juris.web.jsonutil import ensure_dict, ensure_list
 
 _PRIMARY_DRAFTS = frozenset({"draft.md", "rascunho-pesquisa.md"})
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+SubmitPendingCallable = Callable[
+    [str, str, str, str, bytes, str],
+    FilingReceipt,
+]
 
 
 def default_filing_root() -> Path:
@@ -216,11 +225,195 @@ def pending_recovery(root: Path | None, pending_key: str) -> dict[str, object]:
         {"label": "Arquivar o pendente somente após conferência humana", "required": True},
     ]
     payload["safe_to_retry"] = False
+    retry_state = _read_json(pending / "retry.json")
+    if retry_state:
+        payload["retry_state"] = {
+            "status": retry_state.get("status"),
+            "idempotency_key": retry_state.get("idempotency_key"),
+            "started_at": retry_state.get("started_at"),
+            "finished_at": retry_state.get("finished_at"),
+        }
     payload["retry_note"] = (
         "Retry automático fica bloqueado para evitar protocolo duplicado; reenvie apenas após "
         "confirmar manualmente que o tribunal não recebeu o documento."
     )
     return payload
+
+
+def retry_pending_submission(
+    root: Path | None,
+    pending_key: str,
+    *,
+    cpf: str,
+    senha: str,
+    confirm_no_existing_protocol: bool,
+    tribunal: str | None = None,
+    tipo_documento: str | None = None,
+    submitter: SubmitPendingCallable | None = None,
+) -> dict[str, object]:
+    """Retry the MNI submit step for one signed pending filing with duplicate guards.
+
+    The signed PDF is already on disk from the interrupted filing. This function never
+    signs again; it only re-submits that exact PDF after the operator explicitly
+    confirms that the tribunal portal has no existing protocol for it. Once a retry
+    starts, ``retry.json`` blocks blind repeated attempts. Any submit exception is
+    treated as indeterminate because the tribunal may have received the document.
+    """
+    if not confirm_no_existing_protocol:
+        msg = "confirmação de inexistência de protocolo é obrigatória para retry"
+        raise ValueError(msg)
+    cpf = cpf.strip()
+    senha = senha.strip()
+    if not cpf or not senha:
+        msg = "CPF e senha são obrigatórios para reenviar o protocolo pendente"
+        raise ValueError(msg)
+
+    root = root or default_filing_root()
+    pending = _resolve_pending(root, pending_key)
+    retry_path = pending / "retry.json"
+    retry_state = _read_json(retry_path)
+    status = str(retry_state.get("status") or "")
+    if status in {"in_progress", "indeterminate", "succeeded", "rejected"}:
+        msg = (
+            "retry bloqueado para evitar protocolo duplicado; confira o portal e arquive "
+            "ou resolva manualmente este pendente"
+        )
+        raise ValueError(msg)
+
+    metadata = _read_json(pending / "metadata.json")
+    numero_cnj = str(metadata.get("numero_cnj") or "").strip()
+    resolved_tribunal = (tribunal or str(metadata.get("tribunal") or "")).strip()
+    resolved_tipo_documento = (
+        tipo_documento or str(metadata.get("tipo_documento") or "")
+    ).strip()
+    if not numero_cnj or not resolved_tribunal or not resolved_tipo_documento:
+        msg = (
+            "metadata do filing pendente está incompleto; faça recuperação manual "
+            "para evitar protocolo duplicado"
+        )
+        raise ValueError(msg)
+
+    signed_pdf_path = pending / "signed.pdf"
+    signed_pdf = signed_pdf_path.read_bytes()
+    signed_hash = hashlib.sha256(signed_pdf).hexdigest()
+    hashes = _read_json(pending / "hashes.json")
+    expected_signed_hash = str(hashes.get("signed_pdf_hash") or "")
+    if not _SHA256_RE.fullmatch(expected_signed_hash) or expected_signed_hash != signed_hash:
+        msg = "hash do PDF assinado pendente não confere; retry bloqueado"
+        raise ValueError(msg)
+
+    idempotency_key = hashlib.sha256(f"{pending_key}\0{signed_hash}".encode()).hexdigest()
+    started_at = datetime.now().isoformat()
+    _write_json_private(
+        retry_path,
+        {
+            "status": "in_progress",
+            "idempotency_key": idempotency_key,
+            "started_at": started_at,
+            "manual_confirmation": "tribunal_sem_protocolo_existente",
+            "signed_pdf_hash": signed_hash,
+            "tribunal": resolved_tribunal,
+            "tipo_documento": resolved_tipo_documento,
+        },
+    )
+
+    submit = submitter or _submit_pending_via_mni
+    try:
+        receipt = submit(
+            resolved_tribunal,
+            cpf,
+            senha,
+            numero_cnj,
+            signed_pdf,
+            resolved_tipo_documento,
+        )
+    except Exception as exc:  # noqa: BLE001 — after submit begins, outcome may be indeterminate
+        _write_json_private(
+            retry_path,
+            {
+                "status": "indeterminate",
+                "idempotency_key": idempotency_key,
+                "started_at": started_at,
+                "finished_at": datetime.now().isoformat(),
+                "manual_confirmation": "tribunal_sem_protocolo_existente",
+                "signed_pdf_hash": signed_hash,
+                "tribunal": resolved_tribunal,
+                "tipo_documento": resolved_tipo_documento,
+                "error": safe_error_text(exc),
+            },
+        )
+        msg = (
+            "retry de protocolo ficou indeterminado; verifique o portal antes de "
+            "qualquer nova tentativa"
+        )
+        raise RuntimeError(msg) from exc
+
+    if not receipt.sucesso:
+        _write_json_private(
+            retry_path,
+            {
+                "status": "rejected",
+                "idempotency_key": idempotency_key,
+                "started_at": started_at,
+                "finished_at": datetime.now().isoformat(),
+                "manual_confirmation": "tribunal_sem_protocolo_existente",
+                "signed_pdf_hash": signed_hash,
+                "tribunal": resolved_tribunal,
+                "tipo_documento": resolved_tipo_documento,
+                "mensagem": receipt.mensagem,
+            },
+        )
+        return {
+            "success": False,
+            "pending_key": pending_key,
+            "idempotency_key": idempotency_key,
+            "error": receipt.mensagem,
+            "safe_to_retry_again": False,
+        }
+
+    store = FilingReceiptStore(root, AuditLog(root.parent / "audit.jsonl"))
+    receipt_id = store.confirm(
+        str(pending),
+        receipt,
+        submitted_payload_hash=signed_hash,
+        tribunal=resolved_tribunal,
+        tipo_documento=resolved_tipo_documento,
+    )
+    cnj_key = pending.parent.name
+    receipt_key = f"{cnj_key}/{receipt_id}"
+    final_dir = root / cnj_key / receipt_id
+    return {
+        "success": True,
+        "pending_key": pending_key,
+        "receipt_key": receipt_key,
+        "idempotency_key": idempotency_key,
+        "receipt": _receipt_metadata(receipt),
+        "hashes": _read_json(final_dir / "hashes.json"),
+        "safe_to_retry_again": False,
+    }
+
+
+def _submit_pending_via_mni(
+    tribunal: str,
+    cpf: str,
+    senha: str,
+    numero_cnj: str,
+    signed_pdf: bytes,
+    tipo_documento: str,
+) -> FilingReceipt:
+    from juris.mni.auth import PasswordAuth
+    from juris.mni.client import get_mni_client
+    from juris.mni.operations.peticionamento import entregar_manifestacao
+
+    client = get_mni_client(tribunal, PasswordAuth(cpf=cpf, senha=senha))
+    return entregar_manifestacao(
+        client=client,
+        id_manifestante=cpf,
+        senha_manifestante=senha,
+        numero_processo=numero_cnj,
+        signed_pdf_bytes=signed_pdf,
+        tipo_documento=tipo_documento,
+    )
 
 
 def archive_pending(root: Path | None, pending_key: str, *, reason: str) -> dict[str, object]:
@@ -310,6 +503,11 @@ def _read_json(path: Path) -> dict[str, object]:
     except (OSError, json.JSONDecodeError):
         return {}
     return data if isinstance(data, dict) else {}
+
+
+def _write_json_private(path: Path, data: object) -> None:
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    restrict_file(path)
 
 
 def _primary_artifact_name(name: str) -> str | None:

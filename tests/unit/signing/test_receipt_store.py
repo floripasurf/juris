@@ -66,6 +66,25 @@ class TestPrepare:
         assert "signed_pdf_hash" in hashes
         assert _mode(pending / "hashes.json") == 0o600
 
+    def test_creates_recovery_metadata_json(self, tmp_path: Path) -> None:
+        store = _make_store(tmp_path)
+        pending_path = store.prepare(
+            CNJ,
+            SIGNED_PDF,
+            RENDER_HASH,
+            tribunal="tjmg",
+            tipo_documento="manifestacao",
+        )
+        pending = Path(pending_path)
+
+        metadata = json.loads((pending / "metadata.json").read_text(encoding="utf-8"))
+
+        assert metadata["numero_cnj"] == CNJ
+        assert metadata["tribunal"] == "tjmg"
+        assert metadata["tipo_documento"] == "manifestacao"
+        assert "prepared_at" in metadata
+        assert _mode(pending / "metadata.json") == 0o600
+
     def test_pending_paths_are_unique_within_same_second(self, tmp_path: Path) -> None:
         store = _make_store(tmp_path)
 

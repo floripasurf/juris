@@ -224,6 +224,32 @@
     .queue-actions { display: flex; gap: 6px; margin-top: 8px; }
     .queue-actions button { width: auto; margin: 0; padding: 6px 9px; font-size: 12px; }
     .queue-empty { color: var(--muted); font-size: 13px; }
+    .sync-strip {
+      grid-column: 1 / -1;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 12px 14px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+    }
+    .sync-strip strong { display: block; font-size: 13px; }
+    .sync-strip .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .sync-strip.ok { border-color: #abefc6; background: #f6fef9; }
+    .sync-strip.bad { border-color: #fecdca; background: #fffbfa; }
+    .sync-strip .badge {
+      border-radius: 999px;
+      padding: 3px 9px;
+      font-size: 12px;
+      font-weight: 720;
+      background: #e2e8f0;
+      color: #334155;
+      white-space: nowrap;
+    }
+    .sync-strip.ok .badge { background: #dcfce7; color: #166534; }
+    .sync-strip.bad .badge { background: #fee2e2; color: #991b1b; }
     .metric-grid {
       display: grid;
       grid-template-columns: repeat(4, minmax(150px, 1fr));
@@ -1116,6 +1142,33 @@
       return actions;
     }
 
+    function renderSyncStatus(status) {
+      const last = status && status.last_run;
+      const box = document.createElement("div");
+      const failed = Number(status && status.failed_runs || 0);
+      const ok = last && last.success && failed === 0;
+      box.className = `sync-strip ${failed ? "bad" : ok ? "ok" : ""}`;
+      const body = document.createElement("div");
+      const title = document.createElement("strong");
+      title.textContent = last ? `Última sync: ${fmtDate(last.finished_at || last.started_at)}` : "Nightly sem execução registrada";
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      if (last) {
+        const statusText = last.success ? "concluída" : "falhou";
+        const changes = last.had_changes ? `${last.new_movimentos || 0} movimento(s)` : "sem alterações";
+        const failure = last.error ? ` · ${last.error}` : "";
+        meta.textContent = `${statusText} · ${(last.source || "fonte").toUpperCase()} · ${changes}${failure}`;
+      } else {
+        meta.textContent = "A agenda depende do job noturno ou do connect com sincronização.";
+      }
+      body.append(title, meta);
+      const badge = document.createElement("span");
+      badge.className = "badge";
+      badge.textContent = failed ? `${failed} falha(s)` : `${Number(status && status.successful_runs || 0)} ok`;
+      box.append(body, badge);
+      return box;
+    }
+
     function renderWorkbench(wb) {
       const critical = (wb.critical_deadlines || [])
         .map((p) => queueItem(
@@ -1164,6 +1217,7 @@
 
       workbenchEl.innerHTML = "";
       workbenchEl.append(
+        renderSyncStatus(wb.sync_status || {}),
         renderQueue("Prazos críticos", critical, "Nenhum prazo crítico."),
         renderQueue("Novas movimentações", updated, "Sem sync recente."),
         renderQueue("Prontos para rascunho", draftReady, "Nenhum processo importado."),
@@ -1576,18 +1630,29 @@
     function renderPendingRecovery(data) {
       const checks = (data.checklist || []).map((c) => `<li>${escHtml(c.label)}${c.required ? " · obrigatório" : ""}</li>`).join("");
       const actions = (data.recovery_actions || []).map((a) => `<li>${escHtml(a)}</li>`).join("");
+      const retryState = data.retry_state ? `<div class="proc-meta">retry: ${escHtml(data.retry_state.status || "—")} · ${escHtml(data.retry_state.idempotency_key || "")}</div>` : "";
+      const retryControls = AGENT_REMOTE ? "" : `<h4>Retry controlado</h4>
+        <label for="filing-retry-cpf">CPF</label>
+        <input id="filing-retry-cpf" autocomplete="off" value="${escHtml(document.querySelector("#fl_cpf")?.value || "")}" />
+        <label for="filing-retry-senha">Senha PJe</label>
+        <input id="filing-retry-senha" type="password" autocomplete="off" />
+        <label class="check"><input id="filing-retry-confirm" type="checkbox" /> conferi no portal que não existe protocolo para este PDF</label>
+        <button type="button" class="ghost" id="filing-retry-btn">reenviar protocolo pendente</button>`;
       filingRecoveryEl.className = "review-card";
       filingRecoveryEl.innerHTML = `<div class="review-head"><h3>Recuperação de filing pendente</h3>
           <span class="sev-chip sev-important">sem retry automático</span></div>
         <div class="proc-meta">${escHtml(data.pending_key || "")} · signed hash ${escHtml((data.hashes || {}).signed_pdf_hash || "—")}</div>
+        ${retryState}
         <p>${escHtml(data.retry_note || "")}</p>
         <h4>Checklist</h4><ul class="detail-prazos">${checks}</ul>
         <h4>Ações operacionais</h4><ul class="detail-prazos">${actions}</ul>
+        ${retryControls}
         <label for="filing-archive-reason">Justificativa para arquivar</label>
         <input id="filing-archive-reason" autocomplete="off" />
         <label class="check"><input id="filing-archive-confirm" type="checkbox" /> conferi manualmente o portal/recibo</label>
         <button type="button" class="ghost" id="filing-archive-btn">arquivar pendente</button>`;
       document.querySelector("#filing-archive-btn").addEventListener("click", () => archivePending(data.pending_key));
+      document.querySelector("#filing-retry-btn")?.addEventListener("click", () => retryPending(data.pending_key));
     }
 
     async function loadPendingRecovery(pendingKey) {
@@ -1623,6 +1688,36 @@
         if (!response.ok) throw new Error(apiErrorMessage(data, "Falha ao arquivar pendente"));
         filingRecoveryEl.className = "proc-empty";
         filingRecoveryEl.textContent = `Pendente arquivado: ${data.archived_key || ""}`;
+        await loadFilingStatus();
+      } catch (err) {
+        filingRecoveryEl.className = "proc-empty";
+        filingRecoveryEl.innerHTML = `<p class="notice error" style="position:static">${escHtml(err.message)}</p>`;
+      }
+    }
+
+    async function retryPending(pendingKey) {
+      const cpf = document.querySelector("#filing-retry-cpf")?.value.trim() || "";
+      const senha = document.querySelector("#filing-retry-senha")?.value || "";
+      const confirm = document.querySelector("#filing-retry-confirm")?.checked || false;
+      try {
+        const response = await fetch("/api/filing/pending/retry", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pending_key: pendingKey,
+            cpf,
+            senha,
+            confirm_no_existing_protocol: confirm,
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(apiErrorMessage(data, "Falha ao reenviar pendente"));
+        filingRecoveryEl.className = "review-card";
+        filingRecoveryEl.innerHTML = `<div class="review-head"><h3>Retry concluído</h3>
+            <span class="sev-chip sev-suggestion">ok</span></div>
+          <div class="proc-meta">${escHtml(data.receipt_key || "")}</div>
+          <div class="queue-item"><strong>Recibo ${escHtml((data.receipt || {}).protocolo || "sem protocolo")}</strong>
+            <div class="meta">idempotência: ${escHtml(data.idempotency_key || "")}</div></div>`;
         await loadFilingStatus();
       } catch (err) {
         filingRecoveryEl.className = "proc-empty";
