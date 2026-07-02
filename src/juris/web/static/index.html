@@ -343,6 +343,7 @@
       display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; z-index: 50;
       overflow-y: auto;
     }
+    .modal[hidden] { display: none; }
     .modal-card {
       position: relative; background: #fff; border-radius: 14px; padding: 26px 30px;
       max-width: 720px; width: 100%; box-shadow: 0 20px 60px rgba(15, 23, 42, 0.3);
@@ -426,9 +427,62 @@
     #nav button:hover { background: rgba(255, 255, 255, 0.12); }
     #nav button.active { background: #fff; color: var(--accent-dark); }
     header .status { margin-left: auto; text-align: right; }
+    #login-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 60; /* acima dos .modal (50): o login cobre qualquer modal aberto */
+      display: grid;
+      place-items: center;
+      background: rgba(23, 32, 51, 0.55);
+      backdrop-filter: blur(6px);
+    }
+    #login-overlay[hidden] { display: none; }
+    .login-panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 28px;
+      width: min(380px, calc(100vw - 48px));
+      display: grid;
+      gap: 12px;
+    }
+    .login-panel h2 { font-size: 18px; }
+    .login-panel p { margin: 0; color: var(--muted); font-size: 13px; }
+    .login-panel input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    .login-panel button {
+      padding: 10px 12px;
+      border: 0;
+      border-radius: 6px;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .login-panel button:hover { background: var(--accent-dark); }
+    #login-error { color: var(--danger); font-size: 13px; }
+    #login-error[hidden] { display: none; }
   </style>
 </head>
 <body>
+  <div id="login-overlay" hidden>
+    <div class="login-panel">
+      <div class="brand"><div class="mark">J</div><div>Juris</div></div>
+      <h2>Acesso do escritório</h2>
+      <p>Informe a chave de acesso (X-API-Key) fornecida para o seu escritório. Ela fica só nesta aba e não é gravada em disco.</p>
+      <form id="login-form">
+        <input id="login-api-key" type="password" placeholder="Chave de acesso" autocomplete="off" required />
+        <p id="login-error" hidden></p>
+        <button type="submit">Entrar</button>
+      </form>
+    </div>
+  </div>
   <header>
     <div class="brand"><div class="mark">J</div><div>Juris</div></div>
     <nav id="nav">
@@ -707,6 +761,68 @@
   </div>
 
   <script>
+    // Auth seam: toda chamada /api/* passa por apiFetch, que anexa X-API-Key
+    // (sessionStorage) e reabre o login em 401. Em deploy aberto (sem tenants)
+    // nenhum 401 acontece e o overlay nunca aparece.
+    const API_KEY_STORAGE = "jurisApiKey";
+    const loginOverlay = document.querySelector("#login-overlay");
+    const loginForm = document.querySelector("#login-form");
+    const loginInput = document.querySelector("#login-api-key");
+    const loginError = document.querySelector("#login-error");
+
+    function getApiKey() {
+      try { return sessionStorage.getItem(API_KEY_STORAGE) || ""; } catch (_) { return ""; }
+    }
+    function setApiKey(value) {
+      try {
+        if (value) sessionStorage.setItem(API_KEY_STORAGE, value);
+        else sessionStorage.removeItem(API_KEY_STORAGE);
+      } catch (_) { /* private mode */ }
+    }
+    function showLogin(message) {
+      loginOverlay.hidden = false;
+      if (message) { loginError.textContent = message; loginError.hidden = false; }
+      else { loginError.hidden = true; }
+      loginInput.focus();
+    }
+    function hideLogin() {
+      loginOverlay.hidden = true;
+      loginError.hidden = true;
+      loginInput.value = "";
+    }
+    async function apiFetch(url, options) {
+      const opts = Object.assign({}, options);
+      const headers = new Headers(opts.headers || {});
+      const key = getApiKey();
+      if (key) headers.set("X-API-Key", key);
+      opts.headers = headers;
+      const response = await window.fetch(url, opts);
+      if (response.status === 401) {
+        setApiKey("");
+        showLogin("Chave inválida ou expirada. Informe a chave do escritório.");
+      }
+      return response;
+    }
+    loginForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const candidate = loginInput.value.trim();
+      if (!candidate) return;
+      setApiKey(candidate);
+      try {
+        const probe = await apiFetch("/api/workbench");
+        if (probe.status === 401) return; // apiFetch já reabriu com erro
+        if (!probe.ok) {
+          showLogin("Chave aceita, mas o servidor respondeu com erro. Tente de novo.");
+          return;
+        }
+      } catch (_) {
+        showLogin("Não foi possível falar com o servidor. Verifique a conexão.");
+        return;
+      }
+      hideLogin();
+      location.reload(); // reexecuta o boot já autenticado
+    });
+
     const form = document.querySelector("#demo-form");
     const submit = document.querySelector("#submit");
     const notice = document.querySelector("#notice");
@@ -779,7 +895,7 @@
       procModalBody.innerHTML = "<p class='muted'>Verificando cadeia…</p>";
       procModal.hidden = false;
       try {
-        const r = await fetch(`/api/audit?output_dir=${encodeURIComponent(dir)}`);
+        const r = await apiFetch(`/api/audit?output_dir=${encodeURIComponent(dir)}`);
         if (!r.ok) throw new Error(r.status === 404 ? "audit.jsonl não encontrado" : "Falha ao verificar");
         renderAudit(await r.json());
       } catch (err) {
@@ -935,7 +1051,7 @@
     }
     async function loadAgentMode() {
       try {
-        const r = await fetch("/api/agent-mode");
+        const r = await apiFetch("/api/agent-mode");
         if (r.ok) AGENT_REMOTE = (await r.json()).remote === true;
       } catch (_) {
         /* default to co-located */
@@ -943,7 +1059,7 @@
       applyAgentMode();
       if (AGENT_REMOTE) {
         try {
-          const h = await fetch("/api/agent-health");
+          const h = await apiFetch("/api/agent-health");
           if (h.ok) renderAgentHealth(await h.json());
         } catch (_) {
           /* keep the mode message */
@@ -979,7 +1095,7 @@
       }
 
       try {
-        const response = await fetch("/api/demo-runs", {
+        const response = await apiFetch("/api/demo-runs", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -1229,7 +1345,7 @@
 
     async function loadWorkbench() {
       try {
-        const response = await fetch("/api/workbench");
+        const response = await apiFetch("/api/workbench");
         const data = response.ok ? await response.json() : {};
         renderWorkbench(data);
       } catch (_) {
@@ -1248,14 +1364,14 @@
       procModalBody.innerHTML = "<p class='muted'>Carregando…</p>";
       procModal.hidden = false;
       try {
-        const r = await fetch(`/api/processos/${encodeURIComponent(cnj)}`);
+        const r = await apiFetch(`/api/processos/${encodeURIComponent(cnj)}`);
         if (!r.ok) throw new Error(r.status === 404 ? "Processo não encontrado" : "Falha ao carregar");
         const detail = await r.json();
         // Protocolo ligado ao caso: pull this case's pending filings so the lawyer can
         // resume a filing without leaving the case page.
         let pending = [];
         try {
-          const fs = await fetch("/api/filing/status");
+          const fs = await apiFetch("/api/filing/status");
           if (fs.ok) pending = ((await fs.json()).pending || []).filter((p) => p.numero_cnj === cnj);
         } catch (_) { /* filing status is best-effort in the case view */ }
         renderProcDetail(detail, pending);
@@ -1372,7 +1488,7 @@
 
     async function loadProcessos() {
       try {
-        const response = await fetch("/api/processos");
+        const response = await apiFetch("/api/processos");
         const data = await response.json();
         processosCache = data.processos || [];
         renderProcessos(filteredProcessos());
@@ -1419,7 +1535,7 @@
       connectBtn.textContent = "Conectando…";
       connectStatus.textContent = "Lendo token e sincronizando (em segundo plano)…";
       try {
-        const response = await fetch("/api/connect", {
+        const response = await apiFetch("/api/connect", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -1438,7 +1554,7 @@
 
     async function pollConnect(jobId) {
       for (let i = 0; i < 600; i++) {
-        const r = await fetch(`/api/connect/${jobId}`);
+        const r = await apiFetch(`/api/connect/${jobId}`);
         const job = await r.json();
         if (job.status === "running") {
           await new Promise((res) => setTimeout(res, 2000));
@@ -1510,7 +1626,7 @@
 
     async function loadPrazos() {
       try {
-        const response = await fetch("/api/prazos");
+        const response = await apiFetch("/api/prazos");
         const data = await response.json();
         prazosCache = data.prazos || [];
         renderPrazos(filteredPrazos());
@@ -1618,7 +1734,7 @@
 
     async function loadFilingStatus() {
       try {
-        const response = await fetch("/api/filing/status");
+        const response = await apiFetch("/api/filing/status");
         const data = response.ok ? await response.json() : {};
         renderFilingStatus(data);
       } catch (_) {
@@ -1657,7 +1773,7 @@
 
     async function loadPendingRecovery(pendingKey) {
       try {
-        const response = await fetch("/api/filing/pending/recovery", {
+        const response = await apiFetch("/api/filing/pending/recovery", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ pending_key: pendingKey }),
@@ -1675,7 +1791,7 @@
       const reason = document.querySelector("#filing-archive-reason").value.trim();
       const confirm = document.querySelector("#filing-archive-confirm").checked;
       try {
-        const response = await fetch("/api/filing/pending/archive", {
+        const response = await apiFetch("/api/filing/pending/archive", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1700,7 +1816,7 @@
       const senha = document.querySelector("#filing-retry-senha")?.value || "";
       const confirm = document.querySelector("#filing-retry-confirm")?.checked || false;
       try {
-        const response = await fetch("/api/filing/pending/retry", {
+        const response = await apiFetch("/api/filing/pending/retry", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1745,7 +1861,7 @@
 
     async function loadFilingArtifacts() {
       try {
-        const response = await fetch("/api/filing/artifacts");
+        const response = await apiFetch("/api/filing/artifacts");
         const data = response.ok ? await response.json() : { artifacts: [] };
         renderFilingArtifacts(data.artifacts || []);
       } catch (_) {
@@ -1760,7 +1876,7 @@
       const oldText = filingLoadArtifactBtn.textContent;
       filingLoadArtifactBtn.textContent = "carregando…";
       try {
-        const response = await fetch("/api/filing/artifacts/content", {
+        const response = await apiFetch("/api/filing/artifacts/content", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1788,7 +1904,7 @@
       const oldText = button.textContent;
       button.textContent = endpoint.endsWith("submit") ? "Protocolando…" : "Verificando…";
       try {
-        const response = await fetch(endpoint, {
+        const response = await apiFetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(filingPayload()),
@@ -1855,7 +1971,7 @@
 
     async function loadPilotSummary() {
       try {
-        const response = await fetch("/api/pilot-feedback/summary");
+        const response = await apiFetch("/api/pilot-feedback/summary");
         const data = response.ok ? await response.json() : {};
         renderPilotSummary(data);
       } catch (_) {
@@ -1896,7 +2012,7 @@
 
     async function loadPilotFeedback() {
       try {
-        const response = await fetch("/api/pilot-feedback");
+        const response = await apiFetch("/api/pilot-feedback");
         const data = response.ok ? await response.json() : { feedback: [] };
         renderPilotFeedback(data.feedback || []);
       } catch (_) {
@@ -1936,8 +2052,8 @@
     async function loadCorpusQueue() {
       try {
         const [candidatesResp, coverageResp] = await Promise.all([
-          fetch("/api/corpus/candidates"),
-          fetch("/api/corpus/coverage"),
+          apiFetch("/api/corpus/candidates"),
+          apiFetch("/api/corpus/coverage"),
         ]);
         const candidates = candidatesResp.ok ? await candidatesResp.json() : { candidates: [] };
         const coverage = coverageResp.ok ? await coverageResp.json() : {};
@@ -1957,7 +2073,7 @@
       el.className = "proc-empty";
       el.textContent = "Buscando…";
       try {
-        const resp = await fetch(`/api/corpus/search?q=${encodeURIComponent(query)}`);
+        const resp = await apiFetch(`/api/corpus/search?q=${encodeURIComponent(query)}`);
         if (!resp.ok) throw new Error(await apiErrorMessage(resp));
         const data = await resp.json();
         const results = data.results || [];
@@ -2006,7 +2122,7 @@
 
     async function loadPilotComparison() {
       try {
-        const response = await fetch("/api/pilot-feedback/comparison");
+        const response = await apiFetch("/api/pilot-feedback/comparison");
         const data = response.ok ? await response.json() : { comparisons: [] };
         renderPilotComparison(data);
       } catch (_) {
@@ -2033,7 +2149,7 @@
         notes: document.querySelector("#pf_notes").value.trim(),
       };
       try {
-        const response = await fetch("/api/pilot-feedback", {
+        const response = await apiFetch("/api/pilot-feedback", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -2069,7 +2185,7 @@
     async function loadAiSession() {
       const el = document.getElementById("ai-session");
       try {
-        const r = await fetch("/api/ai-session");
+        const r = await apiFetch("/api/ai-session");
         const s = await r.json();
         const labels = { browser_session: "sessão do navegador", cloud_deid: "nuvem", local: "local" };
         const deid = s.deidentify ? " · de-id ✓" : "";
