@@ -1,10 +1,10 @@
-"""Seam: the SPA must authenticate every /api call and gate the UI behind login.
+"""Seam: the SPA must authenticate every /api call and gate the UI behind a key.
 
 The backend already rejects unauthenticated /api requests when tenants are
 required (401 ``tenant_invalid``). Before the console goes online
 (juris.blackcube.dev), the static SPA must hold up its side of that contract:
-ship a login gate, send ``X-API-Key`` on every API call, and re-show the gate
-on 401. These tests pin both sides of the seam.
+ship a public landing with API-key entry, send ``X-API-Key`` on every API call,
+and re-show the gate on 401. These tests pin both sides of the seam.
 """
 
 from __future__ import annotations
@@ -52,11 +52,32 @@ class TestBackendContract:
         client = TestClient(app)
         response = client.get("/")
         assert response.status_code == 200
+        assert "landing-login-form" in response.text
         assert "login-overlay" in response.text
+
+    def test_landing_asset_is_served(self, required_tenant) -> None:
+        client = TestClient(app)
+        response = client.get("/static/assets/causia-hero-legal-desk.jpg")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("image/jpeg")
+        assert client.head("/static/assets/causia-hero-legal-desk.jpg").status_code == 200
 
 
 class TestSpaLoginGate:
     """The static console ships the login gate and authenticated fetch wrapper."""
+
+    def test_ships_public_landing_with_key_input(self) -> None:
+        assert 'id="landing"' in _INDEX_HTML
+        assert 'id="landing-login-form"' in _INDEX_HTML
+        assert 'id="landing-api-key"' in _INDEX_HTML
+        assert "Teste gratuito por 30 dias" in _INDEX_HTML
+        assert "Não guardamos seus dados nem os dados dos seus processos" in _INDEX_HTML
+
+    def test_console_is_hidden_until_key_exists(self) -> None:
+        assert 'id="app-header" hidden' in _INDEX_HTML
+        assert 'id="app-shell" hidden' in _INDEX_HTML
+        assert "if (getApiKey()) bootConsole();" in _INDEX_HTML
+        assert "else showLanding();" in _INDEX_HTML
 
     def test_ships_login_overlay_with_key_input(self) -> None:
         assert 'id="login-overlay"' in _INDEX_HTML
@@ -70,6 +91,25 @@ class TestSpaLoginGate:
         assert re.search(r"status\s*===?\s*401", _INDEX_HTML), (
             "apiFetch deve detectar 401 e reabrir o login"
         )
+
+    def test_initial_loaders_are_inside_boot_console(self) -> None:
+        start = _INDEX_HTML.index("function bootConsole()")
+        end = _INDEX_HTML.index("if (getApiKey()) bootConsole();")
+        body = _INDEX_HTML[start:end]
+        for loader in (
+            "loadAgentMode();",
+            "loadAiSession();",
+            "loadWorkbench();",
+            "loadProcessos();",
+            "loadPrazos();",
+            "loadPilotFeedback();",
+            "loadPilotSummary();",
+            "loadCorpusQueue();",
+            "loadPilotComparison();",
+            "loadFilingStatus();",
+            "loadFilingArtifacts();",
+        ):
+            assert loader in body
 
     def test_hidden_modal_stays_hidden(self) -> None:
         """`.modal { display: flex }` vence o `[hidden]` do user-agent sem esta

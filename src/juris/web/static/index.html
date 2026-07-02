@@ -42,6 +42,162 @@
       font-size: 14px;
       line-height: 1.5;
     }
+    [hidden] { display: none !important; }
+
+    /* ── Landing pública ──────────────────────────────────── */
+    #landing {
+      min-height: 100vh;
+      background: var(--paper);
+    }
+    .landing-hero {
+      min-height: 88vh;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      color: #fff;
+      padding: 24px clamp(18px, 5vw, 64px) 54px;
+      background:
+        linear-gradient(90deg, rgba(23, 26, 32, 0.88) 0%, rgba(23, 26, 32, 0.72) 42%, rgba(23, 26, 32, 0.28) 72%, rgba(23, 26, 32, 0.08) 100%),
+        url("/static/assets/causia-hero-legal-desk.jpg");
+      background-size: cover;
+      background-position: center;
+    }
+    .landing-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      min-height: 44px;
+    }
+    .landing-nav .brand { color: #fff; }
+    .landing-nav .brand .ia { color: #F0C9D2; }
+    .landing-nav .mark {
+      background: #fff;
+      color: var(--brand);
+      box-shadow: inset 0 0 0 1.5px var(--brand), inset 0 0 0 2.5px #fff;
+    }
+    .landing-nav-note {
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 13px;
+      text-align: right;
+    }
+    .landing-copy {
+      align-self: center;
+      max-width: 740px;
+      padding: 42px 0 26px;
+    }
+    .landing-kicker {
+      margin: 0 0 14px;
+      color: #F1D5DB;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .landing-copy h1 {
+      color: #fff;
+      font-family: var(--serif);
+      font-size: 56px;
+      line-height: 1.04;
+      font-weight: 600;
+      max-width: 700px;
+    }
+    .landing-copy .lede {
+      color: rgba(255, 255, 255, 0.86);
+      font-size: 19px;
+      line-height: 1.45;
+      max-width: 640px;
+      margin: 18px 0 0;
+    }
+    .landing-access {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: end;
+      gap: 10px;
+      max-width: 680px;
+      margin-top: 28px;
+    }
+    .landing-access label {
+      margin: 0 0 6px;
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 12px;
+      letter-spacing: 0;
+    }
+    .landing-access input {
+      min-height: 46px;
+      border-color: rgba(255, 255, 255, 0.38);
+      background: rgba(255, 255, 255, 0.96);
+      font-family: var(--mono);
+      font-size: 13px;
+    }
+    .landing-access button {
+      width: auto;
+      min-height: 46px;
+      margin-top: 0;
+      padding: 0 18px;
+      white-space: nowrap;
+      border-color: #fff;
+      background: #fff;
+      color: var(--brand-dark);
+    }
+    .landing-access button:hover {
+      border-color: #F7EDEF;
+      background: #F7EDEF;
+      color: var(--brand-dark);
+    }
+    .landing-note {
+      max-width: 660px;
+      margin: 10px 0 0;
+      color: rgba(255, 255, 255, 0.74);
+      font-size: 13px;
+    }
+    #landing-login-error {
+      grid-column: 1 / -1;
+      margin: 0;
+      color: #FFD9D2;
+      font-size: 13px;
+    }
+    #landing-login-error[hidden] { display: none; }
+    .landing-band {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 42px 24px 58px;
+    }
+    .landing-band h2 {
+      color: var(--ink);
+      font-family: var(--serif);
+      font-size: 28px;
+      font-weight: 600;
+      line-height: 1.18;
+      text-transform: none;
+      letter-spacing: 0;
+      max-width: 700px;
+    }
+    .landing-band > p {
+      max-width: 720px;
+      margin: 10px 0 24px;
+      color: var(--ink-2);
+      font-size: 15px;
+    }
+    .landing-features {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .landing-feature {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 20px;
+    }
+    .landing-feature strong {
+      display: block;
+      color: var(--ink);
+      font-size: 16px;
+      margin-bottom: 7px;
+    }
+    .landing-feature p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13.5px;
+    }
 
     /* ── Cabeçalho ─────────────────────────────────────────── */
     header {
@@ -491,6 +647,23 @@
 
     /* ── Responsivo e acessibilidade ───────────────────────── */
     @media (max-width: 920px) {
+      .landing-hero {
+        min-height: 86vh;
+        padding: 18px 18px 38px;
+        background:
+          linear-gradient(90deg, rgba(23, 26, 32, 0.9) 0%, rgba(23, 26, 32, 0.76) 58%, rgba(23, 26, 32, 0.46) 100%),
+          url("/static/assets/causia-hero-legal-desk.jpg");
+        background-size: cover;
+        background-position: center;
+      }
+      .landing-nav { align-items: flex-start; }
+      .landing-nav-note {
+        max-width: 190px;
+        font-size: 12.5px;
+      }
+      .landing-copy h1 { font-size: 40px; }
+      .landing-copy .lede { font-size: 17px; }
+      .landing-features { grid-template-columns: 1fr; }
       header { padding: 0 16px; gap: 12px; height: auto; min-height: 58px; flex-wrap: wrap; }
       main { grid-template-columns: 1fr; padding: 16px; }
       .form-panel { position: static; }
@@ -502,12 +675,65 @@
       .proc-row { grid-template-columns: 1fr; gap: 6px; }
       .proc-prazo { text-align: left; }
     }
+    @media (max-width: 640px) {
+      .landing-copy { padding-top: 30px; }
+      .landing-copy h1 { font-size: 34px; }
+      .landing-copy .lede { font-size: 16px; }
+      .landing-access { grid-template-columns: 1fr; }
+      .landing-access button { width: 100%; }
+      .landing-nav {
+        display: grid;
+        grid-template-columns: 1fr;
+      }
+      .landing-nav-note { text-align: left; max-width: none; }
+    }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { transition: none !important; animation: none !important; }
     }
   </style>
 </head>
 <body>
+  <section id="landing">
+    <div class="landing-hero">
+      <div class="landing-nav">
+        <div class="brand"><div class="mark">C</div><div>Caus<span class="ia">ia</span></div></div>
+        <div class="landing-nav-note">Teste gratuito por 30 dias, sem cadastro.</div>
+      </div>
+      <div class="landing-copy">
+        <p class="landing-kicker">IA jurídica privada para escritórios</p>
+        <h1>Transforme processos em trabalho pronto sem expor os dados do cliente.</h1>
+        <p class="lede">Causia organiza acervo, prazos, minutas e protocolo controlado em uma mesa de trabalho jurídica. Você usa gratuitamente por 30 dias, sem criar conta.</p>
+        <form id="landing-login-form" class="landing-access">
+          <div>
+            <label for="landing-api-key">Chave de acesso do teste</label>
+            <input id="landing-api-key" type="password" placeholder="Cole sua API key" autocomplete="off" required />
+          </div>
+          <button type="submit">Começar grátis</button>
+          <p id="landing-login-error" hidden></p>
+        </form>
+        <p class="landing-note">A chave fica apenas nesta aba do navegador. Não guardamos seus dados nem os dados dos seus processos.</p>
+      </div>
+    </div>
+    <div class="landing-band">
+      <h2>Uma mesa de trabalho para usar antes de contratar qualquer plano.</h2>
+      <p>O piloto abre o console completo por 30 dias: acervo, agenda, geração de artefatos, busca explicável e fluxo de protocolo com controle humano.</p>
+      <div class="landing-features">
+        <div class="landing-feature">
+          <strong>Sem cadastro</strong>
+          <p>Você entra com a chave de teste e começa a avaliar o produto sem formulário comercial.</p>
+        </div>
+        <div class="landing-feature">
+          <strong>30 dias gratuitos</strong>
+          <p>Tempo suficiente para testar com rotina real, revisar minutas e medir ganho operacional.</p>
+        </div>
+        <div class="landing-feature">
+          <strong>Privacidade por desenho</strong>
+          <p>A operação foi pensada para não reter dados do escritório nem dados dos processos.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <div id="login-overlay" hidden>
     <div class="login-panel">
       <div class="brand"><div class="mark">C</div><div>Caus<span class="ia">ia</span></div></div>
@@ -520,7 +746,7 @@
       </form>
     </div>
   </div>
-  <header>
+  <header id="app-header" hidden>
     <div class="brand"><div class="mark">C</div><div>Caus<span class="ia">ia</span></div></div>
     <nav id="nav">
       <button type="button" data-nav="mesa" class="active">Mesa</button>
@@ -533,7 +759,7 @@
     <div class="status" id="ai-session" title="Modo de IA e de-identificação (ADR-0016/0018)">IA: …</div>
   </header>
 
-  <main>
+  <main id="app-shell" hidden>
     <section class="workbench-panel" data-view="mesa">
       <h1>Mesa de trabalho</h1>
       <p class="lede">Filas do dia por prazo, movimentação, rascunho, bloqueio e artefatos recentes.</p>
@@ -848,10 +1074,17 @@
     // (sessionStorage) e reabre o login em 401. Em deploy aberto (sem tenants)
     // nenhum 401 acontece e o overlay nunca aparece.
     const API_KEY_STORAGE = "jurisApiKey";
+    const landing = document.querySelector("#landing");
+    const appHeader = document.querySelector("#app-header");
+    const appShell = document.querySelector("#app-shell");
+    const landingForm = document.querySelector("#landing-login-form");
+    const landingInput = document.querySelector("#landing-api-key");
+    const landingError = document.querySelector("#landing-login-error");
     const loginOverlay = document.querySelector("#login-overlay");
     const loginForm = document.querySelector("#login-form");
     const loginInput = document.querySelector("#login-api-key");
     const loginError = document.querySelector("#login-error");
+    let consoleBooted = false;
 
     function getApiKey() {
       try { return sessionStorage.getItem(API_KEY_STORAGE) || ""; } catch (_) { return ""; }
@@ -873,8 +1106,36 @@
       loginError.hidden = true;
       loginInput.value = "";
     }
+    function showLanding() {
+      landing.hidden = false;
+      appHeader.hidden = true;
+      appShell.hidden = true;
+      hideLogin();
+    }
+    function hideLandingError() {
+      landingError.hidden = true;
+      landingError.textContent = "";
+    }
+    function showLandingError(message) {
+      landingError.textContent = message;
+      landingError.hidden = false;
+    }
+    function showConsoleShell() {
+      landing.hidden = true;
+      appHeader.hidden = false;
+      appShell.hidden = false;
+    }
+    function setFormBusy(formEl, busy, label) {
+      const button = formEl.querySelector("button[type='submit']");
+      if (!button) return;
+      if (!button.dataset.idleLabel) button.dataset.idleLabel = button.textContent;
+      button.disabled = busy;
+      button.textContent = busy ? label : button.dataset.idleLabel;
+    }
     async function apiFetch(url, options) {
       const opts = Object.assign({}, options);
+      const suppressLogin = Boolean(opts.suppressLogin);
+      delete opts.suppressLogin;
       const headers = new Headers(opts.headers || {});
       const key = getApiKey();
       if (key) headers.set("X-API-Key", key);
@@ -883,28 +1144,58 @@
       if (response.status === 401) {
         const hadKey = Boolean(key);
         setApiKey("");
-        showLogin(hadKey ? "Chave inválida ou expirada. Informe a chave do escritório." : "");
+        if (!suppressLogin) {
+          if (hadKey) showLogin("Chave inválida ou expirada. Informe a chave do escritório.");
+          else if (landing.hidden && loginOverlay.hidden) showLogin("");
+        }
       }
       return response;
     }
+    async function verifyApiKey(candidate, onError) {
+      if (!candidate) return;
+      setApiKey(candidate);
+      try {
+        const probe = await apiFetch("/api/workbench", { suppressLogin: true });
+        if (probe.status === 401) {
+          setApiKey("");
+          onError("Chave inválida ou expirada. Confira a API key e tente novamente.");
+          return false;
+        }
+        if (!probe.ok) {
+          onError("Chave aceita, mas o servidor respondeu com erro. Tente de novo.");
+          return false;
+        }
+      } catch (_) {
+        setApiKey("");
+        onError("Não foi possível falar com o servidor. Verifique a conexão.");
+        return false;
+      }
+      return true;
+    }
+    landingForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const candidate = landingInput.value.trim();
+      if (!candidate) return;
+      hideLandingError();
+      setFormBusy(landingForm, true, "Validando...");
+      const ok = await verifyApiKey(candidate, showLandingError);
+      setFormBusy(landingForm, false, "");
+      if (!ok) return;
+      landingInput.value = "";
+      hideLogin();
+      bootConsole();
+    });
     loginForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const candidate = loginInput.value.trim();
       if (!candidate) return;
-      setApiKey(candidate);
-      try {
-        const probe = await apiFetch("/api/workbench");
-        if (probe.status === 401) return; // apiFetch já reabriu com erro
-        if (!probe.ok) {
-          showLogin("Chave aceita, mas o servidor respondeu com erro. Tente de novo.");
-          return;
-        }
-      } catch (_) {
-        showLogin("Não foi possível falar com o servidor. Verifique a conexão.");
-        return;
-      }
+      loginError.hidden = true;
+      setFormBusy(loginForm, true, "Validando...");
+      const ok = await verifyApiKey(candidate, (message) => showLogin(message));
+      setFormBusy(loginForm, false, "");
+      if (!ok) return;
       hideLogin();
-      location.reload(); // reexecuta o boot já autenticado
+      bootConsole();
     });
 
     const form = document.querySelector("#demo-form");
@@ -1151,7 +1442,6 @@
       }
     }
     sourceSel.addEventListener("change", toggleNewCaseCpf);
-    loadAgentMode();
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -2282,9 +2572,6 @@
       }
     }
 
-    loadAiSession();
-    loadWorkbench();
-    loadProcessos();
     const cuNotice = document.querySelector("#cu_notice");
     function showCuNotice(message, isError) {
       cuNotice.textContent = message;
@@ -2350,13 +2637,33 @@
       searchCorpus(document.querySelector("#corpus-search-q").value);
     });
 
-    loadPrazos();
-    loadPilotFeedback();
-    loadPilotSummary();
-    loadCorpusQueue();
-    loadPilotComparison();
-    loadFilingStatus();
-    loadFilingArtifacts();
+    function bootConsole() {
+      showConsoleShell();
+      showView("mesa");
+      if (consoleBooted) {
+        loadAiSession();
+        loadWorkbench();
+        loadProcessos();
+        loadPrazos();
+        loadFilingStatus();
+        return;
+      }
+      consoleBooted = true;
+      loadAgentMode();
+      loadAiSession();
+      loadWorkbench();
+      loadProcessos();
+      loadPrazos();
+      loadPilotFeedback();
+      loadPilotSummary();
+      loadCorpusQueue();
+      loadPilotComparison();
+      loadFilingStatus();
+      loadFilingArtifacts();
+    }
+
+    if (getApiKey()) bootConsole();
+    else showLanding();
   </script>
 </body>
 </html>

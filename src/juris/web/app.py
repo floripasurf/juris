@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from juris import __version__
@@ -94,6 +94,7 @@ app = FastAPI(
 
 _STATIC_DIR = Path(__file__).with_name("static")
 _INDEX_PATH = _STATIC_DIR / "index.html"
+_ASSETS_DIR = _STATIC_DIR / "assets"
 _EXPENSIVE_API_PREFIXES = (
     "/api/demo-runs",
     "/api/corpus/search",
@@ -1255,6 +1256,19 @@ def _require_filing_credentials(payload: FilingPayload, *, remote: bool) -> None
 async def index() -> str:
     """Render the local operator UI."""
     return await asyncio.to_thread(_INDEX_PATH.read_text, encoding="utf-8")
+
+
+@app.api_route("/static/assets/{asset_path:path}", methods=["GET", "HEAD"])
+async def static_asset(asset_path: str) -> FileResponse:
+    """Serve checked-in UI assets without exposing arbitrary local files."""
+    asset = (_ASSETS_DIR / asset_path).resolve()
+    try:
+        asset.relative_to(_ASSETS_DIR.resolve())
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Asset not found.") from exc
+    if not asset.is_file():
+        raise HTTPException(status_code=404, detail="Asset not found.")
+    return FileResponse(asset)
 
 
 @app.post("/api/demo-runs")
