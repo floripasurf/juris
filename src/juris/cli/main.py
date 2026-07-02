@@ -314,9 +314,7 @@ def avisos(
     _material, resolved_senha, resolved_pin = _mtls_session(tribunal_cfg, cpf, senha, pin)
 
     try:
-        result = InProcessMNIReadService().consultar_avisos(
-            tribunal_cfg, cpf, resolved_senha, token_pin=resolved_pin
-        )
+        result = InProcessMNIReadService().consultar_avisos(tribunal_cfg, cpf, resolved_senha, token_pin=resolved_pin)
     except RuntimeError as e:
         console.print(f"[red]MNI Error:[/red] {e}")
         raise typer.Exit(code=1) from e
@@ -345,9 +343,7 @@ def avisos(
         from juris.core.credentials import store_credential
 
         tracked = _get_tracked_processos()
-        entries = [
-            {"numero_cnj": a.numero_processo, "tribunal": tribunal} for a in result.avisos if a.numero_processo
-        ]
+        entries = [{"numero_cnj": a.numero_processo, "tribunal": tribunal} for a in result.avisos if a.numero_processo]
         tracked, added = _merge_tracked(tracked, entries)
         store_credential("tracked_processos", json.dumps(tracked))
         console.print(f"[green]Rastreando +{added} processo(s)[/green] [dim](total: {len(tracked)})[/dim]")
@@ -362,6 +358,102 @@ def _safe_get_tribunal(tribunal_id: str) -> TribunalConfig | None:
         return get_tribunal(tribunal_id)
     except KeyError:
         return None
+
+
+def _nightly_processos(
+    tracked_list: list[dict[str, str]], tribunal_filter: str | None
+) -> list[dict[str, str]]:
+    """Normalize tracked entries into the shape expected by ``run_nightly``."""
+    if tribunal_filter:
+        tracked_list = [p for p in tracked_list if p.get("tribunal") == tribunal_filter]
+    return [{"numero_cnj": p["numero_cnj"], "tribunal": p.get("tribunal", "tjmg")} for p in tracked_list]
+
+
+def _resolve_nightly_senha(cpf: str, senha: str, processos: list[dict[str, str]]) -> str:
+    """Resolve PJe password from Keychain for the tribunals in this nightly batch."""
+    if senha or not cpf:
+        return senha
+    from juris.core.credentials import get_credential
+
+    tribunais = {p["tribunal"] for p in processos}
+    for trib in tribunais:
+        stored = get_credential(f"mni_{trib}_{cpf}")
+        if stored:
+            return stored
+    return ""
+
+
+def _resolve_nightly_pin(
+    pin: str | None, processos: list[dict[str, str]], *, remote_agent: bool
+) -> str | None:
+    """Resolve token PIN when the token is co-located; remote agents resolve it locally."""
+    if remote_agent:
+        return None
+    needs_mtls = any((_t := _safe_get_tribunal(p["tribunal"])) is not None and _t.requires_mtls for p in processos)
+    if not needs_mtls or pin:
+        return pin
+    from juris.config import get_settings
+
+    settings = get_settings()
+    if settings.token_pin:
+        return settings.token_pin.get_secret_value()
+    return getpass.getpass("PIN do token A3 (mTLS): ")
+
+
+def _print_nightly_results(summary: Any) -> None:
+    """Render the per-process part of a nightly summary."""
+    for r in summary.results:
+        if r.error:
+            console.print(f"  [red]FAIL[/red] {r.numero_cnj}: {r.error}")
+        else:
+            parts = [f"[green]OK[/green] {r.numero_cnj}"]
+            if r.new_movimentos:
+                parts.append(f"+{r.new_movimentos} mov")
+            if r.prazos_computed:
+                parts.append(f"{r.prazos_computed} prazos")
+            if r.critical_alerts:
+                parts.append(f"[red]{r.critical_alerts} alertas[/red]")
+            if not r.new_movimentos and r.success:
+                parts.append("no changes")
+            console.print(f"  {' | '.join(parts)}")
+
+            # Show critical alerts inline
+            if r.alert_batch and r.alert_batch.has_critical:
+                from juris.alerts.deadline_alerts import AlertLevel
+
+                for a in r.alert_batch.alerts:
+                    if a.level == AlertLevel.CRITICAL:
+                        console.print(f"    [red]{a.short_message}[/red]")
+
+
+def _print_nightly_summary(summary: Any) -> None:
+    console.print("\n[bold]Summary:[/bold]")
+    console.print(f"  Succeeded: {summary.succeeded}/{summary.total}")
+    if summary.total_critical_alerts:
+        console.print(f"  [red]Critical alerts: {summary.total_critical_alerts}[/red]")
+    console.print(f"  Duration: {summary.duration_seconds:.1f}s")
+
+
+def _deliver_nightly_alerts(db: Any, summary: Any) -> int:
+    """Send pending alerts for one DB; return desired process exit code."""
+    import asyncio
+
+    from juris.alerts.pending import send_pending_deadline_alerts
+
+    alert_summary = asyncio.run(send_pending_deadline_alerts(db=db))
+    if not alert_summary.smtp_configured:
+        msg = "SMTP not configured; pending alerts were not sent."
+        if summary.total_critical_alerts:
+            console.print(f"[red]{msg} Set ALERT_SMTP_HOST, ALERT_FROM_ADDRESS, ALERT_TO_ADDRESSES.[/red]")
+            return 2
+        console.print(f"[yellow]{msg}[/yellow]")
+        return 0
+    console.print(
+        "[bold]Alert delivery:[/bold] "
+        f"{alert_summary.sent} sent | {alert_summary.failed} failed | "
+        f"{alert_summary.alerts} alert(s) | {alert_summary.suppressed} deduped"
+    )
+    return 2 if alert_summary.failed else 0
 
 
 @app.command()
@@ -730,9 +822,7 @@ def pull_updates(
         if not result.error and result.had_changes:
             # Persist new movimentos
             proc = db.get_processo_by_cnj(result.numero_cnj)
-            proc_id = (
-                db.upsert_processo(result.numero_cnj, result.tribunal_id) if proc is None else proc.id
-            )
+            proc_id = db.upsert_processo(result.numero_cnj, result.tribunal_id) if proc is None else proc.id
 
             mov_dicts = [
                 {
@@ -820,7 +910,7 @@ def analyze(
 
             llm = OllamaLLM()
             console.print("[dim]LLM: Ollama (local) for ambiguous movements[/dim]")
-        except Exception:
+        except Exception:  # noqa: BLE001
             console.print("[yellow]Ollama not available, using rules only.[/yellow]")
 
     analysis = asyncio.run(
@@ -1027,6 +1117,16 @@ def overnight(
     pin: str = typer.Option(None, "--pin", help="Token PIN for mTLS tribunals (else prompted/env)"),
     analyze: bool = typer.Option(True, "--analyze/--no-analyze", help="Run analysis after sync"),
     max_concurrent: int = typer.Option(10, "--max-concurrent", "-c", help="Max concurrent syncs"),
+    all_tenants: bool = typer.Option(
+        False,
+        "--all-tenants",
+        help="Run the nightly pipeline for every tenant configured in JURIS_TENANTS_FILE",
+    ),
+    send_alerts: bool = typer.Option(
+        True,
+        "--send-alerts/--no-send-alerts",
+        help="Send pending critical/warning deadline alerts after the nightly run",
+    ),
 ) -> None:
     """Full nightly pipeline: differential sync → analyze → prazos → alerts.
 
@@ -1035,91 +1135,74 @@ def overnight(
     """
     import asyncio
 
-    from juris.jobs.nightly import run_nightly
-    from juris.persistence.local_db import LocalDB
+    from rich.markup import escape
 
-    tracked_list = _get_tracked_processos()
-    if not tracked_list:
-        console.print("[yellow]No processos tracked. Use 'juris track <numero_cnj>' first.[/yellow]")
+    from juris.api.agent_config import is_remote
+    from juris.jobs.nightly import run_nightly
+    from juris.mni.factory import get_mni_read_service
+    from juris.persistence.local_db import LocalDB
+    from juris.web.auth import Tenant, default_registry, tenant_db_path
+
+    registry = default_registry()
+    if all_tenants:
+        if registry.is_open:
+            console.print("[red]--all-tenants exige JURIS_TENANTS_FILE configurado.[/red]")
+            raise typer.Exit(code=1)
+        tenant_ids = registry.tenant_ids
+    else:
+        tenant_ids = ("public",)
+
+    remote_agent = is_remote()
+    resolved_cpf = cpf or ""
+    exit_code = 0
+    ran_any = False
+
+    for tenant_id in tenant_ids:
+        tenant = Tenant(tenant_id)
+        db = LocalDB(tenant_db_path(tenant)) if all_tenants else LocalDB()
+        tracked_list = _get_tracked_processos(db=db) if all_tenants else _get_tracked_processos()
+        processos = _nightly_processos(tracked_list, tribunal)
+        if not processos:
+            console.print(f"[yellow]No processos tracked for tenant {tenant_id}.[/yellow]")
+            continue
+
+        ran_any = True
+        resolved_senha = _resolve_nightly_senha(resolved_cpf, senha or "", processos)
+        resolved_pin = _resolve_nightly_pin(pin, processos, remote_agent=remote_agent)
+        mni_service = get_mni_read_service(tenant_id) if all_tenants or remote_agent else None
+
+        heading = f"Nightly pipeline [{tenant_id}]: {len(processos)} processos"
+        console.print(f"[bold]{escape(heading)}[/bold]")
+        console.print(f"[dim]DB: {db.path} | Concurrent: {max_concurrent} | Analyze: {analyze}[/dim]\n")
+
+        summary = asyncio.run(
+            run_nightly(
+                processos=processos,
+                db=db,
+                cpf=resolved_cpf,
+                senha=resolved_senha,
+                max_concurrent=max_concurrent,
+                token_pin=resolved_pin,
+                mni_service=mni_service,
+            )
+        )
+
+        _print_nightly_results(summary)
+        _print_nightly_summary(summary)
+        if send_alerts:
+            exit_code = max(exit_code, _deliver_nightly_alerts(db, summary))
+
+    if not ran_any:
+        hint = (
+            "Use 'juris track <numero_cnj>' first."
+            if not all_tenants
+            else "Conecte/importe processos por tenant primeiro."
+        )
+        console.print(f"[yellow]No processos tracked. {hint}[/yellow]")
         raise typer.Exit(code=1)
 
-    if tribunal:
-        tracked_list = [p for p in tracked_list if p.get("tribunal") == tribunal]
-
-    processos = [{"numero_cnj": p["numero_cnj"], "tribunal": p.get("tribunal", "tjmg")} for p in tracked_list]
-
-    db = LocalDB()
-    resolved_cpf = cpf or ""
-    # Resolve PJe password from Keychain when a CPF is known and senha omitted.
-    resolved_senha = senha or ""
-    if resolved_cpf and not resolved_senha:
-        from juris.core.credentials import get_credential
-
-        tribunais = {p["tribunal"] for p in processos}
-        for trib in tribunais:
-            stored = get_credential(f"mni_{trib}_{resolved_cpf}")
-            if stored:
-                resolved_senha = stored
-                break
-
-    # If any tracked tribunal needs mTLS, ensure we have a token PIN.
-    needs_mtls = any(
-        (_t := _safe_get_tribunal(p["tribunal"])) is not None and _t.requires_mtls
-        for p in processos
-    )
-    resolved_pin = pin
-    if needs_mtls and not resolved_pin:
-        from juris.config import get_settings
-
-        settings = get_settings()
-        if settings.token_pin:
-            resolved_pin = settings.token_pin.get_secret_value()
-        else:
-            resolved_pin = getpass.getpass("PIN do token A3 (mTLS): ")
-
-    console.print(f"[bold]Nightly pipeline: {len(processos)} processos[/bold]")
-    console.print(f"[dim]DB: {db.path} | Concurrent: {max_concurrent} | Analyze: {analyze}[/dim]\n")
-
-    summary = asyncio.run(
-        run_nightly(
-            processos=processos,
-            db=db,
-            cpf=resolved_cpf,
-            senha=resolved_senha,
-            max_concurrent=max_concurrent,
-            token_pin=resolved_pin,
-        )
-    )
-
-    # Print results
-    for r in summary.results:
-        if r.error:
-            console.print(f"  [red]FAIL[/red] {r.numero_cnj}: {r.error}")
-        else:
-            parts = [f"[green]OK[/green] {r.numero_cnj}"]
-            if r.new_movimentos:
-                parts.append(f"+{r.new_movimentos} mov")
-            if r.prazos_computed:
-                parts.append(f"{r.prazos_computed} prazos")
-            if r.critical_alerts:
-                parts.append(f"[red]{r.critical_alerts} alertas[/red]")
-            if not r.new_movimentos and r.success:
-                parts.append("no changes")
-            console.print(f"  {' | '.join(parts)}")
-
-            # Show critical alerts inline
-            if r.alert_batch and r.alert_batch.has_critical:
-                from juris.alerts.deadline_alerts import AlertLevel
-
-                for a in r.alert_batch.alerts:
-                    if a.level == AlertLevel.CRITICAL:
-                        console.print(f"    [red]{a.short_message}[/red]")
-
-    console.print("\n[bold]Summary:[/bold]")
-    console.print(f"  Succeeded: {summary.succeeded}/{summary.total}")
-    if summary.total_critical_alerts:
-        console.print(f"  [red]Critical alerts: {summary.total_critical_alerts}[/red]")
-    console.print(f"  Duration: {summary.duration_seconds:.1f}s")
+    if exit_code:
+        raise typer.Exit(code=exit_code)
 
 
 @app.command()
@@ -1729,10 +1812,8 @@ def repertory_search(
         from juris.repertory.retrieval.service import RepertoryService
 
         retriever = HybridRetriever(dense_store=store, sparse_store=store, embedder=LegalEmbedder())
-        results: list[Any] = list(
-            RepertoryService(retriever=retriever).search_jurisprudencia(query=query, top_k=top_k)
-        )
-    except Exception:
+        results: list[Any] = list(RepertoryService(retriever=retriever).search_jurisprudencia(query=query, top_k=top_k))
+    except Exception:  # noqa: BLE001
         results = list(store.search_text(query, top_k=top_k))
 
     if not results:
@@ -1769,18 +1850,14 @@ def repertory_search(
 
 @repertory_app.command("consolidate")
 def repertory_consolidate(
-    archive: bool = typer.Option(
-        False, "--archive", help="Após consolidar, arquiva o banco legado como .bak."
-    ),
+    archive: bool = typer.Option(False, "--archive", help="Após consolidar, arquiva o banco legado como .bak."),
 ) -> None:
     """Consolida o banco legado (data/repertory.db) no canônico do JURIS_HOME."""
     from juris.repertory.consolidate import consolidate_repertory
 
     result = consolidate_repertory()
     if result.merged == 0 and not result.copied_whole:
-        console.print(
-            "[green]Nada a consolidar.[/green] O canônico já está atualizado (ou não há banco legado)."
-        )
+        console.print("[green]Nada a consolidar.[/green] O canônico já está atualizado (ou não há banco legado).")
         return
 
     if result.copied_whole:
@@ -1788,8 +1865,7 @@ def repertory_consolidate(
         return
 
     console.print(
-        f"[green]Consolidado:[/green] +{result.merged} chunks "
-        f"({result.skipped} já presentes) → {result.canonical}"
+        f"[green]Consolidado:[/green] +{result.merged} chunks ({result.skipped} já presentes) → {result.canonical}"
     )
     if archive and result.legacy.exists():
         bak = result.legacy.with_suffix(".db.bak")
@@ -1937,7 +2013,7 @@ def repertory_ingest_peticoes(
         from juris.llm.ollama import OllamaLLM
 
         llm = OllamaLLM()
-    except Exception:
+    except Exception:  # noqa: BLE001
         console.print("[red]Ollama not available. LLM is required for extraction.[/red]")
         raise typer.Exit(code=1) from None
 
@@ -2008,7 +2084,7 @@ def review(
             console.print("[dim]LLM: Claude (cloud, de-identificado)[/dim]")
         except typer.Exit:
             raise
-        except Exception:
+        except Exception:  # noqa: BLE001
             console.print("[red]Claude not available. Check ANTHROPIC_API_KEY.[/red]")
             raise typer.Exit(code=1) from None
     else:
@@ -2017,7 +2093,7 @@ def review(
 
             llm = OllamaLLM()
             console.print("[dim]LLM: Ollama (local)[/dim]")
-        except Exception:
+        except Exception:  # noqa: BLE001
             console.print("[red]Ollama not available.[/red]")
             raise typer.Exit(code=1) from None
 
@@ -2334,10 +2410,7 @@ def escavacao_run(
 
     result = asyncio.run(executar_escavacao(fila, build_escavacao_fetcher()))
     paths = write_inteiro_teor(result.coletados, FilePath(out))
-    console.print(
-        f"[green]Coletados:[/green] {len(paths)} inteiros teores "
-        f"({len(result.falhas)} falhas) → {out}/"
-    )
+    console.print(f"[green]Coletados:[/green] {len(paths)} inteiros teores ({len(result.falhas)} falhas) → {out}/")
 
     # Bridge the harvest INTO the searchable corpus (else the moat is JSON on disk).
     from juris.escavacao.executor import ingest_inteiro_teor
@@ -2416,83 +2489,24 @@ def alerts_send() -> None:
     """Send pending deadline alerts via email."""
     import asyncio
 
-    from juris.alerts.delivery import AlertDelivery, AlertEmailConfig
-    from juris.config import get_settings
-    from juris.persistence.local_db import LocalDB
+    from juris.alerts.pending import alert_email_config_from_settings, send_pending_deadline_alerts
 
-    settings = get_settings()
-
-    # Build SMTP config
-    to_list = [a.strip() for a in settings.alert_to_addresses.split(",") if a.strip()]
-    smtp_config = AlertEmailConfig(
-        smtp_host=settings.alert_smtp_host,
-        smtp_port=settings.alert_smtp_port,
-        smtp_user=settings.alert_smtp_user,
-        smtp_password=settings.alert_smtp_password.get_secret_value() if settings.alert_smtp_password else "",
-        from_address=settings.alert_from_address,
-        to_addresses=to_list,
-    )
-
+    smtp_config = alert_email_config_from_settings()
     if not smtp_config.is_configured:
         console.print("[red]SMTP not configured. Set ALERT_SMTP_HOST, ALERT_FROM_ADDRESS, ALERT_TO_ADDRESSES.[/red]")
         raise typer.Exit(code=1)
 
-    db = LocalDB()
-    delivery = AlertDelivery(smtp_config)
-
-    # Get all processos with pending prazos
-    processos = db.get_all_processos()
-    if not processos:
+    summary = asyncio.run(send_pending_deadline_alerts(config=smtp_config))
+    if summary.processos_checked == 0:
         console.print("[yellow]No processos in database.[/yellow]")
         return
 
-    sent = 0
-    failed = 0
-    for proc in processos:
-        pending = db.get_pending_prazos(proc.numero_cnj)
-        if not pending:
-            continue
-
-        # Build a minimal AlertBatch from pending prazos
-        from datetime import date
-        from types import SimpleNamespace
-
-        from juris.alerts.deadline_alerts import AlertBatch, AlertLevel, DeadlineAlert
-        from juris.prazo.engine import Prazo
-
-        alerts_list = []
-        for pr in pending:
-            if pr.status in ("vencido", "urgente", "proximo"):
-                level = AlertLevel.CRITICAL if pr.status in ("vencido", "urgente") else AlertLevel.WARNING
-                prazo_view = SimpleNamespace(
-                    rule=SimpleNamespace(nome=pr.rule_nome),
-                    data_limite=pr.data_limite,
-                )
-                alerts_list.append(
-                    DeadlineAlert(
-                        prazo=cast(Prazo, prazo_view),
-                        level=level,
-                        message=f"{pr.rule_nome}: {pr.status}",
-                    )
-                )
-
-        if not alerts_list:
-            continue
-
-        batch = AlertBatch(
-            numero_cnj=proc.numero_cnj,
-            tribunal=proc.tribunal_id,
-            generated_at=date.today(),
-            alerts=alerts_list,
-        )
-
-        success = asyncio.run(delivery.send_alert_batch(batch))
-        if success:
-            sent += 1
-        else:
-            failed += 1
-
-    console.print(f"[bold]Alerts sent:[/bold] {sent} processos | [red]Failed:[/red] {failed}")
+    console.print(
+        f"[bold]Alerts sent:[/bold] {summary.sent} processos | "
+        f"[red]Failed:[/red] {summary.failed} | {summary.alerts} alert(s)"
+    )
+    if summary.failed:
+        raise typer.Exit(code=2)
 
 
 benchmark_app = typer.Typer(name="benchmark", help="Retrieval quality benchmark tools.")
@@ -3116,6 +3130,76 @@ def audit_verify(
     console.print(report.to_text())
     if not report.is_intact:
         raise typer.Exit(code=2)
+
+
+# ---------------------------------------------------------------------------
+# backup — operational backup/restore for legal-critical local state
+# ---------------------------------------------------------------------------
+
+
+backup_app = typer.Typer(name="backup", help="Backup/restore operacional do estado local.")
+app.add_typer(backup_app)
+
+
+@backup_app.command("create")
+def backup_create(
+    output: str | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Arquivo .tar.gz ou diretório de destino. Default: ${JURIS_BACKUP_DIR:-$JURIS_HOME/backups}.",
+    ),
+    include_out_root: bool = typer.Option(
+        True,
+        "--include-out-root/--no-out-root",
+        help="Inclui artefatos gerados em JURIS_OUT_ROOT além do JURIS_HOME e repertory.db.",
+    ),
+) -> None:
+    """Cria um backup local com audit logs, bancos por tenant, corpus e recibos."""
+    from juris.ops.backup import create_backup
+
+    try:
+        result = create_backup(
+            output=Path(output).expanduser() if output else None,
+            include_out_root=include_out_root,
+        )
+    except Exception as exc:
+        console.print(f"[red]Falha ao criar backup:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    console.print(f"[green]Backup criado:[/green] {result.archive_path}")
+    console.print(f"  SHA-256: {result.archive_sha256}")
+    console.print(f"  Checksum: {result.checksum_path}")
+    console.print(f"  Arquivos: {result.file_count} ({result.total_bytes} bytes)")
+    for warning in result.warnings:
+        console.print(f"[yellow]Aviso:[/yellow] {warning}")
+
+
+@backup_app.command("restore")
+def backup_restore(
+    archive: str = typer.Argument(..., help="Arquivo .tar.gz criado por `juris backup create`."),
+    target_root: str = typer.Argument(..., help="Diretório onde a árvore restaurada será materializada."),
+    overwrite: bool = typer.Option(False, "--overwrite", help="Sobrescreve arquivos já existentes no destino."),
+) -> None:
+    """Restaura um backup em uma árvore de destino confinada."""
+    from juris.ops.backup import restore_backup
+
+    try:
+        result = restore_backup(
+            Path(archive).expanduser(),
+            target_root=Path(target_root).expanduser(),
+            overwrite=overwrite,
+        )
+    except FileExistsError as exc:
+        console.print(f"[red]Arquivo já existe no destino:[/red] {exc}")
+        console.print("[yellow]Use --overwrite apenas depois de conferir a árvore de restore.[/yellow]")
+        raise typer.Exit(code=1) from exc
+    except Exception as exc:
+        console.print(f"[red]Falha ao restaurar backup:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    console.print(f"[green]Backup restaurado em:[/green] {result.target_root}")
+    console.print(f"  Arquivos restaurados: {len(result.files_restored)}")
 
 
 # ---------------------------------------------------------------------------

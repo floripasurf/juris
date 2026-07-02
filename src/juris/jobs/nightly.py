@@ -184,8 +184,8 @@ async def run_nightly_single(
     processo = diff.fetched
     if processo is None:
         try:
-            processo = _fetch_full_processo(numero_cnj, tribunal)
-        except Exception as e:
+            processo = await asyncio.to_thread(_fetch_full_processo, numero_cnj, tribunal)
+        except Exception as e:  # noqa: BLE001
             result.error = f"Full fetch failed: {type(e).__name__}: {e}"
             db.log_sync(numero_cnj, tribunal, source, success=False, error=result.error)
             return result

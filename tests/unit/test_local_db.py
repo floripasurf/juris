@@ -57,10 +57,18 @@ class TestLocalDB:
         db = LocalDB(tmp_path / "test.db")
         pid = db.upsert_processo("123", "tjmg")
         movs = [
-            {"data_hora": datetime(2026, 4, 1, tzinfo=UTC), "tipo": "nacional",
-             "codigo_nacional": 132, "id_movimento": "m1"},
-            {"data_hora": datetime(2026, 4, 2, tzinfo=UTC), "tipo": "nacional",
-             "codigo_nacional": 11, "id_movimento": "m2"},
+            {
+                "data_hora": datetime(2026, 4, 1, tzinfo=UTC),
+                "tipo": "nacional",
+                "codigo_nacional": 132,
+                "id_movimento": "m1",
+            },
+            {
+                "data_hora": datetime(2026, 4, 2, tzinfo=UTC),
+                "tipo": "nacional",
+                "codigo_nacional": 11,
+                "id_movimento": "m2",
+            },
         ]
         count = db.insert_movimentos(pid, movs)
         assert count == 2
@@ -103,6 +111,32 @@ class TestLocalDB:
         last = db.get_last_sync("123")
         assert last is not None
 
+    def test_sync_overview_reports_latest_runs_and_failures(self, tmp_path: Path) -> None:
+        db = LocalDB(tmp_path / "test.db")
+        db.log_sync("123", "tjmg", "mni", success=True, had_changes=True, new_movimentos=2)
+        db.log_sync("456", "tjsp", "datajud", success=False, error="timeout")
+
+        overview = db.get_sync_overview()
+
+        assert overview["total_runs"] == 2
+        assert overview["successful_runs"] == 1
+        assert overview["failed_runs"] == 1
+        assert overview["last_success_at"] is not None
+        assert overview["last_failure_at"] is not None
+        assert overview["recent_failures"] == [
+            {
+                "numero_cnj": "456",
+                "tribunal": "tjsp",
+                "source": "datajud",
+                "started_at": overview["recent_failures"][0]["started_at"],
+                "finished_at": overview["recent_failures"][0]["finished_at"],
+                "success": False,
+                "had_changes": False,
+                "new_movimentos": 0,
+                "error": "timeout",
+            }
+        ]
+
     def test_get_last_sync_none(self, tmp_path: Path) -> None:
         db = LocalDB(tmp_path / "test.db")
         assert db.get_last_sync("nonexistent") is None
@@ -111,9 +145,12 @@ class TestLocalDB:
         db = LocalDB(tmp_path / "test.db")
         pid = db.upsert_processo("123", "tjmg")
         dt = datetime(2026, 4, 1, 12, 0, tzinfo=UTC)
-        db.insert_movimentos(pid, [
-            {"data_hora": dt, "tipo": "nacional", "codigo_nacional": 132, "id_movimento": "m1"},
-        ])
+        db.insert_movimentos(
+            pid,
+            [
+                {"data_hora": dt, "tipo": "nacional", "codigo_nacional": 132, "id_movimento": "m1"},
+            ],
+        )
         keys = db.get_known_movimento_keys(pid)
         assert len(keys) == 1
         # SQLite strips tzinfo, so compare without it
@@ -137,6 +174,20 @@ class TestLocalDB:
         pending = db.get_pending_prazos("123")
         assert len(pending) == 1
         assert pending[0].rule_nome == "A"
+
+    def test_sent_alert_ledger_is_idempotent(self, tmp_path: Path) -> None:
+        db = LocalDB(tmp_path / "test.db")
+        record = {
+            "alert_key": "abc123",
+            "numero_cnj": "123",
+            "prazo_id": "prazo-1",
+            "level": "critical",
+        }
+
+        assert db.get_sent_alert_keys({"abc123"}) == set()
+        assert db.mark_alerts_sent([record]) == 1
+        assert db.mark_alerts_sent([record]) == 0
+        assert db.get_sent_alert_keys({"abc123", "other"}) == {"abc123"}
 
 
 def test_tracked_list_round_trips(tmp_path) -> None:

@@ -19,18 +19,33 @@ def build_workbench(
     prazos: list[PrazoView],
     out_root: Path,
     filing_root: Path | None = None,
+    sync_status: dict[str, object] | None = None,
     max_items: int = 5,
 ) -> dict[str, object]:
     """Build the daily queues shown by the web console — what to do today."""
     runs = _recent_run_manifests(out_root, max_items=max_items * 4)
     latest_by_cnj = _latest_run_by_cnj(runs)
     return {
+        "sync_status": sync_status or _empty_sync_status(),
         "critical_deadlines": _critical_deadlines(prazos, latest_by_cnj=latest_by_cnj, max_items=max_items),
         "recent_movements": _recent_movements(processos, latest_by_cnj=latest_by_cnj, max_items=max_items),
         "draft_ready": _draft_ready(processos, latest_by_cnj=latest_by_cnj, max_items=max_items),
         "blocked_cases": _blocked_cases(runs, max_items=max_items),
         "pending_filings": _pending_filings(filing_root, max_items=max_items),
         "recent_artifacts": _recent_artifacts(runs, max_items=max_items),
+    }
+
+
+def _empty_sync_status() -> dict[str, object]:
+    return {
+        "last_run": None,
+        "last_success_at": None,
+        "last_failure_at": None,
+        "total_runs": 0,
+        "successful_runs": 0,
+        "failed_runs": 0,
+        "recent_failures": [],
+        "recent_runs": [],
     }
 
 
@@ -56,11 +71,7 @@ def _latest_run_by_cnj(runs: list[dict[str, object]]) -> dict[str, dict[str, obj
 def _critical_deadlines(
     prazos: list[PrazoView], *, latest_by_cnj: dict[str, dict[str, object]], max_items: int
 ) -> list[dict[str, object]]:
-    selected = [
-        p
-        for p in prazos
-        if (p.urgencia or "").strip().lower() in _CRITICAL_URGENCY
-    ]
+    selected = [p for p in prazos if (p.urgencia or "").strip().lower() in _CRITICAL_URGENCY]
     selected.sort(key=lambda p: (p.data_limite is None, p.data_limite or datetime.max))
     return [
         {

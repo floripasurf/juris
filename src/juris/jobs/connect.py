@@ -15,6 +15,7 @@ Flow:
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -70,7 +71,13 @@ async def run_connect(
     first_time = not tracked
 
     # 1) Pending avisos → tracked list.
-    avisos = mni_service.consultar_avisos(tribunal_cfg, cpf, senha, token_pin=token_pin)
+    avisos = await asyncio.to_thread(
+        mni_service.consultar_avisos,
+        tribunal_cfg,
+        cpf,
+        senha,
+        token_pin=token_pin,
+    )
     avisos_entries: list[dict[str, str]] = (
         [{"numero_cnj": a.numero_processo, "tribunal": tribunal_cfg.id} for a in avisos.avisos if a.numero_processo]
         if avisos.sucesso

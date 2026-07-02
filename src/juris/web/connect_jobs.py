@@ -132,3 +132,18 @@ class ConnectJobStore:
                 ")",
                 (tenant_id, max_jobs),
             )
+
+    def count_by_tenant(self, tenant_id: str) -> int:
+        """Return how many connect jobs belong to ``tenant_id``."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM connect_jobs WHERE tenant_id = ?",
+                (tenant_id,),
+            ).fetchone()
+        return int(row[0] if row else 0)
+
+    def delete_by_tenant(self, tenant_id: str) -> int:
+        """Delete all connect jobs owned by ``tenant_id`` and return the row count."""
+        with self._conn() as conn:
+            cur = conn.execute("DELETE FROM connect_jobs WHERE tenant_id = ?", (tenant_id,))
+            return int(cur.rowcount)

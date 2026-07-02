@@ -239,6 +239,45 @@ class TestAuditLog:
         # Entry c's prev_hash points to b, but its predecessor is now the forged entry → flagged
         assert len(corrupted) >= 2
 
+    def test_hmac_anchor_detects_tail_truncation(self, tmp_path: Path) -> None:
+        log_path = tmp_path / "audit.jsonl"
+        log = AuditLog(log_path, hmac_key="anchor-secret")
+        log.log("a", "system", {"x": 1})
+        log.log("b", "system", {"x": 2})
+        log.log("c", "system", {"x": 3})
+
+        lines = log_path.read_text(encoding="utf-8").strip().split("\n")
+        log_path.write_text("\n".join(lines[:2]) + "\n", encoding="utf-8")
+
+        corrupted = log.verify_integrity()
+        assert "__audit_anchor__" in corrupted
+
+    def test_hmac_anchor_detects_head_truncation(self, tmp_path: Path) -> None:
+        log_path = tmp_path / "audit.jsonl"
+        log = AuditLog(log_path, hmac_key="anchor-secret")
+        log.log("a", "system", {"x": 1})
+        log.log("b", "system", {"x": 2})
+        log.log("c", "system", {"x": 3})
+
+        lines = log_path.read_text(encoding="utf-8").strip().split("\n")
+        log_path.write_text("\n".join(lines[1:]) + "\n", encoding="utf-8")
+
+        corrupted = log.verify_integrity()
+        assert "__audit_anchor__" in corrupted
+
+    def test_hmac_anchor_detects_anchor_tampering(self, tmp_path: Path) -> None:
+        log_path = tmp_path / "audit.jsonl"
+        log = AuditLog(log_path, hmac_key="anchor-secret")
+        log.log("a", "system", {"x": 1})
+
+        anchor_path = log_path.with_suffix(log_path.suffix + ".anchor.json")
+        anchor = json.loads(anchor_path.read_text(encoding="utf-8"))
+        anchor["count"] = 99
+        anchor_path.write_text(json.dumps(anchor), encoding="utf-8")
+
+        corrupted = log.verify_integrity()
+        assert "__audit_anchor__" in corrupted
+
     def test_legacy_entries_without_prev_hash_pass_integrity(self, tmp_path: Path) -> None:
         log_path = tmp_path / "audit.jsonl"
         # Write a legacy entry without prev_hash

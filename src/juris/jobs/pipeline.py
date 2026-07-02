@@ -115,7 +115,7 @@ async def run_pipeline_single(
     # 1. Fetch
     try:
         processo = _fetch_processo(numero_cnj, tribunal)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         result.error = f"Fetch failed: {type(e).__name__}: {e}"
         db.log_sync(numero_cnj, tribunal, "datajud", success=False, error=result.error)
         return result

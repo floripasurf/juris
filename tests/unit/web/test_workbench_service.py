@@ -130,3 +130,20 @@ def test_workbench_includes_pending_filings(tmp_path) -> None:
     wb = build_workbench(processos=[], prazos=[], out_root=tmp_path, filing_root=tmp_path / "filings")
     assert "pending_filings" in wb
     assert any(p["receipt_id"] == "20260701_pending" for p in wb["pending_filings"])
+
+
+def test_workbench_includes_nightly_sync_status(tmp_path) -> None:
+    sync_status = {
+        "last_run": {"numero_cnj": "A", "success": False, "error": "timeout"},
+        "last_success_at": None,
+        "last_failure_at": "2026-07-01T02:00:00+00:00",
+        "total_runs": 1,
+        "successful_runs": 0,
+        "failed_runs": 1,
+        "recent_failures": [{"numero_cnj": "A", "success": False, "error": "timeout"}],
+        "recent_runs": [{"numero_cnj": "A", "success": False, "error": "timeout"}],
+    }
+
+    wb = build_workbench(processos=[], prazos=[], out_root=tmp_path, sync_status=sync_status)
+
+    assert wb["sync_status"] == sync_status

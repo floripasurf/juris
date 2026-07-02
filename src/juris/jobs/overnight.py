@@ -17,6 +17,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from juris.core.observability import get_logger, new_correlation_id
+from juris.core.sanitize import safe_error_text
 from juris.mni.operations.differential import DiffResult, diff_processo
 
 if TYPE_CHECKING:
@@ -111,7 +112,8 @@ async def sync_processo_mni(
                     token_pin=token_pin,
                 )
             else:
-                fetched = _fetch_mni_mtls(
+                fetched = await asyncio.to_thread(
+                    _fetch_mni_mtls,
                     numero_cnj=numero_cnj,
                     tribunal_cfg=tribunal_cfg,
                     cpf=cpf,
@@ -120,26 +122,33 @@ async def sync_processo_mni(
                 )
         else:
             auth = PasswordAuth(cpf=cpf, senha=senha)
-            client = get_mni_client(tribunal_id, auth)
-            response = consultar_processo(
-                client=client,
-                id_consultante=cpf,
-                senha_consultante=senha,
-                numero_cnj=numero_cnj,
-                com_documentos=False,
-            )
 
-            sucesso = getattr(response, "sucesso", None)
-            if sucesso is False:
-                msg = getattr(response, "mensagem", "Unknown error")
-                circuit_breaker.record_failure(tribunal_id)
-                return DiffResult(
+            def _fetch_password_mni() -> ProcessoDomain | DiffResult:
+                client = get_mni_client(tribunal_id, auth)
+                response = consultar_processo(
+                    client=client,
+                    id_consultante=cpf,
+                    senha_consultante=senha,
                     numero_cnj=numero_cnj,
-                    tribunal_id=tribunal_id,
-                    error=f"MNI error: {msg}",
+                    com_documentos=False,
                 )
 
-            fetched = parse_processo(response, tribunal_id=tribunal_id)
+                sucesso = getattr(response, "sucesso", None)
+                if sucesso is False:
+                    msg = getattr(response, "mensagem", "Unknown error")
+                    circuit_breaker.record_failure(tribunal_id)
+                    return DiffResult(
+                        numero_cnj=numero_cnj,
+                        tribunal_id=tribunal_id,
+                        error=f"MNI error: {msg}",
+                    )
+
+                return parse_processo(response, tribunal_id=tribunal_id)
+
+            fetched_or_error = await asyncio.to_thread(_fetch_password_mni)
+            if isinstance(fetched_or_error, DiffResult):
+                return fetched_or_error
+            fetched = fetched_or_error
 
         circuit_breaker.record_success(tribunal_id)
 
@@ -150,13 +159,13 @@ async def sync_processo_mni(
             known_doc_ids=known_doc_ids,
         )
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         circuit_breaker.record_failure(tribunal_id)
-        logger.error("sync_processo_error", numero_cnj=numero_cnj, error=str(e))
+        logger.error("sync_processo_error", numero_cnj=numero_cnj, error=safe_error_text(e))
         return DiffResult(
             numero_cnj=numero_cnj,
             tribunal_id=tribunal_id,
-            error=f"{type(e).__name__}: {e}",
+            error=f"{type(e).__name__}: {safe_error_text(e)}",
         )
 
 
@@ -217,7 +226,7 @@ async def sync_processo_datajud(
     from juris.datajud.parser import parse_datajud_processo
 
     try:
-        source = consultar_processo(numero_cnj, tribunal_id)
+        source = await asyncio.to_thread(consultar_processo, numero_cnj, tribunal_id)
         if source is None:
             return DiffResult(
                 numero_cnj=numero_cnj,
@@ -225,7 +234,7 @@ async def sync_processo_datajud(
                 error="Not found in DataJud",
             )
 
-        fetched = parse_datajud_processo(source)
+        fetched = await asyncio.to_thread(parse_datajud_processo, source)
         return diff_processo(
             fetched=fetched,
             last_sync_at=last_sync_at,
@@ -233,12 +242,12 @@ async def sync_processo_datajud(
             known_doc_ids=known_doc_ids,
         )
 
-    except Exception as e:
-        logger.error("sync_datajud_error", numero_cnj=numero_cnj, error=str(e))
+    except Exception as e:  # noqa: BLE001
+        logger.error("sync_datajud_error", numero_cnj=numero_cnj, error=safe_error_text(e))
         return DiffResult(
             numero_cnj=numero_cnj,
             tribunal_id=tribunal_id,
-            error=f"DataJud: {type(e).__name__}: {e}",
+            error=f"DataJud: {type(e).__name__}: {safe_error_text(e)}",
         )
 
 

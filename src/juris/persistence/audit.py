@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
+import os
 import uuid
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -14,6 +16,9 @@ from juris.core.observability import get_logger
 from juris.core.paths import ensure_private_dir, restrict_file
 
 logger = get_logger(__name__)
+
+_ANCHOR_VERSION = 1
+_ANCHOR_SENTINEL = "__audit_anchor__"
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +40,10 @@ class AuditEntry:
         return d
 
 
+def _canonical_json(payload: dict[str, Any]) -> str:
+    return json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
+
+
 def _compute_hash(
     timestamp: datetime,
     event_type: str,
@@ -53,8 +62,12 @@ def _compute_hash(
     }
     if prev_hash is not None:
         payload["prev_hash"] = prev_hash
-    raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
+    raw = _canonical_json(payload)
     return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def _sign_anchor(payload: dict[str, Any], key: str) -> str:
+    return hmac.new(key.encode("utf-8"), _canonical_json(payload).encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 def create_entry(
@@ -84,11 +97,15 @@ class AuditLog:
     Writes to a JSONL file. In production, this will be backed by PostgreSQL.
     """
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, hmac_key: str | None = None) -> None:
         self._path = path
+        self._anchor_path = path.with_suffix(path.suffix + ".anchor.json")
+        self._hmac_key = hmac_key if hmac_key is not None else os.environ.get("JURIS_AUDIT_HMAC_KEY", "")
         ensure_private_dir(self._path.parent)
         if self._path.exists():
             restrict_file(self._path)
+        if self._anchor_path.exists():
+            restrict_file(self._anchor_path)
 
     def append(self, entry: AuditEntry) -> None:
         """Append an entry to the audit log.
@@ -107,6 +124,7 @@ class AuditLog:
         with open(self._path, "a", encoding="utf-8") as f:
             f.write(line + "\n")
         restrict_file(self._path)
+        self._write_anchor()
         logger.debug("audit_appended", entry_id=entry.entry_id, event_type=entry.event_type)
 
     def _get_last_hash(self) -> str | None:
@@ -192,7 +210,53 @@ class AuditLog:
             elif chain_started:
                 # Unchained entry after chain has started — reject
                 corrupted.append(entry.entry_id)
+        if self._anchor_path.exists() and not self._anchor_valid(entries):
+            corrupted.append(_ANCHOR_SENTINEL)
         return corrupted
+
+    def _write_anchor(self) -> None:
+        """Persist a signed tail anchor when an HMAC key is configured."""
+        if not self._hmac_key:
+            return
+        entries = self.read_all()
+        if not entries:
+            return
+        payload: dict[str, Any] = {
+            "version": _ANCHOR_VERSION,
+            "log_name": self._path.name,
+            "count": len(entries),
+            "first_hash": entries[0].content_hash,
+            "tail_hash": entries[-1].content_hash,
+            "updated_at": datetime.now(UTC).isoformat(),
+        }
+        anchor = {**payload, "hmac_sha256": _sign_anchor(payload, self._hmac_key)}
+        self._anchor_path.write_text(json.dumps(anchor, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
+        restrict_file(self._anchor_path)
+
+    def _anchor_valid(self, entries: list[AuditEntry]) -> bool:
+        if not self._hmac_key:
+            return False
+        try:
+            anchor_raw = json.loads(self._anchor_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return False
+        if not isinstance(anchor_raw, dict):
+            return False
+        anchor: dict[str, Any] = anchor_raw
+        signature = anchor.pop("hmac_sha256", None)
+        if not isinstance(signature, str):
+            return False
+        if not hmac.compare_digest(signature, _sign_anchor(anchor, self._hmac_key)):
+            return False
+        if not entries:
+            return anchor.get("count") == 0
+        return (
+            anchor.get("version") == _ANCHOR_VERSION
+            and anchor.get("log_name") == self._path.name
+            and anchor.get("count") == len(entries)
+            and anchor.get("first_hash") == entries[0].content_hash
+            and anchor.get("tail_hash") == entries[-1].content_hash
+        )
 
     @property
     def count(self) -> int:

@@ -110,6 +110,20 @@ class SyncLogLocal(LocalBase):
     error: Mapped[str | None] = mapped_column(Text)
 
 
+class SentAlertLocal(LocalBase):
+    """Delivery ledger for deduping operational deadline alerts."""
+
+    __tablename__ = "sent_alerts"
+
+    id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    alert_key: Mapped[str] = mapped_column(String(64), index=True)
+    channel: Mapped[str] = mapped_column(String(20), index=True)
+    numero_cnj: Mapped[str] = mapped_column(String(25), index=True)
+    prazo_id: Mapped[str] = mapped_column(String(36), index=True)
+    level: Mapped[str] = mapped_column(String(20))
+    sent_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
 class JurisprudenciaLocal(LocalBase):
     __tablename__ = "jurisprudencia"
 
@@ -148,10 +162,12 @@ class LocalDB:
 
         # Create FTS5 virtual table for jurisprudencia full-text search
         with self._engine.connect() as conn:
-            conn.execute(text(
-                "CREATE VIRTUAL TABLE IF NOT EXISTS jurisprudencia_fts "
-                "USING fts5(ementa, texto_integral, content=jurisprudencia, content_rowid=rowid)"
-            ))
+            conn.execute(
+                text(
+                    "CREATE VIRTUAL TABLE IF NOT EXISTS jurisprudencia_fts "
+                    "USING fts5(ementa, texto_integral, content=jurisprudencia, content_rowid=rowid)"
+                )
+            )
             conn.commit()
         if self._path.exists():
             restrict_file(self._path)
@@ -277,17 +293,19 @@ class LocalDB:
         """Log a sync operation."""
         now = datetime.now(UTC)
         with self.session() as s:
-            s.add(SyncLogLocal(
-                numero_cnj=numero_cnj,
-                tribunal_id=tribunal_id,
-                source=source,
-                started_at=now,
-                finished_at=now,
-                success=1 if success else 0,
-                had_changes=1 if had_changes else 0,
-                new_movimentos=new_movimentos,
-                error=error,
-            ))
+            s.add(
+                SyncLogLocal(
+                    numero_cnj=numero_cnj,
+                    tribunal_id=tribunal_id,
+                    source=source,
+                    started_at=now,
+                    finished_at=now,
+                    success=1 if success else 0,
+                    had_changes=1 if had_changes else 0,
+                    new_movimentos=new_movimentos,
+                    error=error,
+                )
+            )
             s.commit()
 
     def get_last_sync(self, numero_cnj: str) -> datetime | None:
@@ -301,14 +319,57 @@ class LocalDB:
             )
             return row.finished_at if row else None
 
+    def get_sync_overview(self, *, limit: int = 10) -> dict[str, object]:
+        """Operational status of the latest nightly/connect sync runs.
+
+        This is intentionally read-only and tenant-local: callers pass the tenant's
+        own SQLite DB, so the web console can show whether the overnight routine ran
+        without scanning another office's state.
+        """
+        with self.session() as s:
+            recent = (
+                s.query(SyncLogLocal)
+                .order_by(SyncLogLocal.finished_at.desc(), SyncLogLocal.started_at.desc())
+                .limit(limit)
+                .all()
+            )
+            last_success = (
+                s.query(SyncLogLocal)
+                .filter_by(success=1)
+                .order_by(SyncLogLocal.finished_at.desc(), SyncLogLocal.started_at.desc())
+                .first()
+            )
+            last_failure = (
+                s.query(SyncLogLocal)
+                .filter_by(success=0)
+                .order_by(SyncLogLocal.finished_at.desc(), SyncLogLocal.started_at.desc())
+                .first()
+            )
+            return {
+                "last_run": _sync_log_payload(recent[0]) if recent else None,
+                "last_success_at": _dt_iso(last_success.finished_at) if last_success else None,
+                "last_failure_at": _dt_iso(last_failure.finished_at) if last_failure else None,
+                "total_runs": s.query(SyncLogLocal).count(),
+                "successful_runs": s.query(SyncLogLocal).filter_by(success=1).count(),
+                "failed_runs": s.query(SyncLogLocal).filter_by(success=0).count(),
+                "recent_failures": [
+                    _sync_log_payload(row)
+                    for row in (
+                        s.query(SyncLogLocal)
+                        .filter_by(success=0)
+                        .order_by(SyncLogLocal.finished_at.desc(), SyncLogLocal.started_at.desc())
+                        .limit(3)
+                        .all()
+                    )
+                ],
+                "recent_runs": [_sync_log_payload(row) for row in recent],
+            }
+
     def get_known_movimento_keys(self, processo_id: str) -> set[tuple[datetime | None, int | None, str | None]]:
         """Get existing movement keys for dedup."""
         with self.session() as s:
             rows = s.query(MovimentoLocal).filter_by(processo_id=processo_id).all()
-            return {
-                (r.data_hora, r.codigo_nacional, r.id_movimento)
-                for r in rows
-            }
+            return {(r.data_hora, r.codigo_nacional, r.id_movimento) for r in rows}
 
     def get_all_processos(self) -> list[ProcessoLocal]:
         """Get all processos."""
@@ -327,10 +388,7 @@ class LocalDB:
             if proc is None:
                 return []
             return list(
-                s.query(MovimentoLocal)
-                .filter_by(processo_id=proc.id)
-                .order_by(MovimentoLocal.data_hora.desc())
-                .all()
+                s.query(MovimentoLocal).filter_by(processo_id=proc.id).order_by(MovimentoLocal.data_hora.desc()).all()
             )
 
     def get_pending_prazos(self, numero_cnj: str | None = None) -> list[PrazoLocal]:
@@ -348,6 +406,50 @@ class LocalDB:
             if numero_cnj:
                 q = q.filter_by(numero_cnj=numero_cnj)
             return list(q.order_by(PrazoLocal.data_limite).all())
+
+    def get_sent_alert_keys(self, alert_keys: set[str], *, channel: str = "email") -> set[str]:
+        """Return alert fingerprints already delivered through a channel."""
+        if not alert_keys:
+            return set()
+        with self.session() as s:
+            rows = (
+                s.query(SentAlertLocal.alert_key)
+                .filter(SentAlertLocal.channel == channel)
+                .filter(SentAlertLocal.alert_key.in_(alert_keys))
+                .all()
+            )
+            return {str(row[0]) for row in rows}
+
+    def mark_alerts_sent(self, records: list[dict[str, str]], *, channel: str = "email") -> int:
+        """Record successfully delivered alert fingerprints.
+
+        Idempotent: repeated records are ignored so a retried bookkeeping write does
+        not inflate counts.
+        """
+        if not records:
+            return 0
+        inserted = 0
+        now = datetime.now(UTC)
+        with self.session() as s:
+            for record in records:
+                alert_key = record["alert_key"]
+                ledger_id = f"{channel}:{alert_key}"
+                if s.get(SentAlertLocal, ledger_id) is not None:
+                    continue
+                s.add(
+                    SentAlertLocal(
+                        id=ledger_id,
+                        alert_key=alert_key,
+                        channel=channel,
+                        numero_cnj=record["numero_cnj"],
+                        prazo_id=record["prazo_id"],
+                        level=record["level"],
+                        sent_at=now,
+                    )
+                )
+                inserted += 1
+            s.commit()
+        return inserted
 
     def insert_jurisprudencia(
         self,
@@ -381,20 +483,21 @@ class LocalDB:
 
             # Sync FTS index
             with self._engine.connect() as conn:
-                conn.execute(text(
-                    "INSERT INTO jurisprudencia_fts(rowid, ementa, texto_integral) "
-                    "SELECT rowid, ementa, COALESCE(texto_integral, '') "
-                    "FROM jurisprudencia WHERE id = :id"
-                ), {"id": record.id})
+                conn.execute(
+                    text(
+                        "INSERT INTO jurisprudencia_fts(rowid, ementa, texto_integral) "
+                        "SELECT rowid, ementa, COALESCE(texto_integral, '') "
+                        "FROM jurisprudencia WHERE id = :id"
+                    ),
+                    {"id": record.id},
+                )
                 conn.commit()
 
             return record.id
 
     def search_fts(self, query: str, limit: int = 10) -> list[JurisprudenciaLocal]:
         """Full-text search on jurisprudencia using FTS5."""
-        safe_query = " ".join(
-            word for word in query.split() if word and not word.startswith(("-", "NOT"))
-        )
+        safe_query = " ".join(word for word in query.split() if word and not word.startswith(("-", "NOT")))
         if not safe_query:
             return []
 
@@ -440,3 +543,21 @@ class LocalDB:
     @property
     def path(self) -> Path:
         return self._path
+
+
+def _dt_iso(value: datetime | None) -> str | None:
+    return value.isoformat() if value is not None else None
+
+
+def _sync_log_payload(row: SyncLogLocal) -> dict[str, object]:
+    return {
+        "numero_cnj": row.numero_cnj,
+        "tribunal": row.tribunal_id,
+        "source": row.source,
+        "started_at": _dt_iso(row.started_at),
+        "finished_at": _dt_iso(row.finished_at),
+        "success": bool(row.success),
+        "had_changes": bool(row.had_changes),
+        "new_movimentos": row.new_movimentos,
+        "error": row.error,
+    }
