@@ -15,6 +15,7 @@ from typing import Any
 
 import fitz  # type: ignore[import-untyped]  # pymupdf
 
+from juris.core.sanitize import safe_error_text
 from juris.repertory.chunking import DocumentChunk, chunk_fonte
 from juris.repertory.corpus.models import FonteJurisprudencia, TipoFonte
 from juris.repertory.ingestion.base import CorpusIngester
@@ -155,10 +156,8 @@ class STFInformativosIngester(CorpusIngester):
                     continue
                 file_fontes = self._pdf_to_fontes(filepath, text)
                 fontes.extend(file_fontes)
-            except Exception:
-                logger.warning(
-                    "Failed to read PDF: %s", filepath.name, exc_info=True
-                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Failed to read PDF %s: %s", filepath.name, safe_error_text(exc))
 
         logger.info(
             "Loaded %d STF Informativo digests from %s",

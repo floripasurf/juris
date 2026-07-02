@@ -83,7 +83,7 @@ async def ingest_peticoes(
 
         try:
             text = extract_text_from_pdf(pdf_path)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning("ingest_peticao_pdf_error", path=safe_error_text(str(pdf_path)), error=safe_error_text(exc))
             continue
 
@@ -106,7 +106,7 @@ async def ingest_peticoes(
                 id=petition_id,
                 sections=len(template.estrutura),
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "ingest_peticao_extract_error",
                 path=safe_error_text(str(pdf_path)),

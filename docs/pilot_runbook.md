@@ -19,6 +19,10 @@ export JURIS_AGENT_CPF=... JURIS_AGENT_SENHA=... JURIS_AGENT_PIN=...
 uv run juris pilot preflight                   # readiness gate before real runs
 ```
 
+Before any case with client data, fill the compliance pack in `docs/compliance/`:
+`dpa-template-pt.md`, `ropa-pilot.md`, `ripd-pilot.md`, and the source matrix
+`data/tos_compliance_log.md` for any external inteiro-teor source.
+
 ## Sprint 4 — instrumented pilot (5–10 real cases)
 
 `Pronto quando: existir relatório de piloto com evidência e backlog priorizado.`

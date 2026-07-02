@@ -13,6 +13,8 @@ import logging
 import pkgutil
 from typing import TYPE_CHECKING
 
+from juris.core.sanitize import safe_error_text
+
 if TYPE_CHECKING:
     from juris.search.adapters.base import SearchAdapter
 
@@ -74,5 +76,5 @@ def _discover_adapters() -> None:
             continue
         try:
             importlib.import_module(f"juris.search.adapters.{name}")
-        except Exception:  # noqa: BLE001
-            logger.warning("Failed to import adapter: %s", name, exc_info=True)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to import adapter %s: %s", name, safe_error_text(exc))

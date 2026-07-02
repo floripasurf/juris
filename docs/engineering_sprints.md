@@ -1,6 +1,6 @@
 # Sprints de Engenharia — Próxima Sequência
 
-**Atualizado:** 2026-06-30
+**Atualizado:** 2026-07-01
 
 Este plano registra a sequência operacional para transformar o Juris em produto
 piloto confiável. A ordem é deliberada: fechar segurança/isolamento antes de
@@ -38,16 +38,23 @@ Fatia entregue agora:
 - A UI mostra o estado do agente remoto na área de conexão.
 - `JURIS_REQUIRE_TENANTS=1` tem preflight de startup: sem tenants configurados
   ou sem binding de agente por tenant em modo remoto, o processo falha fechado.
-- Rate limit process-local por API key protege `/api/*` contra rajadas básicas.
+- Rate limit por API key protege `/api/*`; o handshake de `/ws/agent-relay` tem
+  bucket proprio por tenant/IP. Em single-worker usa contador local e, quando
+  `JURIS_RATE_LIMIT_REDIS_URL` esta definido, usa Redis compartilhado para
+  multi-worker.
 - Erros de autenticação/rate limit/readiness de agente retornam códigos
   estruturados para a UI e operação.
 - Testes cobrem isolamento de connect job, output de demo e audit root entre
   tenants configurados.
+- `/api/health?deep=1` faz probe real de agente/browser bridge; `/api/admin/health`
+  consolida status por escritório.
+- O canal reverso falha fechado em multi-worker sem `JURIS_RELAY_BROKER` ou
+  `JURIS_RELAY_STICKY=1`.
 
 Próximas entregas:
-- Exibir status consolidado por escritório em uma tela administrativa.
 - Persistir eventos de erro operacional para suporte do piloto.
-- Se houver múltiplos workers, mover rate limit para reverse proxy/Redis.
+- Substituir sticky routing por broker Redis/NATS se o deploy precisar escalar sem
+  afinidade de load balancer.
 
 ## Sprint 4 — Console de Rotina do Advogado
 
@@ -160,9 +167,8 @@ Critério atendido:
   LLM.
 
 Próximas entregas:
-- Passar `tom_minuta` diretamente para o drafter quando houver ajuste de prompt
-  do gerador final.
-- Calibrar as heurísticas com feedback real do piloto para reduzir ruído.
+- Calibrar as heurísticas e o `tom_minuta` com feedback real do piloto para reduzir
+  ruído e excesso de cautela.
 
 ## Sprint 8 — Assinatura e Protocolo Controlados
 
@@ -212,27 +218,83 @@ Próximas entregas:
 Entregues e testados (código): segurança da browser session (token validado no native
 host, de-id imposta), health multi-tenant v2 (`/api/health?deep=1`, painel admin, cache),
 guard fail-closed do relay + `JURIS_RELAY_STICKY`, rate-limit **Redis** distribuído
-(`JURIS_RATE_LIMIT_REDIS_URL`), `tom_minuta` no prompt + mini-benchmark, busca de corpus
+(`JURIS_RATE_LIMIT_REDIS_URL`) com buckets separados para rotas comuns, caras e
+handshake do relay,
+`tom_minuta` no prompt + mini-benchmark, busca de corpus
 explicável + `juris repertory ingest-file`, harness `corpus_improvement`, UX de caso
 (paginação/filtros persistentes/protocolo por caso), + correções da auditoria adversária
 (vazamento de nomes p/ claude.ai no fallback local, CPF só-dígitos, bypasses do guard,
-isolamento fail-safe do corpus, thread-safety do search cacheado).
+isolamento fail-safe do corpus, thread-safety do search cacheado), de-id com checksum
+para CPF/CNPJ/CNJ crus, `juris overnight --send-alerts` com SMTP e template launchd,
+backup explícito do engine local gitignored, e `to_thread` nos caminhos web/sync
+mais bloqueantes; `DeidentifyingLLM` agora falha fechado por padrão e exige opt-in
+explícito para de-id parcial; `ENVIRONMENT=prod` agora força tenants configurados
+mesmo sem `JURIS_REQUIRE_TENANTS`, e o transporte MNI PKCS#11 valida certificado
+do servidor com `-verify_return_error` + `-verify_hostname`; `audit.jsonl` pode
+ser ancorado com HMAC (`JURIS_AUDIT_HMAC_KEY`) e `doctor` cobra essa chave em
+produção; `juris backup create/restore` agora cobre `JURIS_HOME`, `JURIS_OUT_ROOT`,
+`repertory.db`, audit logs e recibos com manifesto e SHA-256 por arquivo; e
+`juris tenant erase-data` implementa deleção LGPD/piloto por tenant com dry-run,
+confirmação explícita, limpeza de connect jobs/chunks privados e certificado em
+`compliance-erasure.jsonl`; e o CI agora tem `mypy src/juris` como hard gate,
+cobertura unitária com baseline real de 72%, scanner de segredos de alto risco,
+`pip-audit --local --strict`, `uv sync --frozen`, `npm ci` sem fallback e
+`BLE001` ativo no Ruff para impedir novo `except Exception` sem justificativa. A
+sanitização compartilhada de diagnósticos agora reaproveita o detector estruturado
+do de-id para redigir CPF/CNPJ/CNJ/OAB/RG/CEP/e-mail/telefone/datas em logs, e os
+knobs web `JURIS_API_RATE_LIMIT_PER_MINUTE`, `JURIS_RATE_LIMIT_REDIS_URL`,
+`JURIS_API_EXPENSIVE_RATE_LIMIT_PER_MINUTE`,
+`JURIS_WS_AGENT_RELAY_RATE_LIMIT_PER_MINUTE` e `JURIS_CONNECT_TIMEOUT_SECONDS`
+passaram a fazer parte do `Settings` validado; o pacote LGPD/compliance minimo
+agora existe em `docs/compliance/` (DPA, ROPA, RIPD) e o log de liberacao de
+fontes/ToS em `data/tos_compliance_log.md` deixa ingesters de inteiro teor
+explicitamente bloqueados ate aprovacao por fonte; o fetcher TST agora usa o
+backend JSON real (`pesquisa-textual`) em vez da URL SPA com `#/`, mas permanece
+gated por `JURIS_TST_INTEIRO_TEOR_ENABLED` ate aprovacao de ToS. A cadeia web
+`minuta gerada -> carregar artefato -> dry-run -> revisão/consentimento -> submit`
+agora tem teste de costura unitario, cobrindo o ponto em que o console transforma
+artefato revisado em protocolo controlado sem acionar tribunal real; no modo
+split-trust com `JURIS_AGENT_DEID_READS=1`, o filing remoto mantém o markdown
+de-identificado no wire e reidentifica o rascunho apenas no agente local antes de
+renderizar/assinar/protocolar; o canal reverso agora tem broker Redis opcional
+(`JURIS_RELAY_BROKER`) com roteamento request/reply por tenant e dedupe de
+`request_id` pendente, permitindo que uma requisição recebida em um worker alcance
+o agente conectado em outro; filings `_pending` agora carregam metadados de
+recuperação e têm retry controlado do submit já assinado, com confirmação humana
+de inexistência de protocolo, `retry.json` com idempotency key e bloqueio de nova
+tentativa quando o resultado fica indeterminado; os catálogos de defesas CPC/CPP/CLT agora têm
+registry (`defesas/registry.py`) e entram no `DefesaAnalyzer`, que registra o
+código/institutos consultados no relatório em vez de deixar esses arquivos como
+referência órfã.
 
 Bloqueado por dependência humana: **evidência de piloto** (rodar casos com A3 — ver
 `docs/pilot_runbook.md`) e **fonte real de inteiro teor** (decisão de ToS).
 
 ## Próxima sequência proposta
 
-- **Sprint 8 — Broker de canal reverso.** Sticky routing já entregue; o broker Redis/NATS
-  do relay é a alternativa para escala horizontal sem afinidade de LB. Roteia filing →
-  exige teste de integração contra Redis real antes de produção (determinismo em caminho
-  legal-crítico), não só double in-memory.
-- **Sprint 9 — Zero-PII-to-cloud completo.** Fechar o loop do `JURIS_AGENT_DEID_READS`:
-  render + re-id + sign no agente, para que a nuvem SaaS nunca veja nome/CPF cru.
-- **Sprint 10 — Escopo de tenant no path denso (Qdrant).** O FTS é tenant-scoped; o denso
-  não. Escopar por `tenant_id` antes de ativar o Qdrant.
-- **Sprint 11 — Loop noturno automático.** Overnight sync agendado por tenant, entrega de
-  alertas (email/WhatsApp) com dedupe, e retry de `_pending` **com salvaguarda
-  anti-duplicata**.
+- **Sprint 8 — Broker de canal reverso.** Entregue em código com Redis pub/sub:
+  worker com agente assina o canal do tenant, qualquer worker publica a operação e
+  aguarda reply correlacionado; `SET NX` dedupe protege `request_id` pendente.
+  Falta smoke com Redis real e dois workers antes de habilitar em produção.
+- **Sprint 9 — Zero-PII-to-cloud completo.** Entregue em fatia técnica: o
+  `RemoteFilingService` envia markdown de-identificado e sem mapa de re-id; o
+  agente carrega o mapa local por tenant/CNJ e restaura o rascunho apenas antes
+  de render + sign + file. Falta validar o fluxo contra um agente real com A3 no
+  piloto operacional.
+- **Sprint 10 — Escopo de tenant no path denso (Qdrant).** Implementado no contrato
+  `VectorStore`, no `QdrantVectorStore` e no `HybridRetriever`: busca densa recebe
+  `tenant_id` e filtra seed público + corpus privado do próprio tenant. Antes de ativar
+  Qdrant em produção, reingerir pontos legados sem marcador de tenant; eles falham
+  fechado e não aparecem na busca nova.
+- **Sprint 11 — Loop noturno v2.** O job local básico (launchd + email) já existe;
+  dedupe de alertas por prazo/canal foi adicionado com ledger local (`sent_alerts`) e
+  a mesa de trabalho expõe `sync_status` com última execução, contadores e falhas
+  recentes. Retry de `_pending` com salvaguarda anti-duplicata foi entregue no console:
+  reenvio só com confirmação humana de que não há protocolo existente; erro de submissão
+  marca o estado como indeterminado e bloqueia nova tentativa automática. A CLI agora
+  tem `juris overnight --all-tenants`, que percorre cada tenant configurado, usa o
+  banco/ledger isolado do escritório e roteia leitura MNI pelo agente remoto daquele
+  tenant. Falta WhatsApp opcional e smoke operacional com tenants reais/Redis antes
+  de tratar como rotina SaaS de produção.
 - **Sprint 12 — Entendimento de documento.** Ler acórdão/decisão/intimação recebidos →
   fatos estruturados para análise, minuta e corpus.

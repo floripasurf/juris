@@ -31,9 +31,12 @@ lê todos de volta para a ingestão.
 
 `build_escavacao_fetcher()` compõe as fontes em ordem de qualidade:
 
-1. **TST** (`TSTEscavacaoFetcher`) — primeira fonte real, acórdão completo
-   (`parcial=False`), da jurisprudência pública do TST. **Sem bypass de WAF/captcha**:
-   falha de fetch/parse → `None` → cai para a próxima fonte.
+1. **TST** (`TSTEscavacaoFetcher`) — primeira fonte real implementada, acórdão
+   completo (`parcial=False`) via backend público `pesquisa-textual` da
+   jurisprudência TST. **Sem bypass de WAF/captcha** e gated por compliance:
+   `JURIS_TST_INTEIRO_TEOR_ENABLED=true` só depois de aprovação em
+   `data/tos_compliance_log.md`. Sem aprovação, ou em falha de fetch/parse,
+   retorna `None` e cai para a próxima fonte.
 2. **DataJud** (`DataJudEscavacaoFetcher`) — trilha de movimentos (`parcial=True`),
    o fallback honesto quando não há acórdão completo.
 
@@ -53,7 +56,8 @@ O ranker engine (local) usa, além de relevância/autoridade/vigência:
 
 ## Smoke test (selectors do TST)
 
-Os selectors de `parse_tst_acordao` são validados contra uma fixture realista. Antes
-de apontar para o TST ao vivo, valide-os contra um acórdão real (a estrutura HTML
-pode diferir): rode o fetcher com `fetch_html` apontando para uma amostra salva e
-confira se `texto` traz ementa + acórdão. Ajuste `_PRIMARY_SELECTORS` se necessário.
+O TST não deve ser buscado pela URL com `#/`, porque HTTP recebe apenas o shell da
+SPA. O fetcher usa o backend público `jurisprudencia-backend2.tst.jus.br` e extrai
+`inteiroTeorHtml`/`inteiroTeorHTMLHighlight`. Antes de habilitar ao vivo, registre
+ToS em `data/tos_compliance_log.md` e rode uma amostra com
+`JURIS_TST_INTEIRO_TEOR_ENABLED=true`, conferindo se `texto` traz ementa + acórdão.

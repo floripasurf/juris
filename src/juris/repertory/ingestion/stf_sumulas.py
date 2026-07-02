@@ -51,7 +51,7 @@ class STFSumulasFetcher(CorpusIngester):
             response = httpx.get(url, params=params, timeout=self._timeout)
             response.raise_for_status()
             data = response.json()
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning(
                 "Could not fetch STF sumulas from %s. "
                 "Use SeedLoader with local JSON files instead.",

@@ -58,7 +58,7 @@ async def extract_structure(
             max_tokens=2048,
             temperature=0.0,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         from juris.core.sanitize import safe_error_text
 
         logger.warning("extract_structure_llm_error", petition_id=petition_id, error=safe_error_text(exc))

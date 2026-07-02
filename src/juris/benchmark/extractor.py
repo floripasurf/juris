@@ -100,7 +100,7 @@ async def extract_pairs_from_text(
         data = json.loads(response.content)
         thesis = data.get("thesis", "")
         authorities = data.get("authorities", [])
-    except Exception:
+    except Exception:  # noqa: BLE001
         logger.warning("extraction_failed", section=section_name)
         return []
 
@@ -136,7 +136,7 @@ async def extract_pairs_from_text(
             paraphrases.append(para_data["formal"])
         if para_data.get("question"):
             paraphrases.append(para_data["question"])
-    except Exception:
+    except Exception:  # noqa: BLE001
         logger.debug("paraphrase_generation_failed", section=section_name)
 
     pair = ExtractedPair(

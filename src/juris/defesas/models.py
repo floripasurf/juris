@@ -107,9 +107,13 @@ class DefesaReport:
     Args:
         numero_cnj: Case number in CNJ format.
         defesas_identificadas: List of defense check results.
+        codigos_consultados: Procedural code catalogs used for deterministic checks.
+        institutos_consultados: Defense institutes considered from the catalog.
         summary: Human-readable summary.
     """
 
     numero_cnj: str
     defesas_identificadas: list[ResultadoDefesa] = field(default_factory=list)
+    codigos_consultados: list[str] = field(default_factory=list)
+    institutos_consultados: list[str] = field(default_factory=list)
     summary: str = ""

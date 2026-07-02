@@ -45,7 +45,7 @@ class LegalEmbedder:
             if dim is not None:
                 self._dimension = int(dim)
             logger.info("Loaded embedding model %s on %s (dim=%d)", self._model_name, self._device, self._dimension)
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning(
                 "Could not load embedding model '%s'. "
                 "Install sentence-transformers and download the model. "
@@ -69,7 +69,7 @@ class LegalEmbedder:
         try:
             embeddings = self._model.encode(texts, normalize_embeddings=True)
             return [emb.tolist() for emb in embeddings]
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             from juris.core.sanitize import safe_error_text
 
             logger.warning("Failed to embed %d texts: %s", len(texts), safe_error_text(exc))

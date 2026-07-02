@@ -56,7 +56,7 @@ def resolve_source_id(
             if r.source_id == source_id:
                 return True, r.texto[:200] if r.texto else None
         return False, None
-    except Exception:
+    except Exception:  # noqa: BLE001
         logger.warning("source_id_lookup_error", source_id=source_id)
         return False, None
 
@@ -87,6 +87,6 @@ def resolve_narrative_citation(
         if results and results[0].score >= threshold:
             return True, results[0].source_id
         return False, None
-    except Exception:
+    except Exception:  # noqa: BLE001
         logger.warning("narrative_citation_lookup_error", citation=normalized)
         return False, None

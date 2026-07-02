@@ -50,7 +50,7 @@ class CrossEncoderReranker:
             logger.info(
                 "Loaded reranker model %s on %s", self._model_name, self._device
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning(
                 "Could not load reranker model '%s'. Reranking will be skipped.",
                 self._model_name,
@@ -114,7 +114,7 @@ class CrossEncoderReranker:
                         score=score_val,
                         cached=False,
                     )
-            except Exception:
+            except Exception:  # noqa: BLE001
                 logger.warning("Reranking failed, returning original order")
                 return candidates[:top_k]
 

@@ -12,6 +12,7 @@ from juris.defesas.preclusao import verificar_preclusao
 from juris.defesas.preliminares import identificar_preliminares
 from juris.defesas.prescricao import verificar_prescricao
 from juris.defesas.prescricao_intercorrente import verificar_prescricao_intercorrente
+from juris.defesas.registry import codigo_for_context, institutos_for_context
 
 logger = get_logger(__name__)
 
@@ -38,6 +39,8 @@ class DefesaAnalyzer:
             DefesaReport with all identified defenses.
         """
         defesas: list[ResultadoDefesa] = []
+        codigo_catalogo = codigo_for_context(context)
+        catalogo = institutos_for_context(context)
 
         # 1. Prescricao check
         defesas.extend(await self._check_prescricao(context))
@@ -60,18 +63,27 @@ class DefesaAnalyzer:
 
         todas = aplicaveis + nao_aplicaveis
 
-        summary = self._build_summary(context.numero_cnj, aplicaveis)
+        summary = self._build_summary(
+            context.numero_cnj,
+            aplicaveis,
+            codigo_catalogo.value,
+            len(catalogo),
+        )
 
         logger.info(
             "defesa_analysis_complete",
             numero_cnj=context.numero_cnj,
             total_checks=len(defesas),
             aplicaveis=len(aplicaveis),
+            codigo_catalogo=codigo_catalogo.value,
+            catalogo_institutos=len(catalogo),
         )
 
         return DefesaReport(
             numero_cnj=context.numero_cnj,
             defesas_identificadas=todas,
+            codigos_consultados=[codigo_catalogo.value],
+            institutos_consultados=[inst.nome for inst in catalogo],
             summary=summary,
         )
 
@@ -207,14 +219,21 @@ class DefesaAnalyzer:
             )
             response = await self._llm.complete(prompt=prompt, temperature=0.0)
             return response.text.strip() if response and response.text else None
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning("llm_infer_tipo_acao_failed", numero_cnj=context.numero_cnj)
             return None
 
-    def _build_summary(self, numero_cnj: str, aplicaveis: list[ResultadoDefesa]) -> str:
+    def _build_summary(
+        self,
+        numero_cnj: str,
+        aplicaveis: list[ResultadoDefesa],
+        codigo_catalogo: str,
+        total_institutos: int,
+    ) -> str:
         """Build a human-readable summary."""
+        catalog_note = f" Catálogo consultado: {codigo_catalogo} ({total_institutos} instituto(s))."
         if not aplicaveis:
-            return f"{numero_cnj}: nenhuma defesa processual identificada automaticamente."
+            return f"{numero_cnj}: nenhuma defesa processual identificada automaticamente.{catalog_note}"
 
         tipos = [d.tipo.value for d in aplicaveis]
-        return f"{numero_cnj}: {len(aplicaveis)} defesa(s) identificada(s): {', '.join(tipos)}."
+        return f"{numero_cnj}: {len(aplicaveis)} defesa(s) identificada(s): {', '.join(tipos)}.{catalog_note}"

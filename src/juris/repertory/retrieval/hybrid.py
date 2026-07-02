@@ -59,7 +59,7 @@ class HybridRetriever:
         dense_results: list[SearchResult] = []
         query_embedding = self._embedder.embed_single(query)
         if query_embedding is not None:
-            dense_results = self._dense.search(query_embedding, top_k=top_k * 2)
+            dense_results = self._dense.search(query_embedding, top_k=top_k * 2, tenant_id=tenant_id)
 
         # Sparse retrieval
         sparse_results: list[SearchResult] = []
@@ -68,7 +68,7 @@ class HybridRetriever:
         else:
             # For non-FTS stores, try embedding search as fallback
             if query_embedding is not None:
-                sparse_results = self._sparse.search(query_embedding, top_k=top_k * 2)
+                sparse_results = self._sparse.search(query_embedding, top_k=top_k * 2, tenant_id=tenant_id)
 
         # Merge via RRF
         merged = self.reciprocal_rank_fusion(dense_results, sparse_results)

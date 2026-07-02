@@ -6,7 +6,7 @@ from juris.repertory.chunking import DocumentChunk
 from juris.repertory.corpus.models import TipoFonte
 from juris.repertory.retrieval.hybrid import HybridRetriever
 from juris.repertory.retrieval.service import RepertoryService
-from juris.repertory.vector_store import LocalFTSStore
+from juris.repertory.vector_store import LocalFTSStore, SearchResult
 
 
 def _chunk(cid: str, text: str) -> DocumentChunk:
@@ -20,6 +20,26 @@ class _NullEmbedder:
 
     def embed_single(self, text: str) -> list[float] | None:
         return None
+
+
+class _VectorEmbedder:
+    def embed_single(self, text: str) -> list[float] | None:
+        return [0.1, 0.2, 0.3]
+
+
+class _RecordingDenseStore:
+    def __init__(self) -> None:
+        self.seen_tenant_ids: list[str | None] = []
+
+    def upsert(self, chunks: list[DocumentChunk], embeddings: list[list[float]], tenant_id: str | None = None) -> int:
+        return 0
+
+    def search(self, query_embedding: list[float], top_k: int = 10, tenant_id: str | None = None) -> list[SearchResult]:
+        self.seen_tenant_ids.append(tenant_id)
+        return []
+
+    def delete(self, source_id: str, tenant_id: str | None = None) -> int:
+        return 0
 
 
 def test_tenant_upload_not_visible_to_other_tenant(tmp_path) -> None:
@@ -63,3 +83,16 @@ def test_service_search_scopes_by_tenant(tmp_path) -> None:
         assert {"pub", "b"} <= ids_b
     finally:
         store.close()
+
+
+def test_hybrid_retriever_scopes_dense_path_by_tenant(tmp_path) -> None:
+    dense = _RecordingDenseStore()
+    sparse = LocalFTSStore(tmp_path / "corpus.db")
+    try:
+        retriever = HybridRetriever(dense_store=dense, sparse_store=sparse, embedder=_VectorEmbedder())
+
+        retriever.search("honorários", tenant_id="escritorio-a")
+
+        assert dense.seen_tenant_ids == ["escritorio-a"]
+    finally:
+        sparse.close()

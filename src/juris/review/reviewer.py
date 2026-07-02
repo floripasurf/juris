@@ -126,11 +126,14 @@ class ReviewerAgent:
                 report.llm_calls += 1
                 if dim in _RETRIEVAL_DIMENSIONS:
                     report.retrieval_calls += 1
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 from juris.core.sanitize import safe_error_text
 
                 logger.warning(
-                    "dimension_analysis_failed", dimension=dim.value, error=safe_error_text(exc)
+                    "dimension_analysis_failed",
+                    dimension=dim.value,
+                    error=safe_error_text(exc),
+                    exception_type=exc.__class__.__name__,
                 )
 
         # 3. Sort issues: critical first, then important, then suggestion
@@ -198,8 +201,14 @@ class ReviewerAgent:
             return self._retriever.search_jurisprudencia(
                 query=query, top_k=top_k, tenant_id=self._tenant_id
             )
-        except Exception:
-            logger.warning("retrieval_failed", query=query[:50])
+        except Exception as exc:  # noqa: BLE001
+            from juris.core.sanitize import safe_error_text
+
+            logger.warning(
+                "retrieval_failed",
+                error=safe_error_text(exc),
+                exception_type=exc.__class__.__name__,
+            )
             return []
 
     @staticmethod

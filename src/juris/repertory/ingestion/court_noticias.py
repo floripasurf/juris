@@ -12,6 +12,7 @@ from typing import Any
 
 import feedparser  # type: ignore[import-untyped]
 
+from juris.core.sanitize import safe_error_text
 from juris.repertory.chunking import DocumentChunk, chunk_fonte
 from juris.repertory.corpus.models import FonteJurisprudencia, TipoFonte
 from juris.repertory.ingestion.base import CorpusIngester
@@ -101,8 +102,8 @@ class CourtNoticiasIngester(CorpusIngester):
         """
         try:
             parsed = feedparser.parse(url, request_headers={"Connection": "close"})
-        except Exception:
-            logger.warning("Failed to parse RSS feed for %s: %s", tribunal, url, exc_info=True)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to parse RSS feed for %s: %s", tribunal, safe_error_text(exc))
             return []
 
         if parsed.bozo and parsed.bozo_exception:

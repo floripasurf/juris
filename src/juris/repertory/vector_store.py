@@ -44,6 +44,8 @@ _SEARCH_SQL_TENANT = """
             LIMIT ?
             """
 
+_QDRANT_PUBLIC_TENANT = "__juris_public__"
+
 
 @dataclass(frozen=True, slots=True)
 class SearchResult:
@@ -68,35 +70,41 @@ class VectorStore(ABC):
     """Abstract base class for vector stores."""
 
     @abstractmethod
-    def upsert(self, chunks: list[DocumentChunk], embeddings: list[list[float]]) -> int:
+    def upsert(self, chunks: list[DocumentChunk], embeddings: list[list[float]], tenant_id: str | None = None) -> int:
         """Insert or update chunks with their embeddings.
 
         Args:
             chunks: Document chunks to store.
             embeddings: Corresponding embedding vectors.
+            tenant_id: Tenant that owns private uploaded corpus chunks. ``None``
+                means shared public seed only.
 
         Returns:
             Number of chunks upserted.
         """
 
     @abstractmethod
-    def search(self, query_embedding: list[float], top_k: int = 10) -> list[SearchResult]:
+    def search(self, query_embedding: list[float], top_k: int = 10, tenant_id: str | None = None) -> list[SearchResult]:
         """Search for similar chunks.
 
         Args:
             query_embedding: Query vector.
             top_k: Maximum number of results.
+            tenant_id: Restrict results to public seed plus this tenant's own
+                private corpus. ``None`` returns public seed only.
 
         Returns:
             Ranked list of search results.
         """
 
     @abstractmethod
-    def delete(self, source_id: str) -> int:
+    def delete(self, source_id: str, tenant_id: str | None = None) -> int:
         """Delete all chunks from a given source.
 
         Args:
             source_id: ID of the source to delete.
+            tenant_id: Tenant scope for the deletion. ``None`` deletes only the
+                shared public seed's copy of this source.
 
         Returns:
             Number of chunks deleted.
@@ -140,38 +148,97 @@ class QdrantVectorStore(VectorStore):
             logger.info("Created Qdrant collection '%s'", self._collection)
         return self._client
 
-    def upsert(self, chunks: list[DocumentChunk], embeddings: list[list[float]]) -> int:
+    @staticmethod
+    def _tenant_payload_value(tenant_id: str | None) -> str:
+        """Tenant marker stored in Qdrant payloads.
+
+        Qdrant filters match strict scalar values. Use an explicit public marker
+        instead of missing/null fields so legacy unscoped points fail closed until
+        they are reingested with tenant metadata.
+        """
+        return tenant_id if tenant_id is not None else _QDRANT_PUBLIC_TENANT
+
+    @classmethod
+    def _tenant_match(cls, tenant_id: str | None) -> Any:
+        from qdrant_client.models import FieldCondition, MatchValue
+
+        return FieldCondition(
+            key="tenant_id",
+            match=MatchValue(value=cls._tenant_payload_value(tenant_id)),
+        )
+
+    @classmethod
+    def _visibility_filter(cls, tenant_id: str | None) -> Any:
+        from qdrant_client.models import Filter
+
+        public_match = cls._tenant_match(None)
+        if tenant_id is None:
+            return Filter(must=[public_match])
+        return Filter(should=[public_match, cls._tenant_match(tenant_id)])
+
+    @classmethod
+    def _delete_filter(cls, source_id: str, tenant_id: str | None) -> Any:
+        from qdrant_client.models import FieldCondition, Filter, MatchValue
+
+        return Filter(
+            must=[
+                FieldCondition(key="source_id", match=MatchValue(value=source_id)),
+                cls._tenant_match(tenant_id),
+            ]
+        )
+
+    @staticmethod
+    def _hits_from_qdrant_response(response: Any) -> list[Any]:
+        points = getattr(response, "points", None)
+        if points is not None:
+            return list(points)
+        return list(response or [])
+
+    def upsert(self, chunks: list[DocumentChunk], embeddings: list[list[float]], tenant_id: str | None = None) -> int:
         """Upsert chunks into Qdrant."""
         from qdrant_client.models import PointStruct
 
         client = self._get_client()
         points = []
+        tenant_payload = self._tenant_payload_value(tenant_id)
         for chunk, embedding in zip(chunks, embeddings, strict=True):
             points.append(
                 PointStruct(
                     id=str(uuid.uuid5(uuid.NAMESPACE_DNS, chunk.chunk_id)),
                     vector=embedding,
                     payload={
+                        **chunk.metadata,
                         "chunk_id": chunk.chunk_id,
                         "source_id": chunk.source_id,
                         "source_type": chunk.source_type.value,
                         "text": chunk.text,
                         "position": chunk.position,
-                        **chunk.metadata,
+                        "tenant_id": tenant_payload,
                     },
                 )
             )
         client.upsert(collection_name=self._collection, points=points)
         return len(points)
 
-    def search(self, query_embedding: list[float], top_k: int = 10) -> list[SearchResult]:
+    def search(self, query_embedding: list[float], top_k: int = 10, tenant_id: str | None = None) -> list[SearchResult]:
         """Search Qdrant for similar chunks."""
         client = self._get_client()
-        hits = client.search(
-            collection_name=self._collection,
-            query_vector=query_embedding,
-            limit=top_k,
-        )
+        query_filter = self._visibility_filter(tenant_id)
+        if hasattr(client, "query_points"):
+            response = client.query_points(
+                collection_name=self._collection,
+                query=query_embedding,
+                query_filter=query_filter,
+                limit=top_k,
+            )
+        else:
+            response = client.search(
+                collection_name=self._collection,
+                query_vector=query_embedding,
+                query_filter=query_filter,
+                limit=top_k,
+            )
+        hits = self._hits_from_qdrant_response(response)
         results: list[SearchResult] = []
         for hit in hits:
             payload = hit.payload or {}
@@ -182,26 +249,20 @@ class QdrantVectorStore(VectorStore):
                     score=hit.score,
                     text=payload.get("text", ""),
                     metadata={
-                        k: v
-                        for k, v in payload.items()
-                        if k not in ("chunk_id", "source_id", "text")
+                        k: v for k, v in payload.items() if k not in ("chunk_id", "source_id", "tenant_id", "text")
                     },
                 )
             )
         return results
 
-    def delete(self, source_id: str) -> int:
+    def delete(self, source_id: str, tenant_id: str | None = None) -> int:
         """Delete all chunks for a source from Qdrant."""
-        from qdrant_client.models import FieldCondition, Filter, MatchValue
-
         client = self._get_client()
         result = client.delete(
             collection_name=self._collection,
-            points_selector=Filter(
-                must=[FieldCondition(key="source_id", match=MatchValue(value=source_id))]
-            ),
+            points_selector=self._delete_filter(source_id, tenant_id),
         )
-        logger.info("Deleted chunks for source_id=%s from Qdrant", source_id)
+        logger.info("Deleted chunks for source_id=%s tenant_scoped=%s from Qdrant", source_id, tenant_id is not None)
         return 0 if result is None else 1
 
 
@@ -248,9 +309,7 @@ class LocalFTSStore(VectorStore):
             self._conn.execute("ALTER TABLE chunks ADD COLUMN tenant_id TEXT")
         self._conn.commit()
 
-    def upsert(
-        self, chunks: list[DocumentChunk], embeddings: list[list[float]], tenant_id: str | None = None
-    ) -> int:
+    def upsert(self, chunks: list[DocumentChunk], embeddings: list[list[float]], tenant_id: str | None = None) -> int:
         """Insert chunks into SQLite FTS (embeddings ignored for FTS).
 
         ``tenant_id`` scopes tenant-uploaded corpus (tier-2 doutrina / tier-3 petition
@@ -259,16 +318,10 @@ class LocalFTSStore(VectorStore):
         count = 0
         for chunk in chunks:
             # Delete existing if any
-            existing = self._conn.execute(
-                "SELECT rowid FROM chunks WHERE chunk_id = ?", (chunk.chunk_id,)
-            ).fetchone()
+            existing = self._conn.execute("SELECT rowid FROM chunks WHERE chunk_id = ?", (chunk.chunk_id,)).fetchone()
             if existing:
-                self._conn.execute(
-                    "DELETE FROM chunks_fts WHERE rowid = ?", (existing[0],)
-                )
-                self._conn.execute(
-                    "DELETE FROM chunks WHERE chunk_id = ?", (chunk.chunk_id,)
-                )
+                self._conn.execute("DELETE FROM chunks_fts WHERE rowid = ?", (existing[0],))
+                self._conn.execute("DELETE FROM chunks WHERE chunk_id = ?", (chunk.chunk_id,))
 
             self._conn.execute(
                 "INSERT INTO chunks (chunk_id, source_id, source_type, text, metadata, position, tenant_id) "
@@ -283,9 +336,7 @@ class LocalFTSStore(VectorStore):
                     tenant_id,
                 ),
             )
-            rowid = self._conn.execute(
-                "SELECT rowid FROM chunks WHERE chunk_id = ?", (chunk.chunk_id,)
-            ).fetchone()[0]
+            rowid = self._conn.execute("SELECT rowid FROM chunks WHERE chunk_id = ?", (chunk.chunk_id,)).fetchone()[0]
             self._conn.execute(
                 "INSERT INTO chunks_fts (rowid, text) VALUES (?, ?)",
                 (rowid, chunk.text),
@@ -294,7 +345,7 @@ class LocalFTSStore(VectorStore):
         self._conn.commit()
         return count
 
-    def search(self, query_embedding: list[float], top_k: int = 10) -> list[SearchResult]:
+    def search(self, query_embedding: list[float], top_k: int = 10, tenant_id: str | None = None) -> list[SearchResult]:
         """Search using FTS5 (query_embedding is ignored; uses metadata for text query).
 
         For FTS-based search, use search_text() instead.
@@ -355,14 +406,47 @@ class LocalFTSStore(VectorStore):
             )
         return results
 
-    def delete(self, source_id: str) -> int:
+    def delete(self, source_id: str, tenant_id: str | None = None) -> int:
         """Delete all chunks for a source."""
+        if tenant_id is None:
+            rows = self._conn.execute(
+                "SELECT rowid FROM chunks WHERE source_id = ? AND tenant_id IS NULL", (source_id,)
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT rowid FROM chunks WHERE source_id = ? AND tenant_id = ?", (source_id, tenant_id)
+            ).fetchall()
+        for (rowid,) in rows:
+            self._conn.execute("DELETE FROM chunks_fts WHERE rowid = ?", (rowid,))
+        if tenant_id is None:
+            self._conn.execute("DELETE FROM chunks WHERE source_id = ? AND tenant_id IS NULL", (source_id,))
+        else:
+            self._conn.execute("DELETE FROM chunks WHERE source_id = ? AND tenant_id = ?", (source_id, tenant_id))
+        self._conn.commit()
+        return len(rows)
+
+    def count_by_tenant(self, tenant_id: str) -> int:
+        """Return the number of private corpus chunks for a tenant."""
+        row = self._conn.execute(
+            "SELECT COUNT(*) FROM chunks WHERE tenant_id = ?",
+            (tenant_id,),
+        ).fetchone()
+        return int(row[0] if row else 0)
+
+    def delete_by_tenant(self, tenant_id: str) -> int:
+        """Delete all private corpus chunks for a tenant.
+
+        Public seed chunks keep ``tenant_id IS NULL`` and are intentionally not
+        touched. The FTS shadow table is cleaned first so deleted private text
+        cannot remain searchable.
+        """
         rows = self._conn.execute(
-            "SELECT rowid FROM chunks WHERE source_id = ?", (source_id,)
+            "SELECT rowid FROM chunks WHERE tenant_id = ?",
+            (tenant_id,),
         ).fetchall()
         for (rowid,) in rows:
             self._conn.execute("DELETE FROM chunks_fts WHERE rowid = ?", (rowid,))
-        self._conn.execute("DELETE FROM chunks WHERE source_id = ?", (source_id,))
+        self._conn.execute("DELETE FROM chunks WHERE tenant_id = ?", (tenant_id,))
         self._conn.commit()
         return len(rows)
 

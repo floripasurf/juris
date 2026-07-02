@@ -38,7 +38,7 @@ async def enrich_resultado(
             resultado.tribunal,
             rate_limiter=rate_limiter,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         from juris.core.sanitize import safe_error_text
 
         logger.warning(

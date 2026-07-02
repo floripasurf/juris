@@ -5,24 +5,30 @@ calcula prazos, **busca jurisprudência** e seleciona a **linha argumentativa**,
 **minuta** petições com citações verificadas, e **peticiona** com assinatura
 PAdES — tudo com **trilha de auditoria encadeada** e **de-identificação de PII**.
 
-> Python 3.12 · `uv` · FastAPI · pytest/ruff/mypy. Foco atual: piloto Fase 1
-> (escritório único, co-localizado no Mac Mini) — com a **fundação multi-tenant**
-> (auth + scoping por tenant) e a **extensão MV3 "IA de preferência"** já
-> construídas e testadas, prontas para a Fase 2.
+> Python 3.12 · `uv` · FastAPI · pytest/ruff/mypy. Foco atual: piloto real
+> instrumentado, com fundação multi-tenant, agente remoto split-trust,
+> Browser Session MV3, workbench, corpus dirigido e filing controlado já
+> implementados em fatias operacionais.
 
 ## Quick start
 
 ```bash
 uv sync
-docker compose -f docker/docker-compose.yml up -d   # qdrant, postgres, redis
 cp .env.example .env
 uv run pytest
 uv run juris tribunais
 ```
 
+O caminho de piloto/local não exige serviços externos: storage operacional é
+SQLite/JSON sob `JURIS_HOME` e corpus canônico em FTS5 (`repertory.db`). O
+`docker compose` permanece apenas para serviços opcionais/integração
+(Postgres/Qdrant/Redis), não como pré-requisito para rodar o produto.
+
 Sessão de piloto ao vivo: **`docs/pilot/onboarding.md`** (pré-requisitos + a
 sequência de comandos no Mac Mini). Rode `uv run juris pilot preflight --live`
 antes — um comando verifica token A3, corpus, embeddings, Ollama e o modelo NER.
+Antes de usar casos reais de cliente, preencha o pacote LGPD/compliance em
+`docs/compliance/` e registre fontes externas em `data/tos_compliance_log.md`.
 
 ## Subsistemas
 
@@ -59,6 +65,9 @@ uv run juris demo <CNJ> contestacao --source mni
 # 3. Verificar a integridade da auditoria
 uv run juris audit verify juris-out/<CNJ>/audit.jsonl
 
+# 4. Backup operacional antes de deploy/manutenção
+uv run juris backup create
+
 # Outros
 uv run juris repertory search "<tema>"      # busca corpus (com breakdown do score)
 uv run juris repertory consolidate          # consolida banco legado no canônico
@@ -66,8 +75,9 @@ uv run juris escavacao run --seed espinha.json --out escavacao-out
 uv run juris file <CNJ> <tipo> --cpf <CPF>  # assina (PAdES) + peticiona
 ```
 
-Console web: `uv run uvicorn juris.web.app:app` → conectar / Acervo / Agenda /
-Novo caso, com painéis de estratégia, review e auditoria.
+Console web: `uv run uvicorn juris.web.app:app` → Mesa de trabalho / conectar /
+Acervo / Agenda / Novo caso / Piloto / Corpus / Protocolo, com estratégia, review,
+grounding, auditoria e health por tenant.
 
 ## Matriz de segurança
 
@@ -82,16 +92,17 @@ Novo caso, com painéis de estratégia, review e auditoria.
 
 ## Público vs engine local
 
-O motor proprietário de NLP (`repertory/retrieval/`, `repertory/chunking.py`,
-`agents/` de engine, `llm/`) é **gitignored** — desenvolvido localmente, fora do
-GitHub. O checkout público **degrada graciosamente**:
+Algumas peças proprietárias ainda são **gitignored** por design — principalmente o
+ranker composto (`repertory/retrieval/ranking.py`).
+O checkout público **degrada graciosamente**:
 
 - `repertory/retrieval/service.py` faz **import opcional** do ranker composto
   (`ranking.py`): com o engine, re-ranqueia por relevância+autoridade+vigência e
   expõe o breakdown; **sem o engine, cai para ordem por relevância** (sem score
   composto). Não quebra.
-- Backends de LLM (`llm/`) e o `BrowserSessionLLM` são locais; o protocolo +
-  transporte do bridge (`api/`) são públicos.
+- O protocolo + transporte do browser bridge (`api/`), o adaptador
+  `BrowserSessionLLM` e a extensão MV3 são públicos/testados; um checkout limpo
+  consegue montar a cadeia AI-of-preference sem depender de arquivo gitignored.
 
 ## Limites (hoje)
 
@@ -103,15 +114,22 @@ GitHub. O checkout público **degrada graciosamente**:
   e testados (vitest + pytest), com de-identificação **imposta** no content script,
   validação de sender e token de bridge validado no native host. Resta apenas o
   retuning manual de seletores contra o DOM ao vivo (`docs/browser-extension/`).
-- **Multi-tenant**: fundação ativada (auth + scoping de leitura/demo/audit); o
-  caminho de escrita do connect + agente Remote são Fase 2.
+- **Multi-tenant**: auth, scoping de leitura/demo/audit/connect/filing, agente
+  remoto, health profundo, painel admin, guard de canal reverso e rate limit Redis
+  estão implementados. Para múltiplos workers, use sticky routing ou broker para o
+  relay e Redis/proxy para rate limit (`docs/deployment.md`).
+- **Postgres/Qdrant/Alembic**: existem no repositório como camada futura/legada,
+  mas não são o caminho executado no piloto local. Evite tratar o compose como
+  arquitetura de produção até a migração ser feita de ponta a ponta.
 
 ## Comandos de desenvolvimento
 
 ```bash
-uv run pytest                 # testes
-uv run ruff check src/juris   # lint
-uv run mypy src/juris         # tipos (core estrito)
+uv run pytest tests/unit -q --cov=juris --cov-report=term-missing
+uv run ruff check src/juris tests
+uv run mypy src/juris
+uv run python scripts/scan_secrets.py
+uv run --with pip-audit pip-audit --local --strict
 ```
 
 ## Decisões de arquitetura

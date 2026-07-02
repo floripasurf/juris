@@ -85,7 +85,7 @@ class STJRepetitivosFetcher(CorpusIngester):
                 if len(items) < self._page_size:
                     break
                 offset += self._page_size
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning(
                 "Could not fetch STJ repetitivos from %s. "
                 "Use SeedLoader with local JSON files instead.",

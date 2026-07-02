@@ -494,11 +494,12 @@ def check_token(
         material = read()
     except Exception as exc:  # noqa: BLE001 — any failure means the token isn't ready
         from juris.core.observability import get_logger
+        from juris.core.sanitize import safe_error_text
 
         get_logger("juris.pilot.preflight").warning(
             "preflight_token_probe_failed",
-            error=str(exc),
-            exc_info=exc,
+            error=safe_error_text(exc),
+            exception_type=exc.__class__.__name__,
         )
         return CheckResult(
             name="token_a3",
