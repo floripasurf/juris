@@ -15,29 +15,23 @@ jobs:
         uses: astral-sh/setup-uv@v3
 
       - name: Sync deps
-        run: uv sync --frozen || uv sync
+        run: uv sync --frozen
+
+      - name: Secrets — high-risk patterns
+        run: uv run python scripts/scan_secrets.py
 
       # --- Hard gates (block the build) ---------------------------------------
-      - name: Ruff — lint src + tests
-        run: uv run ruff check src/juris tests
+      - name: Ruff — lint src + tests + scripts
+        run: uv run ruff check src/juris tests scripts/scan_secrets.py
 
-      - name: Pytest — unit suite
-        run: uv run pytest tests/unit -q
+      - name: Mypy — full project
+        run: uv run mypy src/juris
 
-      # --- Mypy: hard on the clean+fully-tracked packages, informational rest ---
-      # Trilha E-2: these packages are mypy-clean AND have no engine-local
-      # (gitignored) source, so local == CI — safe as a hard gate (anti-regression).
-      # Mixed packages (engine-local files) + the debt tracks (cli/persistence/
-      # signing/mni/jobs/repertory) stay in the informational run until folded in.
-      - name: Mypy — clean packages (hard gate)
-        run: >
-          uv run mypy
-          src/juris/alerts src/juris/api src/juris/busca
-          src/juris/demo src/juris/escavacao src/juris/mni
-          src/juris/signing src/juris/web
+      - name: Pytest — unit suite + coverage ratchet
+        run: uv run pytest tests/unit -q --cov=juris --cov-report=term-missing --cov-report=xml
 
-      - name: Mypy — full (informational, shrinking)
-        run: uv run mypy src/juris || true
+      - name: Dependency audit — Python
+        run: uv run --with pip-audit pip-audit --local --strict
 
   extension:
     runs-on: ubuntu-latest
@@ -53,7 +47,10 @@ jobs:
           node-version: "20"
 
       - name: Install deps
-        run: npm ci || npm install
+        run: npm ci
+
+      - name: Dependency audit — extension
+        run: npm audit --audit-level=high
 
       - name: Vitest — selectors/parsers
         run: npm test
