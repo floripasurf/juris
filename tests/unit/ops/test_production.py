@@ -24,6 +24,21 @@ def test_require_tenants_unset_is_an_error(tmp_path) -> None:
     assert c.severity == "error"
 
 
+def test_prod_environment_enforces_tenant_requirement(tmp_path) -> None:
+    checks = _by_name(check_production_readiness(env={"ENVIRONMENT": "prod", "JURIS_HOME": str(tmp_path)}))
+    assert checks["require_tenants"].ok is True
+    assert "ENVIRONMENT=prod" in checks["require_tenants"].detail
+    assert checks["tenants_file"].ok is False
+    assert checks["audit_hmac_key"].ok is False
+    assert checks["audit_hmac_key"].severity == "error"
+
+
+def test_audit_hmac_is_warn_only_outside_prod(tmp_path) -> None:
+    checks = _by_name(check_production_readiness(env={"JURIS_HOME": str(tmp_path)}))
+    assert checks["audit_hmac_key"].ok is True
+    assert checks["audit_hmac_key"].severity == "warn"
+
+
 def test_full_inprocess_prod_config_passes(tmp_path) -> None:
     import os
 
@@ -119,3 +134,56 @@ def test_cross_wired_agent_binding_blocks(tmp_path) -> None:
         "JURIS_AGENT_MODE": "remote", "JURIS_AGENTS_FILE": str(agents), "JURIS_HOME": str(tmp_path),
     }
     assert "agent_bindings" in _blocking_errors(check_production_readiness(env=env))
+
+
+def test_remote_multiworker_without_sticky_or_broker_blocks(tmp_path) -> None:
+    import os
+
+    from juris.web.auth import hash_api_key
+
+    tenants = _write_tenants(tmp_path, {"acme": hash_api_key("ka")})
+    os.chmod(tenants, 0o600)
+    agents = tmp_path / "agents.json"
+    agents.write_text(json.dumps({"acme": {"url": "wss://acme.example/ws", "token": "tok"}}), encoding="utf-8")
+    os.chmod(agents, 0o600)
+    env = {
+        "JURIS_REQUIRE_TENANTS": "1",
+        "JURIS_TENANTS_FILE": str(tenants),
+        "JURIS_AGENT_MODE": "remote",
+        "JURIS_AGENTS_FILE": str(agents),
+        "JURIS_HOME": str(tmp_path / "home"),
+        "WEB_CONCURRENCY": "4",
+    }
+
+    checks = check_production_readiness(env=env)
+
+    assert "reverse_channel_scaling" in _blocking_errors(checks)
+    assert _by_name(checks)["rate_limit_distribution"].ok is False
+    assert _by_name(checks)["rate_limit_distribution"].severity == "warn"
+
+
+def test_remote_multiworker_with_sticky_and_redis_passes_scaling_checks(tmp_path) -> None:
+    import os
+
+    from juris.web.auth import hash_api_key
+
+    tenants = _write_tenants(tmp_path, {"acme": hash_api_key("ka")})
+    os.chmod(tenants, 0o600)
+    agents = tmp_path / "agents.json"
+    agents.write_text(json.dumps({"acme": {"url": "wss://acme.example/ws", "token": "tok"}}), encoding="utf-8")
+    os.chmod(agents, 0o600)
+    env = {
+        "JURIS_REQUIRE_TENANTS": "1",
+        "JURIS_TENANTS_FILE": str(tenants),
+        "JURIS_AGENT_MODE": "remote",
+        "JURIS_AGENTS_FILE": str(agents),
+        "JURIS_HOME": str(tmp_path / "home"),
+        "WEB_CONCURRENCY": "4",
+        "JURIS_RELAY_STICKY": "1",
+        "JURIS_RATE_LIMIT_REDIS_URL": "redis://localhost:6379/0",
+    }
+
+    checks = _by_name(check_production_readiness(env=env))
+
+    assert checks["reverse_channel_scaling"].ok is True
+    assert checks["rate_limit_distribution"].ok is True

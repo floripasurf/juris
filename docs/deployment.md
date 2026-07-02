@@ -10,7 +10,7 @@ Two pieces of state live **in process memory** today:
 
 | State | Where | Consequence of multi-worker |
 |---|---|---|
-| Reverse-channel agent connections | `RelayHub` singleton (`api/relay.py`) | An agent registers on the worker that terminated its WebSocket; `send()` only finds it there. A request landing on another worker fails to route. |
+| Reverse-channel agent connections | `RelayHub` singleton by default; Redis broker when `JURIS_RELAY_BROKER` is set | Without sticky/broker, an agent registers on one worker and a request can land on another. |
 | Rate-limit counters | `web/rate_limit.py` | Per-process counters → the effective limit is `N_workers × limit`. |
 
 **Pilot rule:** run the orchestrator with **one worker** when the reverse channel or
@@ -19,7 +19,7 @@ rate limiting is in use (`uvicorn ... --workers 1`; no horizontal replicas). Hea
 
 **Fail-closed guard (enforced in code):** `RelayHub.send()` refuses to route under
 multi-worker (`WEB_CONCURRENCY`/`JURIS_WEB_WORKERS > 1`) unless you explicitly opt into a
-safe topology — either `JURIS_RELAY_BROKER=<url>` (a real broker) or `JURIS_RELAY_STICKY=1`
+safe topology — either `JURIS_RELAY_BROKER=<url>` (Redis broker) or `JURIS_RELAY_STICKY=1`
 (you assert LB affinity by tenant is configured). Plain multi-worker with neither **fails
 loudly** — an MNI read / filing raises a clear error instead of silently landing on a
 worker that isn't holding the agent's connection. Scaling therefore never *silently*
@@ -45,24 +45,37 @@ Good enough for a handful of firms. It does **not** survive a worker restart mid
 `test_two_tenants_survive_agent_reconnect`, which proves the hub re-routes correctly to
 the new socket and the stale one can't hijack).
 
-## Scaling option B — external broker (real horizontal scale) — RELAY BROKER NOT YET BUILT
+## Scaling option B — Redis relay broker (real horizontal scale)
 
-Status: **sticky routing (Option A) is the supported multi-worker path today** — the
-reverse-channel relay hub is still in-memory (the fail-closed guard makes multi-worker
-without sticky/broker error loudly, never silently misroute). A Redis/NATS **relay** broker
-is a scoped follow-up: it routes signing/filing ops, so it must be integration-tested
-against a real broker before production (determinism for legal-critical paths), not merely
-against an in-memory double. The **rate-limit** Redis backend below, by contrast, IS built
-and enabled by config. When the relay broker is built:
+Status: **built in code, pending real-Redis deployment test before production use**.
+Set:
 
-1. **Relay:** Redis pub/sub or NATS keyed by tenant. The worker holding the agent
-   socket subscribes to `agent:<tenant>`; `send()` publishes the `AgentRequest` there
-   and awaits the correlated reply on `reply:<tenant>:<request_id>`. `RelayHub`'s
-   interface (`register`/`unregister`/`send`/`resolve`) already isolates this — swap the
-   `_agents`/`_pending` dicts for broker calls; the endpoint and `relay_token_ok` are
-   unchanged.
-2. **Idempotency:** reads are safe to retry; **signing/filing is not** — keep the
-   `request_id` de-dupe (`request_id duplicado` guard) and never auto-retry a filing.
+```bash
+JURIS_RELAY_BROKER=redis://redis:6379/0
+```
+
+How it works:
+
+1. **Agent worker subscribes by tenant.** When `/ws/agent-relay?tenant=<id>` accepts the
+   agent WebSocket, `RelayHub.register()` subscribes that worker to
+   `juris:relay:request:<tenant>`.
+2. **Any worker can send.** `RelayHub.send()` publishes the `AgentRequest` to that tenant
+   request channel and waits on a hashed reply channel for the same `request_id`.
+3. **Agent replies through the broker.** The worker holding the WebSocket receives the
+   agent response and publishes it to the correlated reply channel.
+4. **Duplicate request guard.** Redis `SET NX` protects `tenant/request_id` while the
+   request is pending. Reads may be retried manually; **signing/filing must not be
+   automatically retried** without an idempotency/reconciliation design.
+5. **Presence.** The worker holding the agent socket writes a TTL heartbeat key so health
+   checks can report a tenant agent connected even if the current HTTP request lands on a
+   different worker.
+
+Before enabling in production, run a real Redis integration smoke:
+
+1. Start two orchestrator workers/instances with the same `JURIS_RELAY_BROKER`.
+2. Connect one tenant agent to worker A.
+3. Force an MNI read/dry-run filing request through worker B.
+4. Confirm the request reaches the agent and the response correlates by `request_id`.
 
 ## Rate limit for production
 

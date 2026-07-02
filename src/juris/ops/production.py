@@ -51,13 +51,19 @@ def check_production_readiness(env: Mapping[str, str] | None = None) -> list[Che
     env = env if env is not None else os.environ
     checks: list[Check] = []
 
-    # 1. Fail-closed multi-tenant posture.
-    require = _flag(env, "JURIS_REQUIRE_TENANTS")
+    # 1. Fail-closed multi-tenant posture. In prod, the runtime enforces this
+    # even if JURIS_REQUIRE_TENANTS was forgotten.
+    prod_env = env.get("ENVIRONMENT", "").strip().lower() == "prod"
+    require = _flag(env, "JURIS_REQUIRE_TENANTS") or prod_env
     checks.append(
         Check(
             "require_tenants",
             require,
-            "JURIS_REQUIRE_TENANTS=1" if require else "não definido — fallback ao tenant público é permitido",
+            "ENVIRONMENT=prod exige tenants"
+            if prod_env and not _flag(env, "JURIS_REQUIRE_TENANTS")
+            else "JURIS_REQUIRE_TENANTS=1"
+            if require
+            else "não definido — fallback ao tenant público é permitido",
         )
     )
 
@@ -129,6 +135,16 @@ def check_production_readiness(env: Mapping[str, str] | None = None) -> list[Che
         )
     )
 
+    # 8. Reverse-channel relay is in-memory unless the deploy asserts a safe topology.
+    if env.get("JURIS_AGENT_MODE", "inprocess").strip().lower() == "remote":
+        checks.append(_check_reverse_channel_scaling(env))
+
+    # 9. API rate-limit counters must be shared once the app has multiple workers.
+    checks.append(_check_rate_limit_distribution(env))
+
+    # 10. In production, audit logs need an HMAC key to anchor head/tail integrity.
+    checks.append(_check_audit_hmac(env))
+
     return checks
 
 
@@ -186,6 +202,75 @@ def _check_storage_private(env: Mapping[str, str]) -> Check:
         not accessible,
         "storage owner-only" if not accessible else f"{home} legível por grupo/outros — chmod 700",
         severity="error",  # world/group-readable storage (every tenant's DB + receipts) must BLOCK
+    )
+
+
+def _configured_worker_count(env: Mapping[str, str]) -> tuple[int, bool]:
+    """Return max configured worker count and whether any worker value was malformed."""
+    workers = 1
+    malformed = False
+    for name in ("WEB_CONCURRENCY", "JURIS_WEB_WORKERS"):
+        raw = env.get(name, "").strip()
+        if not raw:
+            continue
+        try:
+            workers = max(workers, int(raw))
+        except ValueError:
+            malformed = True
+    return workers, malformed
+
+
+def _check_reverse_channel_scaling(env: Mapping[str, str]) -> Check:
+    workers, malformed = _configured_worker_count(env)
+    if workers <= 1 and not malformed:
+        return Check("reverse_channel_scaling", True, "single-worker ou sem escala horizontal")
+    broker = bool(env.get("JURIS_RELAY_BROKER", "").strip())
+    sticky = _flag(env, "JURIS_RELAY_STICKY")
+    ok = broker or sticky
+    if ok:
+        detail = "broker configurado" if broker else "sticky routing declarado por JURIS_RELAY_STICKY=1"
+    elif malformed:
+        detail = "contagem de workers inválida; não dá para provar single-worker"
+    else:
+        detail = (
+            "múltiplos workers sem JURIS_RELAY_BROKER nem JURIS_RELAY_STICKY=1; "
+            "o canal reverso é process-local"
+        )
+    return Check("reverse_channel_scaling", ok, detail)
+
+
+def _check_rate_limit_distribution(env: Mapping[str, str]) -> Check:
+    workers, malformed = _configured_worker_count(env)
+    if workers <= 1 and not malformed:
+        return Check("rate_limit_distribution", True, "process-local OK em single-worker", severity="warn")
+    redis_url = bool(env.get("JURIS_RATE_LIMIT_REDIS_URL", "").strip())
+    proxy = _flag(env, "JURIS_RATE_LIMIT_PROXY")
+    ok = redis_url or proxy
+    if ok:
+        detail = "Redis compartilhado" if redis_url else "rate limit declarado no reverse proxy"
+    elif malformed:
+        detail = (
+            "contagem de workers inválida; configure JURIS_RATE_LIMIT_REDIS_URL "
+            "ou declare JURIS_RATE_LIMIT_PROXY=1"
+        )
+    else:
+        detail = (
+            "múltiplos workers sem JURIS_RATE_LIMIT_REDIS_URL nem JURIS_RATE_LIMIT_PROXY=1; "
+            "limite efetivo vira N_workers × limite"
+        )
+    return Check("rate_limit_distribution", ok, detail, severity="warn")
+
+
+def _check_audit_hmac(env: Mapping[str, str]) -> Check:
+    prod_env = env.get("ENVIRONMENT", "").strip().lower() == "prod"
+    configured = bool(env.get("JURIS_AUDIT_HMAC_KEY", "").strip())
+    if configured:
+        return Check("audit_hmac_key", True, "JURIS_AUDIT_HMAC_KEY configurado")
+    return Check(
+        "audit_hmac_key",
+        not prod_env,
+        "ausente — audit.jsonl não terá âncora HMAC contra truncamento/recomputação",
+        severity="error" if prod_env else "warn",
     )
 
 

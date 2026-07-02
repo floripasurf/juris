@@ -170,9 +170,21 @@ def default_registry() -> TenantRegistry:
     return TenantRegistry.from_file(Path(os.environ.get("JURIS_TENANTS_FILE", "config/tenants.json")))
 
 
-def _require_tenants() -> bool:
-    """Whether to fail closed when no tenants are configured (``$JURIS_REQUIRE_TENANTS``)."""
-    return os.environ.get("JURIS_REQUIRE_TENANTS", "").strip().lower() in {"1", "true", "yes"}
+def _is_prod_environment(env: Mapping[str, str] | None = None) -> bool:
+    env = env or os.environ
+    return env.get("ENVIRONMENT", "").strip().lower() == "prod"
+
+
+def require_tenants_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """Whether tenant auth must fail closed.
+
+    In development, ``JURIS_REQUIRE_TENANTS=1`` opts in explicitly. In production,
+    ``ENVIRONMENT=prod`` is enough: forgetting the flag must not reopen the shared
+    ``public`` tenant.
+    """
+    env = env or os.environ
+    explicit = env.get("JURIS_REQUIRE_TENANTS", "").strip().lower() in {"1", "true", "yes"}
+    return explicit or _is_prod_environment(env)
 
 
 async def current_tenant(x_api_key: str | None = Header(default=None)) -> Tenant:
@@ -183,7 +195,7 @@ async def current_tenant(x_api_key: str | None = Header(default=None)) -> Tenant
     """
     try:
         tenant = resolve_tenant(
-            default_registry(), api_key=x_api_key, require_configured=_require_tenants()
+            default_registry(), api_key=x_api_key, require_configured=require_tenants_enabled()
         )
     except PermissionError as exc:
         raise HTTPException(

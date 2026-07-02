@@ -57,3 +57,20 @@ def test_build_rate_limiter_picks_backend() -> None:
     from juris.web.rate_limit import FixedWindowRateLimiter
 
     assert isinstance(build_rate_limiter(limit=5), FixedWindowRateLimiter)  # no redis_url → local
+
+
+def test_redis_limiter_prefix_separates_buckets() -> None:
+    fake = _FakeRedis()
+    standard = RedisFixedWindowRateLimiter(fake, limit=1, window_seconds=60, prefix="juris:rl:api:")
+    expensive = RedisFixedWindowRateLimiter(
+        fake, limit=1, window_seconds=60, prefix="juris:rl:api-expensive:"
+    )
+    relay = RedisFixedWindowRateLimiter(fake, limit=1, window_seconds=60, prefix="juris:rl:ws-agent-relay:")
+
+    assert standard.check("tenant:a", now=100).allowed is True
+    assert expensive.check("tenant:a", now=100).allowed is True
+    assert relay.check("tenant:a:host:127.0.0.1", now=100).allowed is True
+    assert standard.check("tenant:a", now=100).allowed is False
+    assert expensive.check("tenant:a", now=100).allowed is False
+    assert relay.check("tenant:a:host:127.0.0.1", now=100).allowed is False
+    assert len(fake.store) == 3

@@ -9,13 +9,14 @@ from contextlib import asynccontextmanager, suppress
 from datetime import date
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from juris import __version__
+from juris.config import get_settings
 from juris.core.paths import juris_home
 from juris.jobs.connect import run_connect
 from juris.web.auth import Tenant, current_tenant, require_admin, tenant_db_path
@@ -80,7 +81,7 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     # Recover jobs orphaned by a crash/restart: any 'running' row older than the
     # per-job timeout can never complete, so mark it errored on boot.
     with suppress(Exception):  # never block startup on housekeeping
-        _connect_job_store().sweep_stale(_CONNECT_JOB_TIMEOUT_SECONDS)
+        _connect_job_store().sweep_stale(_connect_job_timeout_seconds())
     yield
 
 
@@ -93,19 +94,54 @@ app = FastAPI(
 
 _STATIC_DIR = Path(__file__).with_name("static")
 _INDEX_PATH = _STATIC_DIR / "index.html"
-
-
-def _env_flag(name: str) -> bool:
-    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes"}
+_EXPENSIVE_API_PREFIXES = (
+    "/api/demo-runs",
+    "/api/corpus/search",
+    "/api/corpus/reingest",
+    "/api/filing/dry-run",
+    "/api/filing/submit",
+)
 
 
 @lru_cache(maxsize=1)
 def _api_rate_limiter() -> RateLimiter:
     # Shared Redis quota when JURIS_RATE_LIMIT_REDIS_URL is set (multi-worker SaaS);
     # process-local otherwise (single-worker pilot).
-    limit = int(os.environ.get("JURIS_API_RATE_LIMIT_PER_MINUTE", "120"))
-    redis_url = os.environ.get("JURIS_RATE_LIMIT_REDIS_URL") or None
-    return build_rate_limiter(limit=limit, window_seconds=60, redis_url=redis_url)
+    settings = get_settings()
+    return build_rate_limiter(
+        limit=settings.api_rate_limit_per_minute,
+        window_seconds=60,
+        redis_url=settings.rate_limit_redis_url or None,
+        prefix="juris:rl:api:",
+    )
+
+
+@lru_cache(maxsize=1)
+def _api_expensive_rate_limiter() -> RateLimiter:
+    settings = get_settings()
+    return build_rate_limiter(
+        limit=settings.api_expensive_rate_limit_per_minute,
+        window_seconds=60,
+        redis_url=settings.rate_limit_redis_url or None,
+        prefix="juris:rl:api-expensive:",
+    )
+
+
+@lru_cache(maxsize=1)
+def _ws_agent_relay_rate_limiter() -> RateLimiter:
+    settings = get_settings()
+    return build_rate_limiter(
+        limit=settings.ws_agent_relay_rate_limit_per_minute,
+        window_seconds=60,
+        redis_url=settings.rate_limit_redis_url or None,
+        prefix="juris:rl:ws-agent-relay:",
+    )
+
+
+def _api_rate_limiter_for_path(path: str) -> RateLimiter:
+    if path.startswith(_EXPENSIVE_API_PREFIXES):
+        return _api_expensive_rate_limiter()
+    return _api_rate_limiter()
 
 
 @app.middleware("http")
@@ -114,7 +150,7 @@ async def _rate_limit_api(request: Request, call_next: Any) -> Any:
     if not request.url.path.startswith("/api/"):
         return await call_next(request)
     key = _api_rate_limit_key(request)
-    decision = _api_rate_limiter().check(key)
+    decision = _api_rate_limiter_for_path(request.url.path).check(key)
     if decision.allowed:
         return await call_next(request)
     return JSONResponse(
@@ -143,6 +179,11 @@ def _api_rate_limit_key(request: Request) -> str:
         return f"tenant:{tenant.tenant_id}:{hash_api_key(raw_key or '')}"
     client_host = request.client.host if request.client else "unknown"
     return f"invalid:{client_host}"
+
+
+def _ws_agent_relay_rate_limit_key(ws: WebSocket, tenant_id: str) -> str:
+    client_host = ws.client.host if ws.client else "unknown"
+    return f"tenant:{tenant_id}:host:{client_host}"
 
 
 @app.exception_handler(Exception)
@@ -189,14 +230,14 @@ def _operational_http_error(
 def validate_startup_config() -> None:
     """Fail closed for production multi-tenant deployments.
 
-    ``JURIS_REQUIRE_TENANTS=1`` means the web process must not silently fall back
-    to the shared public tenant, and remote agent mode must have one binding per
-    configured tenant.
+    ``JURIS_REQUIRE_TENANTS=1`` or ``ENVIRONMENT=prod`` means the web process must
+    not silently fall back to the shared public tenant, and remote agent mode must
+    have one binding per configured tenant.
     """
     from juris.api.agent_config import is_remote, tenant_agent_binding
-    from juris.web.auth import default_registry
+    from juris.web.auth import default_registry, require_tenants_enabled
 
-    if not _env_flag("JURIS_REQUIRE_TENANTS"):
+    if not require_tenants_enabled():
         return
 
     registry = default_registry()
@@ -302,6 +343,16 @@ class PendingArchivePayload(PendingRecoveryPayload):
     confirm_manual_resolution: bool = False
 
 
+class PendingRetryPayload(PendingRecoveryPayload):
+    """Controlled retry of an already signed pending filing."""
+
+    cpf: str | None = Field(default=None, max_length=32)
+    senha: str | None = Field(default=None, max_length=256)
+    tribunal: str | None = Field(default=None, max_length=32)
+    tipo_documento: str | None = Field(default=None, max_length=64)
+    confirm_no_existing_protocol: bool = False
+
+
 def _readiness() -> dict[str, object]:
     """Probe the real dependencies (DB + jobs store), not just liveness."""
     from juris.web.auth import PUBLIC_TENANT_ID
@@ -327,15 +378,13 @@ def _readiness() -> dict[str, object]:
 @app.get("/health")
 async def health() -> Response:
     """Readiness probe: liveness + real DB/jobs-store connectivity (503 when degraded)."""
-    result = _readiness()
+    result = await asyncio.to_thread(_readiness)
     code = 200 if result["status"] == "ok" else 503
     return JSONResponse(status_code=code, content={"version": __version__, **result})
 
 
 @app.get("/api/health")
-async def get_tenant_health(
-    deep: bool = True, tenant: Tenant = Depends(current_tenant)
-) -> dict[str, object]:
+async def get_tenant_health(deep: bool = True, tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
     """Per-tenant operational health — config, storage, corpus, agent, browser bridge.
 
     Scoped to the authenticated tenant; never touches another firm's data. ``deep``
@@ -345,7 +394,7 @@ async def get_tenant_health(
     """
     from juris.ops.tenant_health import tenant_operational_status
 
-    return tenant_operational_status(tenant, deep=deep)
+    return await asyncio.to_thread(tenant_operational_status, tenant, deep=deep)
 
 
 @app.get("/api/admin/health")
@@ -361,7 +410,9 @@ async def get_admin_health(deep: bool = True, _: None = Depends(require_admin)) 
 
     reg = default_registry()
     tenant_ids = list(reg.tenant_ids) if not reg.is_open else ["public"]
-    tenants = [tenant_operational_status(Tenant(tid), deep=deep) for tid in sorted(tenant_ids)]
+    tenants = await asyncio.gather(
+        *(asyncio.to_thread(tenant_operational_status, Tenant(tid), deep=deep) for tid in sorted(tenant_ids))
+    )
     return {
         "tenants": tenants,
         "degraded": [t["tenant_id"] for t in tenants if t["status"] != "ok"],
@@ -387,7 +438,7 @@ async def get_processos(
     """
     from juris.web.processos_service import list_processos_page
 
-    page, total = list_processos_page(db=_tenant_db(tenant), limit=limit, offset=offset)
+    page, total = await asyncio.to_thread(list_processos_page, db=_tenant_db(tenant), limit=limit, offset=offset)
     return {
         "processos": [v.to_dict() for v in page],
         "total": total,
@@ -397,11 +448,9 @@ async def get_processos(
 
 
 @app.get("/api/processos/{numero_cnj}")
-async def get_processo(
-    numero_cnj: str, tenant: Tenant = Depends(current_tenant)
-) -> dict[str, object]:
+async def get_processo(numero_cnj: str, tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
     """Detail for one processo: metadata + movements + pending prazos."""
-    detail = get_processo_detail(numero_cnj, db=_tenant_db(tenant))
+    detail = await asyncio.to_thread(get_processo_detail, numero_cnj, db=_tenant_db(tenant))
     if detail is None:
         raise HTTPException(status_code=404, detail="processo não encontrado")
     return detail.to_dict()
@@ -445,10 +494,7 @@ def _serialize_connect(result: Any) -> dict[str, object]:
 # each job to its owning tenant (Phase 2). The PIN is never persisted (it lives only
 # in the transient background-task closure, then is GC'd).
 _MAX_CONNECT_JOBS = 200
-_CONNECT_JOB_TIMEOUT_SECONDS = int(os.environ.get("JURIS_CONNECT_TIMEOUT_SECONDS", "900"))
-_CONNECT_JOB_ERROR = (
-    "Falha operacional ao conectar/sincronizar. Verifique agente, token e credenciais locais."
-)
+_CONNECT_JOB_ERROR = "Falha operacional ao conectar/sincronizar. Verifique agente, token e credenciais locais."
 # Strong refs to in-flight background tasks so the event loop doesn't GC them mid-run.
 _BACKGROUND_TASKS: set[asyncio.Task[None]] = set()
 
@@ -458,9 +504,11 @@ def _connect_job_store() -> ConnectJobStore:
     return ConnectJobStore()
 
 
-async def _run_connect_job(
-    job_id: str, tribunal_cfg: TribunalConfig, payload: ConnectPayload, tenant: Tenant
-) -> None:
+def _connect_job_timeout_seconds() -> int:
+    return get_settings().connect_timeout_seconds
+
+
+async def _run_connect_job(job_id: str, tribunal_cfg: TribunalConfig, payload: ConnectPayload, tenant: Tenant) -> None:
     """Background worker: run the (possibly slow) connect and record the outcome.
 
     Writes go to the tenant's own store (isolation); the job carries its
@@ -482,7 +530,7 @@ async def _run_connect_job(
                 db=_tenant_db(tenant),
                 tenant_id=tenant.tenant_id,
             ),
-            timeout=_CONNECT_JOB_TIMEOUT_SECONDS,  # a hung MNI/agent call can't leave the job "running"
+            timeout=_connect_job_timeout_seconds(),  # a hung MNI/agent call can't leave the job "running"
         )
         store.mark_done(job_id, _serialize_connect(result))
     except TimeoutError:
@@ -502,9 +550,7 @@ async def _run_connect_job(
 
 
 @app.post("/api/connect", status_code=202)
-async def create_connect(
-    payload: ConnectPayload, tenant: Tenant = Depends(current_tenant)
-) -> dict[str, object]:
+async def create_connect(payload: ConnectPayload, tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
     """Start an async import/update; returns a job id to poll (connect can take minutes)."""
     import uuid
 
@@ -522,14 +568,16 @@ async def create_connect(
     from juris.api.agent_config import is_remote
 
     if not is_remote() and not (payload.pin and payload.cpf):
-        raise HTTPException(
-            status_code=400, detail="CPF e PIN do token são obrigatórios no modo co-localizado."
-        )
+        raise HTTPException(status_code=400, detail="CPF e PIN do token são obrigatórios no modo co-localizado.")
 
     job_id = uuid.uuid4().hex
-    store = _connect_job_store()
-    store.create(job_id, tenant.tenant_id)
-    store.evict_old(_MAX_CONNECT_JOBS, tenant_id=tenant.tenant_id)
+
+    def _create_job() -> None:
+        store = _connect_job_store()
+        store.create(job_id, tenant.tenant_id)
+        store.evict_old(_MAX_CONNECT_JOBS, tenant_id=tenant.tenant_id)
+
+    await asyncio.to_thread(_create_job)
     # Retain a reference so the task isn't garbage-collected mid-run (asyncio caveat)
     # and use create_task (not the deprecated get_event_loop().create_task).
     task = asyncio.create_task(_run_connect_job(job_id, tribunal_cfg, payload, tenant))
@@ -552,6 +600,10 @@ async def agent_relay_socket(ws: WebSocket) -> None:
     except ValueError:
         await ws.close(code=4001, reason="Unauthorized")
         return
+    decision = _ws_agent_relay_rate_limiter().check(_ws_agent_relay_rate_limit_key(ws, tenant_id))
+    if not decision.allowed:
+        await ws.close(code=4008, reason="Rate limited")
+        return
     # The relay is cloud-facing: never accept the shared secret in the URL, which
     # can be captured by access logs, browser history, or intermediary telemetry.
     token = ws.headers.get("x-agent-token")
@@ -567,7 +619,7 @@ async def agent_relay_socket(ws: WebSocket) -> None:
     connection_id = hub.register(tenant_id, _send)
     try:
         while True:  # agent → cloud replies, correlated by request_id
-            hub.resolve(tenant_id, AgentResponse.model_validate_json(await ws.receive_text()))
+            await hub.resolve_async(tenant_id, AgentResponse.model_validate_json(await ws.receive_text()))
     except WebSocketDisconnect:
         pass
     finally:
@@ -622,7 +674,7 @@ async def get_agent_health(tenant: Tenant = Depends(current_tenant)) -> dict[str
         binding = tenant_agent_binding(tenant.tenant_id)
         payload["agent_configured"] = True
         payload["binding_present"] = True
-        health = check_agent_health(binding.base_url)
+        health = await asyncio.to_thread(check_agent_health, binding.base_url)
     except Exception as exc:  # noqa: BLE001 — health reports readiness, not stack traces
         code = _agent_health_error_code(str(exc))
         from juris.core.observability import get_logger
@@ -711,11 +763,9 @@ def _agent_health_message(error_code: str) -> str:
 
 
 @app.get("/api/connect/{job_id}")
-async def get_connect(
-    job_id: str, tenant: Tenant = Depends(current_tenant)
-) -> dict[str, object]:
+async def get_connect(job_id: str, tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
     """Poll a connect job — only the tenant that started it can read it (durable store)."""
-    job = _connect_job_store().get(job_id)
+    job = await asyncio.to_thread(_connect_job_store().get, job_id)
     if job is None or job.get("tenant_id") != tenant.tenant_id:
         raise HTTPException(status_code=404, detail="job não encontrado")
     return job
@@ -724,7 +774,8 @@ async def get_connect(
 @app.get("/api/prazos")
 async def get_prazos(tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
     """Deadline agenda: pending prazos across the acervo, soonest first."""
-    return {"prazos": [v.to_dict() for v in list_prazos(db=_tenant_db(tenant))]}
+    prazos = await asyncio.to_thread(list_prazos, db=_tenant_db(tenant))
+    return {"prazos": [v.to_dict() for v in prazos]}
 
 
 @app.get("/api/workbench")
@@ -733,12 +784,17 @@ async def get_workbench(tenant: Tenant = Depends(current_tenant)) -> dict[str, o
     from juris.web.auth import tenant_scoped_dir
 
     db = _tenant_db(tenant)
-    return build_workbench(
-        processos=list_processos(db=db),
-        prazos=list_prazos(db=db),
-        out_root=tenant_scoped_dir(tenant, _out_root()),
-        filing_root=_tenant_filing_root(tenant),
-    )
+
+    def _build() -> dict[str, object]:
+        return build_workbench(
+            processos=list_processos(db=db),
+            prazos=list_prazos(db=db),
+            out_root=tenant_scoped_dir(tenant, _out_root()),
+            filing_root=_tenant_filing_root(tenant),
+            sync_status=db.get_sync_overview(),
+        )
+
+    return await asyncio.to_thread(_build)
 
 
 @app.post("/api/pilot-feedback", status_code=201)
@@ -750,7 +806,7 @@ async def create_pilot_feedback(
     from juris.web.pilot_feedback import append_feedback
 
     root = tenant_scoped_dir(tenant, _out_root())
-    record = append_feedback(root, payload.model_dump())
+    record = await asyncio.to_thread(append_feedback, root, payload.model_dump())
     return {"feedback": record}
 
 
@@ -760,7 +816,8 @@ async def get_pilot_feedback(tenant: Tenant = Depends(current_tenant)) -> dict[s
     from juris.web.auth import tenant_scoped_dir
     from juris.web.pilot_feedback import list_feedback
 
-    return {"feedback": list_feedback(tenant_scoped_dir(tenant, _out_root()))}
+    feedback = await asyncio.to_thread(list_feedback, tenant_scoped_dir(tenant, _out_root()))
+    return {"feedback": feedback}
 
 
 @app.get("/api/pilot-feedback/summary")
@@ -769,7 +826,7 @@ async def get_pilot_feedback_summary(tenant: Tenant = Depends(current_tenant)) -
     from juris.web.auth import tenant_scoped_dir
     from juris.web.pilot_feedback import summarize_feedback
 
-    return summarize_feedback(tenant_scoped_dir(tenant, _out_root()))
+    return await asyncio.to_thread(summarize_feedback, tenant_scoped_dir(tenant, _out_root()))
 
 
 @app.get("/api/pilot-feedback/comparison")
@@ -778,7 +835,7 @@ async def get_pilot_feedback_comparison(tenant: Tenant = Depends(current_tenant)
     from juris.web.auth import tenant_scoped_dir
     from juris.web.pilot_feedback import compare_feedback_runs
 
-    return compare_feedback_runs(tenant_scoped_dir(tenant, _out_root()))
+    return await asyncio.to_thread(compare_feedback_runs, tenant_scoped_dir(tenant, _out_root()))
 
 
 @app.get("/api/corpus/candidates")
@@ -787,7 +844,8 @@ async def get_corpus_candidates(tenant: Tenant = Depends(current_tenant)) -> dic
     from juris.web.auth import tenant_scoped_dir
     from juris.web.corpus_queue import corpus_candidates
 
-    return {"candidates": corpus_candidates(tenant_scoped_dir(tenant, _out_root()))}
+    candidates = await asyncio.to_thread(corpus_candidates, tenant_scoped_dir(tenant, _out_root()))
+    return {"candidates": candidates}
 
 
 @app.post("/api/corpus/sources", status_code=201)
@@ -799,7 +857,11 @@ async def create_corpus_source(
     from juris.web.corpus_queue import append_accepted_source
 
     try:
-        source = append_accepted_source(tenant_scoped_dir(tenant, _out_root()), payload.model_dump())
+        source = await asyncio.to_thread(
+            append_accepted_source,
+            tenant_scoped_dir(tenant, _out_root()),
+            payload.model_dump(),
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"source": source}
@@ -811,7 +873,8 @@ async def get_corpus_sources(tenant: Tenant = Depends(current_tenant)) -> dict[s
     from juris.web.auth import tenant_scoped_dir
     from juris.web.corpus_queue import list_accepted_sources
 
-    return {"sources": list_accepted_sources(tenant_scoped_dir(tenant, _out_root()))}
+    sources = await asyncio.to_thread(list_accepted_sources, tenant_scoped_dir(tenant, _out_root()))
+    return {"sources": sources}
 
 
 @app.get("/api/corpus/coverage")
@@ -820,13 +883,11 @@ async def get_corpus_coverage(tenant: Tenant = Depends(current_tenant)) -> dict[
     from juris.web.auth import tenant_scoped_dir
     from juris.web.corpus_queue import coverage_report
 
-    return coverage_report(tenant_scoped_dir(tenant, _out_root()))
+    return await asyncio.to_thread(coverage_report, tenant_scoped_dir(tenant, _out_root()))
 
 
 @app.get("/api/corpus/search")
-async def search_corpus(
-    q: str, top_k: int = 8, tenant: Tenant = Depends(current_tenant)
-) -> dict[str, object]:
+async def search_corpus(q: str, top_k: int = 8, tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
     """Explainable jurisprudence search (Sprint 5): each hit carries WHY it ranked.
 
     Tenant-scoped (public seed + this firm's own uploads only). Every result exposes
@@ -837,13 +898,16 @@ async def search_corpus(
     from juris.repertory.readiness import read_status, resolve_repertory_path
     from juris.repertory.retrieval.service import explain_ranking
 
-    if not read_status().is_ready:
+    status = await asyncio.to_thread(read_status)
+    if not status.is_ready:
         return {"query": q, "results": [], "detail": "corpus não ingerido ainda"}
 
-    repertory = _corpus_search_service(resolve_repertory_path())
-    results = repertory.search_jurisprudencia(
-        query=q, top_k=max(1, min(top_k, 20)), tenant_id=tenant.tenant_id
-    )
+    def _search() -> list[Any]:
+        repertory = _corpus_search_service(resolve_repertory_path())
+        raw_results = repertory.search_jurisprudencia(query=q, top_k=max(1, min(top_k, 20)), tenant_id=tenant.tenant_id)
+        return cast(list[Any], raw_results)
+
+    results = await asyncio.to_thread(_search)
     return {
         "query": q,
         "results": [
@@ -861,14 +925,12 @@ async def search_corpus(
 
 
 @app.post("/api/corpus/sources/{source_id}/reingested")
-async def mark_corpus_source_reingested(
-    source_id: str, tenant: Tenant = Depends(current_tenant)
-) -> dict[str, object]:
+async def mark_corpus_source_reingested(source_id: str, tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
     """Mark a queued source as reingested after the controlled corpus job runs."""
     from juris.web.auth import tenant_scoped_dir
     from juris.web.corpus_queue import mark_reingested
 
-    source = mark_reingested(tenant_scoped_dir(tenant, _out_root()), source_id)
+    source = await asyncio.to_thread(mark_reingested, tenant_scoped_dir(tenant, _out_root()), source_id)
     if source is None:
         raise HTTPException(status_code=404, detail="fonte não encontrada")
     return {"source": source}
@@ -881,8 +943,11 @@ async def reingest_pilot_corpus(tenant: Tenant = Depends(current_tenant)) -> dic
     from juris.web.auth import tenant_scoped_dir
     from juris.web.corpus_queue import reingest_pending_sources
 
-    report = reingest_pending_sources(
-        tenant_scoped_dir(tenant, _out_root()), resolve_repertory_path(), tenant_id=tenant.tenant_id
+    report = await asyncio.to_thread(
+        reingest_pending_sources,
+        tenant_scoped_dir(tenant, _out_root()),
+        resolve_repertory_path(),
+        tenant_id=tenant.tenant_id,
     )
     return report.to_dict()
 
@@ -898,18 +963,16 @@ async def export_pilot_feedback(
 
     root = tenant_scoped_dir(tenant, _out_root())
     if export_format == "csv":
-        return Response(export_feedback_csv(root), media_type="text/csv")
+        return Response(await asyncio.to_thread(export_feedback_csv, root), media_type="text/csv")
     if export_format == "json":
-        return Response(export_feedback_json(root), media_type="application/json")
+        return Response(await asyncio.to_thread(export_feedback_json, root), media_type="application/json")
     if export_format == "md":
-        return Response(export_feedback_report_markdown(root), media_type="text/markdown")
+        return Response(await asyncio.to_thread(export_feedback_report_markdown, root), media_type="text/markdown")
     raise HTTPException(status_code=400, detail="format deve ser json, csv ou md")
 
 
 @app.get("/api/audit")
-async def get_audit(
-    output_dir: str, tenant: Tenant = Depends(current_tenant)
-) -> dict[str, object]:
+async def get_audit(output_dir: str, tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
     """The audit chain + integrity verdict for a demo run's output dir.
 
     The path is resolved and confined to the tenant's output root, so the endpoint
@@ -924,7 +987,7 @@ async def get_audit(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     try:
-        return audit_view(audit_path)
+        return await asyncio.to_thread(audit_view, audit_path)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="audit.jsonl não encontrado") from exc
 
@@ -934,7 +997,7 @@ async def get_filing_status(tenant: Tenant = Depends(current_tenant)) -> dict[st
     """Pending filings and recent custody chains — scoped to THIS tenant's filings."""
     from juris.web.filing_console import filing_status
 
-    return filing_status(_tenant_filing_root(tenant))
+    return await asyncio.to_thread(filing_status, _tenant_filing_root(tenant))
 
 
 @app.get("/api/filing/artifacts")
@@ -943,7 +1006,7 @@ async def get_filing_artifacts(tenant: Tenant = Depends(current_tenant)) -> dict
     from juris.web.auth import tenant_scoped_dir
     from juris.web.filing_console import filing_artifacts
 
-    return filing_artifacts(tenant_scoped_dir(tenant, _out_root()))
+    return await asyncio.to_thread(filing_artifacts, tenant_scoped_dir(tenant, _out_root()))
 
 
 @app.post("/api/filing/artifacts/content")
@@ -955,7 +1018,8 @@ async def get_filing_artifact_content(
     from juris.web.filing_console import read_filing_artifact
 
     try:
-        return read_filing_artifact(
+        return await asyncio.to_thread(
+            read_filing_artifact,
             tenant_scoped_dir(tenant, _out_root()),
             output_dir=payload.output_dir,
             artifact_name=payload.artifact_name,
@@ -972,7 +1036,7 @@ async def recover_pending_filing(
     from juris.web.filing_console import pending_recovery
 
     try:
-        return pending_recovery(_tenant_filing_root(tenant), payload.pending_key)
+        return await asyncio.to_thread(pending_recovery, _tenant_filing_root(tenant), payload.pending_key)
     except (FileNotFoundError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -987,15 +1051,52 @@ async def archive_pending_filing(
     if not payload.confirm_manual_resolution:
         raise HTTPException(status_code=400, detail="confirmação manual é obrigatória para arquivar")
     try:
-        return archive_pending(_tenant_filing_root(tenant), payload.pending_key, reason=payload.reason)
+        return await asyncio.to_thread(
+            archive_pending,
+            _tenant_filing_root(tenant),
+            payload.pending_key,
+            reason=payload.reason,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/filing/pending/retry")
+async def retry_pending_filing(
+    payload: PendingRetryPayload, tenant: Tenant = Depends(current_tenant)
+) -> dict[str, object]:
+    """Retry the submit step for a signed pending filing after human reconciliation."""
+    from juris.web.filing_console import retry_pending_submission
+
+    if _is_remote_agent_mode():
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "retry de _pending remoto deve ser executado no agente local; "
+                "a nuvem não acessa signed.pdf nem credenciais"
+            ),
+        )
+    if not (payload.cpf and payload.senha):
+        raise HTTPException(status_code=400, detail="CPF e senha são obrigatórios para retry co-localizado")
+    try:
+        return await asyncio.to_thread(
+            retry_pending_submission,
+            _tenant_filing_root(tenant),
+            payload.pending_key,
+            cpf=payload.cpf,
+            senha=payload.senha,
+            confirm_no_existing_protocol=payload.confirm_no_existing_protocol,
+            tribunal=payload.tribunal,
+            tipo_documento=payload.tipo_documento,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except (FileNotFoundError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/filing/dry-run")
-async def dry_run_filing(
-    payload: FilingPayload, tenant: Tenant = Depends(current_tenant)
-) -> dict[str, object]:
+async def dry_run_filing(payload: FilingPayload, tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
     """Render and preflight a filing without signing or contacting the tribunal."""
     from juris.signing.filing import FilingRequest
     from juris.signing.filing_service import get_filing_service
@@ -1015,9 +1116,7 @@ async def dry_run_filing(
         prazo_override=payload.prazo_override,
     )
     try:
-        result = await get_filing_service(
-            tenant.tenant_id, storage_root=_tenant_juris_home(tenant)
-        ).file(
+        result = await get_filing_service(tenant.tenant_id, storage_root=_tenant_juris_home(tenant)).file(
             request,
             pin=None if remote else payload.pin,
         )
@@ -1031,9 +1130,7 @@ async def dry_run_filing(
 
 
 @app.post("/api/filing/submit")
-async def submit_filing(
-    payload: FilingPayload, tenant: Tenant = Depends(current_tenant)
-) -> dict[str, object]:
+async def submit_filing(payload: FilingPayload, tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
     """Sign and file only after review confirmation and explicit lawyer consent."""
     from juris.signing.filing import FilingRequest
     from juris.signing.filing_service import get_filing_service
@@ -1058,9 +1155,7 @@ async def submit_filing(
         prazo_override=payload.prazo_override,
     )
     try:
-        result = await get_filing_service(
-            tenant.tenant_id, storage_root=_tenant_juris_home(tenant)
-        ).file(
+        result = await get_filing_service(tenant.tenant_id, storage_root=_tenant_juris_home(tenant)).file(
             request,
             pin=None if remote else payload.pin,
         )
@@ -1083,9 +1178,7 @@ def _require_filing_credentials(payload: FilingPayload, *, remote: bool) -> None
     if remote:
         return
     missing = [
-        name
-        for name, value in (("CPF", payload.cpf), ("senha", payload.senha), ("PIN", payload.pin))
-        if not value
+        name for name, value in (("CPF", payload.cpf), ("senha", payload.senha), ("PIN", payload.pin)) if not value
     ]
     if missing:
         raise HTTPException(
@@ -1097,13 +1190,11 @@ def _require_filing_credentials(payload: FilingPayload, *, remote: bool) -> None
 @app.get("/", response_class=HTMLResponse)
 async def index() -> str:
     """Render the local operator UI."""
-    return _INDEX_PATH.read_text(encoding="utf-8")
+    return await asyncio.to_thread(_INDEX_PATH.read_text, encoding="utf-8")
 
 
 @app.post("/api/demo-runs")
-async def create_demo_run(
-    payload: DemoRunPayload, tenant: Tenant = Depends(current_tenant)
-) -> dict[str, object]:
+async def create_demo_run(payload: DemoRunPayload, tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
     """Run the demo pipeline from a browser request."""
     from juris.web.auth import tenant_scoped_dir
 

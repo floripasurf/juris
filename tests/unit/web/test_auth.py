@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from juris.web.auth import Tenant, TenantRegistry, resolve_tenant
+from juris.web.auth import Tenant, TenantRegistry, require_tenants_enabled, resolve_tenant
 
 
 def test_open_when_no_tenants_configured() -> None:
@@ -12,6 +12,13 @@ def test_open_when_no_tenants_configured() -> None:
     assert registry.is_open is True
     # an open deployment resolves everyone to the shared public tenant
     assert resolve_tenant(registry, api_key=None) == Tenant("public")
+
+
+def test_prod_environment_requires_tenants_even_without_flag() -> None:
+    registry = TenantRegistry({})
+    assert require_tenants_enabled({"ENVIRONMENT": "prod"}) is True
+    with pytest.raises(PermissionError, match="tenants exigidos"):
+        resolve_tenant(registry, api_key=None, require_configured=require_tenants_enabled({"ENVIRONMENT": "prod"}))
 
 
 def test_valid_api_key_resolves_its_tenant() -> None:

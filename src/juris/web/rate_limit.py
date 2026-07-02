@@ -102,12 +102,21 @@ class RedisFixedWindowRateLimiter:
 
 
 def build_rate_limiter(
-    *, limit: int, window_seconds: int = 60, redis_url: str | None = None
+    *,
+    limit: int,
+    window_seconds: int = 60,
+    redis_url: str | None = None,
+    prefix: str = "juris:rl:",
 ) -> RateLimiter:
     """Pick the shared Redis limiter when ``redis_url`` is set, else the process-local one."""
     if redis_url:
         import redis
 
         client = redis.Redis.from_url(redis_url)
-        return RedisFixedWindowRateLimiter(client, limit=limit, window_seconds=window_seconds)
+        return RedisFixedWindowRateLimiter(
+            client,
+            limit=limit,
+            window_seconds=window_seconds,
+            prefix=prefix,
+        )
     return FixedWindowRateLimiter(limit=limit, window_seconds=window_seconds)

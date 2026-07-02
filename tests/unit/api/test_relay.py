@@ -7,7 +7,7 @@ import json
 
 import pytest
 
-from juris.api.relay import RelayHub
+from juris.api.relay import MemoryRelayBroker, RelayHub
 from juris.api.ws_schemas import AgentRequest, AgentResponse
 
 
@@ -181,6 +181,59 @@ def test_hub_old_connection_cannot_unregister_new_connection() -> None:
     assert hub.is_connected("tenant-a") is True
     hub.unregister("tenant-a", new_id)
     assert hub.is_connected("tenant-a") is False
+
+
+@pytest.mark.asyncio
+async def test_broker_routes_request_between_hub_instances() -> None:
+    """Worker B can route through the broker to the agent socket held by worker A."""
+    broker = MemoryRelayBroker()
+    hub_with_agent = RelayHub(broker=broker)
+    hub_without_agent = RelayHub(broker=broker)
+    sent_to_agent: list[dict[str, object]] = []
+
+    async def fake_send(payload: str) -> None:
+        sent_to_agent.append(json.loads(payload))
+
+    hub_with_agent.register("tenant-a", fake_send)
+    req = AgentRequest(request_id="r-broker", tenant_id="spoofed", operation="mni", payload={})
+
+    task = asyncio.create_task(hub_without_agent.send("tenant-a", req, timeout=5))
+    await asyncio.sleep(0)
+    await hub_with_agent.resolve_async(
+        "tenant-a",
+        AgentResponse(request_id="r-broker", success=True, payload={"via": "broker"}),
+    )
+
+    resp = await task
+    assert resp.success is True
+    assert resp.payload == {"via": "broker"}
+    assert sent_to_agent[0]["tenant_id"] == "tenant-a"
+
+
+@pytest.mark.asyncio
+async def test_broker_rejects_duplicate_request_id_across_hubs() -> None:
+    broker = MemoryRelayBroker()
+    hub_with_agent = RelayHub(broker=broker)
+    hub_a = RelayHub(broker=broker)
+    hub_b = RelayHub(broker=broker)
+    release_send = asyncio.Event()
+
+    async def slow_send(_payload: str) -> None:
+        await release_send.wait()
+
+    hub_with_agent.register("tenant-a", slow_send)
+    req = AgentRequest(request_id="same-id", tenant_id="tenant-a", operation="mni", payload={})
+
+    first = asyncio.create_task(hub_a.send("tenant-a", req, timeout=5))
+    await asyncio.sleep(0)
+    with pytest.raises(RuntimeError, match="request_id duplicado"):
+        await hub_b.send("tenant-a", req, timeout=5)
+
+    await hub_with_agent.resolve_async(
+        "tenant-a", AgentResponse(request_id="same-id", success=True, payload={})
+    )
+    release_send.set()
+    await first
 
 
 def test_run_relay_agent_appends_validated_tenant_query(monkeypatch) -> None:
