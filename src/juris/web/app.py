@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
 
 from juris import __version__
@@ -95,6 +95,14 @@ app = FastAPI(
 _STATIC_DIR = Path(__file__).with_name("static")
 _INDEX_PATH = _STATIC_DIR / "index.html"
 _ASSETS_DIR = _STATIC_DIR / "assets"
+_PUBLIC_HTTPS_HOSTS = frozenset(
+    {
+        "causia.com.br",
+        "www.causia.com.br",
+        "app.causia.com.br",
+        "juris.blackcube.dev",
+    }
+)
 _EXPENSIVE_API_PREFIXES = (
     "/api/demo-runs",
     "/api/corpus/search",
@@ -146,16 +154,36 @@ def _api_rate_limiter_for_path(path: str) -> RateLimiter:
     return _api_rate_limiter()
 
 
+def _request_host(request: Request) -> str:
+    return request.headers.get("host", "").split(":", 1)[0].lower()
+
+
+def _forwarded_proto(request: Request) -> str:
+    return request.headers.get("x-forwarded-proto", request.url.scheme).split(",", 1)[0].strip().lower()
+
+
+def _is_public_https_host(request: Request) -> bool:
+    return _request_host(request) in _PUBLIC_HTTPS_HOSTS
+
+
+def _add_hsts_if_public_https(request: Request, response: Response) -> Response:
+    if _is_public_https_host(request) and _forwarded_proto(request) == "https":
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+    return response
+
+
 @app.middleware("http")
 async def _rate_limit_api(request: Request, call_next: Any) -> Any:
     """Basic per-API-key burst protection for web API routes."""
+    if _is_public_https_host(request) and _forwarded_proto(request) == "http":
+        return RedirectResponse(str(request.url.replace(scheme="https")), status_code=308)
     if not request.url.path.startswith("/api/"):
-        return await call_next(request)
+        return _add_hsts_if_public_https(request, await call_next(request))
     key = _api_rate_limit_key(request)
     decision = _api_rate_limiter_for_path(request.url.path).check(key)
     if decision.allowed:
-        return await call_next(request)
-    return JSONResponse(
+        return _add_hsts_if_public_https(request, await call_next(request))
+    response = JSONResponse(
         status_code=429,
         headers={"Retry-After": str(decision.retry_after_seconds)},
         content={
@@ -166,6 +194,7 @@ async def _rate_limit_api(request: Request, call_next: Any) -> Any:
             }
         },
     )
+    return _add_hsts_if_public_https(request, response)
 
 
 def _api_rate_limit_key(request: Request) -> str:

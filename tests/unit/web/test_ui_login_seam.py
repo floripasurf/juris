@@ -62,6 +62,25 @@ class TestBackendContract:
         assert response.headers["content-type"].startswith("image/jpeg")
         assert client.head("/static/assets/causia-hero-legal-desk.jpg").status_code == 200
 
+    def test_public_http_host_redirects_to_https(self, required_tenant) -> None:
+        client = TestClient(app)
+        response = client.get(
+            "/",
+            headers={"host": "causia.com.br", "x-forwarded-proto": "http"},
+            follow_redirects=False,
+        )
+        assert response.status_code == 308
+        assert response.headers["location"] == "https://causia.com.br/"
+
+    def test_public_https_host_sets_hsts(self, required_tenant) -> None:
+        client = TestClient(app)
+        response = client.get(
+            "/",
+            headers={"host": "causia.com.br", "x-forwarded-proto": "https"},
+        )
+        assert response.status_code == 200
+        assert response.headers["strict-transport-security"] == "max-age=31536000"
+
 
 class TestSpaLoginGate:
     """The static console ships the login gate and authenticated fetch wrapper."""
@@ -78,6 +97,12 @@ class TestSpaLoginGate:
         assert 'id="app-shell" hidden' in _INDEX_HTML
         assert "if (getApiKey()) bootConsole();" in _INDEX_HTML
         assert "else showLanding();" in _INDEX_HTML
+
+    def test_console_ships_logout_button_that_clears_session_key(self) -> None:
+        assert 'id="logout-button"' in _INDEX_HTML
+        assert "function logout()" in _INDEX_HTML
+        assert 'setApiKey("");' in _INDEX_HTML
+        assert 'logoutButton.addEventListener("click", logout);' in _INDEX_HTML
 
     def test_ships_login_overlay_with_key_input(self) -> None:
         assert 'id="login-overlay"' in _INDEX_HTML

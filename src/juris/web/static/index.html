@@ -256,7 +256,27 @@
       border-bottom-color: var(--brand);
       background: transparent;
     }
-    header .status { margin-left: auto; text-align: right; color: var(--muted); font-size: 12.5px; }
+    .header-actions {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header .status { text-align: right; color: var(--muted); font-size: 12.5px; }
+    .header-logout {
+      width: auto;
+      margin: 0;
+      padding: 6px 10px;
+      background: transparent;
+      color: var(--ink-2);
+      border-color: var(--line-2);
+      font-size: 12.5px;
+    }
+    .header-logout:hover {
+      background: var(--panel-soft);
+      color: var(--ink);
+      border-color: var(--line-2);
+    }
 
     /* ── Estrutura ─────────────────────────────────────────── */
     main {
@@ -665,6 +685,11 @@
       .landing-copy .lede { font-size: 17px; }
       .landing-features { grid-template-columns: 1fr; }
       header { padding: 0 16px; gap: 12px; height: auto; min-height: 58px; flex-wrap: wrap; }
+      .header-actions {
+        width: 100%;
+        justify-content: space-between;
+        padding-bottom: 10px;
+      }
       main { grid-template-columns: 1fr; padding: 16px; }
       .form-panel { position: static; }
       .artifact-list { grid-template-columns: 1fr; }
@@ -756,7 +781,10 @@
       <button type="button" data-nav="protocolo">Protocolo</button>
       <button type="button" data-nav="piloto">Piloto</button>
     </nav>
-    <div class="status" id="ai-session" title="Modo de IA e de-identificação (ADR-0016/0018)">IA: …</div>
+    <div class="header-actions">
+      <div class="status" id="ai-session" title="Modo de IA e de-identificação (ADR-0016/0018)">IA: …</div>
+      <button type="button" id="logout-button" class="header-logout">Sair</button>
+    </div>
   </header>
 
   <main id="app-shell" hidden>
@@ -1084,6 +1112,7 @@
     const loginForm = document.querySelector("#login-form");
     const loginInput = document.querySelector("#login-api-key");
     const loginError = document.querySelector("#login-error");
+    const logoutButton = document.querySelector("#logout-button");
     let consoleBooted = false;
 
     function getApiKey() {
@@ -1124,6 +1153,12 @@
       landing.hidden = true;
       appHeader.hidden = false;
       appShell.hidden = false;
+    }
+    function logout() {
+      setApiKey("");
+      hideLandingError();
+      landingInput.value = "";
+      showLanding();
     }
     function setFormBusy(formEl, busy, label) {
       const button = formEl.querySelector("button[type='submit']");
@@ -1197,6 +1232,7 @@
       hideLogin();
       bootConsole();
     });
+    logoutButton.addEventListener("click", logout);
 
     const form = document.querySelector("#demo-form");
     const submit = document.querySelector("#submit");
