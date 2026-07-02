@@ -66,7 +66,7 @@ def _default_fetch_html(numero_cnj: str) -> str | None:
 def tst_backend_search_body(numero_cnj: str) -> dict[str, Any]:
     """Build the public TST search payload for one CNJ."""
     return {
-        "e": numero_cnj,
+        "e": _unpadded_cnj(numero_cnj),
         "ou": "",
         "termoExato": "",
         "naoContem": "",
@@ -132,6 +132,18 @@ def _record_matches_cnj(item: dict[str, Any], target_digits: str) -> bool:
     if isinstance(numeracao_unica, dict):
         values.extend(str(v) for v in numeracao_unica.values() if v is not None)
     return any(_normalize_cnj_digits(value) == target_digits for value in values)
+
+
+
+def _unpadded_cnj(numero_cnj: str) -> str:
+    """CNJ sem zeros à esquerda no sequencial — o índice do TST só casa assim."""
+    import re
+
+    match = re.search(r"(\d{1,7})-(\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})", numero_cnj.strip())
+    if not match:
+        return numero_cnj.strip()
+    seq = match.group(1).lstrip("0") or "0"
+    return f"{seq}-{match.group(2)}"
 
 
 def _normalize_cnj_digits(value: str) -> str:

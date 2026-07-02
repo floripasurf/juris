@@ -131,3 +131,16 @@ async def test_default_fetcher_is_gated_until_tos_approval(monkeypatch: pytest.M
     fetcher = TSTEscavacaoFetcher(today="2026-07-01")
 
     assert await fetcher.fetch(_alvo("2093-21.2017.5.09.0015")) is None
+
+
+def test_backend_search_body_strips_leading_zeros_from_cnj() -> None:
+    """O backend do TST não encontra o processo com zeros à esquerda no sequencial
+    (validado ao vivo em 2026-07-02: '0000883-75…' → 0 registros; '883-75…' → 3).
+    """
+    body = tst_backend_search_body("0000883-75.2012.5.03.0079")
+    assert body["e"] == "883-75.2012.5.03.0079"
+
+
+def test_backend_search_body_keeps_cnj_without_padding_unchanged() -> None:
+    body = tst_backend_search_body("1001116-10.2018.5.02.0714")
+    assert body["e"] == "1001116-10.2018.5.02.0714"

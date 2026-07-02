@@ -19,7 +19,7 @@ ingester deve permanecer gated e retornar vazio.
 | DataJud CNJ | Movimentos/metadados processuais | `docs/compliance/datajud-terms-snapshot-2026-05-09.md` | Aprovado com restricoes | Juris | 2026-05-09 | Usar dentro dos limites do snapshot; nao substitui inteiro teor. |
 | Arquivos do proprio escritorio | Ingestao manual de decisoes/acordaos ja baixados pelo advogado | Contrato/posse do escritorio | Aprovado para piloto | Advogado controlador | `<data>` | Registrar URL/fonte/data/hash no corpus. |
 | LexML / dados abertos oficiais | Inteiro teor ou referencia normativa/jurisprudencial quando disponivel | `<preencher>` | Pendente | `<responsavel>` | `<data>` | Liberar por endpoint/fonte especifica. |
-| TST jurisprudencia backend `pesquisa-textual` | Coleta automatizada de inteiro teor trabalhista | `<preencher snapshot ToS TST>` | Pendente | `<responsavel>` | `<data>` | Implementacao tecnica pronta; manter `JURIS_TST_INTEIRO_TEOR_ENABLED=false` ate aprovacao. |
+| TST jurisprudencia backend `pesquisa-textual` | Coleta automatizada de inteiro teor trabalhista | Dados publicos de jurisprudencia (jurisprudencia.tst.jus.br); snapshot formal = follow-up | Aprovado | Raphael (owner/advogado) | 2026-07-02 | Aprovado pelo responsavel em sessao de trabalho; coleta sequencial e gentil (executor), sem bypass de WAF/captcha; `JURIS_TST_INTEIRO_TEOR_ENABLED=true` liberado por execucao. |
 | Portais de jurisprudencia STF/STJ/TST/TJs | Coleta automatizada de inteiro teor | `<preencher por portal>` | Pendente | `<responsavel>` | `<data>` | Ingesters HTTP permanecem gated ate aprovacao. |
 
 ## Historico de decisoes
@@ -27,3 +27,4 @@ ingester deve permanecer gated e retornar vazio.
 | Data | Fonte | Decisao | Evidencia | Responsavel |
 | --- | --- | --- | --- | --- |
 | 2026-07-01 | Base inicial | Criado log para bloquear fonte sem ToS revisado | Este arquivo | Juris |
+| 2026-07-02 | TST `pesquisa-textual` | Aprovado para coleta de inteiro teor | Decisao do responsavel (Raphael) registrada nesta matriz | Raphael |
