@@ -28,7 +28,7 @@ Claude.ai / ChatGPT tab  (lawyer logged in, training disabled)
 |---|---|---|
 | `CompletionRequest` / `CompletionResponse` (`api/ws_schemas.py`) | ✅ done, tracked | The wire contract |
 | `NativeBridgeTransport` (`api/browser_bridge.py`) | ✅ done, tracked | Serialise request → `BridgeChannel.request` → unwrap reply; satisfies `BrowserTransport` |
-| `BrowserSessionLLM` (`llm/browser_session.py`) | ✅ done — **local only** (gitignored engine; **not in GitHub**) | `AbstractLLM` over the transport |
+| `BrowserSessionLLM` (`llm/browser_session.py`) | ✅ done, tracked | `AbstractLLM` over the transport |
 | `WebSocketBridgeChannel` (`api/browser_bridge.py`) | ✅ done, tracked | WS client to the host: open → send JSON → await reply → close; injectable `connect` |
 | Native Messaging Host (`api/native_host.py` + `juris browser install-native-host`) | ✅ done, tracked | Registered manifest; localhost WS server ↔ stdio to the extension |
 | Chrome extension content script (`docs/browser-extension/content.js`) | ✅ minimal MV3 done, tracked | Inject prompt into the tab, extract the (streamed) reply |
@@ -40,9 +40,9 @@ What remains before declaring the sprint fully done is the manual smoke against
 the live Claude.ai/ChatGPT DOM on the lawyer's machine.
 
 > **Public vs local:** the **protocol + transport** (`ws_schemas`, `browser_bridge`)
-> are tracked and on GitHub; the **LLM backend** (`BrowserSessionLLM`) lives only
-> in the local gitignored engine. A public checkout has the wire + the WS client,
-> not the `AbstractLLM` backend — by design (engine convention).
+> and the `BrowserSessionLLM` adapter are tracked and on GitHub. The proprietary
+> local-only boundary remains the composite repertory ranker, not the browser
+> bridge client.
 
 ## Protocol
 

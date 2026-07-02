@@ -7,27 +7,45 @@ with optional filtering by tema, tribunal, and hierarchy level.
 from __future__ import annotations
 
 import hashlib
+import importlib
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol, cast
 
 from juris.repertory.corpus.models import _HIERARCHY_LABELS
 from juris.repertory.retrieval.hybrid import HybridRetriever
 from juris.repertory.vector_store import SearchResult
-
-try:
-    # The composite ranker (ADR-0017 Stage 1) is part of the local retrieval
-    # engine and may be absent in a public checkout — degrade gracefully to the
-    # relevance order instead of breaking the import.
-    from juris.repertory.retrieval.ranking import rank_with_scores
-except ImportError:  # pragma: no cover - engine kept local
-    rank_with_scores = None  # type: ignore[assignment]
 
 if TYPE_CHECKING:
     from juris.llm.base import AbstractLLM
     from juris.persistence.audit import AuditLog
 
 logger = logging.getLogger(__name__)
+
+
+class _CompositeBreakdown(Protocol):
+    total: float
+
+    def as_dict(self) -> dict[str, float]: ...
+
+
+_RankWithScores = Callable[[list[SearchResult]], list[tuple[SearchResult, _CompositeBreakdown]]]
+
+
+def _load_rank_with_scores() -> _RankWithScores | None:
+    """Load the local composite ranker when present without making CI depend on it."""
+    try:
+        module = importlib.import_module("juris.repertory.retrieval.ranking")
+    except ImportError:  # pragma: no cover - engine kept local
+        return None
+    ranker = getattr(module, "rank_with_scores", None)
+    return cast("_RankWithScores", ranker) if callable(ranker) else None
+
+
+# The composite ranker (ADR-0017 Stage 1) is part of the local retrieval engine
+# and may be absent in a public checkout. Degrade to relevance order when absent.
+rank_with_scores = _load_rank_with_scores()
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,6 +188,7 @@ class RepertoryService:
         # composite (what drove the order) and score_components itemises why
         # (auditability). Falls back to the relevance order, no breakdown, when
         # the ranking engine isn't present.
+        ranked: list[tuple[SearchResult, float, dict[str, float] | None]]
         if rank_with_scores is not None:
             ranked = [(r, b.total, b.as_dict()) for r, b in rank_with_scores(filtered)]
         else:
@@ -255,10 +274,14 @@ class RepertoryService:
                         },
                     )
                 return hypothetical
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             from juris.core.sanitize import safe_error_text
 
-            logger.warning("hyde_expansion_failed: %s", safe_error_text(exc))
+            logger.warning(
+                "hyde_expansion_failed error=%s exception_type=%s",
+                safe_error_text(exc),
+                exc.__class__.__name__,
+            )
 
         return None
 

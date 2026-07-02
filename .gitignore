@@ -20,6 +20,7 @@ build/
 .pytest_cache/
 htmlcov/
 .coverage
+coverage.xml
 
 # Certificates — NEVER commit
 *.pfx
@@ -34,6 +35,7 @@ htmlcov/
 !/data/search-fixtures/**
 !/data/corpus/**
 !/data/corpus-sources.md
+!/data/tos_compliance_log.md
 !/data/*_index.json
 
 # IDE
@@ -72,13 +74,12 @@ STF_Casos_Relevantes/
 # prompts, prazo, review, defesas, corpus, ingestion) are now TRACKED and
 # published — their old "DO NOT PUBLISH" entries were obsolete and were removed
 # (they only produced misleading `git status` and forced `git add -f`). Only
-# genuinely-local pieces remain below: the proprietary composite ranker, the
-# browser-session LLM, and the local-only engine tests that mirror them. Bulk
+# genuinely-local pieces remain below: the proprietary composite ranker and the
+# local-only engine tests that mirror it. Bulk
 # corpus DATA (Decisoes/, Petiçoes/, ...) is ignored separately above.
 
 # Proprietary bits that stay local (untracked by design)
 src/juris/repertory/retrieval/ranking.py
-src/juris/llm/browser_session.py
 
 # Local-only engine tests (mirror the local internals; not in public CI).
 # The public EstrategiaAgent test (tests/unit/agents/test_estrategia.py) IS tracked.
@@ -88,7 +89,6 @@ tests/unit/test_embeddings.py
 tests/unit/test_chunking.py
 tests/unit/test_hybrid_retrieval.py
 tests/unit/test_llm.py
-tests/unit/test_browser_session_llm.py
 tests/unit/test_preliminary*.py
 tests/unit/test_peticao_*.py
 tests/unit/test_defesa_*.py
