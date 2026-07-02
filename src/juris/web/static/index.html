@@ -643,6 +643,52 @@
           <div id="corpus-coverage" class="proc-empty">Carregando…</div>
         </div>
       </div>
+      <h2>Adicionar ao corpus — acervo do escritório</h2>
+      <p class="lede">Decisões que o escritório já possui (PDF, TXT, MD ou texto colado) entram no corpus privado com proveniência e ficam pesquisáveis na hora.</p>
+      <form id="corpus-upload-form">
+        <div class="row">
+          <div>
+            <label for="cu_file">Arquivo (PDF, TXT ou MD)</label>
+            <input id="cu_file" type="file" accept=".pdf,.txt,.md" />
+          </div>
+          <div>
+            <label for="cu_title">Título / identificação</label>
+            <input id="cu_title" placeholder="ex.: Apelação 1.0000.24.123456-7/001" />
+          </div>
+        </div>
+        <label for="cu_text">Ou cole o texto da decisão</label>
+        <textarea id="cu_text" placeholder="Inteiro teor, quando não houver arquivo"></textarea>
+        <div class="row">
+          <div>
+            <label for="cu_tipo">Tipo</label>
+            <select id="cu_tipo">
+              <option value="acordao_publicado">acórdão publicado</option>
+              <option value="precedente_local">precedente local</option>
+              <option value="modelo_peticao">modelo de petição</option>
+              <option value="doutrina_pd">doutrina (domínio público)</option>
+            </select>
+          </div>
+          <div>
+            <label for="cu_tribunal">Tribunal</label>
+            <input id="cu_tribunal" placeholder="ex.: tjmg" />
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="cu_data">Data da decisão</label>
+            <input id="cu_data" type="date" />
+          </div>
+          <div>
+            <label for="cu_tema">Tema / área</label>
+            <input id="cu_tema" placeholder="ex.: honorários sucumbenciais" />
+          </div>
+        </div>
+        <label for="cu_url">URL de origem (consulta pública ou PJe)</label>
+        <input id="cu_url" type="url" placeholder="https://…" />
+        <button id="cu_submit" type="submit">Adicionar ao corpus</button>
+        <div id="cu_notice" class="notice" hidden></div>
+      </form>
+
       <h2>Busca explicável na jurisprudência</h2>
       <p class="lede">Cada resultado mostra <strong>por que</strong> ranqueou: fonte, autoridade, vigência, corroboração.</p>
       <form id="corpus-search-form" class="row">
@@ -2239,6 +2285,66 @@
     loadAiSession();
     loadWorkbench();
     loadProcessos();
+    const cuNotice = document.querySelector("#cu_notice");
+    function showCuNotice(message, isError) {
+      cuNotice.textContent = message;
+      cuNotice.classList.toggle("error", Boolean(isError));
+      cuNotice.hidden = false;
+    }
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(",", 2)[1] || "");
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+    }
+    document.querySelector("#corpus-upload-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const submitBtn = document.querySelector("#cu_submit");
+      const fileInput = document.querySelector("#cu_file");
+      const file = fileInput.files && fileInput.files[0];
+      const payload = {
+        source_text: document.querySelector("#cu_text").value.trim(),
+        title: document.querySelector("#cu_title").value.trim(),
+        source_type: document.querySelector("#cu_tipo").value,
+        tribunal: document.querySelector("#cu_tribunal").value.trim(),
+        source_date: document.querySelector("#cu_data").value,
+        tema: document.querySelector("#cu_tema").value.trim(),
+        source_url: document.querySelector("#cu_url").value.trim(),
+      };
+      if (!file && !payload.source_text) {
+        showCuNotice("Envie um arquivo ou cole o texto da decisão.", true);
+        return;
+      }
+      submitBtn.disabled = true;
+      try {
+        if (file) {
+          payload.filename = file.name;
+          payload.content_base64 = await fileToBase64(file);
+        }
+        const response = await apiFetch("/api/corpus/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const body = await response.json();
+        if (!response.ok) {
+          const detail = body && body.detail;
+          showCuNotice((detail && detail.message) || "Falha ao adicionar ao corpus.", true);
+          return;
+        }
+        const chunks = body.reingest ? body.reingest.chunks : 0;
+        showCuNotice(`Adicionado ao corpus: ${chunks} trecho(s) pesquisável(is).`, false);
+        document.querySelector("#corpus-upload-form").reset();
+        loadCorpusQueue();
+      } catch (_) {
+        showCuNotice("Não foi possível enviar o documento. Tente de novo.", true);
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
     document.querySelector("#corpus-search-form").addEventListener("submit", (event) => {
       event.preventDefault();
       searchCorpus(document.querySelector("#corpus-search-q").value);

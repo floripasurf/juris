@@ -98,6 +98,7 @@ _EXPENSIVE_API_PREFIXES = (
     "/api/demo-runs",
     "/api/corpus/search",
     "/api/corpus/reingest",
+    "/api/corpus/upload",
     "/api/filing/dry-run",
     "/api/filing/submit",
 )
@@ -288,6 +289,23 @@ class PilotFeedbackPayload(BaseModel):
     perceived_utility: int = Field(ge=1, le=5)
     corpus_usable: bool = False
     notes: str = Field(default="", max_length=_MAX_SHORT_TEXT)
+
+
+class CorpusUploadPayload(BaseModel):
+    """Office-archive document uploaded from the console into the corpus."""
+
+    source_text: str = Field(default="", max_length=_MAX_CORPUS_SOURCE_TEXT)
+    filename: str = Field(default="", max_length=255)
+    content_base64: str = Field(default="", max_length=28_000_000)  # ~20MB decodificados
+    title: str = Field(default="", max_length=512)
+    source_type: str = Field(default="acordao_publicado", max_length=64)
+    source_date: str = Field(default="", max_length=32)
+    source_url: str = Field(default="", max_length=_MAX_URL_TEXT)
+    tribunal: str = Field(default="", max_length=32)
+    source_publisher: str = Field(default="", max_length=128)
+    tema: str = Field(default="", max_length=256)
+    area: str = Field(default="", max_length=128)
+    numero_cnj: str = Field(default="", max_length=64)
 
 
 class CorpusSourcePayload(BaseModel):
@@ -886,6 +904,21 @@ async def get_corpus_coverage(tenant: Tenant = Depends(current_tenant)) -> dict[
     return await asyncio.to_thread(coverage_report, tenant_scoped_dir(tenant, _out_root()))
 
 
+
+def _repertory_has_chunks(path: Path) -> bool:
+    """Uploads do escritório contam como corpus pesquisável mesmo sem as seeds públicas."""
+    import sqlite3
+
+    if not path.is_file():
+        return False
+    try:
+        with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as conn:
+            row = conn.execute("SELECT 1 FROM chunks LIMIT 1").fetchone()
+    except sqlite3.Error:
+        return False
+    return row is not None
+
+
 @app.get("/api/corpus/search")
 async def search_corpus(q: str, top_k: int = 8, tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
     """Explainable jurisprudence search (Sprint 5): each hit carries WHY it ranked.
@@ -899,7 +932,9 @@ async def search_corpus(q: str, top_k: int = 8, tenant: Tenant = Depends(current
     from juris.repertory.retrieval.service import explain_ranking
 
     status = await asyncio.to_thread(read_status)
-    if not status.is_ready:
+    if not status.is_ready and not await asyncio.to_thread(
+        _repertory_has_chunks, resolve_repertory_path()
+    ):
         return {"query": q, "results": [], "detail": "corpus não ingerido ainda"}
 
     def _search() -> list[Any]:
@@ -934,6 +969,35 @@ async def mark_corpus_source_reingested(source_id: str, tenant: Tenant = Depends
     if source is None:
         raise HTTPException(status_code=404, detail="fonte não encontrada")
     return {"source": source}
+
+
+
+@app.post("/api/corpus/upload", status_code=201)
+async def upload_corpus_document(
+    payload: CorpusUploadPayload, tenant: Tenant = Depends(current_tenant)
+) -> dict[str, object]:
+    """Acervo do escritório → corpus: registra com proveniência e ingere na hora.
+
+    Único caminho de inteiro teor aprovado no ToS log (documentos que o
+    escritório já possui). O texto entra tagueado pelo tenant (tier privado).
+    """
+    from juris.repertory.readiness import resolve_repertory_path
+    from juris.web.auth import tenant_scoped_dir
+    from juris.web.corpus_queue import upload_source_document
+
+    try:
+        return await asyncio.to_thread(
+            upload_source_document,
+            tenant_scoped_dir(tenant, _out_root()),
+            resolve_repertory_path(),
+            payload.model_dump(),
+            tenant.tenant_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "corpus_upload_invalid", "message": str(exc)},
+        ) from exc
 
 
 @app.post("/api/corpus/reingest")

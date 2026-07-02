@@ -8,6 +8,8 @@ than ad hoc files.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import json
 import re
@@ -15,6 +17,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import Any, cast
 from urllib.parse import urlparse, urlunparse
 
 from juris.core.paths import ensure_private_dir, restrict_file
@@ -241,6 +244,88 @@ def reingest_pending_sources(
             )
             errors.append({"source_id": source_id, "error": _REINGEST_SOURCE_ERROR})
     return ReingestReport(processed=processed, chunks=total_chunks, errors=errors)
+
+
+_UPLOAD_MAX_BYTES = 20 * 1024 * 1024
+_UPLOAD_MAX_CHARS = 2_000_000
+
+
+def extract_upload_text(filename: str, data: bytes) -> str:
+    """Extract plain text from an uploaded office document (.pdf, .txt or .md).
+
+    The office-archive upload is the ToS-approved inteiro-teor path
+    (``data/tos_compliance_log.md``): documents the firm already owns.
+    """
+    if len(data) > _UPLOAD_MAX_BYTES:
+        msg = "arquivo excede o limite de 20MB."
+        raise ValueError(msg)
+    name = filename.lower().strip()
+    if name.endswith(".pdf"):
+        import pymupdf  # heavy import kept off the module path
+
+        try:
+            doc = cast("Any", pymupdf.open(stream=data, filetype="pdf"))  # type: ignore[no-untyped-call]
+            with doc:
+                text = "\n".join(page.get_text() for page in doc)
+        except (RuntimeError, ValueError) as exc:
+            msg = "não foi possível ler o PDF — exporte novamente ou cole o texto."
+            raise ValueError(msg) from exc
+    elif name.endswith((".txt", ".md")):
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError:
+            # Exportações jurídicas brasileiras são frequentemente cp1252.
+            text = data.decode("cp1252", errors="replace")
+    else:
+        msg = "formato não suportado — envie PDF, TXT ou MD, ou cole o texto."
+        raise ValueError(msg)
+    text = text.strip()
+    if not text:
+        msg = "documento sem texto extraível — cole o texto manualmente."
+        raise ValueError(msg)
+    return text[:_UPLOAD_MAX_CHARS]
+
+
+def upload_source_document(
+    root: Path, repertory_path: Path, payload: dict[str, object], tenant_id: str | None
+) -> dict[str, object]:
+    """Register one office-archive document and ingest it immediately.
+
+    Combines the two existing controlled steps (accepted source with mandatory
+    provenance + pending reingestion) into the single flow the console exposes.
+    """
+    text = str(payload.get("source_text") or "").strip()
+    encoded = str(payload.get("content_base64") or "").strip()
+    if not text and encoded:
+        try:
+            data = base64.b64decode(encoded, validate=True)
+        except binascii.Error as exc:
+            msg = "content_base64 inválido."
+            raise ValueError(msg) from exc
+        text = extract_upload_text(str(payload.get("filename") or ""), data)
+    if not text:
+        msg = "envie o texto da decisão (source_text) ou um arquivo (filename + content_base64)."
+        raise ValueError(msg)
+
+    record_payload: dict[str, object] = {
+        key: payload[key]
+        for key in (
+            "title",
+            "source_type",
+            "source_date",
+            "source_url",
+            "tribunal",
+            "source_publisher",
+            "tema",
+            "area",
+            "numero_cnj",
+        )
+        if str(payload.get(key) or "").strip()
+    }
+    record_payload["source_text"] = text
+    source = append_accepted_source(root, record_payload)
+    report = reingest_pending_sources(root, repertory_path, tenant_id=tenant_id)
+    return {"source": source, "reingest": report.to_dict()}
 
 
 def _resolve_content_hash(payload: dict[str, object]) -> str:
