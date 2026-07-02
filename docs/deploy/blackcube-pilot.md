@@ -1,4 +1,12 @@
-# Piloto online — juris.blackcube.dev (Mac Mini + Cloudflare Tunnel)
+# Piloto online — causia.com.br (Mac Mini + Cloudflare Tunnel)
+
+> **Domínio de produção (02/07/2026):** o produto chama-se **Causia** e vive em
+> `causia.com.br` + `app.causia.com.br` (zona própria no Cloudflare; registros
+> CNAME → `<tunnel-id>.cfargotunnel.com`, proxied). `juris.blackcube.dev` foi o
+> endereço de validação e pode ser aposentado após a transição. Para rotear DNS
+> de uma zona nova via `cloudflared tunnel route dns`, o `cert.pem` precisa ter
+> sido autorizado NAQUELA zona — senão ele cria um registro-lixo na zona antiga
+> (`dominio.com.br.zonaantiga.dev`); prefira criar o CNAME no dashboard.
 
 Publica o console web para o advogado usar do navegador dele, sem abrir porta no
 Mac Mini: `juris web` escuta só em 127.0.0.1 e o `cloudflared` faz o caminho de
