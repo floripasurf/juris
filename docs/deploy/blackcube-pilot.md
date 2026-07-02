@@ -12,8 +12,15 @@ LGPD em `docs/compliance/` (DPA/ROPA/RIPD).
 
 ## 1. Preparar o orquestrador no Mac Mini
 
+> **Onde clonar (aprendido no deploy de validação):** o checkout do serviço
+> NÃO pode ficar em `~/Desktop`, `~/Documents` ou `~/Downloads` — o TCC do
+> macOS bloqueia essas pastas para processos launchd e o Python pendura num
+> `open()` eterno, sem log. Clone para um caminho neutro (ex.:
+> `~/juris-pilot/app`), separado do checkout de desenvolvimento.
+
 ```bash
-cd <path>/juris && uv sync
+git clone --branch <branch> <repo-dev-ou-remoto> ~/juris-pilot/app
+cd ~/juris-pilot/app && uv sync --frozen
 
 # tenant do escritório piloto (a chave crua aparece UMA vez — entregue ao advogado)
 uv run juris tenant new escritorio-piloto      # → entrada hashada p/ tenants.json

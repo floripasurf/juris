@@ -12,11 +12,13 @@
   <key>Label</key>
   <string>com.juris.web</string>
 
+  <!-- Chame o entrypoint do venv DIRETO: `uv run` trava (deadlock silencioso)
+       quando invocado pelo launchd. E o checkout NÃO pode morar em ~/Desktop,
+       ~/Documents ou ~/Downloads: o TCC do macOS bloqueia leitura dessas pastas
+       para processos launchd e o open() do Python pendura para sempre. -->
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/local/bin/uv</string>
-    <string>run</string>
-    <string>juris</string>
+    <string>REPLACE_WITH_PATH_TO/juris/.venv/bin/juris</string>
     <string>web</string>
     <string>--host</string>
     <string>127.0.0.1</string>
