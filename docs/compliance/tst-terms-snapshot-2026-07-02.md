@@ -72,3 +72,4 @@ uma requisição por processo, sequencial. Ainda assim, este sinal foi
   20 inteiros teores, 0 falhas.
 - 2026-07-02 (mesma data, em seguida): re-revisão solicitada pelo responsável;
   este snapshot produzido com robots.txt + PPPDP lidos na íntegra.
+- 2026-07-02: após re-revisão com este material (incluindo o robots.txt do portal), o responsável **manteve a aprovação** nos termos e salvaguardas acima.
