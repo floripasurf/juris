@@ -47,7 +47,9 @@ the new socket and the stale one can't hijack).
 
 ## Scaling option B — Redis relay broker (real horizontal scale)
 
-Status: **built in code, pending real-Redis deployment test before production use**.
+Status: **built in code; real Redis integration smoke passed locally** with two
+`RelayHub` instances sharing one Redis broker. Repeat the smoke against the target
+Redis/network before enabling production multi-worker remote mode.
 Set:
 
 ```bash
