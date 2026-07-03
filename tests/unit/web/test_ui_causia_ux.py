@@ -73,13 +73,17 @@ class TestConversionAndPromise:
 
     def test_agent_pairing_is_browser_first_with_technical_fallback(self) -> None:
         assert 'id="agent-setup"' in _INDEX_HTML
-        assert 'id="agent-pairing-button"' in _INDEX_HTML
-        assert 'id="agent-credentials-link"' in _INDEX_HTML
-        assert "Conectar agente local" in _INDEX_HTML
-        assert "Configurar token/PJe" in _INDEX_HTML
-        assert "http://127.0.0.1:8765/setup" in _INDEX_HTML
+        assert 'id="agent-credentials-modal"' in _INDEX_HTML
+        assert 'id="agent-credentials-form"' in _INDEX_HTML
+        assert 'id="connect-btn"' in _INDEX_HTML
+        assert "Salvar e sincronizar" in _INDEX_HTML
+        assert "agent-pairing-button" not in _INDEX_HTML
+        assert "agent-credentials-link" not in _INDEX_HTML
         assert "Gerar comando do agente" not in _INDEX_HTML
         assert "/api/agent/pairing" in _INDEX_HTML
+        assert "/api/connect" in _INDEX_HTML
+        assert "/credentials/status" in _INDEX_HTML
+        assert "/credentials" in _INDEX_HTML
         assert "pairLocalAgent" in _INDEX_HTML
         assert "local.endpoint" in _INDEX_HTML
         assert "show_agent_command" in _INDEX_HTML

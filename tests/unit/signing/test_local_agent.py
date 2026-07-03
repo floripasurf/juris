@@ -139,10 +139,11 @@ def test_local_setup_page_is_served_only_on_loopback() -> None:
     assert response.status_code == 200
     assert "credentials-form" in response.text
     assert "não são enviadas ao servidor" in response.text
+    assert "Voltar ao Causia" in response.text
     assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
 
 
-def test_local_credentials_are_stored_from_local_browser_page(monkeypatch) -> None:
+def test_local_credentials_are_stored_from_causia_page(monkeypatch) -> None:
     import juris.core.credentials as credentials
 
     stored: dict[str, str] = {}
@@ -151,11 +152,12 @@ def test_local_credentials_are_stored_from_local_browser_page(monkeypatch) -> No
 
     response = client.post(
         "/credentials",
-        headers={"origin": "http://127.0.0.1:8765", "host": "127.0.0.1:8765"},
+        headers={"origin": "https://causia.com.br", "host": "127.0.0.1:8765"},
         json={"cpf": "076.710.396-32", "senha": "senha-pje", "pin": "1234", "tribunal": "TJMG"},
     )
 
     assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "https://causia.com.br"
     assert response.json()["status"] == "ok"
     assert "senha-pje" not in response.text
     assert "1234" not in response.text
@@ -167,7 +169,39 @@ def test_local_credentials_are_stored_from_local_browser_page(monkeypatch) -> No
     }
 
 
-def test_local_credentials_reject_cloud_origin(monkeypatch) -> None:
+def test_local_credentials_preflight_allows_private_network_request() -> None:
+    client = TestClient(app, client=("127.0.0.1", 50000))
+
+    response = client.options(
+        "/credentials",
+        headers={
+            "origin": "https://causia.com.br",
+            "host": "127.0.0.1:8765",
+            "access-control-request-method": "POST",
+            "access-control-request-private-network": "true",
+        },
+    )
+
+    assert response.status_code == 204
+    assert response.headers["access-control-allow-origin"] == "https://causia.com.br"
+    assert response.headers["access-control-allow-private-network"] == "true"
+
+
+def test_local_credentials_status_reports_readiness_without_secrets(monkeypatch) -> None:
+    monkeypatch.setattr(local_agent, "local_credentials_configured", lambda: True)
+    client = TestClient(app, client=("127.0.0.1", 50000))
+
+    response = client.get(
+        "/credentials/status",
+        headers={"origin": "https://causia.com.br", "host": "127.0.0.1:8765"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "https://causia.com.br"
+    assert response.json() == {"configured": True}
+
+
+def test_local_credentials_reject_foreign_origin(monkeypatch) -> None:
     import juris.core.credentials as credentials
 
     stored: dict[str, str] = {}
@@ -176,7 +210,7 @@ def test_local_credentials_reject_cloud_origin(monkeypatch) -> None:
 
     response = client.post(
         "/credentials",
-        headers={"origin": "https://causia.com.br", "host": "127.0.0.1:8765"},
+        headers={"origin": "https://evil.example", "host": "127.0.0.1:8765"},
         json={"cpf": "07671039632", "senha": "senha-pje", "pin": "1234", "tribunal": "tjmg"},
     )
 

@@ -230,20 +230,6 @@
       gap: 12px;
       margin: 8px 0 12px;
     }
-    .agent-tools a.ghost-link {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      border: 1px solid var(--line-2);
-      border-radius: 4px;
-      color: var(--ink-2);
-      min-height: 38px;
-      padding: 0 14px;
-      text-decoration: none;
-      font-weight: 600;
-      font-size: 14px;
-    }
-    .agent-tools a.ghost-link:hover { background: var(--panel-soft); color: var(--ink); }
     .agent-tools span { color: var(--muted); font-size: 13px; }
     #landing-login-error {
       grid-column: 1 / -1;
@@ -703,6 +689,15 @@
     .modal-close:hover { background: var(--paper); color: var(--ink); }
     .modal-card h2 { font-family: var(--mono); font-size: 15px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--ink); }
     .modal-card h4 { margin: 20px 0 6px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .agent-credentials-card { max-width: 560px; }
+    .agent-credentials-card h2 { font-family: var(--serif); font-size: 24px; font-weight: 650; margin: 0 0 8px; }
+    .agent-credentials-card p { margin: 0 0 16px; color: var(--muted); line-height: 1.5; }
+    .agent-credentials-form { display: grid; gap: 12px; }
+    .agent-credentials-form label { display: grid; gap: 6px; font-weight: 650; color: var(--ink); }
+    .agent-credentials-form input { margin: 0; }
+    .agent-credentials-form button { width: auto; margin-top: 6px; justify-self: start; }
+    #agent-credentials-status { min-height: 20px; margin: 0; color: var(--muted); font-size: 13px; }
+    #agent-credentials-status.error { color: var(--danger); }
     .detail-meta { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 18px; margin: 14px 0 0; }
     .detail-meta dt { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
     .detail-meta dd { margin: 0; font-size: 13.5px; }
@@ -985,13 +980,9 @@
 
     <section class="processos-panel" data-view="acervo" hidden>
       <h1>Meus processos</h1>
-      <p class="lede">Acervo importado do seu token. Conecte para importar e manter atualizado; clique em "minuta" para redigir a partir de um processo.</p>
+      <p class="lede">Acervo importado pelo agente local do seu computador. Clique em conectar para importar e manter atualizado.</p>
       <div id="agent-setup" class="notice agent-setup" role="status" aria-live="polite" hidden></div>
-      <div class="agent-tools">
-        <button id="agent-pairing-button" type="button" class="ghost">Conectar agente local</button>
-        <a id="agent-credentials-link" class="ghost-link" href="http://127.0.0.1:8765/setup" target="_blank" rel="noopener">Configurar token/PJe</a>
-        <span id="agent-pairing-status"></span>
-      </div>
+      <div class="agent-tools"><span id="agent-pairing-status" role="status" aria-live="polite"></span></div>
       <form id="connect-form" class="connect-bar">
         <input id="c_cpf" placeholder="CPF do advogado" autocomplete="off" />
         <input id="c_pin" placeholder="PIN do token A3" type="password" autocomplete="off" />
@@ -1309,6 +1300,30 @@
     </section>
   </main>
 
+  <div id="agent-credentials-modal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="agent-credentials-title">
+    <div class="modal-card agent-credentials-card">
+      <button type="button" class="modal-close" id="agent-credentials-cancel" aria-label="Fechar">×</button>
+      <h2 id="agent-credentials-title">Conectar token e PJe</h2>
+      <p>Estas credenciais serão salvas no agente local em 127.0.0.1. Elas não são enviadas ao servidor da Causia.</p>
+      <form id="agent-credentials-form" class="agent-credentials-form">
+        <label for="agent-credential-cpf">CPF do advogado
+          <input id="agent-credential-cpf" name="cpf" inputmode="numeric" autocomplete="username" required />
+        </label>
+        <label for="agent-credential-senha">Senha PJe
+          <input id="agent-credential-senha" name="senha" type="password" autocomplete="current-password" required />
+        </label>
+        <label for="agent-credential-pin">PIN do token A3
+          <input id="agent-credential-pin" name="pin" type="password" autocomplete="off" required />
+        </label>
+        <label for="agent-credential-tribunal">Tribunal
+          <input id="agent-credential-tribunal" name="tribunal" value="tjmg" autocomplete="off" required />
+        </label>
+        <button type="submit">Salvar e sincronizar</button>
+        <p id="agent-credentials-status" role="status" aria-live="polite"></p>
+      </form>
+    </div>
+  </div>
+
   <div id="proc-modal" class="modal" hidden role="dialog" aria-modal="true" aria-label="Detalhe do processo">
     <div class="modal-card">
       <button type="button" class="modal-close" aria-label="Fechar">×</button>
@@ -1330,8 +1345,11 @@
     const startTrialButton = document.querySelector("#start-trial");
     const trialIssued = document.querySelector("#trial-issued");
     const agentSetup = document.querySelector("#agent-setup");
-    const agentPairingButton = document.querySelector("#agent-pairing-button");
     const agentPairingStatus = document.querySelector("#agent-pairing-status");
+    const agentCredentialsModal = document.querySelector("#agent-credentials-modal");
+    const agentCredentialsForm = document.querySelector("#agent-credentials-form");
+    const agentCredentialsStatus = document.querySelector("#agent-credentials-status");
+    const agentCredentialsCancel = document.querySelector("#agent-credentials-cancel");
     const loginOverlay = document.querySelector("#login-overlay");
     const loginForm = document.querySelector("#login-form");
     const loginInput = document.querySelector("#login-api-key");
@@ -1709,6 +1727,8 @@
       nav.appendChild(btn);
     })();
     const checked = (id) => document.querySelector(`#${id}`).checked;
+    const LOCAL_AGENT_BASE_URL = "http://127.0.0.1:8765";
+    let pendingCredentialsResolve = null;
 
     // Split-trust mode (ADR-0015): hide local secrets until the backend explicitly
     // confirms a co-located setup.
@@ -1795,6 +1815,100 @@
       if (!response.ok) throw new Error("Agente local recusou o pareamento.");
       return true;
     }
+    async function localAgentCredentialsConfigured() {
+      const response = await window.fetch(`${LOCAL_AGENT_BASE_URL}/credentials/status`);
+      if (!response.ok) throw new Error("Causia Agent local não respondeu.");
+      const data = await response.json();
+      return data.configured === true;
+    }
+    async function saveAgentCredentialsFromModal() {
+      const formData = new FormData(agentCredentialsForm);
+      const response = await window.fetch(`${LOCAL_AGENT_BASE_URL}/credentials`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(Object.fromEntries(formData.entries())),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(apiErrorMessage(data, "Não foi possível salvar no agente local."));
+      return true;
+    }
+    function openAgentCredentialsModal() {
+      agentCredentialsStatus.textContent = "";
+      agentCredentialsStatus.className = "";
+      agentCredentialsModal.hidden = false;
+      const first = agentCredentialsModal.querySelector("input");
+      if (first) first.focus();
+      return new Promise((resolve) => {
+        pendingCredentialsResolve = resolve;
+      });
+    }
+    function closeAgentCredentialsModal(saved) {
+      agentCredentialsModal.hidden = true;
+      if (pendingCredentialsResolve) pendingCredentialsResolve(saved === true);
+      pendingCredentialsResolve = null;
+    }
+    if (agentCredentialsForm) {
+      agentCredentialsForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const submit = agentCredentialsForm.querySelector('button[type="submit"]');
+        setButtonBusy(submit, true, "Salvando...");
+        agentCredentialsStatus.className = "";
+        agentCredentialsStatus.textContent = "Salvando no agente local...";
+        try {
+          await saveAgentCredentialsFromModal();
+          try { sessionStorage.setItem("causiaAgentCredentialsConfigured", "1"); } catch (_) { /* private mode */ }
+          agentCredentialsForm.reset();
+          agentCredentialsForm.querySelector('[name="tribunal"]').value = "tjmg";
+          closeAgentCredentialsModal(true);
+        } catch (error) {
+          agentCredentialsStatus.className = "error";
+          agentCredentialsStatus.textContent = error.message;
+        } finally {
+          setButtonBusy(submit, false, "");
+        }
+      });
+      agentCredentialsCancel.addEventListener("click", () => closeAgentCredentialsModal(false));
+      agentCredentialsModal.addEventListener("click", (event) => {
+        if (event.target === agentCredentialsModal) closeAgentCredentialsModal(false);
+      });
+      document.addEventListener("keydown", (event) => {
+        if (agentCredentialsModal.hidden) return;
+        if (event.key === "Escape") { closeAgentCredentialsModal(false); return; }
+        if (event.key !== "Tab") return;
+        const focusables = agentCredentialsModal.querySelectorAll('button, input, select, textarea, [tabindex]:not([tabindex="-1"])');
+        if (!focusables.length) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      });
+    }
+    async function ensureLocalCredentials() {
+      try {
+        if (await localAgentCredentialsConfigured()) return true;
+      } catch (error) {
+        throw new Error("Não encontrei o Causia Agent aberto neste computador.");
+      }
+      connectStatus.textContent = "Informe CPF, senha PJe e PIN do token para salvar no agente local.";
+      const saved = await openAgentCredentialsModal();
+      if (!saved) throw new Error("Sincronização cancelada.");
+      return true;
+    }
+    async function pairCurrentLocalAgent() {
+      let pairingData = null;
+      const response = await apiFetch("/api/agent/pairing", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(apiErrorMessage(data, "Falha ao preparar agente local"));
+      pairingData = data;
+      try {
+        await pairLocalAgent(data);
+        clearAgentSetup();
+        agentPairingStatus.textContent = "";
+      } catch (error) {
+        if (pairingData && pairingData.command) storeAgentSetup(pairingData);
+        throw new Error("Não encontrei o Causia Agent aberto neste computador.");
+      }
+    }
     function renderAgentHealth(h) {
       const cs = document.querySelector("#connect-status");
       if (!cs || !h || !h.remote) return;
@@ -1817,28 +1931,6 @@
       if (h.token_connected === true) {
         cs.textContent = "Agente remoto pronto: token A3 conectado.";
       }
-    }
-    if (agentPairingButton) {
-      agentPairingButton.addEventListener("click", async () => {
-        agentPairingStatus.textContent = "";
-        setButtonBusy(agentPairingButton, true, "Conectando...");
-        let pairingData = null;
-        try {
-          const response = await apiFetch("/api/agent/pairing", { method: "POST" });
-          const data = await response.json();
-          if (!response.ok) throw new Error(apiErrorMessage(data, "Falha ao preparar agente local"));
-          pairingData = data;
-          await pairLocalAgent(data);
-          clearAgentSetup();
-          agentPairingStatus.textContent = "Agente local conectado. Agora clique em Conectar / sincronizar.";
-        } catch (error) {
-          if (pairingData && pairingData.command) storeAgentSetup(pairingData);
-          agentPairingStatus.textContent =
-            "Não encontrei o agente local instalado. Instale ou abra o Causia Agent neste computador; a opção técnica apareceu acima.";
-        } finally {
-          setButtonBusy(agentPairingButton, false, "");
-        }
-      });
     }
     async function loadAgentMode() {
       try {
@@ -2374,8 +2466,16 @@
       }
       connectBtn.disabled = true;
       connectBtn.textContent = "Conectando…";
-      connectStatus.textContent = "Lendo token e sincronizando (em segundo plano)…";
+      connectStatus.textContent = AGENT_REMOTE
+        ? "Preparando o agente local..."
+        : "Lendo token e sincronizando (em segundo plano)…";
       try {
+        if (AGENT_REMOTE) {
+          await ensureLocalCredentials();
+          connectStatus.textContent = "Conectando o agente local...";
+          await pairCurrentLocalAgent();
+          connectStatus.textContent = "Lendo token e sincronizando (em segundo plano)…";
+        }
         const response = await apiFetch("/api/connect", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

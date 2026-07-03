@@ -113,38 +113,65 @@ def agent_mni_service() -> MNIReadService:
 
 
 def _cors_headers(origin: str | None) -> dict[str, str]:
-    if origin not in _BROWSER_PAIRING_ORIGINS:
+    if origin is None or not _is_allowed_browser_origin(origin):
         return {}
     return {
         "Access-Control-Allow-Origin": origin,
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
         "Access-Control-Allow-Headers": "content-type",
         "Access-Control-Allow-Private-Network": "true",
         "Vary": "Origin",
     }
 
 
-def _assert_browser_pairing_request(request: Request) -> str | None:
+def _origin_is_loopback(origin: str | None) -> bool:
+    if origin is None:
+        return False
+    from urllib.parse import urlparse
+
+    return (urlparse(origin).hostname or "") in _LOOPBACK_HOSTS
+
+
+def _is_allowed_browser_origin(origin: str | None) -> bool:
+    return origin in _BROWSER_PAIRING_ORIGINS or _origin_is_loopback(origin)
+
+
+def _assert_browser_agent_request(request: Request, *, allow_cloud_origin: bool) -> str | None:
     host = request.headers.get("host", "").split(":")[0]
     client_host = request.client.host if request.client else ""
     if host not in _LOOPBACK_HOSTS or client_host not in _LOOPBACK_HOSTS:
-        raise HTTPException(status_code=403, detail="agent pairing apenas por loopback")
+        raise HTTPException(status_code=403, detail="agente local apenas por loopback")
     origin = request.headers.get("origin")
-    if origin is not None and origin not in _BROWSER_PAIRING_ORIGINS:
-        raise HTTPException(status_code=403, detail="origem não autorizada para pareamento do agente")
+    origin_allowed = (
+        origin is None
+        or _origin_is_loopback(origin)
+        or (allow_cloud_origin and origin in _BROWSER_PAIRING_ORIGINS)
+    )
+    if not origin_allowed:
+        raise HTTPException(status_code=403, detail="origem não autorizada para o agente local")
     return origin
 
 
-def _assert_local_setup_request(request: Request) -> None:
-    from urllib.parse import urlparse
+def _assert_browser_pairing_request(request: Request) -> str | None:
+    try:
+        return _assert_browser_agent_request(request, allow_cloud_origin=True)
+    except HTTPException as exc:
+        if exc.detail == "agente local apenas por loopback":
+            raise HTTPException(status_code=403, detail="agent pairing apenas por loopback") from exc
+        raise HTTPException(status_code=403, detail="origem não autorizada para pareamento do agente") from exc
 
-    host = request.headers.get("host", "").split(":")[0]
-    client_host = request.client.host if request.client else ""
-    if host not in _LOOPBACK_HOSTS or client_host not in _LOOPBACK_HOSTS:
-        raise HTTPException(status_code=403, detail="configuração do agente apenas por loopback")
-    origin = request.headers.get("origin")
-    if origin is not None and (urlparse(origin).hostname or "") not in _LOOPBACK_HOSTS:
-        raise HTTPException(status_code=403, detail="origem não autorizada para credenciais locais")
+
+def _assert_local_setup_request(request: Request) -> None:
+    _assert_browser_agent_request(request, allow_cloud_origin=False)
+
+
+def _assert_credentials_request(request: Request) -> str | None:
+    try:
+        return _assert_browser_agent_request(request, allow_cloud_origin=True)
+    except HTTPException as exc:
+        if exc.detail == "agente local apenas por loopback":
+            raise HTTPException(status_code=403, detail="configuração do agente apenas por loopback") from exc
+        raise HTTPException(status_code=403, detail="origem não autorizada para credenciais locais") from exc
 
 
 def _start_relay_pairing(payload: RelayPairingPayload) -> None:
@@ -195,6 +222,24 @@ def configure_local_credentials(payload: AgentCredentialsPayload) -> None:
     logger.info("agent_credentials_configured", tribunal=tribunal)
 
 
+def local_credentials_configured() -> bool:
+    """Report whether the agent can resolve CPF/PJe/PIN locally without exposing them."""
+    cpf = os.environ.get("JURIS_AGENT_CPF")
+    senha = os.environ.get("JURIS_AGENT_SENHA")
+    pin = os.environ.get("JURIS_AGENT_PIN")
+    if cpf and senha and pin:
+        return True
+
+    from juris.core.credentials import get_credential
+
+    cpf = cpf or get_credential("agent_cpf")
+    tribunal = os.environ.get("JURIS_AGENT_TRIBUNAL") or get_credential("agent_tribunal") or "tjmg"
+    cpf_key = "".join(ch for ch in cpf if ch.isdigit()) if cpf else ""
+    senha = senha or (get_credential(f"mni_{tribunal}_{cpf_key}") if cpf_key else None)
+    pin = pin or get_credential("token_pin")
+    return bool(cpf and senha and pin)
+
+
 async def _credentials_payload_from_request(request: Request) -> AgentCredentialsPayload:
     from urllib.parse import parse_qs
 
@@ -225,6 +270,7 @@ def _local_setup_html() -> str:
     form { display: grid; gap: 14px; margin-top: 24px; }
     label { display: grid; gap: 6px; font-weight: 650; }
     input { border: 1px solid #d6d0c7; border-radius: 4px; padding: 11px 12px; font: inherit; }
+    a { color: #6f2232; font-weight: 700; }
     button {
       border: 1px solid #6f2232;
       border-radius: 4px;
@@ -260,6 +306,7 @@ def _local_setup_html() -> str:
       <button type="submit">Salvar neste computador</button>
       <p id="status" role="status" aria-live="polite"></p>
     </form>
+    <p><a href="https://causia.com.br/">Voltar ao Causia</a></p>
   </main>
   <script>
     const form = document.querySelector("#credentials-form");
@@ -328,15 +375,43 @@ async def local_setup_page(request: Request) -> HTMLResponse:
 
 
 @app.post("/credentials")
-async def save_local_credentials(request: Request) -> dict[str, str]:
+async def save_local_credentials(request: Request) -> Response:
     """Save CPF/PJe/PIN locally through the local agent's browser page."""
-    _assert_local_setup_request(request)
+    origin = _assert_credentials_request(request)
     payload = await _credentials_payload_from_request(request)
     try:
         configure_local_credentials(payload)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"status": "ok", "message": "Credenciais salvas no agente local."}
+    return Response(
+        '{"status":"ok","message":"Credenciais salvas no agente local."}',
+        media_type="application/json",
+        headers=_cors_headers(origin),
+    )
+
+
+@app.options("/credentials")
+async def credentials_options(request: Request) -> Response:
+    origin = _assert_credentials_request(request)
+    return Response(status_code=204, headers=_cors_headers(origin))
+
+
+@app.get("/credentials/status")
+async def local_credentials_status(request: Request) -> Response:
+    """Return only readiness, never the credential values."""
+    origin = _assert_credentials_request(request)
+    configured = "true" if local_credentials_configured() else "false"
+    return Response(
+        f'{{"configured":{configured}}}',
+        media_type="application/json",
+        headers=_cors_headers(origin),
+    )
+
+
+@app.options("/credentials/status")
+async def credentials_status_options(request: Request) -> Response:
+    origin = _assert_credentials_request(request)
+    return Response(status_code=204, headers=_cors_headers(origin))
 
 
 def _default_pin_resolver() -> str:
