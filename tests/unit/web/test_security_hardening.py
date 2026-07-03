@@ -37,7 +37,7 @@ class TestSecurityHeaders:
         assert "default-src 'self'" in csp
         assert "frame-ancestors 'none'" in csp
         assert "object-src 'none'" in csp
-        assert "connect-src 'self' http://127.0.0.1:8765" in csp
+        assert "connect-src 'self' http://127.0.0.1:8765 http://localhost:8765" in csp
         assert r.headers["x-content-type-options"] == "nosniff"
         assert r.headers["x-frame-options"] == "DENY"
         assert r.headers["referrer-policy"] == "strict-origin-when-cross-origin"

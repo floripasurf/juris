@@ -16,7 +16,7 @@ import hmac
 import json
 import os
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import lru_cache
@@ -98,27 +98,45 @@ def _parse_expires_at(value: object) -> datetime | None:
     return parsed.astimezone(UTC)
 
 
-def _is_expired(value: object, *, now: datetime) -> bool:
-    expires_at = _parse_expires_at(value)
+def _is_expired_at(expires_at: datetime | None, *, now: datetime) -> bool:
     return expires_at is not None and expires_at <= now
 
 
-def _key_from_structured_entry(tenant_id: str, key_id: str, entry: object, *, now: datetime) -> str | None:
+def _is_expired(value: object, *, now: datetime) -> bool:
+    return _is_expired_at(_parse_expires_at(value), now=now)
+
+
+def _earliest_expiration(*values: datetime | None) -> datetime | None:
+    present = [value for value in values if value is not None]
+    return min(present) if present else None
+
+
+def _key_from_structured_entry(
+    tenant_id: str,
+    key_id: str,
+    entry: object,
+    *,
+    tenant_expires_at: datetime | None,
+    now: datetime,
+) -> tuple[str, datetime | None] | None:
     if isinstance(entry, str):
-        return _validate_api_key_config(tenant_id, entry)
+        return _validate_api_key_config(tenant_id, entry), tenant_expires_at
     if not isinstance(entry, Mapping):
         msg = f"API key inválida para tenant {tenant_id!r}/{key_id!r}: entrada deve ser string ou objeto."
         raise ValueError(msg)
-    if _is_expired(entry.get("expires_at"), now=now):
+    key_expires_at = _parse_expires_at(entry.get("expires_at"))
+    if _is_expired_at(key_expires_at, now=now):
         return None
     key = entry.get("hash") or entry.get("api_key")
     if key is None:
         msg = f"API key inválida para tenant {tenant_id!r}/{key_id!r}: informe hash ou api_key."
         raise ValueError(msg)
-    return _validate_api_key_config(tenant_id, key)
+    return _validate_api_key_config(tenant_id, key), _earliest_expiration(tenant_expires_at, key_expires_at)
 
 
-def _active_api_keys_for_tenant(tenant_id: str, raw_config: object, *, now: datetime) -> tuple[str, ...]:
+def _active_api_key_bindings_for_tenant(
+    tenant_id: str, raw_config: object, *, now: datetime
+) -> tuple[tuple[str, datetime | None], ...]:
     """Return active stored key strings for one tenant.
 
     Backwards compatible formats:
@@ -128,24 +146,27 @@ def _active_api_keys_for_tenant(tenant_id: str, raw_config: object, *, now: date
     deleting its local data immediately.
     """
     if isinstance(raw_config, str):
-        return (_validate_api_key_config(tenant_id, raw_config),)
+        return ((_validate_api_key_config(tenant_id, raw_config), None),)
     if not isinstance(raw_config, Mapping):
         msg = f"configuração inválida para tenant {tenant_id!r}: use string ou objeto."
         raise ValueError(msg)
-    if _is_expired(raw_config.get("trial_expires_at") or raw_config.get("expires_at"), now=now):
+    tenant_expires_at = _parse_expires_at(raw_config.get("trial_expires_at") or raw_config.get("expires_at"))
+    if _is_expired_at(tenant_expires_at, now=now):
         return ()
     keys = raw_config.get("keys")
     if not isinstance(keys, Mapping) or not keys:
         msg = f"configuração inválida para tenant {tenant_id!r}: objeto precisa de keys não vazio."
         raise ValueError(msg)
-    active = []
+    active: list[tuple[str, datetime | None]] = []
     for key_id, entry in keys.items():
         if not isinstance(key_id, str) or not key_id:
             msg = f"key_id inválido para tenant {tenant_id!r}: {key_id!r}"
             raise ValueError(msg)
-        key = _key_from_structured_entry(tenant_id, key_id, entry, now=now)
-        if key is not None:
-            active.append(key)
+        binding = _key_from_structured_entry(
+            tenant_id, key_id, entry, tenant_expires_at=tenant_expires_at, now=now
+        )
+        if binding is not None:
+            active.append(binding)
     return tuple(active)
 
 
@@ -157,24 +178,32 @@ class Tenant:
     name: str = ""
 
 
+@dataclass(frozen=True, slots=True)
+class _KeyBinding:
+    tenant: Tenant
+    expires_at: datetime | None = None
+
+
 class TenantRegistry:
     """Maps API keys to tenants. Empty ⇒ open deployment."""
 
-    def __init__(self, tenants: Mapping[str, object]) -> None:
+    def __init__(self, tenants: Mapping[str, object], *, now_func: Callable[[], datetime] | None = None) -> None:
         # config is {tenant_id: api_key_or_structured_entry}; index by key for O(1) auth.
-        by_key: dict[str, Tenant] = {}
+        self._now = now_func or (lambda: datetime.now(UTC))
+        by_key: dict[str, _KeyBinding] = {}
         tenant_ids: set[str] = set()
-        now = datetime.now(UTC)
+        now = self._now()
         for tenant_id, raw_key in tenants.items():
             validated_tenant_id = _validate_configured_tenant_id(tenant_id)
-            keys = _active_api_keys_for_tenant(validated_tenant_id, raw_key, now=now)
-            if keys:
+            key_bindings = _active_api_key_bindings_for_tenant(validated_tenant_id, raw_key, now=now)
+            if key_bindings:
                 tenant_ids.add(validated_tenant_id)
-            for key in keys:
+            tenant = Tenant(validated_tenant_id)
+            for key, expires_at in key_bindings:
                 if key in by_key:
                     msg = "API key duplicada em JURIS_TENANTS_FILE; cada tenant precisa de chave própria."
                     raise ValueError(msg)
-                by_key[key] = Tenant(validated_tenant_id)
+                by_key[key] = _KeyBinding(tenant=tenant, expires_at=expires_at)
         self._by_key = by_key
         self._tenant_ids = tenant_ids
 
@@ -207,10 +236,11 @@ class TenantRegistry:
         if api_key is None:
             return None
         incoming_hash = hash_api_key(api_key)
-        for stored, tenant in self._by_key.items():
+        now = self._now()
+        for stored, binding in self._by_key.items():
             target = incoming_hash if stored.startswith(_HASH_PREFIX) else api_key
-            if hmac.compare_digest(stored, target):
-                return tenant
+            if hmac.compare_digest(stored, target) and not _is_expired_at(binding.expires_at, now=now):
+                return binding.tenant
         return None
 
 

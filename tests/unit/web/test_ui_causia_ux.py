@@ -84,6 +84,8 @@ class TestConversionAndPromise:
         assert "/api/connect" in _INDEX_HTML
         assert "/credentials/status" in _INDEX_HTML
         assert "/credentials" in _INDEX_HTML
+        assert "http://127.0.0.1:8765" in _INDEX_HTML
+        assert "http://localhost:8765" in _INDEX_HTML
         assert "pairLocalAgent" in _INDEX_HTML
         assert "local.endpoint" in _INDEX_HTML
         assert "show_agent_command" in _INDEX_HTML

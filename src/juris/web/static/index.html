@@ -1727,7 +1727,7 @@
       nav.appendChild(btn);
     })();
     const checked = (id) => document.querySelector(`#${id}`).checked;
-    const LOCAL_AGENT_BASE_URL = "http://127.0.0.1:8765";
+    const LOCAL_AGENT_BASE_URLS = ["http://127.0.0.1:8765", "http://localhost:8765"];
     let pendingCredentialsResolve = null;
 
     // Split-trust mode (ADR-0015): hide local secrets until the backend explicitly
@@ -1803,27 +1803,48 @@
     async function pairLocalAgent(data) {
       const local = data.local_pairing || (data.agent && data.agent.local_pairing);
       if (!local || !local.endpoint) return false;
-      const response = await window.fetch(local.endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          relay_url: local.relay_url,
-          tenant_id: local.tenant_id,
-          agent_token: local.agent_token,
-        }),
-      });
-      if (!response.ok) throw new Error("Agente local recusou o pareamento.");
-      return true;
+      const endpoints = [local.endpoint];
+      if (local.endpoint.includes("127.0.0.1")) endpoints.push(local.endpoint.replace("127.0.0.1", "localhost"));
+      let lastError = null;
+      for (const endpoint of endpoints) {
+        try {
+          const response = await window.fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              relay_url: local.relay_url,
+              tenant_id: local.tenant_id,
+              agent_token: local.agent_token,
+            }),
+          });
+          if (!response.ok) throw new Error("Agente local recusou o pareamento.");
+          return true;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      throw lastError || new Error("Agente local recusou o pareamento.");
+    }
+    async function fetchLocalAgent(path, options) {
+      let lastError = null;
+      for (const baseUrl of LOCAL_AGENT_BASE_URLS) {
+        try {
+          return await window.fetch(`${baseUrl}${path}`, options);
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      throw lastError || new Error("Causia Agent local não respondeu.");
     }
     async function localAgentCredentialsConfigured() {
-      const response = await window.fetch(`${LOCAL_AGENT_BASE_URL}/credentials/status`);
+      const response = await fetchLocalAgent("/credentials/status");
       if (!response.ok) throw new Error("Causia Agent local não respondeu.");
       const data = await response.json();
       return data.configured === true;
     }
     async function saveAgentCredentialsFromModal() {
       const formData = new FormData(agentCredentialsForm);
-      const response = await window.fetch(`${LOCAL_AGENT_BASE_URL}/credentials`, {
+      const response = await fetchLocalAgent("/credentials", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(Object.fromEntries(formData.entries())),

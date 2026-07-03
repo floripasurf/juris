@@ -198,7 +198,7 @@ def _content_security_policy() -> str:
             "style-src 'self' 'unsafe-inline'",
             "font-src 'self'",
             f"script-src {script_src}",
-            "connect-src 'self' http://127.0.0.1:8765",
+            "connect-src 'self' http://127.0.0.1:8765 http://localhost:8765",
             "form-action 'self'",
         )
     )
@@ -581,13 +581,19 @@ class AccessKeyPayload(BaseModel):
 @app.post("/api/trial/start", status_code=201)
 async def start_trial(request: Request) -> dict[str, object]:
     """Issue an anonymous 30-day trial without collecting personal data."""
-    from juris.web.trial_access import create_trial_access, trial_days
+    from juris.web.trial_access import TrialCapacityError, create_trial_access, trial_days
 
     client_host = request.client.host if request.client else "unknown"
     decision = _api_expensive_rate_limiter().check(f"trial:{client_host}")
     if not decision.allowed:
         raise HTTPException(status_code=429, detail="Muitas tentativas. Tente novamente em instantes.")
-    trial = await asyncio.to_thread(create_trial_access)
+    try:
+        trial = await asyncio.to_thread(create_trial_access)
+    except TrialCapacityError as exc:
+        raise HTTPException(
+            status_code=429,
+            detail="Limite de testes anônimos ativos atingido. Tente novamente mais tarde.",
+        ) from exc
     return {
         "tenant_id": trial.tenant_id,
         "api_key": trial.api_key,

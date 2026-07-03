@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -104,3 +105,69 @@ def test_agent_pairing_endpoint_rotates_relay_command(trial_env) -> None:
     after = json.loads(agents.read_text(encoding="utf-8"))[trial["tenant_id"]]["token"]
     assert after != before
     assert after in body["command"]
+
+
+def test_start_trial_prunes_expired_trials_and_agent_bindings(trial_env) -> None:
+    tenants, agents = trial_env
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    tenants.write_text(
+        json.dumps(
+            {
+                "trial_old": {
+                    "kind": "trial",
+                    "trial_expires_at": "2025-01-01T00:00:00Z",
+                    "keys": {"owner": {"hash": "sha256:" + "a" * 64}},
+                },
+                "trial_active": {
+                    "kind": "trial",
+                    "trial_expires_at": "2999-01-01T00:00:00Z",
+                    "keys": {"owner": {"hash": "sha256:" + "b" * 64}},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    agents.write_text(
+        json.dumps({"trial_old": {"token": "old"}, "trial_active": {"token": "active"}}),
+        encoding="utf-8",
+    )
+
+    from juris.web.trial_access import create_trial_access
+
+    created = create_trial_access(tenants_path=tenants, agents_path=agents, now=now)
+
+    tenant_data = json.loads(tenants.read_text(encoding="utf-8"))
+    agent_data = json.loads(agents.read_text(encoding="utf-8"))
+    assert "trial_old" not in tenant_data
+    assert "trial_old" not in agent_data
+    assert "trial_active" in tenant_data
+    assert "trial_active" in agent_data
+    assert created.tenant_id in tenant_data
+    assert created.tenant_id in agent_data
+
+
+def test_start_trial_enforces_active_trial_cap(trial_env, monkeypatch) -> None:
+    tenants, agents = trial_env
+    monkeypatch.setenv("JURIS_TRIAL_MAX_ACTIVE", "1")
+    tenants.write_text(
+        json.dumps(
+            {
+                "trial_active": {
+                    "kind": "trial",
+                    "trial_expires_at": "2999-01-01T00:00:00Z",
+                    "keys": {"owner": {"hash": "sha256:" + "b" * 64}},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    agents.write_text(json.dumps({"trial_active": {"token": "active"}}), encoding="utf-8")
+
+    client = TestClient(app)
+
+    response = client.post("/api/trial/start")
+
+    assert response.status_code == 429
+    assert "Limite de testes" in response.json()["detail"]
+    assert set(json.loads(tenants.read_text(encoding="utf-8"))) == {"trial_active"}
+    assert set(json.loads(agents.read_text(encoding="utf-8"))) == {"trial_active"}

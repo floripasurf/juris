@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 
 from juris.web.auth import Tenant, TenantRegistry, require_tenants_enabled, resolve_tenant
@@ -120,6 +122,31 @@ def test_expired_structured_trial_key_is_rejected() -> None:
     assert registry.is_open is True
     with pytest.raises(PermissionError):
         resolve_tenant(registry, api_key="old-key", require_configured=True)
+
+
+def test_cached_registry_rechecks_trial_expiration_on_each_authenticate() -> None:
+    from juris.web.auth import hash_api_key
+
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+
+    def clock() -> datetime:
+        return now
+
+    registry = TenantRegistry(
+        {
+            "trial-short": {
+                "trial_expires_at": (now + timedelta(seconds=1)).isoformat().replace("+00:00", "Z"),
+                "keys": {"owner": {"hash": hash_api_key("trial-key")}},
+            }
+        },
+        now_func=clock,
+    )
+
+    assert resolve_tenant(registry, api_key="trial-key") == Tenant("trial-short")
+    now = now + timedelta(seconds=2)
+
+    with pytest.raises(PermissionError):
+        resolve_tenant(registry, api_key="trial-key")
 
 
 def test_rejects_unsafe_tenant_id_in_config() -> None:
