@@ -10,13 +10,57 @@
 
 Publica o console web para o advogado usar do navegador dele, sem abrir porta no
 Mac Mini: `juris web` escuta só em 127.0.0.1 e o `cloudflared` faz o caminho de
-saída. Duas camadas de acesso: **Cloudflare Access** (e-mails autorizados) na
-frente e a **X-API-Key por tenant** na aplicação (tela de login da SPA).
+saída. Controle de acesso = **X-API-Key por tenant** (auth fail-closed do app) +
+CSP/headers/HSTS + WAF Cloudflare. (Cloudflare Access foi removido — ver §3.)
 
 Pré-requisito de postura: este runbook assume a configuração fail-closed de
 `docs/deploy/production.md` §1 (`ENVIRONMENT=prod`, `JURIS_REQUIRE_TENANTS=1`,
 chaves hashadas). Antes de caso real com dado de cliente, preencher o pacote
 LGPD em `docs/compliance/` (DPA/ROPA/RIPD).
+
+## 0. Go-live — migração MacBook → Mac Mini (turnkey)
+
+> **Contexto (03/07/2026):** a produção rodou até aqui no MacBook (validação —
+> dorme, muda de rede). O piloto real precisa de host always-on → migrar para o
+> **Mac Mini**. O script `scripts/golive_mac_mini.sh` automatiza a parte
+> determinística; os passos de máquina/token ficam guiados abaixo.
+
+**No Mac Mini**, com o layout `~/juris-pilot/` (mesma convenção do
+`doctor_juris_pilot.sh`):
+
+```bash
+# 1) traga o código e rode o script (idempotente — pode repetir)
+git clone --branch feat/mni-mtls-token <repo> ~/juris-pilot/app   # 1ª vez
+sh ~/juris-pilot/app/scripts/golive_mac_mini.sh
+# ele: sync, cria dirs 700, gera HMAC, escreve/instala o launchd da web,
+#      e imprime o que falta (tenant, tunnel, agente). Rode de novo após criar
+#      tenants.json / agents.json.
+
+# 2) tenant do piloto (a chave crua aparece uma vez — entregue ao advogado)
+cd ~/juris-pilot/app && uv run juris tenant new escritorio-piloto
+printf '{ "escritorio-piloto": "sha256:<hash>" }' > ~/juris-pilot/tenants.json
+chmod 600 ~/juris-pilot/tenants.json
+sh ~/juris-pilot/app/scripts/golive_mac_mini.sh     # reexecuta → sobe a web
+```
+
+**Mover o tunnel do MacBook para o Mac Mini** (cutover):
+
+```bash
+# no MacBook: empacote as credenciais do tunnel 'juris'
+cd ~/.cloudflared && tar czf ~/cf-juris.tgz cert.pem config.yml \
+  49e67dad-57d2-4e84-a1d2-3d8baad4ddf3.json         # <TUNNEL_ID>.json
+# copie cf-juris.tgz para o Mac Mini (AirDrop/scp), e no Mac Mini:
+mkdir -p ~/.cloudflared && tar xzf ~/cf-juris.tgz -C ~/.cloudflared
+sudo cloudflared service install && cloudflared tunnel info juris
+# PARE o tunnel no MacBook (cutover limpo): launchctl bootout do cloudflared lá,
+# ou desligue o serviço. O DNS já aponta para o tunnel 'juris' — nada muda na zona.
+```
+
+**Agente local A3 (co-localizado no Mac Mini)** — ver §7. Depois do agente:
+gere `~/juris-pilot/agents.json` e reexecute o script (a web passa a `remote`,
+escondendo CPF/PIN/senha no navegador).
+
+**Validar:** `cd ~/juris-pilot/app && uv run juris doctor` e o smoke da §4.
 
 ## 1. Preparar o orquestrador no Mac Mini
 
@@ -100,34 +144,22 @@ cloudflared tunnel info juris                   # confirma conector ativo
 > converte; cliente entra com a chave. **Não reative Access nestes hosts** sem antes
 > resolver o conflito (ex.: Access só num host administrativo separado).
 
-No Zero Trust dashboard → **Access → Applications → Add → Self-hosted**:
-
-- Application domain: `juris.blackcube.dev`
-- Policy *Allow* → Include → Emails: o seu + o do advogado piloto
-- Session duration: 24h
-
-Enquanto a única credencial da aplicação é a API key, o Access garante que a
-superfície pública nem chega a estranhos. Para o fluxo SaaS/trial anônimo, o
-agente remoto conecta em `wss://causia.com.br/ws/agent-relay`; se Cloudflare
-Access voltar a proteger esse path, crie um **service token** ou uma policy
-própria para `/ws/agent-relay`, porque o agente não passa por login de browser.
-
 ## 4. Smoke de go-live
 
 ```bash
 # sem chave → 401 estruturado (fail-closed valendo na borda pública)
-curl -s https://juris.blackcube.dev/api/workbench | grep tenant_invalid
+curl -s https://causia.com.br/api/workbench | grep tenant_invalid
 
-# página abre sem auth para renderizar o login
-curl -s https://juris.blackcube.dev/ | grep -c login-overlay
+# página pública (landing) abre sem auth
+curl -s https://causia.com.br/ | grep -c "Começar teste anônimo"
 
 # com a chave do tenant → 200
-curl -s -H "X-API-Key: <chave-crua>" https://juris.blackcube.dev/api/workbench | head -c 120
+curl -s -H "X-API-Key: <chave-crua>" https://causia.com.br/api/workbench | head -c 120
 ```
 
-No navegador: acessar, passar pelo Access, ver a tela **Acesso do escritório**,
-entrar com a chave → Mesa de trabalho carrega. Chave errada deve reabrir o login
-com mensagem de erro.
+No navegador: acessar `https://causia.com.br`, ver a landing pública; "Começar
+teste anônimo" emite uma chave e entra, ou "Já tenho uma chave" → entrar com a
+chave do escritório → Mesa de trabalho. Chave errada reabre o login com erro.
 
 ## 5. Operação
 
@@ -145,3 +177,39 @@ com mensagem de erro.
   e `/api/agent-mode` exigem chave de tenant.
 - Health por tenant: `/api/health?deep=1` (com a chave) e `/api/admin/health`
   (com `JURIS_ADMIN_TOKEN`, se configurado).
+
+## 6. Prova rápida do produto (sem token)
+
+Antes do A3, valide o valor com o caminho agent-free: no console, empty-state da
+Mesa → **"Explorar com dados de exemplo"** gera 6 artefatos de um caso fixture
+(sem agente), com preview formatado e **Baixar .docx**. Serve para o advogado ver
+o produto na primeira sessão enquanto o token não está configurado.
+
+## 7. Agente local A3 (co-localizado no Mac Mini)
+
+O agente é o guardião do token (ADR-0015): roda no Mac Mini, resolve CPF/senha
+PJe/PIN localmente e expõe só um WebSocket em `127.0.0.1:8765`. Nada de segredo
+vai para a nuvem. Detalhe completo em `docs/deploy/agent-install.md`; resumo:
+
+1. **Token + driver**: plugue o e-CPF A3 e instale o módulo PKCS#11 (SafeNet/eToken).
+2. **Serviço do agente** (launchd):
+   ```bash
+   cp ~/juris-pilot/app/docs/deploy/com.juris.agent.plist ~/Library/LaunchAgents/
+   # edite: JURIS_AGENT_TOKEN (pareamento), JURIS_AGENT_CPF/SENHA/PIN, caminho PKCS#11
+   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.juris.agent.plist
+   uv run juris agent health --url ws://127.0.0.1:8765   # token conectado; cert válido
+   ```
+3. **Pareamento browser-first (mais fácil)**: no console → **Acervo → Conectar
+   agente local**. O navegador fala com `http://127.0.0.1:8765` (loopback; CORS +
+   Private Network Access já tratados) e configura CPF/PJe/PIN **direto no agente**,
+   sem passar pelo servidor. Fallback "comando técnico" se o navegador não alcançar
+   o agente.
+4. **Ligar o modo remoto na web**: gere o binding do tenant e reexecute o go-live:
+   ```bash
+   printf '{"escritorio-piloto":{"url":"ws://127.0.0.1:8765","token":"<token pareado>"}}' \
+     > ~/juris-pilot/agents.json && chmod 600 ~/juris-pilot/agents.json
+   sh ~/juris-pilot/app/scripts/golive_mac_mini.sh   # web sobe em JURIS_AGENT_MODE=remote
+   ```
+   Com isso a UI para de pedir CPF/PIN/senha no navegador — o agente resolve tudo.
+5. **Validar ponta a ponta**: `uv run juris consulta <cnj> --tribunal tjmg` (leitura
+   MNI real via token) e, no console, gerar minuta com `source=mni`.
