@@ -81,6 +81,12 @@ cloudflared tunnel info juris                   # confirma conector ativo
 
 ## 3. Cloudflare Access (porta da frente)
 
+> **FEITO em 03/07/2026 via API** (token restrito): org/team `blackcube.cloudflareaccess.com`
+> criada, IdP one-time PIN, app self-hosted `Causia — console do piloto`
+> (`436a9177…`) cobrindo `causia.com.br` + `app.causia.com.br` + `juris.blackcube.dev`,
+> policy Allow por e-mail, sessão 24h. ⚠️ Isso deixou a LANDING também atrás do
+> Access — decidir depois: apex público p/ conversão × tudo trancado no piloto.
+
 No Zero Trust dashboard → **Access → Applications → Add → Self-hosted**:
 
 - Application domain: `juris.blackcube.dev`
