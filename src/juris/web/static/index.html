@@ -360,6 +360,39 @@
       border-bottom-color: var(--brand);
       background: transparent;
     }
+    #nav button { position: relative; }
+    .nav-badge {
+      display: inline-block;
+      min-width: 16px;
+      margin-left: 6px;
+      padding: 0 5px;
+      border-radius: 999px;
+      background: var(--danger);
+      color: #fff;
+      font-size: 10.5px;
+      font-weight: 700;
+      line-height: 16px;
+      text-align: center;
+      vertical-align: middle;
+    }
+    .trial-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 11px;
+      border-radius: 999px;
+      border: 1px solid var(--line-2);
+      background: var(--panel);
+      color: var(--ink-2);
+      font-size: 12px;
+      font-weight: 600;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .trial-pill::after { content: "Contratar"; color: var(--brand); font-weight: 700; }
+    .trial-pill:hover { border-color: var(--brand); }
+    .trial-pill.urgent { background: var(--warn-bg); border-color: var(--warn-line); color: var(--warn); }
+    .trial-pill[hidden] { display: none; }
     .header-actions {
       margin-left: auto;
       display: flex;
@@ -1005,6 +1038,8 @@
       <button type="button" data-nav="acessos">Acessos</button>
     </nav>
     <div class="header-actions">
+      <a id="trial-status" class="trial-pill" role="status" aria-live="polite" hidden
+         href="mailto:lages.raphael@gmail.com?subject=Quero%20contratar%20o%20Causia&body=Ol%C3%A1%2C%20estou%20testando%20o%20Causia%20e%20gostaria%20de%20conversar%20sobre%20contratar."></a>
       <div class="status" id="ai-session" role="status" aria-live="polite" title="Modo de IA e proteção de dados">IA: …</div>
       <button type="button" id="logout-button" class="header-logout">Sair</button>
     </div>
@@ -1761,6 +1796,29 @@
       return out.join("\n");
     }
 
+    // Trial countdown + upgrade CTA (conversão): show days left for a trial tenant.
+    function renderTrialStatus(data) {
+      const pill = document.querySelector("#trial-status");
+      if (!pill) return;
+      if (!data || data.trial !== true || !data.expires_at) { pill.hidden = true; return; }
+      const ms = new Date(data.expires_at).getTime() - Date.now();
+      const days = Math.max(0, Math.ceil(ms / 86400000));
+      pill.textContent = `Teste: ${days} ${days === 1 ? "dia" : "dias"} · `;
+      pill.classList.toggle("urgent", days <= 5);
+      pill.hidden = false;
+    }
+
+    // Deadline badge on a nav tab (rotina): surface urgency without navigating.
+    function setNavBadge(name, count) {
+      const btn = document.querySelector(`#nav button[data-nav="${name}"]`);
+      if (!btn) return;
+      let badge = btn.querySelector(".nav-badge");
+      if (!count || count <= 0) { if (badge) badge.remove(); return; }
+      if (!badge) { badge = document.createElement("span"); badge.className = "nav-badge"; btn.appendChild(badge); }
+      badge.textContent = String(count);
+      badge.setAttribute("aria-label", `${count} prazo(s) crítico(s)`);
+    }
+
     // Download a minuta as .docx (entrega): the lawyer finishes in Word.
     async function downloadDocx(body, suggestedName, statusEl) {
       const setStatus = (msg, isError) => {
@@ -2379,6 +2437,7 @@
     }
 
     function renderWorkbench(wb) {
+      setNavBadge("agenda", (wb.critical_deadlines || []).length);
       const critical = (wb.critical_deadlines || [])
         .map((p) => queueItem(
           p.numero_cnj,
@@ -2801,6 +2860,7 @@
     const accessSubmit = document.querySelector("#access-key-submit");
 
     function renderAccessSummary(data) {
+      renderTrialStatus(data);
       const keys = data.keys || [];
       accessSummary.className = keys.length ? "proc-list" : "proc-empty";
       accessSummary.innerHTML = "";
