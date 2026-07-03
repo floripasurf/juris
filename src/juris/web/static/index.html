@@ -226,9 +226,24 @@
     .agent-tools {
       display: flex;
       align-items: center;
+      flex-wrap: wrap;
       gap: 12px;
       margin: 8px 0 12px;
     }
+    .agent-tools a.ghost-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--line-2);
+      border-radius: 4px;
+      color: var(--ink-2);
+      min-height: 38px;
+      padding: 0 14px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .agent-tools a.ghost-link:hover { background: var(--panel-soft); color: var(--ink); }
     .agent-tools span { color: var(--muted); font-size: 13px; }
     #landing-login-error {
       grid-column: 1 / -1;
@@ -974,6 +989,7 @@
       <div id="agent-setup" class="notice agent-setup" role="status" aria-live="polite" hidden></div>
       <div class="agent-tools">
         <button id="agent-pairing-button" type="button" class="ghost">Conectar agente local</button>
+        <a id="agent-credentials-link" class="ghost-link" href="http://127.0.0.1:8765/setup" target="_blank" rel="noopener">Configurar token/PJe</a>
         <span id="agent-pairing-status"></span>
       </div>
       <form id="connect-form" class="connect-bar">

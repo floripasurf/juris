@@ -679,12 +679,12 @@ def _serialize_connect(result: Any) -> dict[str, object]:
 _MAX_CONNECT_JOBS = 200
 _CONNECT_JOB_ERROR = "Falha operacional ao conectar/sincronizar. Verifique agente, token e credenciais locais."
 _CONNECT_AGENT_MISSING = (
-    "Agente local não conectado ao teste. Em Acervo, gere/rode o comando do agente "
+    "Agente local não conectado ao teste. Em Acervo, clique em Conectar agente local "
     "no computador onde o token A3 está conectado e tente novamente."
 )
 _CONNECT_AGENT_CREDS_MISSING = (
-    "Agente local conectado, mas sem credenciais locais. Configure CPF, senha PJe "
-    "e PIN do A3 no agente local; esses dados não devem ser enviados ao servidor."
+    "Agente local conectado, mas sem credenciais locais. Em Acervo, abra Configurar token/PJe "
+    "e salve CPF, senha PJe e PIN do A3 no agente local; esses dados não são enviados ao servidor."
 )
 # Strong refs to in-flight background tasks so the event loop doesn't GC them mid-run.
 _BACKGROUND_TASKS: set[asyncio.Task[None]] = set()

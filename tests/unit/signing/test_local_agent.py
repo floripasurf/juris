@@ -131,6 +131,86 @@ def test_browser_pairing_rejects_foreign_origin(monkeypatch) -> None:
     assert called is False
 
 
+def test_local_setup_page_is_served_only_on_loopback() -> None:
+    client = TestClient(app, client=("127.0.0.1", 50000))
+
+    response = client.get("/setup", headers={"host": "127.0.0.1:8765"})
+
+    assert response.status_code == 200
+    assert "credentials-form" in response.text
+    assert "não são enviadas ao servidor" in response.text
+    assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
+
+
+def test_local_credentials_are_stored_from_local_browser_page(monkeypatch) -> None:
+    import juris.core.credentials as credentials
+
+    stored: dict[str, str] = {}
+    monkeypatch.setattr(credentials, "store_credential", lambda key, value: stored.__setitem__(key, value))
+    client = TestClient(app, client=("127.0.0.1", 50000))
+
+    response = client.post(
+        "/credentials",
+        headers={"origin": "http://127.0.0.1:8765", "host": "127.0.0.1:8765"},
+        json={"cpf": "076.710.396-32", "senha": "senha-pje", "pin": "1234", "tribunal": "TJMG"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    assert "senha-pje" not in response.text
+    assert "1234" not in response.text
+    assert stored == {
+        "agent_cpf": "07671039632",
+        "agent_tribunal": "tjmg",
+        "mni_tjmg_07671039632": "senha-pje",
+        "token_pin": "1234",
+    }
+
+
+def test_local_credentials_reject_cloud_origin(monkeypatch) -> None:
+    import juris.core.credentials as credentials
+
+    stored: dict[str, str] = {}
+    monkeypatch.setattr(credentials, "store_credential", lambda key, value: stored.__setitem__(key, value))
+    client = TestClient(app, client=("127.0.0.1", 50000))
+
+    response = client.post(
+        "/credentials",
+        headers={"origin": "https://causia.com.br", "host": "127.0.0.1:8765"},
+        json={"cpf": "07671039632", "senha": "senha-pje", "pin": "1234", "tribunal": "tjmg"},
+    )
+
+    assert response.status_code == 403
+    assert stored == {}
+
+
+def test_default_credentials_resolver_uses_local_secure_store(monkeypatch) -> None:
+    import juris.core.credentials as credentials
+
+    values = {
+        "agent_cpf": "07671039632",
+        "agent_tribunal": "tjmg",
+        "mni_tjmg_07671039632": "senha-pje",
+        "token_pin": "1234",
+    }
+    monkeypatch.delenv("JURIS_AGENT_CPF", raising=False)
+    monkeypatch.delenv("JURIS_AGENT_SENHA", raising=False)
+    monkeypatch.delenv("JURIS_AGENT_PIN", raising=False)
+    monkeypatch.delenv("JURIS_AGENT_TRIBUNAL", raising=False)
+    monkeypatch.setattr(credentials, "get_credential", lambda key: values.get(key))
+
+    assert local_agent._default_credentials_resolver() == ("07671039632", "senha-pje", "1234")
+
+
+def test_default_pin_resolver_uses_local_secure_store(monkeypatch) -> None:
+    import juris.core.credentials as credentials
+
+    monkeypatch.delenv("JURIS_AGENT_PIN", raising=False)
+    monkeypatch.setattr(credentials, "get_credential", lambda key: "1234" if key == "token_pin" else None)
+
+    assert local_agent._default_pin_resolver() == "1234"
+
+
 def test_handle_sign_request_resolves_pin_locally_and_signs() -> None:
     signer = _FakeSigner()
     req = SignRequest(request_id="r1", pdf_bytes_b64=base64.b64encode(b"PDF").decode())

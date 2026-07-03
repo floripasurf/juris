@@ -22,7 +22,8 @@ from functools import lru_cache
 from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel, Field
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel, Field, ValidationError
 
 from juris.api.ws_schemas import AgentRequest, AgentResponse, HealthResponse, SignRequest, SignResponse
 from juris.core.observability import get_logger
@@ -83,6 +84,15 @@ class RelayPairingPayload(BaseModel):
     agent_token: str = Field(min_length=1)
 
 
+class AgentCredentialsPayload(BaseModel):
+    """Local browser form -> local-agent credentials. Never sent to the cloud."""
+
+    cpf: str = Field(min_length=11, max_length=18)
+    senha: str = Field(min_length=1, max_length=256)
+    pin: str = Field(min_length=1, max_length=128)
+    tribunal: str = Field(default="tjmg", min_length=2, max_length=32)
+
+
 def get_signing_token() -> str:
     """Return the local signing token for authenticated clients."""
     return _resolve_signing_token()
@@ -125,6 +135,18 @@ def _assert_browser_pairing_request(request: Request) -> str | None:
     return origin
 
 
+def _assert_local_setup_request(request: Request) -> None:
+    from urllib.parse import urlparse
+
+    host = request.headers.get("host", "").split(":")[0]
+    client_host = request.client.host if request.client else ""
+    if host not in _LOOPBACK_HOSTS or client_host not in _LOOPBACK_HOSTS:
+        raise HTTPException(status_code=403, detail="configuração do agente apenas por loopback")
+    origin = request.headers.get("origin")
+    if origin is not None and (urlparse(origin).hostname or "") not in _LOOPBACK_HOSTS:
+        raise HTTPException(status_code=403, detail="origem não autorizada para credenciais locais")
+
+
 def _start_relay_pairing(payload: RelayPairingPayload) -> None:
     from juris.web.auth import validate_tenant_id
 
@@ -146,6 +168,129 @@ def _start_relay_pairing(payload: RelayPairingPayload) -> None:
     thread.start()
 
 
+def _normalize_cpf_for_storage(cpf: str) -> str:
+    digits = "".join(ch for ch in cpf if ch.isdigit())
+    if len(digits) != 11:
+        raise ValueError("CPF deve ter 11 dígitos.")
+    return digits
+
+
+def _normalize_tribunal_for_storage(tribunal: str) -> str:
+    normalized = tribunal.strip().lower()
+    if not normalized or not all(ch.isalnum() or ch in {"_", "-"} for ch in normalized):
+        raise ValueError("Tribunal inválido.")
+    return normalized
+
+
+def configure_local_credentials(payload: AgentCredentialsPayload) -> None:
+    """Persist local credentials in the agent's secure local store."""
+    from juris.core.credentials import store_credential
+
+    cpf = _normalize_cpf_for_storage(payload.cpf)
+    tribunal = _normalize_tribunal_for_storage(payload.tribunal)
+    store_credential("agent_cpf", cpf)
+    store_credential("agent_tribunal", tribunal)
+    store_credential(f"mni_{tribunal}_{cpf}", payload.senha)
+    store_credential("token_pin", payload.pin)
+    logger.info("agent_credentials_configured", tribunal=tribunal)
+
+
+async def _credentials_payload_from_request(request: Request) -> AgentCredentialsPayload:
+    from urllib.parse import parse_qs
+
+    try:
+        if "application/json" in request.headers.get("content-type", ""):
+            raw = await request.json()
+        else:
+            parsed = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
+            raw = {key: values[-1] for key, values in parsed.items()}
+        return AgentCredentialsPayload.model_validate(raw)
+    except (UnicodeDecodeError, ValidationError) as exc:
+        raise HTTPException(status_code=400, detail="Informe CPF, senha PJe e PIN do token.") from exc
+
+
+def _local_setup_html() -> str:
+    return """<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Causia Agent</title>
+  <style>
+    :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { margin: 0; background: #f7f5f0; color: #22252a; }
+    main { max-width: 520px; margin: 48px auto; padding: 0 20px; }
+    h1 { margin: 0 0 10px; font-size: 28px; }
+    p { color: #5d626b; line-height: 1.5; }
+    form { display: grid; gap: 14px; margin-top: 24px; }
+    label { display: grid; gap: 6px; font-weight: 650; }
+    input { border: 1px solid #d6d0c7; border-radius: 4px; padding: 11px 12px; font: inherit; }
+    button {
+      border: 1px solid #6f2232;
+      border-radius: 4px;
+      background: #6f2232;
+      color: white;
+      padding: 11px 14px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    #status { min-height: 22px; font-weight: 650; }
+    .ok { color: #1f6b3a; }
+    .err { color: #9b1c1c; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Causia Agent</h1>
+    <p>Informe as credenciais neste computador. Elas ficam no agente local e não são enviadas ao servidor da Causia.</p>
+    <form id="credentials-form">
+      <label>CPF do advogado
+        <input name="cpf" inputmode="numeric" autocomplete="username" required />
+      </label>
+      <label>Senha PJe
+        <input name="senha" type="password" autocomplete="current-password" required />
+      </label>
+      <label>PIN do token A3
+        <input name="pin" type="password" autocomplete="off" required />
+      </label>
+      <label>Tribunal
+        <input name="tribunal" value="tjmg" autocomplete="off" required />
+      </label>
+      <button type="submit">Salvar neste computador</button>
+      <p id="status" role="status" aria-live="polite"></p>
+    </form>
+  </main>
+  <script>
+    const form = document.querySelector("#credentials-form");
+    const status = document.querySelector("#status");
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      status.className = "";
+      status.textContent = "Salvando...";
+      const body = Object.fromEntries(new FormData(form).entries());
+      try {
+        const response = await fetch("/credentials", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || "Falha ao salvar.");
+        form.reset();
+        form.tribunal.value = body.tribunal || "tjmg";
+        status.className = "ok";
+        status.textContent = data.message || "Credenciais salvas neste computador.";
+      } catch (error) {
+        status.className = "err";
+        status.textContent = error.message;
+      }
+    });
+  </script>
+</body>
+</html>"""
+
+
 @app.options("/pair-relay")
 async def pair_relay_options(request: Request) -> Response:
     origin = _assert_browser_pairing_request(request)
@@ -165,14 +310,47 @@ async def pair_relay_from_browser(payload: RelayPairingPayload, request: Request
     return Response(status_code=202, headers=_cors_headers(origin))
 
 
+@app.get("/setup")
+async def local_setup_page(request: Request) -> HTMLResponse:
+    """Local-only setup page for lawyer credentials."""
+    _assert_local_setup_request(request)
+    return HTMLResponse(
+        _local_setup_html(),
+        headers={
+            "Content-Security-Policy": (
+                "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; "
+                "connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
+            ),
+            "Referrer-Policy": "no-referrer",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@app.post("/credentials")
+async def save_local_credentials(request: Request) -> dict[str, str]:
+    """Save CPF/PJe/PIN locally through the local agent's browser page."""
+    _assert_local_setup_request(request)
+    payload = await _credentials_payload_from_request(request)
+    try:
+        configure_local_credentials(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"status": "ok", "message": "Credenciais salvas no agente local."}
+
+
 def _default_pin_resolver() -> str:
     """Resolve the A3 PIN locally at the agent — never sent by the orchestrator.
 
-    Reads ``$JURIS_AGENT_PIN`` (set on the lawyer's machine). A production agent
-    would prompt interactively or read the OS keychain; the security property is
-    that the PIN is resolved *here*, where the token lives.
+    Reads ``$JURIS_AGENT_PIN`` first, then the secure local store populated by
+    ``/setup``. The security property is that the PIN is resolved *here*, where
+    the token lives.
     """
     pin = os.environ.get("JURIS_AGENT_PIN")
+    if not pin:
+        from juris.core.credentials import get_credential
+
+        pin = get_credential("token_pin")
     if not pin:
         msg = "PIN do token não disponível no agente (defina JURIS_AGENT_PIN)."
         raise RuntimeError(msg)
@@ -225,12 +403,20 @@ def handle_sign_request(
 def _default_credentials_resolver() -> tuple[str, str, str]:
     """Resolve the lawyer's PJe credentials + token PIN locally at the agent.
 
-    Reads ``$JURIS_AGENT_CPF`` / ``$JURIS_AGENT_SENHA`` / ``$JURIS_AGENT_PIN`` (set
-    on the lawyer's machine). The orchestrator never sends these — split-trust.
+    Reads env vars first, then the secure local store populated by ``/setup``.
+    The orchestrator never sends these — split-trust.
     """
     cpf = os.environ.get("JURIS_AGENT_CPF")
     senha = os.environ.get("JURIS_AGENT_SENHA")
     pin = os.environ.get("JURIS_AGENT_PIN")
+    if not (cpf and senha and pin):
+        from juris.core.credentials import get_credential
+
+        cpf = cpf or get_credential("agent_cpf")
+        tribunal = os.environ.get("JURIS_AGENT_TRIBUNAL") or get_credential("agent_tribunal") or "tjmg"
+        cpf_key = "".join(ch for ch in cpf if ch.isdigit()) if cpf else ""
+        senha = senha or (get_credential(f"mni_{tribunal}_{cpf_key}") if cpf_key else None)
+        pin = pin or get_credential("token_pin")
     if not (cpf and senha and pin):
         msg = "credenciais do advogado ausentes no agente (JURIS_AGENT_CPF/SENHA/PIN)."
         raise RuntimeError(msg)
