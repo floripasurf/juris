@@ -79,13 +79,18 @@ sudo cloudflared service install                # launchd, sobe no boot
 cloudflared tunnel info juris                   # confirma conector ativo
 ```
 
-## 3. Cloudflare Access (porta da frente)
+## 3. Acesso — auth própria do app (Cloudflare Access foi REMOVIDO)
 
-> **FEITO em 03/07/2026 via API** (token restrito): org/team `blackcube.cloudflareaccess.com`
-> criada, IdP one-time PIN, app self-hosted `Causia — console do piloto`
-> (`436a9177…`) cobrindo `causia.com.br` + `app.causia.com.br` + `juris.blackcube.dev`,
-> policy Allow por e-mail, sessão 24h. ⚠️ Isso deixou a LANDING também atrás do
-> Access — decidir depois: apex público p/ conversão × tudo trancado no piloto.
+> **Decisão (03/07/2026): produto PÚBLICO.** O Cloudflare Access chegou a ser
+> criado via API, mas era incompatível com o modelo do produto: é um portão por
+> cookie de navegador (SSO) e trancava (a) a landing pública de conversão e
+> (b) o login por header `X-API-Key` — `/api/*` com chave válida voltava 302 para
+> o login do Access porque o navegador do cliente não tinha sessão. A app Access
+> `436a9177…` foi **deletada**; o controle de acesso é a **auth própria do app**:
+> fail-closed por tenant (`JURIS_REQUIRE_TENANTS=1`), chave hashada, rate-limit,
+> CSP/headers/HSTS e o WAF/bot-protection da Cloudflare na frente. Landing pública
+> converte; cliente entra com a chave. **Não reative Access nestes hosts** sem antes
+> resolver o conflito (ex.: Access só num host administrativo separado).
 
 No Zero Trust dashboard → **Access → Applications → Add → Self-hosted**:
 
