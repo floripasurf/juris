@@ -209,35 +209,34 @@ def _normalize_tribunal_for_storage(tribunal: str) -> str:
     return normalized
 
 
+def _require_non_blank_secret(value: str, label: str) -> str:
+    if not value or not value.strip():
+        raise ValueError(f"{label} é obrigatório.")
+    return value
+
+
 def configure_local_credentials(payload: AgentCredentialsPayload) -> None:
     """Persist local credentials in the agent's secure local store."""
     from juris.core.credentials import store_credential
 
     cpf = _normalize_cpf_for_storage(payload.cpf)
     tribunal = _normalize_tribunal_for_storage(payload.tribunal)
-    store_credential("agent_cpf", cpf)
+    senha = _require_non_blank_secret(payload.senha, "Senha PJe")
+    pin = _require_non_blank_secret(payload.pin, "PIN do token A3")
     store_credential("agent_tribunal", tribunal)
-    store_credential(f"mni_{tribunal}_{cpf}", payload.senha)
-    store_credential("token_pin", payload.pin)
+    store_credential("agent_cpf", cpf)
+    store_credential(f"mni_{tribunal}_{cpf}", senha)
+    store_credential("token_pin", pin)
     logger.info("agent_credentials_configured", tribunal=tribunal)
 
 
 def local_credentials_configured() -> bool:
     """Report whether the agent can resolve CPF/PJe/PIN locally without exposing them."""
-    cpf = os.environ.get("JURIS_AGENT_CPF")
-    senha = os.environ.get("JURIS_AGENT_SENHA")
-    pin = os.environ.get("JURIS_AGENT_PIN")
-    if cpf and senha and pin:
-        return True
-
-    from juris.core.credentials import get_credential
-
-    cpf = cpf or get_credential("agent_cpf")
-    tribunal = os.environ.get("JURIS_AGENT_TRIBUNAL") or get_credential("agent_tribunal") or "tjmg"
-    cpf_key = "".join(ch for ch in cpf if ch.isdigit()) if cpf else ""
-    senha = senha or (get_credential(f"mni_{tribunal}_{cpf_key}") if cpf_key else None)
-    pin = pin or get_credential("token_pin")
-    return bool(cpf and senha and pin)
+    try:
+        _default_credentials_resolver()
+    except Exception:  # noqa: BLE001 - readiness endpoint must never leak internal credential state
+        return False
+    return True
 
 
 async def _credentials_payload_from_request(request: Request) -> AgentCredentialsPayload:
@@ -426,7 +425,7 @@ def _default_pin_resolver() -> str:
         from juris.core.credentials import get_credential
 
         pin = get_credential("token_pin")
-    if not pin:
+    if not pin or not pin.strip():
         msg = "PIN do token não disponível no agente (defina JURIS_AGENT_PIN)."
         raise RuntimeError(msg)
     return pin
@@ -484,18 +483,22 @@ def _default_credentials_resolver() -> tuple[str, str, str]:
     cpf = os.environ.get("JURIS_AGENT_CPF")
     senha = os.environ.get("JURIS_AGENT_SENHA")
     pin = os.environ.get("JURIS_AGENT_PIN")
-    if not (cpf and senha and pin):
-        from juris.core.credentials import get_credential
+    from juris.core.credentials import get_credential
 
-        cpf = cpf or get_credential("agent_cpf")
-        tribunal = os.environ.get("JURIS_AGENT_TRIBUNAL") or get_credential("agent_tribunal") or "tjmg"
-        cpf_key = "".join(ch for ch in cpf if ch.isdigit()) if cpf else ""
-        senha = senha or (get_credential(f"mni_{tribunal}_{cpf_key}") if cpf_key else None)
-        pin = pin or get_credential("token_pin")
-    if not (cpf and senha and pin):
+    cpf = cpf or get_credential("agent_cpf")
+    tribunal_raw = os.environ.get("JURIS_AGENT_TRIBUNAL") or get_credential("agent_tribunal") or "tjmg"
+    try:
+        cpf_key = _normalize_cpf_for_storage(cpf or "")
+        tribunal = _normalize_tribunal_for_storage(tribunal_raw)
+    except ValueError as exc:
+        raise RuntimeError("credenciais do advogado inválidas no agente.") from exc
+
+    senha = senha or get_credential(f"mni_{tribunal}_{cpf_key}")
+    pin = pin or get_credential("token_pin")
+    if not (cpf_key and senha and senha.strip() and pin and pin.strip()):
         msg = "credenciais do advogado ausentes no agente (JURIS_AGENT_CPF/SENHA/PIN)."
         raise RuntimeError(msg)
-    return cpf, senha, pin
+    return cpf_key, senha, pin
 
 
 def handle_mni_request(

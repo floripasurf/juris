@@ -13,6 +13,8 @@ from juris.mni.parsers.processo import Movimento, ProcessoDomain
 from juris.mni.remote import RemoteMNIReadService
 from juris.mni.tribunais import get_tribunal
 
+_LOCAL_AGENT_CPF = "07671039632"
+
 
 class _EchoTransport:
     """Returns a canned AgentResponse, echoing the request_id; records the request."""
@@ -101,7 +103,7 @@ def test_raises_on_agent_error() -> None:
 class _FakeMNI:
     def consultar_processo(self, numero_cnj, tribunal_cfg, cpf, senha, *, token_pin=None, com_documentos=False):  # noqa: ANN001, ANN201
         # credentials must come from the agent's local resolver, not the wire
-        assert (cpf, senha, token_pin) == ("local-cpf", "local-senha", "local-pin")
+        assert (cpf, senha, token_pin) == (_LOCAL_AGENT_CPF, "local-senha", "local-pin")
         assert tribunal_cfg.id == "tjmg"
         return _processo()
 
@@ -110,7 +112,7 @@ class _FakeMNI:
 
 
 def _creds() -> tuple[str, str, str]:
-    return ("local-cpf", "local-senha", "local-pin")
+    return (_LOCAL_AGENT_CPF, "local-senha", "local-pin")
 
 
 def test_handle_mni_consultar_processo_resolves_creds_locally() -> None:
@@ -293,7 +295,7 @@ def test_ws_mni_round_trip_with_testclient(monkeypatch) -> None:
     from juris.api import local_agent
 
     monkeypatch.setattr(local_agent, "agent_mni_service", lambda: _FakeMNI())
-    monkeypatch.setenv("JURIS_AGENT_CPF", "local-cpf")
+    monkeypatch.setenv("JURIS_AGENT_CPF", _LOCAL_AGENT_CPF)
     monkeypatch.setenv("JURIS_AGENT_SENHA", "local-senha")
     monkeypatch.setenv("JURIS_AGENT_PIN", "local-pin")
     client = TestClient(local_agent.app)

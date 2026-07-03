@@ -169,6 +169,24 @@ def test_local_credentials_are_stored_from_causia_page(monkeypatch) -> None:
     }
 
 
+def test_local_credentials_reject_blank_secrets(monkeypatch) -> None:
+    import juris.core.credentials as credentials
+
+    stored: dict[str, str] = {}
+    monkeypatch.setattr(credentials, "store_credential", lambda key, value: stored.__setitem__(key, value))
+    client = TestClient(app, client=("127.0.0.1", 50000))
+
+    response = client.post(
+        "/credentials",
+        headers={"origin": "https://causia.com.br", "host": "127.0.0.1:8765"},
+        json={"cpf": "076.710.396-32", "senha": "   ", "pin": "1234", "tribunal": "TJMG"},
+    )
+
+    assert response.status_code == 400
+    assert "Senha PJe" in response.json()["detail"]
+    assert stored == {}
+
+
 def test_local_credentials_preflight_allows_private_network_request() -> None:
     client = TestClient(app, client=("127.0.0.1", 50000))
 
@@ -199,6 +217,31 @@ def test_local_credentials_status_reports_readiness_without_secrets(monkeypatch)
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "https://causia.com.br"
     assert response.json() == {"configured": True}
+
+
+def test_local_credentials_status_rejects_incomplete_stored_values(monkeypatch) -> None:
+    import juris.core.credentials as credentials
+
+    values = {
+        "agent_cpf": "07671039632",
+        "agent_tribunal": "tjmg",
+        "mni_tjmg_07671039632": "   ",
+        "token_pin": "1234",
+    }
+    monkeypatch.delenv("JURIS_AGENT_CPF", raising=False)
+    monkeypatch.delenv("JURIS_AGENT_SENHA", raising=False)
+    monkeypatch.delenv("JURIS_AGENT_PIN", raising=False)
+    monkeypatch.delenv("JURIS_AGENT_TRIBUNAL", raising=False)
+    monkeypatch.setattr(credentials, "get_credential", lambda key: values.get(key))
+    client = TestClient(app, client=("127.0.0.1", 50000))
+
+    response = client.get(
+        "/credentials/status",
+        headers={"origin": "https://causia.com.br", "host": "127.0.0.1:8765"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"configured": False}
 
 
 def test_local_credentials_reject_foreign_origin(monkeypatch) -> None:

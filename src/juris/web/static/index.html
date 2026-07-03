@@ -627,6 +627,22 @@
     .connect-bar input { width: auto; flex: 0 1 180px; margin: 0; }
     .connect-bar button { width: auto; flex: 0 0 auto; margin-top: 0; }
     #connect-status { color: var(--muted); font-size: 13px; }
+    .connect-seed {
+      flex-basis: 100%;
+      margin-top: 4px;
+      max-width: 640px;
+    }
+    .connect-seed summary {
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 650;
+    }
+    .connect-seed textarea {
+      min-height: 78px;
+      margin: 8px 0 0;
+      resize: vertical;
+    }
     .field-note { margin: 8px 0 0; color: var(--muted); font-size: 12.5px; }
     .list-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 10px 0 14px; }
     .list-tools input, .list-tools select { width: auto; min-width: 180px; margin: 0; }
@@ -987,7 +1003,12 @@
         <input id="c_cpf" placeholder="CPF do advogado" autocomplete="off" />
         <input id="c_pin" placeholder="PIN do token A3" type="password" autocomplete="off" />
         <button id="connect-btn" type="submit">Conectar / sincronizar</button>
+        <button id="agent-credentials-edit" class="ghost" type="button">Atualizar credenciais</button>
         <span id="connect-status"></span>
+        <details class="connect-seed">
+          <summary>Adicionar processos por número CNJ</summary>
+          <textarea id="c_seed" placeholder="Cole um ou mais números CNJ para acompanhar processos sem aviso pendente."></textarea>
+        </details>
       </form>
       <p id="connect-note" class="field-note">O PIN é usado só para assinar no seu computador e não é armazenado.</p>
       <div class="list-tools">
@@ -1836,11 +1857,10 @@
       }
       throw lastError || new Error("Causia Agent local não respondeu.");
     }
-    async function localAgentCredentialsConfigured() {
+    async function localAgentCredentialsStatus() {
       const response = await fetchLocalAgent("/credentials/status");
       if (!response.ok) throw new Error("Causia Agent local não respondeu.");
-      const data = await response.json();
-      return data.configured === true;
+      return await response.json();
     }
     async function saveAgentCredentialsFromModal() {
       const formData = new FormData(agentCredentialsForm);
@@ -1906,7 +1926,11 @@
     }
     async function ensureLocalCredentials() {
       try {
-        if (await localAgentCredentialsConfigured()) return true;
+        const status = await localAgentCredentialsStatus();
+        if (status.configured === true) {
+          connectStatus.textContent = "Credenciais locais já salvas neste computador. Sincronizando...";
+          return true;
+        }
       } catch (error) {
         throw new Error("Não encontrei o Causia Agent aberto neste computador.");
       }
@@ -2468,11 +2492,24 @@
     const connectForm = document.querySelector("#connect-form");
     const connectBtn = document.querySelector("#connect-btn");
     const connectStatus = document.querySelector("#connect-status");
+    const agentCredentialsEdit = document.querySelector("#agent-credentials-edit");
+    const connectSeed = document.querySelector("#c_seed");
+
+    if (agentCredentialsEdit) {
+      agentCredentialsEdit.addEventListener("click", async () => {
+        connectStatus.textContent = "Atualize CPF, senha PJe e PIN do token neste computador.";
+        const saved = await openAgentCredentialsModal();
+        connectStatus.textContent = saved
+          ? "Credenciais atualizadas. Clique em Conectar / sincronizar para importar."
+          : "Atualização cancelada.";
+      });
+    }
 
     connectForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const cpf = document.querySelector("#c_cpf").value.trim();
       const pin = document.querySelector("#c_pin").value;
+      const seedText = connectSeed ? connectSeed.value.trim() : "";
       // Split-trust: in remote mode the local agent resolves CPF/PIN — the cloud must
       // send neither. Co-located still requires both.
       let body;
@@ -2485,6 +2522,7 @@
         }
         body = { cpf, pin, tribunal: "tjmg", sync: true };
       }
+      if (seedText) body.seed_text = seedText;
       connectBtn.disabled = true;
       connectBtn.textContent = "Conectando…";
       connectStatus.textContent = AGENT_REMOTE
@@ -2528,7 +2566,15 @@
         }
         const d = job.result;
         const sync = d.sync ? `, ${d.sync.succeeded}/${d.sync.total} sincronizados` : "";
-        connectStatus.textContent = `+${d.avisos_added} via avisos, +${d.seed_added} via seed (total ${d.total_tracked})${sync}.`;
+        if (d.total_tracked === 0) {
+          connectStatus.textContent =
+            "Conectado ao agente local, mas nenhum processo foi importado. " +
+            "Não encontramos avisos pendentes e nenhum CNJ foi informado para acompanhar.";
+        } else {
+          connectStatus.textContent =
+            `${d.avisos_added} por avisos, ${d.seed_added} por CNJs informados ` +
+            `(total ${d.total_tracked})${sync}.`;
+        }
         loadProcessos();
         loadPrazos();
         loadWorkbench();

@@ -76,7 +76,14 @@ class TestConversionAndPromise:
         assert 'id="agent-credentials-modal"' in _INDEX_HTML
         assert 'id="agent-credentials-form"' in _INDEX_HTML
         assert 'id="connect-btn"' in _INDEX_HTML
+        assert 'id="agent-credentials-edit"' in _INDEX_HTML
+        assert 'id="c_seed"' in _INDEX_HTML
         assert "Salvar e sincronizar" in _INDEX_HTML
+        assert "Atualizar credenciais" in _INDEX_HTML
+        assert "Adicionar processos por número CNJ" in _INDEX_HTML
+        assert "localAgentCredentialsStatus" in _INDEX_HTML
+        assert "Credenciais locais já salvas neste computador" in _INDEX_HTML
+        assert "por CNJs informados" in _INDEX_HTML
         assert "agent-pairing-button" not in _INDEX_HTML
         assert "agent-credentials-link" not in _INDEX_HTML
         assert "Gerar comando do agente" not in _INDEX_HTML
