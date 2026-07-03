@@ -100,9 +100,11 @@ class TestConversionAndPromise:
 
 
 class TestConsoleOnboarding:
-    def test_workbench_ships_actionable_empty_state(self) -> None:
-        assert "Comece importando seu acervo" in _INDEX_HTML
-        assert "Ir para Acervo" in _INDEX_HTML
+    def test_workbench_ships_two_path_empty_state(self) -> None:
+        # activation: explore agent-free with sample data OR connect the real caseload
+        assert "Explorar com dados de exemplo" in _INDEX_HTML
+        assert "Conectar meu acervo" in _INDEX_HTML
+        assert "exploreWithSampleData" in _INDEX_HTML
 
     def test_empty_state_is_gated_on_all_queues_empty(self) -> None:
         # a function that decides whether the workbench is entirely empty

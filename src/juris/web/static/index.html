@@ -510,6 +510,29 @@
       font-size: 12.5px;
       line-height: 1.6;
     }
+    .preview-toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; margin: -4px 0 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line);
+    }
+    .preview-modes { display: inline-flex; border: 1px solid var(--line-2); border-radius: 5px; overflow: hidden; }
+    .preview-mode {
+      width: auto; margin: 0; border: 0; border-radius: 0; background: var(--panel);
+      color: var(--ink-2); font-size: 12px; font-weight: 500; padding: 5px 12px;
+    }
+    .preview-mode.active { background: var(--brand); color: #fff; }
+    .preview-toolbar .ghost { padding: 5px 12px; font-size: 12.5px; }
+    /* Rendered minuta (Formatado): reads like a document, in the serif face. */
+    .preview-body.md { font-family: var(--serif); font-size: 14.5px; line-height: 1.7; color: var(--ink); }
+    .preview-body.md h1, .preview-body.md h2, .preview-body.md h3, .preview-body.md h4 {
+      font-family: var(--serif); color: var(--ink); margin: 18px 0 8px; line-height: 1.25;
+    }
+    .preview-body.md h1 { font-size: 20px; } .preview-body.md h2 { font-size: 17px; }
+    .preview-body.md h3 { font-size: 15px; } .preview-body.md h4 { font-size: 14px; }
+    .preview-body.md p { margin: 0 0 12px; text-align: justify; }
+    .preview-body.md ul, .preview-body.md ol { margin: 0 0 12px; padding-left: 22px; }
+    .preview-body.md li { margin-bottom: 5px; }
+    .onboarding-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+    .onboarding-actions button { width: auto; margin: 0; }
     .empty { padding: 74px 24px; text-align: center; color: var(--muted); }
     .notice {
       border-radius: 4px;
@@ -1231,6 +1254,10 @@
         </div>
         <label for="fl_draft">Minuta revisada (texto editável)</label>
         <textarea id="fl_draft" style="min-height:180px"></textarea>
+        <div class="list-tools">
+          <button type="button" class="ghost" id="fl_download_docx">Baixar .docx</button>
+          <span id="fl_download_status" class="field-note" hidden></span>
+        </div>
         <label for="fl_prazo_override">Override de prazo</label>
         <input id="fl_prazo_override" autocomplete="off" />
         <div class="checks">
@@ -1708,6 +1735,63 @@
     // Escape untrusted text (LLM output, court/process data) before innerHTML.
     const ESC_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
     const escHtml = (v) => (v == null ? "" : String(v).replace(/[&<>"']/g, (c) => ESC_MAP[c]));
+
+    // Minimal, XSS-safe Markdown → HTML for the minuta preview: escape FIRST,
+    // then apply headings/bold/lists on the escaped text (only <strong>/<h*>/<li>
+    // wrap already-escaped content — no untrusted HTML ever reaches the DOM).
+    function renderMarkdownSafe(md) {
+      const inline = (t) => escHtml(t).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/__(.+?)__/g, "<strong>$1</strong>");
+      const lines = String(md || "").replace(/\r\n/g, "\n").split("\n");
+      const out = [];
+      let list = null;
+      let para = [];
+      const closeList = () => { if (list) { out.push(`</${list}>`); list = null; } };
+      const flushPara = () => { if (para.length) { out.push(`<p>${inline(para.join(" ").trim())}</p>`); para = []; } };
+      for (const line of lines) {
+        const h = line.match(/^(#{1,6})\s+(.*)$/);
+        const ul = line.match(/^\s*[-*]\s+(.*)$/);
+        const ol = line.match(/^\s*\d+[.)]\s+(.*)$/);
+        if (h) { flushPara(); closeList(); const lvl = Math.min(h[1].length, 4); out.push(`<h${lvl}>${inline(h[2])}</h${lvl}>`); }
+        else if (ul) { flushPara(); if (list !== "ul") { closeList(); out.push("<ul>"); list = "ul"; } out.push(`<li>${inline(ul[1])}</li>`); }
+        else if (ol) { flushPara(); if (list !== "ol") { closeList(); out.push("<ol>"); list = "ol"; } out.push(`<li>${inline(ol[1])}</li>`); }
+        else if (!line.trim()) { flushPara(); closeList(); }
+        else para.push(line);
+      }
+      flushPara(); closeList();
+      return out.join("\n");
+    }
+
+    // Download a minuta as .docx (entrega): the lawyer finishes in Word.
+    async function downloadDocx(body, suggestedName, statusEl) {
+      const setStatus = (msg, isError) => {
+        if (!statusEl) return;
+        statusEl.textContent = msg;
+        statusEl.classList.toggle("error", Boolean(isError));
+        statusEl.hidden = false;
+      };
+      try {
+        setStatus("Gerando .docx…", false);
+        const r = await apiFetch("/api/export/docx", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!r.ok) { setStatus("Não foi possível gerar o .docx.", true); return; }
+        const blob = await r.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = suggestedName || "minuta.docx";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+        setStatus("", false);
+        if (statusEl) statusEl.hidden = true;
+      } catch (_) {
+        setStatus("Falha ao baixar o .docx.", true);
+      }
+    }
     const apiErrorMessage = (data, fallback) => {
       if (data && data.detail && data.detail.message) return data.detail.message;
       if (data && typeof data.detail === "string") return data.detail;
@@ -2073,9 +2157,54 @@
       }
 
       artifactsEl.className = "artifact-list";
-      artifactsEl.innerHTML = '<div class="tabs"></div><div class="preview"><pre></pre></div>';
+      artifactsEl.innerHTML = `<div class="tabs"></div>
+        <div class="preview">
+          <div class="preview-toolbar">
+            <div class="preview-modes">
+              <button type="button" class="preview-mode active" data-mode="formatado">Formatado</button>
+              <button type="button" class="preview-mode" data-mode="markdown">Markdown</button>
+            </div>
+            <button type="button" class="ghost" id="artifact-download">Baixar .docx</button>
+          </div>
+          <div class="preview-body md"></div>
+          <p id="artifact-download-status" class="field-note" hidden></p>
+        </div>`;
       const tabs = artifactsEl.querySelector(".tabs");
-      const preview = artifactsEl.querySelector("pre");
+      const body = artifactsEl.querySelector(".preview-body");
+      const dlStatus = artifactsEl.querySelector("#artifact-download-status");
+      let activeArtifact = data.artifacts[0];
+      let mode = "formatado";
+
+      const paint = () => {
+        const text = activeArtifact ? (activeArtifact.preview || "") : "";
+        if (mode === "markdown") {
+          const pre = document.createElement("pre");
+          pre.textContent = text || "(sem prévia)";
+          body.innerHTML = "";
+          body.classList.remove("md");
+          body.appendChild(pre);
+        } else {
+          body.classList.add("md");
+          body.innerHTML = renderMarkdownSafe(text) || "<p class='muted'>(sem prévia)</p>";
+        }
+      };
+
+      artifactsEl.querySelectorAll(".preview-mode").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          mode = btn.dataset.mode;
+          artifactsEl.querySelectorAll(".preview-mode").forEach((b) => b.classList.toggle("active", b === btn));
+          paint();
+        });
+      });
+      artifactsEl.querySelector("#artifact-download").addEventListener("click", () => {
+        if (!activeArtifact) return;
+        const base = (activeArtifact.name || "minuta").replace(/\.[^.]+$/, "");
+        downloadDocx(
+          { output_dir: data.output_dir, name: activeArtifact.name, filename: `${base}.docx` },
+          `${base}.docx`,
+          dlStatus
+        );
+      });
 
       data.artifacts.forEach((artifact, index) => {
         const tab = document.createElement("button");
@@ -2085,11 +2214,12 @@
         tab.addEventListener("click", () => {
           tabs.querySelectorAll(".tab").forEach((item) => item.classList.remove("active"));
           tab.classList.add("active");
-          preview.textContent = artifact.preview || "(sem prévia)";
+          activeArtifact = artifact;
+          paint();
         });
         tabs.appendChild(tab);
-        if (index === 0) preview.textContent = artifact.preview || "(sem prévia)";
       });
+      paint();
     }
 
     const processosEl = document.querySelector("#processos");
@@ -2223,14 +2353,27 @@
       return noItems && neverSynced;
     }
 
+    function exploreWithSampleData() {
+      showView("caso");
+      const source = document.querySelector("#source");
+      if (source) { source.value = "fixture"; source.dispatchEvent(new Event("change")); }
+      const cnj = document.querySelector("#numero_cnj");
+      if (cnj) { cnj.scrollIntoView({ behavior: "smooth", block: "center" }); }
+    }
+
     function renderWorkbenchOnboarding() {
       const box = document.createElement("div");
       box.className = "workbench-onboarding";
       box.innerHTML = `
-        <h2>Comece importando seu acervo</h2>
-        <p>Conecte o agente local para importar seus processos e prazos com segurança —
-           as credenciais ficam no seu computador, não neste navegador.</p>
-        <button type="button" id="onboarding-goto-acervo">Ir para Acervo</button>`;
+        <h2>Comece por aqui</h2>
+        <p>Você pode avaliar o Causia agora com dados de exemplo, sem instalar nada — ou
+           conectar seu acervo real quando quiser. As credenciais do seu token ficam no
+           seu computador, nunca neste navegador.</p>
+        <div class="onboarding-actions">
+          <button type="button" id="onboarding-explore">Explorar com dados de exemplo</button>
+          <button type="button" id="onboarding-goto-acervo" class="ghost">Conectar meu acervo</button>
+        </div>`;
+      box.querySelector("#onboarding-explore").addEventListener("click", exploreWithSampleData);
       box.querySelector("#onboarding-goto-acervo").addEventListener("click", () => showView("acervo"));
       return box;
     }
@@ -3003,6 +3146,18 @@
     filingDryRunBtn.addEventListener("click", () => runFiling("/api/filing/dry-run", filingDryRunBtn));
     filingSubmitBtn.addEventListener("click", () => runFiling("/api/filing/submit", filingSubmitBtn));
     filingLoadArtifactBtn.addEventListener("click", loadSelectedFilingArtifact);
+    document.querySelector("#fl_download_docx").addEventListener("click", () => {
+      const draft = document.querySelector("#fl_draft").value.trim();
+      const status = document.querySelector("#fl_download_status");
+      if (!draft) {
+        status.textContent = "Cole ou carregue uma minuta antes de baixar.";
+        status.classList.add("error");
+        status.hidden = false;
+        return;
+      }
+      const cnj = (document.querySelector("#fl_cnj").value.trim() || "minuta").replace(/[^\w.-]+/g, "-");
+      downloadDocx({ markdown: draft, filename: `${cnj}.docx` }, `${cnj}.docx`, status);
+    });
 
     // Explicit consent gate: "assinar e protocolar" stays disabled until the lawyer
     // confirms human review AND authorizes signing (defense-in-depth over the API 400).

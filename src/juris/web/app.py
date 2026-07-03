@@ -428,6 +428,15 @@ class FilingArtifactPayload(BaseModel):
     artifact_name: str = Field(min_length=1, max_length=128)
 
 
+class ExportDocxPayload(BaseModel):
+    """Minuta to render as .docx — either posted text or a tenant artifact on disk."""
+
+    markdown: str = Field(default="", max_length=_MAX_CORPUS_SOURCE_TEXT)
+    filename: str = Field(default="minuta.docx", max_length=128)
+    output_dir: str = Field(default="", max_length=_MAX_PATH_TEXT)
+    name: str = Field(default="", max_length=128)
+
+
 class PendingRecoveryPayload(BaseModel):
     """One pending filing selected for recovery."""
 
@@ -1296,6 +1305,53 @@ async def get_filing_artifact_content(
         )
     except (FileNotFoundError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _read_tenant_artifact_text(tenant: Tenant, output_dir: str, name: str) -> str:
+    """Read an artifact's text confined to the tenant's output root (anti-traversal)."""
+    from juris.web.auth import tenant_scoped_dir
+
+    if "/" in name or "\\" in name or name in ("", ".", ".."):
+        msg = "nome de artefato inválido."
+        raise ValueError(msg)
+    base = tenant_scoped_dir(tenant, _out_root()).resolve()
+    raw = Path(output_dir)
+    case_dir = (raw if raw.is_absolute() else base / raw).resolve()
+    path = (case_dir / name).resolve()
+    if not case_dir.is_relative_to(base) or not path.is_relative_to(base) or not path.is_file():
+        msg = "artefato fora do diretório de saída permitido."
+        raise ValueError(msg)
+    return path.read_text(encoding="utf-8", errors="replace")
+
+
+@app.post("/api/export/docx")
+async def export_docx(
+    payload: ExportDocxPayload, tenant: Tenant = Depends(current_tenant)
+) -> Response:
+    """Render a minuta (posted text or a tenant artifact) to .docx for editing in Word."""
+    from juris.web.export import markdown_to_docx
+
+    markdown = payload.markdown
+    if not markdown.strip() and payload.output_dir and payload.name:
+        try:
+            markdown = await asyncio.to_thread(
+                _read_tenant_artifact_text, tenant, payload.output_dir, payload.name
+            )
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not markdown.strip():
+        raise HTTPException(status_code=400, detail="Informe a minuta (markdown) ou um artefato.")
+
+    filename = payload.filename.strip() or "minuta.docx"
+    if not filename.endswith(".docx"):
+        filename = f"{filename}.docx"
+    filename = filename.replace('"', "").replace("\\", "").replace("/", "")
+    data = await asyncio.to_thread(markdown_to_docx, markdown, title=filename[:-5])
+    return Response(
+        content=data,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @app.post("/api/filing/pending/recovery")
