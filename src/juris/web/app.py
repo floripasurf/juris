@@ -624,6 +624,25 @@ async def create_access_key(
     }
 
 
+@app.post("/api/agent/pairing", status_code=201)
+async def rotate_agent_pairing_command(
+    request: Request, tenant: Tenant = Depends(current_tenant)
+) -> dict[str, object]:
+    """Rotate and return a one-time relay command for the tenant's local agent."""
+    from juris.web.trial_access import rotate_agent_pairing
+
+    client_host = request.client.host if request.client else "unknown"
+    decision = _api_expensive_rate_limiter().check(f"agent-pairing:{tenant.tenant_id}:{client_host}")
+    if not decision.allowed:
+        raise HTTPException(status_code=429, detail="Muitas tentativas. Tente novamente em instantes.")
+    pairing = await asyncio.to_thread(rotate_agent_pairing, tenant.tenant_id)
+    return {
+        "tenant_id": pairing.tenant_id,
+        "relay_url": pairing.relay_url,
+        "command": pairing.agent_command,
+    }
+
+
 def _serialize_connect(result: Any) -> dict[str, object]:
     return {
         "avisos_added": result.avisos_added,
@@ -647,6 +666,14 @@ def _serialize_connect(result: Any) -> dict[str, object]:
 # in the transient background-task closure, then is GC'd).
 _MAX_CONNECT_JOBS = 200
 _CONNECT_JOB_ERROR = "Falha operacional ao conectar/sincronizar. Verifique agente, token e credenciais locais."
+_CONNECT_AGENT_MISSING = (
+    "Agente local não conectado ao teste. Em Acervo, gere/rode o comando do agente "
+    "no computador onde o token A3 está conectado e tente novamente."
+)
+_CONNECT_AGENT_CREDS_MISSING = (
+    "Agente local conectado, mas sem credenciais locais. Configure CPF, senha PJe "
+    "e PIN do A3 no agente local; esses dados não devem ser enviados ao servidor."
+)
 # Strong refs to in-flight background tasks so the event loop doesn't GC them mid-run.
 _BACKGROUND_TASKS: set[asyncio.Task[None]] = set()
 
@@ -658,6 +685,15 @@ def _connect_job_store() -> ConnectJobStore:
 
 def _connect_job_timeout_seconds() -> int:
     return get_settings().connect_timeout_seconds
+
+
+def _safe_connect_error_message(exc: Exception) -> str:
+    text = str(exc).lower()
+    if "nenhum agente conectado" in text or "reverse-channel" in text:
+        return _CONNECT_AGENT_MISSING
+    if "credenciais do advogado ausentes" in text or "juris_agent_cpf/senha/pin" in text:
+        return _CONNECT_AGENT_CREDS_MISSING
+    return _CONNECT_JOB_ERROR
 
 
 async def _run_connect_job(job_id: str, tribunal_cfg: TribunalConfig, payload: ConnectPayload, tenant: Tenant) -> None:
@@ -698,7 +734,7 @@ async def _run_connect_job(job_id: str, tribunal_cfg: TribunalConfig, payload: C
             error=safe_error_text(exc),
             exception_type=exc.__class__.__name__,
         )
-        store.mark_error(job_id, _CONNECT_JOB_ERROR)
+        store.mark_error(job_id, _safe_connect_error_message(exc))
 
 
 @app.post("/api/connect", status_code=202)

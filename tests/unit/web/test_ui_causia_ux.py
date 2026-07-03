@@ -73,6 +73,8 @@ class TestConversionAndPromise:
 
     def test_agent_pairing_command_is_visible_in_acervo(self) -> None:
         assert 'id="agent-setup"' in _INDEX_HTML
+        assert 'id="agent-pairing-button"' in _INDEX_HTML
+        assert "/api/agent/pairing" in _INDEX_HTML
         assert "parear o agente local" in _INDEX_HTML
 
 

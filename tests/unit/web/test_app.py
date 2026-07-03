@@ -225,6 +225,28 @@ async def test_connect_job_runner_sanitizes_internal_errors(monkeypatch, tmp_pat
     assert logged["exception_type"] == "RuntimeError"
 
 
+def test_connect_job_error_message_guides_missing_relay_agent() -> None:
+    app_module = importlib.import_module("juris.web.app")
+
+    message = app_module._safe_connect_error_message(
+        RuntimeError("nenhum agente conectado para o tenant 'trial_x' (reverse-channel)")
+    )
+
+    assert "Agente local não conectado" in message
+    assert "token=abc" not in message
+
+
+def test_connect_job_error_message_guides_missing_local_credentials() -> None:
+    app_module = importlib.import_module("juris.web.app")
+
+    message = app_module._safe_connect_error_message(
+        RuntimeError("credenciais do advogado ausentes no agente (JURIS_AGENT_CPF/SENHA/PIN).")
+    )
+
+    assert "sem credenciais locais" in message
+    assert "servidor" in message
+
+
 def test_audit_endpoint_returns_chain(monkeypatch) -> None:
     view = {"total": 2, "intact": True, "corrupted": [], "entries": [{"event_type": "draft"}]}
     import juris.web.audit_service as audit_service

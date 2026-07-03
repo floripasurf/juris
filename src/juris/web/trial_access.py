@@ -39,6 +39,20 @@ class IssuedAccessKey:
     expires_at: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class AgentPairing:
+    tenant_id: str
+    agent_token: str
+    relay_url: str
+
+    @property
+    def agent_command(self) -> str:
+        return (
+            f"JURIS_AGENT_TOKEN={self.agent_token} "
+            f"juris agent connect-relay {self.relay_url} --tenant {self.tenant_id}"
+        )
+
+
 def tenants_file_path() -> Path:
     return Path(os.environ.get("JURIS_TENANTS_FILE", "config/tenants.json"))
 
@@ -211,6 +225,28 @@ def issue_access_key(
         api_key=raw_key,
         expires_at=expires_at if isinstance(expires_at, str) else None,
     )
+
+
+def rotate_agent_pairing(
+    tenant_id: str,
+    *,
+    agents_path: Path | None = None,
+) -> AgentPairing:
+    """Rotate the tenant's relay token and return the raw agent command once."""
+    tenant_id = validate_tenant_id(tenant_id)
+    agents_path = agents_path if agents_path is not None else agents_file_path()
+    if agents_path is None:
+        msg = "JURIS_AGENTS_FILE não configurado; não é possível gerar comando do agente."
+        raise RuntimeError(msg)
+    agent_token = secrets.token_urlsafe(32)
+    relay_url = trial_relay_url()
+    with _locked_json(agents_path) as agents:
+        current = agents.get(tenant_id)
+        if isinstance(current, Mapping):
+            relay_url = str(current.get("url") or relay_url)
+        agents[tenant_id] = {"url": relay_url, "token": agent_token, "transport": "relay"}
+    _clear_auth_caches()
+    return AgentPairing(tenant_id=tenant_id, agent_token=agent_token, relay_url=relay_url)
 
 
 def read_tenant_access_summary(tenant_id: str, *, tenants_path: Path | None = None) -> dict[str, object]:

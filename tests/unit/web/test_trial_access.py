@@ -80,3 +80,22 @@ def test_access_key_endpoint_issues_team_key_for_same_tenant(trial_env) -> None:
     summary = client.get("/api/access", headers={"X-API-Key": trial["api_key"]}).json()
     assert summary["trial"] is True
     assert any(item["label"] == "estagiário" for item in summary["keys"])
+
+
+def test_agent_pairing_endpoint_rotates_relay_command(trial_env) -> None:
+    _tenants, agents = trial_env
+    client = TestClient(app)
+    trial = client.post("/api/trial/start").json()
+    before = json.loads(agents.read_text(encoding="utf-8"))[trial["tenant_id"]]["token"]
+
+    response = client.post("/api/agent/pairing", headers={"X-API-Key": trial["api_key"]})
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["tenant_id"] == trial["tenant_id"]
+    assert body["relay_url"] == "wss://app.example/ws/agent-relay"
+    assert "juris agent connect-relay wss://app.example/ws/agent-relay" in body["command"]
+    assert trial["tenant_id"] in body["command"]
+    after = json.loads(agents.read_text(encoding="utf-8"))[trial["tenant_id"]]["token"]
+    assert after != before
+    assert after in body["command"]

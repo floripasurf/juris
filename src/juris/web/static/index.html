@@ -223,6 +223,13 @@
       font-family: var(--mono);
       white-space: nowrap;
     }
+    .agent-tools {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 8px 0 12px;
+    }
+    .agent-tools span { color: var(--muted); font-size: 13px; }
     #landing-login-error {
       grid-column: 1 / -1;
       margin: 0;
@@ -965,6 +972,10 @@
       <h1>Meus processos</h1>
       <p class="lede">Acervo importado do seu token. Conecte para importar e manter atualizado; clique em "minuta" para redigir a partir de um processo.</p>
       <div id="agent-setup" class="notice agent-setup" role="status" aria-live="polite" hidden></div>
+      <div class="agent-tools">
+        <button id="agent-pairing-button" type="button" class="ghost">Gerar comando do agente</button>
+        <span id="agent-pairing-status"></span>
+      </div>
       <form id="connect-form" class="connect-bar">
         <input id="c_cpf" placeholder="CPF do advogado" autocomplete="off" />
         <input id="c_pin" placeholder="PIN do token A3" type="password" autocomplete="off" />
@@ -1303,6 +1314,8 @@
     const startTrialButton = document.querySelector("#start-trial");
     const trialIssued = document.querySelector("#trial-issued");
     const agentSetup = document.querySelector("#agent-setup");
+    const agentPairingButton = document.querySelector("#agent-pairing-button");
+    const agentPairingStatus = document.querySelector("#agent-pairing-status");
     const loginOverlay = document.querySelector("#login-overlay");
     const loginForm = document.querySelector("#login-form");
     const loginInput = document.querySelector("#login-api-key");
@@ -1732,6 +1745,12 @@
       agentSetup.append(p, code);
       agentSetup.hidden = false;
     }
+    function storeAgentSetup(data) {
+      try {
+        sessionStorage.setItem("causiaTrialSetup", JSON.stringify({ agent: { command: data.command } }));
+      } catch (_) { /* private mode */ }
+      renderTrialSetup();
+    }
     function renderAgentHealth(h) {
       const cs = document.querySelector("#connect-status");
       if (!cs || !h || !h.remote) return;
@@ -1754,6 +1773,23 @@
       if (h.token_connected === true) {
         cs.textContent = "Agente remoto pronto: token A3 conectado.";
       }
+    }
+    if (agentPairingButton) {
+      agentPairingButton.addEventListener("click", async () => {
+        agentPairingStatus.textContent = "";
+        setButtonBusy(agentPairingButton, true, "Gerando...");
+        try {
+          const response = await apiFetch("/api/agent/pairing", { method: "POST" });
+          const data = await response.json();
+          if (!response.ok) throw new Error(apiErrorMessage(data, "Falha ao gerar comando do agente"));
+          storeAgentSetup(data);
+          agentPairingStatus.textContent = "Comando gerado. Rode-o no computador com o token A3.";
+        } catch (error) {
+          agentPairingStatus.textContent = error.message;
+        } finally {
+          setButtonBusy(agentPairingButton, false, "");
+        }
+      });
     }
     async function loadAgentMode() {
       try {
