@@ -1,0 +1,8 @@
+/* Causia — fontes self-hosted (privacidade: sem chamada a fonts.gstatic.com; subset latin) */
+@font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:400;font-display:swap;src:url('/static/assets/fonts/ibm-plex-mono-400.woff2') format('woff2');}
+@font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:500;font-display:swap;src:url('/static/assets/fonts/ibm-plex-mono-500.woff2') format('woff2');}
+@font-face{font-family:'IBM Plex Sans';font-style:normal;font-weight:400;font-display:swap;src:url('/static/assets/fonts/ibm-plex-sans-400.woff2') format('woff2');}
+@font-face{font-family:'IBM Plex Sans';font-style:normal;font-weight:500;font-display:swap;src:url('/static/assets/fonts/ibm-plex-sans-500.woff2') format('woff2');}
+@font-face{font-family:'IBM Plex Sans';font-style:normal;font-weight:600;font-display:swap;src:url('/static/assets/fonts/ibm-plex-sans-600.woff2') format('woff2');}
+@font-face{font-family:'Lora';font-style:normal;font-weight:500;font-display:swap;src:url('/static/assets/fonts/lora-500.woff2') format('woff2');}
+@font-face{font-family:'Lora';font-style:normal;font-weight:600;font-display:swap;src:url('/static/assets/fonts/lora-600.woff2') format('woff2');}

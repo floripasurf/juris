@@ -120,6 +120,15 @@ com mensagem de erro.
 
 - Backup desde o dia 1: `docs/deploy/backup-restore.md` (dados reais de processo).
 - Loop noturno/alertas: `com.juris.overnight.plist`.
-- Logs: `/tmp/juris-web.log` e `cloudflared` via `log show --predicate 'process == "cloudflared"' --last 1h`.
+- Logs: `<path>/logs/web.log` (dir **chmod 700**, nunca `/tmp` — pode conter
+  contexto operacional). O access log do uvicorn fica **desligado** (registraria
+  CNJ/termos de busca em texto puro); só habilite com `JURIS_WEB_ACCESS_LOG=1` se
+  precisar depurar, e nunca em produção. `cloudflared` via
+  `log show --predicate 'process == "cloudflared"' --last 1h`.
+- Segurança de borda (automática no app): CSP com hash de script (sem
+  `unsafe-inline`), `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`,
+  `Permissions-Policy` e HSTS em host público HTTPS. Fontes self-hosted
+  (`/static/assets/fonts/`) — nenhuma chamada a Google Fonts. `/api/ai-session`
+  e `/api/agent-mode` exigem chave de tenant.
 - Health por tenant: `/api/health?deep=1` (com a chave) e `/api/admin/health`
   (com `JURIS_ADMIN_TOKEN`, se configurado).

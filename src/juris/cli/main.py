@@ -2792,14 +2792,24 @@ def web(
     reload: bool = typer.Option(False, "--reload", help="Recarregar servidor durante desenvolvimento"),
 ) -> None:
     """Start the local browser UI for the Juris pilot workflow."""
+    import os
+
     import uvicorn
+
+    from juris.core.observability import setup_logging
 
     if host not in {"127.0.0.1", "localhost"}:
         console.print("[red]A interface web local só pode escutar em 127.0.0.1 ou localhost.[/red]")
         raise typer.Exit(code=1)
 
+    # Access logs record the full path+query — for a legal tool that leaks CNJ and
+    # search terms (case-identifying) into a plaintext file. Off by default; the
+    # structured audit log is the intended trail. Opt in with JURIS_WEB_ACCESS_LOG=1.
+    access_log = os.environ.get("JURIS_WEB_ACCESS_LOG", "").strip().lower() in {"1", "true", "yes"}
+    setup_logging(log_level=os.environ.get("JURIS_LOG_LEVEL", "INFO"))
+
     console.print(f"[green]Juris web:[/green] http://{host}:{port}")
-    uvicorn.run("juris.web.app:app", host=host, port=port, reload=reload)
+    uvicorn.run("juris.web.app:app", host=host, port=port, reload=reload, access_log=access_log)
 
 
 # ---------------------------------------------------------------------------

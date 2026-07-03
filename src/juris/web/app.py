@@ -166,7 +166,57 @@ def _is_public_https_host(request: Request) -> bool:
     return _request_host(request) in _PUBLIC_HTTPS_HOSTS
 
 
-def _add_hsts_if_public_https(request: Request, response: Response) -> Response:
+@lru_cache(maxsize=1)
+def _inline_script_hashes() -> tuple[str, ...]:
+    """sha256 of every inline <script> in the SPA, for a CSP that allows *those*
+    exact scripts and nothing else injected — real XSS protection without
+    'unsafe-inline'. Computed from the served file, so it can't drift."""
+    import base64
+    import hashlib
+    import re
+
+    html = _INDEX_PATH.read_text(encoding="utf-8")
+    hashes = []
+    for match in re.finditer(r"<script>(.*?)</script>", html, re.S):
+        digest = hashlib.sha256(match.group(1).encode("utf-8")).digest()
+        hashes.append("'sha256-" + base64.b64encode(digest).decode("ascii") + "'")
+    return tuple(hashes)
+
+
+@lru_cache(maxsize=1)
+def _content_security_policy() -> str:
+    script_src = " ".join(("'self'", *_inline_script_hashes()))
+    return "; ".join(
+        (
+            "default-src 'self'",
+            "base-uri 'self'",
+            "object-src 'none'",
+            "frame-ancestors 'none'",
+            "img-src 'self' data:",
+            # inline style attributes (set by the app's render code) need this;
+            # style injection is far lower-risk than script injection.
+            "style-src 'self' 'unsafe-inline'",
+            "font-src 'self'",
+            f"script-src {script_src}",
+            "connect-src 'self'",
+            "form-action 'self'",
+        )
+    )
+
+
+_STATIC_SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
+}
+
+
+def _add_security_headers(request: Request, response: Response) -> Response:
+    """Attach CSP + hardening headers to every response; HSTS only on public HTTPS."""
+    for name, value in _STATIC_SECURITY_HEADERS.items():
+        response.headers.setdefault(name, value)
+    response.headers.setdefault("Content-Security-Policy", _content_security_policy())
     if _is_public_https_host(request) and _forwarded_proto(request) == "https":
         response.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
     return response
@@ -178,11 +228,11 @@ async def _rate_limit_api(request: Request, call_next: Any) -> Any:
     if _is_public_https_host(request) and _forwarded_proto(request) == "http":
         return RedirectResponse(str(request.url.replace(scheme="https")), status_code=308)
     if not request.url.path.startswith("/api/"):
-        return _add_hsts_if_public_https(request, await call_next(request))
+        return _add_security_headers(request, await call_next(request))
     key = _api_rate_limit_key(request)
     decision = _api_rate_limiter_for_path(request.url.path).check(key)
     if decision.allowed:
-        return _add_hsts_if_public_https(request, await call_next(request))
+        return _add_security_headers(request, await call_next(request))
     response = JSONResponse(
         status_code=429,
         headers={"Retry-After": str(decision.retry_after_seconds)},
@@ -194,7 +244,7 @@ async def _rate_limit_api(request: Request, call_next: Any) -> Any:
             }
         },
     )
-    return _add_hsts_if_public_https(request, response)
+    return _add_security_headers(request, response)
 
 
 def _api_rate_limit_key(request: Request) -> str:
@@ -468,8 +518,12 @@ async def get_admin_health(deep: bool = True, _: None = Depends(require_admin)) 
 
 
 @app.get("/api/ai-session")
-async def get_ai_session() -> dict[str, object]:
-    """Active AI mode + de-id posture, for the operator console badge (ADR-0016/0018)."""
+async def get_ai_session(tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
+    """Active AI mode + de-id posture, for the operator console badge (ADR-0016/0018).
+
+    Tenant-gated: it exposes internal AI/bridge config, so it must not answer to
+    the open internet even though the UI only calls it post-login.
+    """
     from juris.web.ai_status import resolve_ai_session_status
 
     return resolve_ai_session_status()
@@ -675,10 +729,12 @@ async def agent_relay_socket(ws: WebSocket) -> None:
 
 
 @app.get("/api/agent-mode")
-async def get_agent_mode() -> dict[str, object]:
+async def get_agent_mode(tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
     """Tell the UI whether token ops are remote (the local agent resolves secrets) or
     co-located. In remote the connect/new-case forms must hide CPF/PIN and send only
-    {tribunal, sync}; co-located source=mni still needs the CPF (ADR-0015)."""
+    {tribunal, sync}; co-located source=mni still needs the CPF (ADR-0015).
+
+    Tenant-gated: deployment posture is internal detail, not for the open internet."""
     from juris.api.agent_config import agent_mode, is_remote
 
     return {"remote": is_remote(), "mode": agent_mode()}
