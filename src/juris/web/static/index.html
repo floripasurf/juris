@@ -973,7 +973,7 @@
       <p class="lede">Acervo importado do seu token. Conecte para importar e manter atualizado; clique em "minuta" para redigir a partir de um processo.</p>
       <div id="agent-setup" class="notice agent-setup" role="status" aria-live="polite" hidden></div>
       <div class="agent-tools">
-        <button id="agent-pairing-button" type="button" class="ghost">Gerar comando do agente</button>
+        <button id="agent-pairing-button" type="button" class="ghost">Conectar agente local</button>
         <span id="agent-pairing-status"></span>
       </div>
       <form id="connect-form" class="connect-bar">
@@ -1731,7 +1731,7 @@
       } catch (_) {
         data = null;
       }
-      const command = data && data.agent && data.agent.command;
+      const command = data && data.show_agent_command === true && data.agent && data.agent.command;
       if (!command) {
         agentSetup.hidden = true;
         agentSetup.innerHTML = "";
@@ -1739,17 +1739,45 @@
       }
       agentSetup.innerHTML = "";
       const p = document.createElement("p");
-      p.textContent = "No computador onde o token A3 está conectado, rode o comando abaixo para parear o agente local deste teste.";
+      p.textContent = "Opção avançada: se o botão não encontrar o agente local instalado, use este comando técnico no computador com o token A3.";
       const code = document.createElement("code");
       code.textContent = command;
       agentSetup.append(p, code);
       agentSetup.hidden = false;
     }
-    function storeAgentSetup(data) {
+    function clearAgentSetup() {
       try {
-        sessionStorage.setItem("causiaTrialSetup", JSON.stringify({ agent: { command: data.command } }));
+        const data = JSON.parse(sessionStorage.getItem("causiaTrialSetup") || "null");
+        if (data) {
+          data.show_agent_command = false;
+          sessionStorage.setItem("causiaTrialSetup", JSON.stringify(data));
+        }
       } catch (_) { /* private mode */ }
       renderTrialSetup();
+    }
+    function storeAgentSetup(data) {
+      try {
+        sessionStorage.setItem(
+          "causiaTrialSetup",
+          JSON.stringify({ show_agent_command: true, agent: { command: data.command } })
+        );
+      } catch (_) { /* private mode */ }
+      renderTrialSetup();
+    }
+    async function pairLocalAgent(data) {
+      const local = data.local_pairing || (data.agent && data.agent.local_pairing);
+      if (!local || !local.endpoint) return false;
+      const response = await window.fetch(local.endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          relay_url: local.relay_url,
+          tenant_id: local.tenant_id,
+          agent_token: local.agent_token,
+        }),
+      });
+      if (!response.ok) throw new Error("Agente local recusou o pareamento.");
+      return true;
     }
     function renderAgentHealth(h) {
       const cs = document.querySelector("#connect-status");
@@ -1777,15 +1805,20 @@
     if (agentPairingButton) {
       agentPairingButton.addEventListener("click", async () => {
         agentPairingStatus.textContent = "";
-        setButtonBusy(agentPairingButton, true, "Gerando...");
+        setButtonBusy(agentPairingButton, true, "Conectando...");
+        let pairingData = null;
         try {
           const response = await apiFetch("/api/agent/pairing", { method: "POST" });
           const data = await response.json();
-          if (!response.ok) throw new Error(apiErrorMessage(data, "Falha ao gerar comando do agente"));
-          storeAgentSetup(data);
-          agentPairingStatus.textContent = "Comando gerado. Rode-o no computador com o token A3.";
+          if (!response.ok) throw new Error(apiErrorMessage(data, "Falha ao preparar agente local"));
+          pairingData = data;
+          await pairLocalAgent(data);
+          clearAgentSetup();
+          agentPairingStatus.textContent = "Agente local conectado. Agora clique em Conectar / sincronizar.";
         } catch (error) {
-          agentPairingStatus.textContent = error.message;
+          if (pairingData && pairingData.command) storeAgentSetup(pairingData);
+          agentPairingStatus.textContent =
+            "Não encontrei o agente local instalado. Instale ou abra o Causia Agent neste computador; a opção técnica apareceu acima.";
         } finally {
           setButtonBusy(agentPairingButton, false, "");
         }

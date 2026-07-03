@@ -198,7 +198,7 @@ def _content_security_policy() -> str:
             "style-src 'self' 'unsafe-inline'",
             "font-src 'self'",
             f"script-src {script_src}",
-            "connect-src 'self'",
+            "connect-src 'self' http://127.0.0.1:8765",
             "form-action 'self'",
         )
     )
@@ -596,6 +596,12 @@ async def start_trial(request: Request) -> dict[str, object]:
         "agent": {
             "relay_url": trial.relay_url,
             "command": trial.agent_command,
+            "local_pairing": {
+                "endpoint": "http://127.0.0.1:8765/pair-relay",
+                "relay_url": trial.relay_url,
+                "tenant_id": trial.tenant_id,
+                "agent_token": trial.agent_token,
+            },
         },
     }
 
@@ -640,6 +646,12 @@ async def rotate_agent_pairing_command(
         "tenant_id": pairing.tenant_id,
         "relay_url": pairing.relay_url,
         "command": pairing.agent_command,
+        "local_pairing": {
+            "endpoint": "http://127.0.0.1:8765/pair-relay",
+            "relay_url": pairing.relay_url,
+            "tenant_id": pairing.tenant_id,
+            "agent_token": pairing.agent_token,
+        },
     }
 
 

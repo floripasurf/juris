@@ -71,11 +71,15 @@ class TestConversionAndPromise:
         assert 'id="access-key-form"' in _INDEX_HTML
         assert "/api/access-keys" in _INDEX_HTML
 
-    def test_agent_pairing_command_is_visible_in_acervo(self) -> None:
+    def test_agent_pairing_is_browser_first_with_technical_fallback(self) -> None:
         assert 'id="agent-setup"' in _INDEX_HTML
         assert 'id="agent-pairing-button"' in _INDEX_HTML
+        assert "Conectar agente local" in _INDEX_HTML
         assert "/api/agent/pairing" in _INDEX_HTML
-        assert "parear o agente local" in _INDEX_HTML
+        assert "pairLocalAgent" in _INDEX_HTML
+        assert "local.endpoint" in _INDEX_HTML
+        assert "show_agent_command" in _INDEX_HTML
+        assert "comando técnico" in _INDEX_HTML
 
 
 class TestConsoleOnboarding:

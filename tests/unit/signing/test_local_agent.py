@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 import json
+import threading
 from datetime import UTC, date, datetime
 
 import pytest
@@ -52,6 +53,82 @@ def test_health_endpoint():
     assert data["status"] == "ok"
     # Validate against schema
     HealthResponse.model_validate(data)
+
+
+def test_browser_pairing_starts_relay_agent_from_allowed_origin(monkeypatch) -> None:
+    """The Causia web app can pair a running loopback agent without terminal usage."""
+    seen: dict[str, str] = {}
+    called = threading.Event()
+
+    def fake_run_relay_agent(url: str, token: str, tenant_id: str) -> None:
+        seen.update({"url": url, "token": token, "tenant_id": tenant_id})
+        called.set()
+
+    monkeypatch.setattr(local_agent, "run_relay_agent", fake_run_relay_agent)
+    client = TestClient(app, client=("127.0.0.1", 50000))
+
+    response = client.post(
+        "/pair-relay",
+        headers={"origin": "https://causia.com.br", "host": "127.0.0.1:8765"},
+        json={
+            "relay_url": "wss://causia.com.br/ws/agent-relay",
+            "tenant_id": "trial_abc123",
+            "agent_token": "relay-token",
+        },
+    )
+
+    assert response.status_code == 202
+    assert response.headers["access-control-allow-origin"] == "https://causia.com.br"
+    assert called.wait(timeout=1)
+    assert seen == {
+        "url": "wss://causia.com.br/ws/agent-relay",
+        "token": "relay-token",
+        "tenant_id": "trial_abc123",
+    }
+
+
+def test_browser_pairing_preflight_allows_private_network_request() -> None:
+    """Chrome's private-network preflight must pass before the cloud page calls localhost."""
+    client = TestClient(app, client=("127.0.0.1", 50000))
+
+    response = client.options(
+        "/pair-relay",
+        headers={
+            "origin": "https://causia.com.br",
+            "host": "127.0.0.1:8765",
+            "access-control-request-method": "POST",
+            "access-control-request-private-network": "true",
+        },
+    )
+
+    assert response.status_code == 204
+    assert response.headers["access-control-allow-origin"] == "https://causia.com.br"
+    assert response.headers["access-control-allow-private-network"] == "true"
+
+
+def test_browser_pairing_rejects_foreign_origin(monkeypatch) -> None:
+    """A random page open in the browser cannot pair itself with the local agent."""
+    called = False
+
+    def fake_run_relay_agent(url: str, token: str, tenant_id: str) -> None:  # noqa: ARG001
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr(local_agent, "run_relay_agent", fake_run_relay_agent)
+    client = TestClient(app, client=("127.0.0.1", 50000))
+
+    response = client.post(
+        "/pair-relay",
+        headers={"origin": "https://evil.example", "host": "127.0.0.1:8765"},
+        json={
+            "relay_url": "wss://causia.com.br/ws/agent-relay",
+            "tenant_id": "trial_abc123",
+            "agent_token": "relay-token",
+        },
+    )
+
+    assert response.status_code == 403
+    assert called is False
 
 
 def test_handle_sign_request_resolves_pin_locally_and_signs() -> None:

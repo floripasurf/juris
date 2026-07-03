@@ -38,6 +38,9 @@ def test_start_trial_creates_anonymous_30_day_access(trial_env) -> None:
     assert body["api_key"].startswith("causia_")
     assert body["trial_days"] == 30
     assert body["agent"]["relay_url"] == "wss://app.example/ws/agent-relay"
+    assert body["agent"]["local_pairing"]["endpoint"] == "http://127.0.0.1:8765/pair-relay"
+    assert body["agent"]["local_pairing"]["tenant_id"] == body["tenant_id"]
+    assert body["agent"]["local_pairing"]["agent_token"]
     assert body["tenant_id"] in body["agent"]["command"]
     assert body["api_key"] not in tenants.read_text(encoding="utf-8")
 
@@ -94,6 +97,8 @@ def test_agent_pairing_endpoint_rotates_relay_command(trial_env) -> None:
     body = response.json()
     assert body["tenant_id"] == trial["tenant_id"]
     assert body["relay_url"] == "wss://app.example/ws/agent-relay"
+    assert body["local_pairing"]["endpoint"] == "http://127.0.0.1:8765/pair-relay"
+    assert body["local_pairing"]["tenant_id"] == trial["tenant_id"]
     assert "juris agent connect-relay wss://app.example/ws/agent-relay" in body["command"]
     assert trial["tenant_id"] in body["command"]
     after = json.loads(agents.read_text(encoding="utf-8"))[trial["tenant_id"]]["token"]

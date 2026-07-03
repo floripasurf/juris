@@ -14,13 +14,15 @@ from __future__ import annotations
 import base64
 import os
 import secrets
+import threading
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from datetime import date
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel, Field
 
 from juris.api.ws_schemas import AgentRequest, AgentResponse, HealthResponse, SignRequest, SignResponse
 from juris.core.observability import get_logger
@@ -35,6 +37,12 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 _LOCAL_AGENT_HOST = "127.0.0.1"
+_BROWSER_PAIRING_ORIGINS = {
+    "https://causia.com.br",
+    "https://app.causia.com.br",
+    "http://127.0.0.1:8000",
+    "http://localhost:8000",
+}
 _SIGN_ERROR = "Falha ao assinar no agente local. Verifique token e PIN no agente."
 _MNI_ERROR = "Falha ao consultar MNI no agente local. Verifique credenciais, token e tribunal."
 _INVALID_REQUEST_ERROR = "Requisição inválida para o agente local."
@@ -64,6 +72,15 @@ app = FastAPI(
     version="0.1.0",
     description="Lawyer-side local agent — signing + token management",
 )
+_RELAY_THREADS: dict[str, threading.Thread] = {}
+
+
+class RelayPairingPayload(BaseModel):
+    """Browser -> local-agent pairing payload. Token stays on loopback."""
+
+    relay_url: str = Field(min_length=1)
+    tenant_id: str = Field(min_length=1)
+    agent_token: str = Field(min_length=1)
 
 
 def get_signing_token() -> str:
@@ -83,6 +100,69 @@ def agent_mni_service() -> MNIReadService:
     from juris.mni.service import InProcessMNIReadService
 
     return InProcessMNIReadService()
+
+
+def _cors_headers(origin: str | None) -> dict[str, str]:
+    if origin not in _BROWSER_PAIRING_ORIGINS:
+        return {}
+    return {
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "content-type",
+        "Access-Control-Allow-Private-Network": "true",
+        "Vary": "Origin",
+    }
+
+
+def _assert_browser_pairing_request(request: Request) -> str | None:
+    host = request.headers.get("host", "").split(":")[0]
+    client_host = request.client.host if request.client else ""
+    if host not in _LOOPBACK_HOSTS or client_host not in _LOOPBACK_HOSTS:
+        raise HTTPException(status_code=403, detail="agent pairing apenas por loopback")
+    origin = request.headers.get("origin")
+    if origin is not None and origin not in _BROWSER_PAIRING_ORIGINS:
+        raise HTTPException(status_code=403, detail="origem não autorizada para pareamento do agente")
+    return origin
+
+
+def _start_relay_pairing(payload: RelayPairingPayload) -> None:
+    from juris.web.auth import validate_tenant_id
+
+    tenant_id = validate_tenant_id(payload.tenant_id)
+
+    def _run() -> None:
+        try:
+            run_relay_agent(payload.relay_url, payload.agent_token, tenant_id)
+        except Exception as exc:  # noqa: BLE001 - local background task logs only sanitized detail
+            logger.warning(
+                "agent_relay_pairing_stopped",
+                tenant_id=tenant_id,
+                error=safe_error_text(exc),
+                exception_type=exc.__class__.__name__,
+            )
+
+    thread = threading.Thread(target=_run, name=f"causia-relay-{tenant_id}", daemon=True)
+    _RELAY_THREADS[tenant_id] = thread
+    thread.start()
+
+
+@app.options("/pair-relay")
+async def pair_relay_options(request: Request) -> Response:
+    origin = _assert_browser_pairing_request(request)
+    return Response(status_code=204, headers=_cors_headers(origin))
+
+
+@app.post("/pair-relay", status_code=202)
+async def pair_relay_from_browser(payload: RelayPairingPayload, request: Request) -> Response:
+    """Pair this local agent with a Causia trial without requiring terminal usage.
+
+    The public web page obtains a one-time relay token from the orchestrator and
+    posts it to this loopback endpoint. The token never goes in a URL and the
+    local agent then dials out to the cloud relay.
+    """
+    origin = _assert_browser_pairing_request(request)
+    _start_relay_pairing(payload)
+    return Response(status_code=202, headers=_cors_headers(origin))
 
 
 def _default_pin_resolver() -> str:
