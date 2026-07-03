@@ -89,7 +89,7 @@ class TestSpaLoginGate:
         assert 'id="landing"' in _INDEX_HTML
         assert 'id="landing-login-form"' in _INDEX_HTML
         assert 'id="landing-api-key"' in _INDEX_HTML
-        assert "Teste gratuito por 30 dias" in _INDEX_HTML
+        assert "sem criar conta no produto" in _INDEX_HTML
         assert "Não guardamos seus dados nem os dados dos seus processos" in _INDEX_HTML
 
     def test_console_is_hidden_until_key_exists(self) -> None:

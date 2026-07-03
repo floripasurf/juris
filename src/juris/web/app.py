@@ -1300,6 +1300,20 @@ async def static_asset(asset_path: str) -> FileResponse:
     return FileResponse(asset)
 
 
+_PUBLIC_PAGES = {"termos", "privacidade"}
+
+
+@app.api_route("/static/{page}.html", methods=["GET", "HEAD"])
+async def public_page(page: str) -> FileResponse:
+    """Serve the public legal pages (termos/privacidade) — allowlisted, open."""
+    if page not in _PUBLIC_PAGES:
+        raise HTTPException(status_code=404, detail="Page not found.")
+    path = _STATIC_DIR / f"{page}.html"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Page not found.")
+    return FileResponse(path)
+
+
 @app.post("/api/demo-runs")
 async def create_demo_run(payload: DemoRunPayload, tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
     """Run the demo pipeline from a browser request."""

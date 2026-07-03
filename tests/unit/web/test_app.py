@@ -50,7 +50,7 @@ def test_index_renders_local_ui() -> None:
     assert 'data-nav="protocolo"' in response.text
     assert "renderWorkbench" in response.text
     assert "renderSyncStatus" in response.text
-    assert "Nightly sem execução registrada" in response.text
+    assert "Atualização automática ainda não executada" in response.text
     assert "/api/workbench" in response.text
     assert "Prazos críticos" in response.text
     assert "runMeta" in response.text
@@ -63,7 +63,7 @@ def test_index_renders_local_ui() -> None:
     assert "filteredPrazos" in response.text
     assert "persistFilter" in response.text  # filters persist across reloads (localStorage)
     assert "juris.filter.processos" in response.text
-    assert "Piloto instrumentado" in response.text
+    assert "Registro do piloto" in response.text  # internal telemetry section still ships
     assert "pilot-form" in response.text
     assert "/api/pilot-feedback" in response.text
     assert "/api/pilot-feedback/summary" in response.text
