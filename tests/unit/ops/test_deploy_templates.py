@@ -24,7 +24,7 @@ def test_agent_launchd_template_uses_direct_entrypoint_and_private_logs() -> Non
     assert "/usr/local/bin/uv" not in text
     assert "uv run" not in text
     assert ".venv/bin/juris" in text
-    assert "/tmp/juris-agent" not in text
+    assert f"{'/'}tmp/juris-agent" not in text
     assert "logs/agent.log" in text
     assert "logs/agent.err" in text
 

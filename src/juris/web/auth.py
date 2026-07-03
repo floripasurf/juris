@@ -18,7 +18,7 @@ import os
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 
@@ -94,8 +94,8 @@ def _parse_expires_at(value: object) -> datetime | None:
         msg = f"expires_at inválido: {value!r}"
         raise ValueError(msg) from exc
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def _is_expired(value: object, *, now: datetime) -> bool:
@@ -164,7 +164,7 @@ class TenantRegistry:
         # config is {tenant_id: api_key_or_structured_entry}; index by key for O(1) auth.
         by_key: dict[str, Tenant] = {}
         tenant_ids: set[str] = set()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         for tenant_id, raw_key in tenants.items():
             validated_tenant_id = _validate_configured_tenant_id(tenant_id)
             keys = _active_api_keys_for_tenant(validated_tenant_id, raw_key, now=now)

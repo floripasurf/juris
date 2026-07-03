@@ -76,7 +76,9 @@ class RelaySignTransport:
             raise RuntimeError(msg)
         if not response.success:
             return SignResponse(request_id=request.request_id, success=False, error=response.error)
-        return SignResponse.model_validate({"request_id": request.request_id, "success": True, **(response.payload or {})})
+        return SignResponse.model_validate(
+            {"request_id": request.request_id, "success": True, **(response.payload or {})}
+        )
 
 
 class RemoteSigningService(SigningService):

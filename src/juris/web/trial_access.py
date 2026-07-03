@@ -8,7 +8,7 @@ import secrets
 from collections.abc import Iterator, MutableMapping
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from juris.web.auth import hash_api_key, validate_tenant_id
@@ -61,11 +61,11 @@ def trial_relay_url() -> str:
 
 
 def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _iso(dt: datetime) -> str:
-    return dt.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return dt.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def _load_json_object(path: Path) -> dict[str, object]:
