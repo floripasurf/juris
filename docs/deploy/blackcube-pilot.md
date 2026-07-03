@@ -20,10 +20,24 @@ LGPD em `docs/compliance/` (DPA/ROPA/RIPD).
 
 ## 0. Go-live — migração MacBook → Mac Mini (turnkey)
 
-> **Contexto (03/07/2026):** a produção rodou até aqui no MacBook (validação —
-> dorme, muda de rede). O piloto real precisa de host always-on → migrar para o
-> **Mac Mini**. O script `scripts/golive_mac_mini.sh` automatiza a parte
-> determinística; os passos de máquina/token ficam guiados abaixo.
+> **FEITO (03/07/2026, via Tailscale ssh `raphaels-mac-mini` 100.77.76.64).**
+> causia.com.br agora roda no **Mac Mini** (always-on). Detalhes reais da execução:
+> - O Mac Mini é host compartilhado (finep/credito/leite/secont/escora via tunnels
+>   próprios) — **porta 8000 já ocupada** pelo transparencia-es, então Causia usa
+>   **porta 8100**.
+> - Serviços launchd (padrão `com.<app>.*` do Mac Mini): **`com.causia.web`**
+>   (8100, prod, `~/juris-pilot/`) e **`com.causia.tunnel`** (tunnel `juris`
+>   49e67dad via `~/.cloudflared/config.causia.yml` → 8100). RunAtLoad+KeepAlive.
+> - Dados migrados por rsync/Tailscale: `tenants.json`, `.hmac_key`, `home/`
+>   (repertory.db com 1761 chunks do corpus TST, tenant dbs, audit). Sem
+>   `agents.json` (agente A3 ainda não pareado — modo co-localizado até a §7).
+> - Cutover: parado `com.cloudflare.juris` + `com.juris.web` no MacBook; conector
+>   do Mac Mini reconectou limpo (4 conexões). Outros apps do Mac Mini intactos.
+> - **Pendente:** parear o agente A3 no Mac Mini (§7) — precisa do token físico
+>   plugado lá. Até então, use o caminho agent-free (§6).
+>
+> O texto abaixo é o procedimento genérico (para repetir/entender), com o script
+> `scripts/golive_mac_mini.sh` automatizando a parte determinística.
 
 **No Mac Mini**, com o layout `~/juris-pilot/` (mesma convenção do
 `doctor_juris_pilot.sh`):
