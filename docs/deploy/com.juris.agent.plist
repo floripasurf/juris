@@ -4,7 +4,7 @@
   launchd template for the juris local agent (the token holder, ADR-0015).
   Runs `juris agent serve` (loopback-only) at login. Copy to
   ~/Library/LaunchAgents/com.juris.agent.plist, fill in the REPLACE_* values,
-  then: launchctl load ~/Library/LaunchAgents/com.juris.agent.plist
+  then: launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.juris.agent.plist
   Secrets live here on the LAWYER's machine — never on the orchestrator.
 -->
 <plist version="1.0">
@@ -14,9 +14,8 @@
 
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/local/bin/uv</string>
-    <string>run</string>
-    <string>juris</string>
+    <!-- Use the venv entrypoint directly; launchd wrappers can hang silently. -->
+    <string>REPLACE_WITH_PATH_TO/juris/.venv/bin/juris</string>
     <string>agent</string>
     <string>serve</string>
     <string>--host</string>
@@ -30,16 +29,17 @@
 
   <key>EnvironmentVariables</key>
   <dict>
-    <!-- pairing: same value as JURIS_LOCAL_AGENT_TOKEN on the orchestrator -->
+    <!-- pairing: same value as the tenant token in JURIS_AGENTS_FILE -->
     <key>JURIS_AGENT_TOKEN</key>
     <string>REPLACE_WITH_PAIRING_TOKEN</string>
-    <!-- the lawyer's own secrets — resolved here, never sent to the cloud -->
+    <!-- Optional on the lawyer's machine only. If omitted, token operations fail
+         closed until the local environment/keychain supplies the values. -->
     <key>JURIS_AGENT_CPF</key>
-    <string>REPLACE</string>
+    <string>REPLACE_OPTIONAL_LAWYER_CPF</string>
     <key>JURIS_AGENT_SENHA</key>
-    <string>REPLACE</string>
+    <string>REPLACE_OPTIONAL_PJE_PASSWORD</string>
     <key>JURIS_AGENT_PIN</key>
-    <string>REPLACE</string>
+    <string>REPLACE_OPTIONAL_A3_PIN</string>
     <!-- path to the A3 token's PKCS#11 module -->
     <key>JURIS_PKCS11_MODULE</key>
     <string>/Library/Frameworks/eToken.framework/Versions/A/libeToken.dylib</string>
@@ -50,9 +50,10 @@
   <key>KeepAlive</key>
   <true/>
 
+  <!-- Owner-only log dir (chmod 700); NOT /tmp (world-readable). -->
   <key>StandardOutPath</key>
-  <string>/tmp/juris-agent.log</string>
+  <string>REPLACE_WITH_PATH_TO/logs/agent.log</string>
   <key>StandardErrorPath</key>
-  <string>/tmp/juris-agent.err</string>
+  <string>REPLACE_WITH_PATH_TO/logs/agent.err</string>
 </dict>
 </plist>

@@ -8,7 +8,7 @@ import json
 import pytest
 
 from juris.api.relay import MemoryRelayBroker, RelayHub
-from juris.api.ws_schemas import AgentRequest, AgentResponse
+from juris.api.ws_schemas import AgentRequest, AgentResponse, SignResponse
 
 
 def test_relay_token_rejects_shared_fallback_for_nondefault_tenant(monkeypatch) -> None:
@@ -305,6 +305,56 @@ async def test_dispatch_routes_mni_operation(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_dispatch_routes_health_operation(monkeypatch) -> None:
+    """A relayed health request returns token readiness from the local agent."""
+    from juris.api import local_agent
+
+    monkeypatch.setattr(
+        local_agent,
+        "agent_health",
+        lambda: local_agent.HealthResponse(status="ok", token_connected=True, version="test"),
+    )
+
+    req = AgentRequest(request_id="r1", tenant_id="t", operation="health", payload={})
+    resp = await local_agent.dispatch_agent_request(req)
+
+    assert resp.success is True
+    assert resp.payload and resp.payload["token_connected"] is True
+
+
+@pytest.mark.asyncio
+async def test_dispatch_routes_sign_operation(monkeypatch) -> None:
+    """A relayed sign request is converted back to an AgentResponse envelope."""
+    from juris.api import local_agent
+
+    def fake_handle_sign(request, service, **kwargs):
+        return SignResponse(
+            request_id=request.request_id,
+            success=True,
+            signed_pdf_b64="cGRm",
+            signer_name="Advogada",
+            signer_cpf="00000000000",
+            signed_pdf_hash="abc",
+            signed_at="2026-01-01T00:00:00Z",
+            cert_valid_until="2027-01-01",
+        )
+
+    monkeypatch.setattr(local_agent, "handle_sign_request", fake_handle_sign)
+    monkeypatch.setattr(local_agent, "agent_signer", lambda: object())
+
+    req = AgentRequest(
+        request_id="r1",
+        tenant_id="t",
+        operation="sign",
+        payload={"pdf_bytes_b64": "cGRm", "field_name": "AdvogadoSignature"},
+    )
+    resp = await local_agent.dispatch_agent_request(req)
+
+    assert resp.success is True
+    assert resp.payload and resp.payload["signed_pdf_b64"] == "cGRm"
+
+
+@pytest.mark.asyncio
 async def test_dispatch_rejects_unknown_operation() -> None:
     from juris.api import local_agent
 
@@ -381,6 +431,26 @@ async def test_relay_send_fails_closed_under_multiworker(monkeypatch) -> None:
     # Fail LOUDLY (protect MNI/filing) instead of silently misrouting to a stale worker.
     with pytest.raises(RuntimeError, match="múltiplos workers"):
         await hub.send("t", req, timeout=1)
+
+
+@pytest.mark.asyncio
+async def test_relay_send_sync_from_worker_thread_uses_registered_loop(monkeypatch) -> None:
+    monkeypatch.delenv("WEB_CONCURRENCY", raising=False)
+    monkeypatch.delenv("JURIS_WEB_WORKERS", raising=False)
+    hub = RelayHub()
+    sent: list[dict[str, object]] = []
+
+    async def fake_send(payload: str) -> None:
+        sent.append(json.loads(payload))
+        hub.resolve("t", AgentResponse(request_id="r", success=True, payload={"ok": True}))
+
+    hub.register("t", fake_send)
+    req = AgentRequest(request_id="r", tenant_id="spoofed", operation="mni", payload={})
+
+    response = await asyncio.to_thread(hub.send_sync, "t", req, timeout=5)
+
+    assert response.payload == {"ok": True}
+    assert sent[0]["tenant_id"] == "t"
 
 
 def test_reverse_channel_scaling_ok_allows_asserted_sticky_sessions(monkeypatch) -> None:

@@ -45,14 +45,22 @@ Serviço launchd (web em **8000**; o agente local usa 8765):
 ```bash
 cp docs/deploy/com.juris.web.plist ~/Library/LaunchAgents/
 # editar: WorkingDirectory, JURIS_TENANTS_FILE, JURIS_HOME, JURIS_AUDIT_HMAC_KEY,
-#         JURIS_LOCAL_AGENT_TOKEN (pareado com com.juris.agent.plist)
-launchctl load ~/Library/LaunchAgents/com.juris.web.plist
+#         JURIS_AGENTS_FILE (um binding por tenant)
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.juris.web.plist
 curl -s http://127.0.0.1:8000/api/health | head -c 200   # sanity local
 ```
 
-Piloto co-localizado (Fase 1, ADR-0015): o agente com o token A3 roda **neste
-mesmo Mac Mini** via `com.juris.agent.plist` (ver `agent-install.md`). O
-orquestrador fala com ele por `ws://127.0.0.1:8765` — nada disso passa pelo tunnel.
+Piloto split-trust co-localizado (ADR-0015): o agente com o token A3 roda **neste
+mesmo Mac Mini** via `com.juris.agent.plist` (ver `agent-install.md`), mas o
+orquestrador continua em `JURIS_AGENT_MODE=remote`. Com
+`JURIS_REQUIRE_TENANTS=1`, configure `/path/agents.json` em vez do fallback global:
+
+```json
+{"escritorio-piloto":{"url":"ws://127.0.0.1:8765","token":"<token pareado>"}}
+```
+
+`chmod 600 /path/agents.json`. Assim a UI não pede CPF/PIN/senha no navegador; o
+agente resolve tudo localmente e o tunnel publica apenas o console web.
 
 ## 2. Cloudflare Tunnel
 
@@ -99,10 +107,10 @@ No Zero Trust dashboard → **Access → Applications → Add → Self-hosted**:
 - Session duration: 24h
 
 Enquanto a única credencial da aplicação é a API key, o Access garante que a
-superfície pública nem chega a estranhos. **Pitfall (Fase 2):** quando um agente
-remoto na máquina do advogado for conectar em `wss://juris.blackcube.dev/ws/agent-relay`,
-ele não passa pelo login de browser do Access — criar um **service token** e uma
-policy própria para o path `/ws/agent-relay` antes de sair do co-localizado.
+superfície pública nem chega a estranhos. Para o fluxo SaaS/trial anônimo, o
+agente remoto conecta em `wss://causia.com.br/ws/agent-relay`; se Cloudflare
+Access voltar a proteger esse path, crie um **service token** ou uma policy
+própria para `/ws/agent-relay`, porque o agente não passa por login de browser.
 
 ## 4. Smoke de go-live
 

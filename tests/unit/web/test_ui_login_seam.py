@@ -57,10 +57,10 @@ class TestBackendContract:
 
     def test_landing_asset_is_served(self, required_tenant) -> None:
         client = TestClient(app)
-        response = client.get("/static/assets/causia-hero-legal-desk.jpg")
+        response = client.get("/static/assets/causia-hero-legal-desk-v2.jpg")
         assert response.status_code == 200
         assert response.headers["content-type"].startswith("image/jpeg")
-        assert client.head("/static/assets/causia-hero-legal-desk.jpg").status_code == 200
+        assert client.head("/static/assets/causia-hero-legal-desk-v2.jpg").status_code == 200
 
     def test_public_http_host_redirects_to_https(self, required_tenant) -> None:
         client = TestClient(app)
@@ -89,7 +89,7 @@ class TestSpaLoginGate:
         assert 'id="landing"' in _INDEX_HTML
         assert 'id="landing-login-form"' in _INDEX_HTML
         assert 'id="landing-api-key"' in _INDEX_HTML
-        assert "sem criar conta no produto" in _INDEX_HTML
+        assert "sem informar nome, e-mail ou escritório" in _INDEX_HTML
         assert "Não guardamos seus dados nem os dados dos seus processos" in _INDEX_HTML
 
     def test_console_is_hidden_until_key_exists(self) -> None:

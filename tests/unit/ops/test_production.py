@@ -57,6 +57,9 @@ def test_full_inprocess_prod_config_passes(tmp_path) -> None:
     checks = check_production_readiness(env=env)
     errors = [c for c in checks if c.severity == "error" and not c.ok]
     assert errors == [], f"unexpected errors: {[(c.name, c.detail) for c in errors]}"
+    agent_mode = _by_name(checks)["agent_mode"]
+    assert agent_mode.ok is False
+    assert agent_mode.severity == "warn"
 
 
 def test_plaintext_api_key_is_flagged(tmp_path) -> None:

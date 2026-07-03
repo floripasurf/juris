@@ -16,7 +16,7 @@ import base64
 import uuid
 from typing import TYPE_CHECKING, Protocol
 
-from juris.api.ws_schemas import SignRequest, SignResponse
+from juris.api.ws_schemas import AgentRequest, SignRequest, SignResponse
 from juris.signing.pades import SigningResult, _sha256_hex
 from juris.signing.service import SigningService
 
@@ -52,6 +52,31 @@ class WebSocketSignTransport:
             ws.send(request.model_dump_json())
             raw = ws.recv(timeout=self._timeout)
         return SignResponse.model_validate_json(raw)
+
+
+class RelaySignTransport:
+    """Sync signing transport through the reverse-channel relay."""
+
+    def __init__(self, tenant_id: str, *, timeout: float = 30.0) -> None:
+        self._tenant_id = tenant_id
+        self._timeout = timeout
+
+    def send(self, request: SignRequest) -> SignResponse:
+        from juris.api.relay import get_relay_hub
+
+        agent_request = AgentRequest(
+            request_id=request.request_id,
+            tenant_id=self._tenant_id,
+            operation="sign",
+            payload=request.model_dump(mode="json", exclude={"request_id", "tenant_id"}),
+        )
+        response = get_relay_hub().send_sync(self._tenant_id, agent_request, timeout=self._timeout)
+        if response.request_id != request.request_id:
+            msg = "resposta de assinatura via relay não correlaciona com o pedido"
+            raise RuntimeError(msg)
+        if not response.success:
+            return SignResponse(request_id=request.request_id, success=False, error=response.error)
+        return SignResponse.model_validate({"request_id": request.request_id, "success": True, **(response.payload or {})})
 
 
 class RemoteSigningService(SigningService):

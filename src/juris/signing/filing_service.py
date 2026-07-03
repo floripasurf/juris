@@ -132,10 +132,14 @@ def get_filing_service(tenant_id: str = "public", *, storage_root: Path | None =
     from juris.api.agent_config import is_remote, tenant_agent_binding
 
     if is_remote():
-        from juris.mni.remote import WebSocketAgentTransport  # same /ws transport, /ws/file
+        from juris.mni.remote import RelayAgentTransport, WebSocketAgentTransport  # same /ws transport, /ws/file
 
         binding = tenant_agent_binding(tenant_id)  # routes to THIS firm's agent
-        transport = WebSocketAgentTransport(binding.base_url + "/ws/file", token=binding.token)
+        transport = (
+            RelayAgentTransport(tenant_id)
+            if binding.transport == "relay"
+            else WebSocketAgentTransport(binding.base_url + "/ws/file", token=binding.token)
+        )
         return RemoteFilingService(transport, tenant_id=tenant_id)
 
     return InProcessFilingService(storage_root=storage_root)

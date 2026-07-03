@@ -38,7 +38,7 @@ def _is_group_or_world_accessible(path: Path) -> bool:
     return bool(mode & 0o077)
 
 
-def _load_tenant_keys(path: Path) -> dict[str, str]:
+def _load_tenant_keys(path: Path) -> dict[str, object]:
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         msg = "JURIS_TENANTS_FILE deve conter um objeto JSON {tenant_id: api_key}."
@@ -70,7 +70,8 @@ def check_production_readiness(env: Mapping[str, str] | None = None) -> list[Che
     # 2. Tenants file present + non-empty (real registry, not open).
     tenants_path_str = env.get("JURIS_TENANTS_FILE")
     tenants_path = Path(tenants_path_str) if tenants_path_str else None
-    tenant_keys: dict[str, str] = {}
+    tenant_keys: dict[str, object] = {}
+    active_tenant_ids: tuple[str, ...] = ()
     if tenants_path is None:
         checks.append(Check("tenants_file", False, "JURIS_TENANTS_FILE não definido"))
     elif not tenants_path.exists():
@@ -90,7 +91,7 @@ def check_production_readiness(env: Mapping[str, str] | None = None) -> list[Che
     #    (well-formed sha256, no duplicate keys, no reserved ids). Doctor must not accept
     #    a weaker model than TenantRegistry — a garbage hash / dup key would boot-crash.
     if tenant_keys:
-        plaintext = [tid for tid, key in tenant_keys.items() if not str(key).startswith("sha256:")]
+        plaintext = _plaintext_key_entries(tenant_keys)
         if plaintext:
             checks.append(
                 Check("hashed_keys", False, f"chaves em texto puro: {', '.join(plaintext)} — use hash-key")
@@ -99,10 +100,11 @@ def check_production_readiness(env: Mapping[str, str] | None = None) -> list[Che
             try:
                 from juris.web.auth import TenantRegistry
 
-                TenantRegistry(tenant_keys)
+                registry = TenantRegistry(tenant_keys)
             except (ValueError, TypeError) as exc:
                 checks.append(Check("hashed_keys", False, f"registro de tenants inválido: {exc}"))
             else:
+                active_tenant_ids = registry.tenant_ids
                 checks.append(Check("hashed_keys", True, "chaves hashadas e válidas (sha256:)"))
 
     # 4. Secrets files are owner-only (0600) — world/group-readable secrets BLOCK.
@@ -117,14 +119,19 @@ def check_production_readiness(env: Mapping[str, str] | None = None) -> list[Che
                 )
             )
 
-    # 5. Remote agent mode: every tenant must have its own binding (no silent global fallback).
-    if env.get("JURIS_AGENT_MODE", "inprocess").strip().lower() == "remote":
-        checks.extend(_check_remote_bindings(env, tenant_keys))
+    # 5. Agent posture: remote is the hosted-pilot target; in-process stays possible
+    # for a truly co-located/local install, but doctor should make that explicit.
+    agent_mode = env.get("JURIS_AGENT_MODE", "inprocess").strip().lower()
+    checks.append(_check_agent_mode_posture(agent_mode, require))
 
-    # 6. Storage root is private.
+    # 6. Remote agent mode: every tenant must have its own binding (no silent global fallback).
+    if agent_mode == "remote":
+        checks.extend(_check_remote_bindings(env, active_tenant_ids))
+
+    # 7. Storage root is private.
     checks.append(_check_storage_private(env))
 
-    # 7. Server-controlled output root.
+    # 8. Server-controlled output root.
     out_root = env.get("JURIS_OUT_ROOT")
     checks.append(
         Check(
@@ -135,14 +142,14 @@ def check_production_readiness(env: Mapping[str, str] | None = None) -> list[Che
         )
     )
 
-    # 8. Reverse-channel relay is in-memory unless the deploy asserts a safe topology.
-    if env.get("JURIS_AGENT_MODE", "inprocess").strip().lower() == "remote":
+    # 9. Reverse-channel relay is in-memory unless the deploy asserts a safe topology.
+    if agent_mode == "remote":
         checks.append(_check_reverse_channel_scaling(env))
 
-    # 9. API rate-limit counters must be shared once the app has multiple workers.
+    # 10. API rate-limit counters must be shared once the app has multiple workers.
     checks.append(_check_rate_limit_distribution(env))
 
-    # 10. In production, audit logs need an HMAC key to anchor head/tail integrity.
+    # 11. In production, audit logs need an HMAC key to anchor head/tail integrity.
     checks.append(_check_audit_hmac(env))
 
     return checks
@@ -153,7 +160,46 @@ def _agents_path(env: Mapping[str, str]) -> Path | None:
     return Path(p) if p else None
 
 
-def _check_remote_bindings(env: Mapping[str, str], tenant_keys: dict[str, str]) -> list[Check]:
+def _check_agent_mode_posture(agent_mode: str, require_tenants: bool) -> Check:
+    if agent_mode == "remote":
+        return Check("agent_mode", True, "remote: token/PIN/PJe ficam no agente local")
+    if agent_mode == "inprocess":
+        if require_tenants:
+            return Check(
+                "agent_mode",
+                False,
+                "inprocess em deploy com tenants: só use em instalação local/co-localizada; "
+                "para piloto hospedado use remote + JURIS_AGENTS_FILE",
+                severity="warn",
+            )
+        return Check("agent_mode", True, "inprocess: aceitável em execução local sem tenants", severity="warn")
+    return Check("agent_mode", False, f"JURIS_AGENT_MODE inválido: {agent_mode!r}")
+
+
+def _plaintext_key_entries(tenant_keys: Mapping[str, object]) -> list[str]:
+    plaintext: list[str] = []
+    for tid, value in tenant_keys.items():
+        if isinstance(value, str):
+            if not value.startswith("sha256:"):
+                plaintext.append(str(tid))
+            continue
+        if isinstance(value, Mapping):
+            keys = value.get("keys")
+            if not isinstance(keys, Mapping):
+                continue
+            for key_id, entry in keys.items():
+                if isinstance(entry, str):
+                    key_value = entry
+                elif isinstance(entry, Mapping):
+                    key_value = entry.get("hash") or entry.get("api_key")
+                else:
+                    continue
+                if isinstance(key_value, str) and not key_value.startswith("sha256:"):
+                    plaintext.append(f"{tid}/{key_id}")
+    return plaintext
+
+
+def _check_remote_bindings(env: Mapping[str, str], tenant_ids: tuple[str, ...]) -> list[Check]:
     agents_path = _agents_path(env)
     if agents_path is None:
         return [Check("agent_bindings", False, "JURIS_AGENT_MODE=remote exige JURIS_AGENTS_FILE")]
@@ -164,7 +210,7 @@ def _check_remote_bindings(env: Mapping[str, str], tenant_keys: dict[str, str]) 
     except (ValueError, OSError) as exc:
         return [Check("agent_bindings", False, f"JURIS_AGENTS_FILE ilegível: {exc}")]
 
-    missing = [tid for tid in tenant_keys if tid not in bindings]
+    missing = [tid for tid in tenant_ids if tid not in bindings]
     incomplete = [
         tid
         for tid, b in bindings.items()

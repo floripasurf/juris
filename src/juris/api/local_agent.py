@@ -432,11 +432,34 @@ async def dispatch_agent_request(request: AgentRequest) -> AgentResponse:
     from juris.mni.tribunais import get_tribunal
 
     op = request.operation
+    if op == "health":
+        health = agent_health()
+        return AgentResponse(
+            request_id=request.request_id,
+            success=True,
+            payload=health.model_dump(mode="json"),
+        )
     if op == "file":
         from juris.signing.filing_service import handle_file_request
 
         return await handle_file_request(
             request, agent_filing_service(), credentials_resolver=_default_credentials_resolver
+        )
+    if op == "sign":
+        sign_request = SignRequest.model_validate(
+            {"request_id": request.request_id, "tenant_id": request.tenant_id, **request.payload}
+        )
+        sign_response = handle_sign_request(sign_request, agent_signer(), pin_resolver=_default_pin_resolver)
+        payload = (
+            sign_response.model_dump(mode="json", exclude={"request_id", "success", "error"})
+            if sign_response.success
+            else None
+        )
+        return AgentResponse(
+            request_id=request.request_id,
+            success=sign_response.success,
+            payload=payload,
+            error=sign_response.error,
         )
     if op.startswith("mni"):
         return handle_mni_request(

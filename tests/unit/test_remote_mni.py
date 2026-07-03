@@ -259,6 +259,34 @@ def test_factory_remote_when_configured(monkeypatch) -> None:
     assert isinstance(get_mni_read_service(), RemoteMNIReadService)
 
 
+def test_factory_uses_relay_transport_for_relay_binding(tmp_path, monkeypatch) -> None:
+    import json
+
+    from juris.api.agent_config import _load_agent_bindings
+    from juris.mni.factory import get_mni_read_service
+    from juris.mni.remote import RelayAgentTransport
+
+    agents = tmp_path / "agents.json"
+    agents.write_text(
+        json.dumps(
+            {
+                "trial-a": {
+                    "url": "wss://app.example/ws/agent-relay",
+                    "token": "tok-a",
+                    "transport": "relay",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("JURIS_AGENT_MODE", "remote")
+    monkeypatch.setenv("JURIS_AGENTS_FILE", str(agents))
+    _load_agent_bindings.cache_clear()
+
+    service = get_mni_read_service("trial-a")
+    assert isinstance(service._transport, RelayAgentTransport)
+
+
 def test_ws_mni_round_trip_with_testclient(monkeypatch) -> None:
     from fastapi.testclient import TestClient
 

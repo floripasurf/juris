@@ -70,3 +70,30 @@ def test_factory_routes_each_tenant_to_its_own_agent(tmp_path, monkeypatch) -> N
     # fallback) so it can never reach the wrong firm's agent
     with pytest.raises(RuntimeError, match="sem binding"):
         get_signing_service("escritorio-desconhecido")
+
+
+def test_factory_uses_relay_transport_for_relay_binding(tmp_path, monkeypatch) -> None:
+    import json
+
+    from juris.api.agent_config import _load_agent_bindings
+    from juris.signing.remote import RelaySignTransport
+
+    agents = tmp_path / "agents.json"
+    agents.write_text(
+        json.dumps(
+            {
+                "trial-a": {
+                    "url": "wss://app.example/ws/agent-relay",
+                    "token": "tok-a",
+                    "transport": "relay",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("JURIS_AGENT_MODE", "remote")
+    monkeypatch.setenv("JURIS_AGENTS_FILE", str(agents))
+    _load_agent_bindings.cache_clear()
+
+    service = get_signing_service("trial-a")
+    assert isinstance(service._transport, RelaySignTransport)

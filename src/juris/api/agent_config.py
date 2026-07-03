@@ -45,6 +45,18 @@ def _normalize_base_url(url: str) -> str:
     return urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
 
 
+def _validate_ws_url(url: str) -> str:
+    """Validate a WebSocket URL without dropping its path."""
+    parsed = urlparse(url)
+    if parsed.scheme not in {"ws", "wss"} or not parsed.netloc:
+        msg = f"URL do agente inválida (use ws://host:porta): {url!r}"
+        raise RuntimeError(msg)
+    if parsed.username or parsed.password:
+        msg = "URL do agente inválida: não inclua usuário/senha; use o token pareado separado."
+        raise RuntimeError(msg)
+    return url
+
+
 def local_agent_base_url() -> str:
     """The single-tenant/fallback agent base URL from ``$JURIS_LOCAL_AGENT_URL``."""
     url = os.environ.get("JURIS_LOCAL_AGENT_URL")
@@ -73,6 +85,7 @@ class AgentBinding:
 
     base_url: str
     token: str
+    transport: str = "direct"
 
 
 @lru_cache(maxsize=4)
@@ -135,7 +148,12 @@ def tenant_agent_binding(tenant_id: str = "public") -> AgentBinding:
         if not entry.get("url") or not entry.get("token"):
             msg = f"binding do agente incompleto para o tenant {tenant_id!r} (precisa url + token)."
             raise RuntimeError(msg)
-        return AgentBinding(_normalize_base_url(entry["url"]), entry["token"])
+        transport = entry.get("transport", "direct")
+        if transport not in {"direct", "relay"}:
+            msg = f"transport inválido para o tenant {tenant_id!r}: {transport!r}"
+            raise RuntimeError(msg)
+        url = _validate_ws_url(entry["url"]) if transport == "relay" else _normalize_base_url(entry["url"])
+        return AgentBinding(url, entry["token"], transport=transport)
 
     if bindings or _require_tenants():
         msg = (

@@ -574,6 +574,56 @@ class ConnectPayload(BaseModel):
     sync: bool = True
 
 
+class AccessKeyPayload(BaseModel):
+    label: str = Field(default="equipe", max_length=80)
+
+
+@app.post("/api/trial/start", status_code=201)
+async def start_trial(request: Request) -> dict[str, object]:
+    """Issue an anonymous 30-day trial without collecting personal data."""
+    from juris.web.trial_access import create_trial_access, trial_days
+
+    client_host = request.client.host if request.client else "unknown"
+    decision = _api_expensive_rate_limiter().check(f"trial:{client_host}")
+    if not decision.allowed:
+        raise HTTPException(status_code=429, detail="Muitas tentativas. Tente novamente em instantes.")
+    trial = await asyncio.to_thread(create_trial_access)
+    return {
+        "tenant_id": trial.tenant_id,
+        "api_key": trial.api_key,
+        "expires_at": trial.expires_at,
+        "trial_days": trial_days(),
+        "agent": {
+            "relay_url": trial.relay_url,
+            "command": trial.agent_command,
+        },
+    }
+
+
+@app.get("/api/access")
+async def get_access_summary(tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
+    """Current tenant access metadata, excluding raw API keys."""
+    from juris.web.trial_access import read_tenant_access_summary
+
+    return await asyncio.to_thread(read_tenant_access_summary, tenant.tenant_id)
+
+
+@app.post("/api/access-keys", status_code=201)
+async def create_access_key(
+    payload: AccessKeyPayload, tenant: Tenant = Depends(current_tenant)
+) -> dict[str, object]:
+    """Issue an additional raw API key for a colleague/intern; returned once."""
+    from juris.web.trial_access import issue_access_key
+
+    issued = await asyncio.to_thread(issue_access_key, tenant.tenant_id, label=payload.label)
+    return {
+        "tenant_id": issued.tenant_id,
+        "key_id": issued.key_id,
+        "api_key": issued.api_key,
+        "expires_at": issued.expires_at,
+    }
+
+
 def _serialize_connect(result: Any) -> dict[str, object]:
     return {
         "avisos_added": result.avisos_added,
@@ -778,7 +828,22 @@ async def get_agent_health(tenant: Tenant = Depends(current_tenant)) -> dict[str
         binding = tenant_agent_binding(tenant.tenant_id)
         payload["agent_configured"] = True
         payload["binding_present"] = True
-        health = await asyncio.to_thread(check_agent_health, binding.base_url)
+        if binding.transport == "relay":
+            import uuid
+
+            from juris.api.relay import get_relay_hub
+            from juris.api.ws_schemas import AgentRequest, HealthResponse
+
+            response = await get_relay_hub().send(
+                tenant.tenant_id,
+                AgentRequest(request_id=uuid.uuid4().hex, tenant_id=tenant.tenant_id, operation="health"),
+                timeout=5,
+            )
+            if not response.success:
+                raise RuntimeError(response.error or "health do agente via relay falhou")
+            health = HealthResponse.model_validate(response.payload or {})
+        else:
+            health = await asyncio.to_thread(check_agent_health, binding.base_url)
     except Exception as exc:  # noqa: BLE001 — health reports readiness, not stack traces
         code = _agent_health_error_code(str(exc))
         from juris.core.observability import get_logger

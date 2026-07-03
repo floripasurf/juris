@@ -85,6 +85,43 @@ def test_authenticates_hashed_keys_for_production() -> None:
         resolve_tenant(registry, api_key="wrong")
 
 
+def test_authenticates_structured_multiple_keys_for_same_tenant() -> None:
+    from juris.web.auth import hash_api_key
+
+    registry = TenantRegistry(
+        {
+            "trial-a": {
+                "trial_expires_at": "2999-01-01T00:00:00Z",
+                "keys": {
+                    "owner": {"hash": hash_api_key("owner-key"), "label": "titular"},
+                    "intern": {"hash": hash_api_key("intern-key"), "label": "estagiário"},
+                },
+            }
+        }
+    )
+
+    assert resolve_tenant(registry, api_key="owner-key") == Tenant("trial-a")
+    assert resolve_tenant(registry, api_key="intern-key") == Tenant("trial-a")
+    assert registry.tenant_ids == ("trial-a",)
+
+
+def test_expired_structured_trial_key_is_rejected() -> None:
+    from juris.web.auth import hash_api_key
+
+    registry = TenantRegistry(
+        {
+            "trial-expired": {
+                "trial_expires_at": "2000-01-01T00:00:00Z",
+                "keys": {"owner": {"hash": hash_api_key("old-key")}},
+            }
+        }
+    )
+
+    assert registry.is_open is True
+    with pytest.raises(PermissionError):
+        resolve_tenant(registry, api_key="old-key", require_configured=True)
+
+
 def test_rejects_unsafe_tenant_id_in_config() -> None:
     with pytest.raises(ValueError, match="inválido"):
         TenantRegistry({"../etc": "key"})

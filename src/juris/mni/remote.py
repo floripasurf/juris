@@ -64,6 +64,19 @@ class WebSocketAgentTransport:
         raise RuntimeError(msg) from last_exc
 
 
+class RelayAgentTransport:
+    """Sync transport through the orchestrator relay for NAT-friendly trials."""
+
+    def __init__(self, tenant_id: str, *, timeout: float = 30.0) -> None:
+        self._tenant_id = tenant_id
+        self._timeout = timeout
+
+    def send(self, request: AgentRequest) -> AgentResponse:
+        from juris.api.relay import get_relay_hub
+
+        return get_relay_hub().send_sync(self._tenant_id, request, timeout=self._timeout)
+
+
 class RemoteMNIReadService(MNIReadService):
     """Reads MNI by forwarding to the lawyer's local agent (credentials stay remote)."""
 

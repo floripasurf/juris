@@ -73,6 +73,33 @@ def test_tenant_binding_from_agents_file(tmp_path, monkeypatch) -> None:
     assert b.token == "tok-b"  # noqa: S105
 
 
+def test_tenant_binding_supports_relay_transport(tmp_path, monkeypatch) -> None:
+    import json
+
+    from juris.api.agent_config import _load_agent_bindings, tenant_agent_binding
+
+    agents = tmp_path / "agents.json"
+    agents.write_text(
+        json.dumps(
+            {
+                "trial-a": {
+                    "url": "wss://app.example/ws/agent-relay",
+                    "token": "tok-a",
+                    "transport": "relay",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("JURIS_AGENTS_FILE", str(agents))
+    _load_agent_bindings.cache_clear()
+
+    binding = tenant_agent_binding("trial-a")
+    assert binding.base_url == "wss://app.example/ws/agent-relay"
+    assert binding.token == "tok-a"  # noqa: S105
+    assert binding.transport == "relay"
+
+
 def test_tenant_binding_rejects_credentialed_agent_url(tmp_path, monkeypatch) -> None:
     import json
 

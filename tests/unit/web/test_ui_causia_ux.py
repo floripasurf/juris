@@ -3,8 +3,8 @@
 Pins the three tracks of the Causia UX overhaul against the static SPA so the
 copy/structure can't silently regress:
 
-1. Conversão & promessa — request-access CTA, key as secondary flow, real
-   contact path, footer. No false self-service promise.
+1. Conversão & promessa — anonymous trial CTA, key as secondary flow, legal footer.
+   No manual access request as the primary path.
 2. Onboarding & confiança — actionable empty-state on the workbench.
 3. Linguagem de advogado — no raw dev jargon in the primary interface; the
    internal "Piloto" telemetry tab is out of the main nav.
@@ -12,7 +12,6 @@ copy/structure can't silently regress:
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -24,12 +23,15 @@ _INDEX_HTML = (
 ).read_text(encoding="utf-8")
 
 # The <nav id="nav"> … </nav> block: what the lawyer sees as primary tasks.
-_MAIN_NAV = _INDEX_HTML[_INDEX_HTML.index('<nav id="nav">') : _INDEX_HTML.index("</nav>")]
+_NAV_START = _INDEX_HTML.index('<nav id="nav">')
+_MAIN_NAV = _INDEX_HTML[_NAV_START : _INDEX_HTML.index("</nav>", _NAV_START)]
 
 
 class TestConversionAndPromise:
-    def test_primary_cta_requests_access(self) -> None:
-        assert "Solicitar acesso" in _INDEX_HTML
+    def test_primary_cta_starts_anonymous_trial(self) -> None:
+        assert "Começar teste anônimo" in _INDEX_HTML
+        assert 'id="start-trial"' in _INDEX_HTML
+        assert "Solicitar acesso" not in _INDEX_HTML
 
     def test_key_flow_is_secondary_disclosure(self) -> None:
         assert "Já tenho uma chave" in _INDEX_HTML
@@ -37,18 +39,23 @@ class TestConversionAndPromise:
         assert 'id="landing-api-key"' in _INDEX_HTML
 
     def test_copy_does_not_promise_false_self_service(self) -> None:
-        # the old "sem cadastro" self-service claim is gone …
         assert "Teste gratuito por 30 dias, sem cadastro" not in _INDEX_HTML
-        # … replaced by the request-a-key framing
-        assert "sem criar conta no produto" in _INDEX_HTML
+        assert "sem informar nome, e-mail ou escritório" in _INDEX_HTML
+        assert "sem nome, e-mail, telefone ou formulário comercial" in _INDEX_HTML
 
-    def test_real_contact_channel_exists(self) -> None:
-        assert re.search(r'href="(mailto:|https://wa\.me/|https://api\.whatsapp)', _INDEX_HTML)
+    def test_trial_endpoint_is_wired_from_landing(self) -> None:
+        assert 'window.fetch("/api/trial/start"' in _INDEX_HTML
+        assert "causiaTrialSetup" in _INDEX_HTML
+        assert "causiaStartView" in _INDEX_HTML
 
     def test_footer_with_contact_and_legal_links(self) -> None:
         assert "<footer" in _INDEX_HTML
         assert "Termos" in _INDEX_HTML
         assert "Privacidade" in _INDEX_HTML
+
+    def test_hero_uses_real_visual_asset_not_fake_dashboard_mock(self) -> None:
+        assert "causia-hero-legal-desk-v2.jpg" in _INDEX_HTML
+        assert "app-frame" not in _INDEX_HTML
 
     def test_legal_pages_are_served_publicly(self) -> None:
         client = TestClient(app)
@@ -58,6 +65,15 @@ class TestConversionAndPromise:
             assert resp.headers["content-type"].startswith("text/html")
         # allowlist: no arbitrary .html leaks
         assert client.get("/static/index-secret.html").status_code == 404
+
+    def test_access_key_generation_for_team_is_visible(self) -> None:
+        assert 'data-nav="acessos"' in _MAIN_NAV
+        assert 'id="access-key-form"' in _INDEX_HTML
+        assert "/api/access-keys" in _INDEX_HTML
+
+    def test_agent_pairing_command_is_visible_in_acervo(self) -> None:
+        assert 'id="agent-setup"' in _INDEX_HTML
+        assert "parear o agente local" in _INDEX_HTML
 
 
 class TestConsoleOnboarding:

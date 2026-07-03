@@ -18,10 +18,12 @@ through broker reply channels. Sticky routing remains a valid small-deploy optio
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import hashlib
 import os
 import time
 import uuid
+from asyncio import AbstractEventLoop
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol, cast
 
@@ -276,7 +278,7 @@ class RelayHub:
     """Routes orchestrator → agent requests over each tenant's dialed-in connection."""
 
     def __init__(self, *, broker: RelayBroker | None = None) -> None:
-        self._agents: dict[str, tuple[int, SendJson]] = {}
+        self._agents: dict[str, tuple[int, SendJson, AbstractEventLoop | None]] = {}
         self._pending: dict[tuple[str, str], asyncio.Future[AgentResponse]] = {}
         self._broker = broker
         self._subscriptions: dict[str, tuple[int, BrokerSubscription]] = {}
@@ -291,7 +293,11 @@ class RelayHub:
         """
         self._next_connection_id += 1
         connection_id = self._next_connection_id
-        self._agents[tenant_id] = (connection_id, send_json)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        self._agents[tenant_id] = (connection_id, send_json, loop)
         if self._broker is not None:
             current = self._subscriptions.pop(tenant_id, None)
             if current is not None:
@@ -347,7 +353,7 @@ class RelayHub:
         if send_entry is None:
             msg = f"nenhum agente conectado para o tenant {tenant_id!r} (reverse-channel)"
             raise RuntimeError(msg)
-        _connection_id, send_json = send_entry
+        _connection_id, send_json, _loop = send_entry
 
         loop = asyncio.get_event_loop()
         fut: asyncio.Future[AgentResponse] = loop.create_future()
@@ -361,6 +367,40 @@ class RelayHub:
             return await asyncio.wait_for(fut, timeout)
         finally:
             self._pending.pop(pending_key, None)
+
+    def send_sync(self, tenant_id: str, request: AgentRequest, *, timeout: float = 30.0) -> AgentResponse:
+        """Synchronous bridge for blocking transports that need the reverse channel.
+
+        Web endpoints run MNI/signing/filing calls in worker threads. When the
+        agent WebSocket is held by the ASGI event loop, this schedules ``send`` on
+        that loop so the WebSocket writer and pending future stay on their owner
+        loop. Broker-backed deployments can run the coroutine in this thread.
+        """
+        send_entry = self._agents.get(tenant_id)
+        if self._broker is None and send_entry is not None and send_entry[2] is not None:
+            loop = send_entry[2]
+            try:
+                running_loop = asyncio.get_running_loop()
+            except RuntimeError:
+                running_loop = None
+            if running_loop is loop:
+                msg = "relay síncrono chamado no event loop; execute em uma thread ou use RelayHub.send."
+                raise RuntimeError(msg)
+            future = asyncio.run_coroutine_threadsafe(self.send(tenant_id, request, timeout=timeout), loop)
+            try:
+                return future.result(timeout=timeout + 1)
+            except concurrent.futures.TimeoutError as exc:
+                future.cancel()
+                raise TimeoutError("tempo excedido ao aguardar resposta do relay") from exc
+
+        try:
+            running_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            running_loop = None
+        if running_loop is not None:
+            msg = "relay síncrono chamado no event loop; execute em uma thread ou use RelayHub.send."
+            raise RuntimeError(msg)
+        return asyncio.run(self.send(tenant_id, request, timeout=timeout))
 
     def resolve(self, tenant_id: str, response: AgentResponse) -> None:
         """Complete this tenant's pending request whose id matches ``response``."""

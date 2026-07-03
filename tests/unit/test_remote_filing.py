@@ -212,6 +212,34 @@ def test_filing_factory_remote_when_configured(monkeypatch) -> None:
     assert isinstance(get_filing_service(), RemoteFilingService)
 
 
+def test_filing_factory_uses_relay_transport_for_relay_binding(tmp_path, monkeypatch) -> None:
+    import json
+
+    from juris.api.agent_config import _load_agent_bindings
+    from juris.mni.remote import RelayAgentTransport
+    from juris.signing.filing_service import get_filing_service
+
+    agents = tmp_path / "agents.json"
+    agents.write_text(
+        json.dumps(
+            {
+                "trial-a": {
+                    "url": "wss://app.example/ws/agent-relay",
+                    "token": "tok-a",
+                    "transport": "relay",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("JURIS_AGENT_MODE", "remote")
+    monkeypatch.setenv("JURIS_AGENTS_FILE", str(agents))
+    _load_agent_bindings.cache_clear()
+
+    service = get_filing_service("trial-a")
+    assert isinstance(service._transport, RelayAgentTransport)
+
+
 def test_remote_filing_carries_protocol_metadata_not_artifacts() -> None:
     from datetime import UTC, datetime
 

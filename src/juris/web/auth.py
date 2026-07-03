@@ -18,6 +18,7 @@ import os
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 
@@ -81,6 +82,73 @@ def _validate_api_key_config(tenant_id: str, api_key: object) -> str:
     return api_key
 
 
+def _parse_expires_at(value: object) -> datetime | None:
+    if value in (None, ""):
+        return None
+    if not isinstance(value, str):
+        msg = f"expires_at inválido: {value!r}"
+        raise ValueError(msg)
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        msg = f"expires_at inválido: {value!r}"
+        raise ValueError(msg) from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _is_expired(value: object, *, now: datetime) -> bool:
+    expires_at = _parse_expires_at(value)
+    return expires_at is not None and expires_at <= now
+
+
+def _key_from_structured_entry(tenant_id: str, key_id: str, entry: object, *, now: datetime) -> str | None:
+    if isinstance(entry, str):
+        return _validate_api_key_config(tenant_id, entry)
+    if not isinstance(entry, Mapping):
+        msg = f"API key inválida para tenant {tenant_id!r}/{key_id!r}: entrada deve ser string ou objeto."
+        raise ValueError(msg)
+    if _is_expired(entry.get("expires_at"), now=now):
+        return None
+    key = entry.get("hash") or entry.get("api_key")
+    if key is None:
+        msg = f"API key inválida para tenant {tenant_id!r}/{key_id!r}: informe hash ou api_key."
+        raise ValueError(msg)
+    return _validate_api_key_config(tenant_id, key)
+
+
+def _active_api_keys_for_tenant(tenant_id: str, raw_config: object, *, now: datetime) -> tuple[str, ...]:
+    """Return active stored key strings for one tenant.
+
+    Backwards compatible formats:
+    - ``"tenant": "sha256:..."`` or plaintext (dev legacy)
+    - ``"tenant": {"trial_expires_at": "...", "keys": {"owner": {"hash": "sha256:..."}}}``
+    Expired tenant/key entries are ignored, making a 30-day trial fail auth without
+    deleting its local data immediately.
+    """
+    if isinstance(raw_config, str):
+        return (_validate_api_key_config(tenant_id, raw_config),)
+    if not isinstance(raw_config, Mapping):
+        msg = f"configuração inválida para tenant {tenant_id!r}: use string ou objeto."
+        raise ValueError(msg)
+    if _is_expired(raw_config.get("trial_expires_at") or raw_config.get("expires_at"), now=now):
+        return ()
+    keys = raw_config.get("keys")
+    if not isinstance(keys, Mapping) or not keys:
+        msg = f"configuração inválida para tenant {tenant_id!r}: objeto precisa de keys não vazio."
+        raise ValueError(msg)
+    active = []
+    for key_id, entry in keys.items():
+        if not isinstance(key_id, str) or not key_id:
+            msg = f"key_id inválido para tenant {tenant_id!r}: {key_id!r}"
+            raise ValueError(msg)
+        key = _key_from_structured_entry(tenant_id, key_id, entry, now=now)
+        if key is not None:
+            active.append(key)
+    return tuple(active)
+
+
 @dataclass(frozen=True, slots=True)
 class Tenant:
     """The firm a request belongs to."""
@@ -92,17 +160,23 @@ class Tenant:
 class TenantRegistry:
     """Maps API keys to tenants. Empty ⇒ open deployment."""
 
-    def __init__(self, tenants: Mapping[str, str]) -> None:
-        # config is {tenant_id: api_key}; index by key for O(1) auth.
+    def __init__(self, tenants: Mapping[str, object]) -> None:
+        # config is {tenant_id: api_key_or_structured_entry}; index by key for O(1) auth.
         by_key: dict[str, Tenant] = {}
+        tenant_ids: set[str] = set()
+        now = datetime.now(timezone.utc)
         for tenant_id, raw_key in tenants.items():
             validated_tenant_id = _validate_configured_tenant_id(tenant_id)
-            key = _validate_api_key_config(validated_tenant_id, raw_key)
-            if key in by_key:
-                msg = "API key duplicada em JURIS_TENANTS_FILE; cada tenant precisa de chave própria."
-                raise ValueError(msg)
-            by_key[key] = Tenant(validated_tenant_id)
+            keys = _active_api_keys_for_tenant(validated_tenant_id, raw_key, now=now)
+            if keys:
+                tenant_ids.add(validated_tenant_id)
+            for key in keys:
+                if key in by_key:
+                    msg = "API key duplicada em JURIS_TENANTS_FILE; cada tenant precisa de chave própria."
+                    raise ValueError(msg)
+                by_key[key] = Tenant(validated_tenant_id)
         self._by_key = by_key
+        self._tenant_ids = tenant_ids
 
     @classmethod
     def from_file(cls, path: Path) -> TenantRegistry:
@@ -122,7 +196,7 @@ class TenantRegistry:
     @property
     def tenant_ids(self) -> tuple[str, ...]:
         """Configured tenant ids, for production preflight checks."""
-        return tuple(sorted({tenant.tenant_id for tenant in self._by_key.values()}))
+        return tuple(sorted(self._tenant_ids))
 
     def authenticate(self, api_key: str | None) -> Tenant | None:
         """Match a key against stored values — plaintext (dev) or ``sha256:`` (prod).

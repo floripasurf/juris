@@ -57,51 +57,17 @@
       color: #fff;
       padding: 24px clamp(18px, 5vw, 64px) 54px;
       background:
-        radial-gradient(1200px 600px at 78% 18%, rgba(122, 35, 52, 0.55) 0%, rgba(122, 35, 52, 0) 60%),
-        linear-gradient(135deg, #2A1218 0%, #23252B 55%, #1B1D22 100%);
+        linear-gradient(90deg, rgba(23, 26, 32, 0.92) 0%, rgba(23, 26, 32, 0.78) 54%, rgba(23, 26, 32, 0.38) 100%),
+        url("/static/assets/causia-hero-legal-desk-v2.jpg");
+      background-size: cover;
+      background-position: center;
     }
     .landing-main {
       align-self: center;
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 0.92fr);
-      align-items: center;
-      gap: clamp(28px, 5vw, 72px);
       width: 100%;
+      max-width: 760px;
+      min-width: 0;
     }
-    /* Product showcase — a faithful mini "Mesa de trabalho" in a browser frame. */
-    .landing-showcase { perspective: 1400px; }
-    .app-frame {
-      border-radius: 12px;
-      overflow: hidden;
-      background: var(--paper);
-      box-shadow: 0 40px 90px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.06);
-      transform: rotateY(-4deg) rotateX(2deg);
-    }
-    .app-frame-bar {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 14px;
-      background: #ECEAE3;
-      border-bottom: 1px solid var(--line);
-    }
-    .app-frame-bar i { width: 10px; height: 10px; border-radius: 50%; background: #CFCCC3; }
-    .app-frame-bar .u { margin-left: 10px; font-size: 11px; color: var(--muted); font-family: var(--mono); }
-    .app-frame-body { padding: 16px 16px 18px; color: var(--ink); }
-    .mm-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
-    .mm-head strong { font-family: var(--serif); font-size: 15px; }
-    .mm-head span { font-size: 10.5px; color: var(--ok); background: var(--ok-bg); border: 1px solid var(--ok-line); padding: 2px 7px; border-radius: 3px; }
-    .mm-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .mm-col > h4 {
-      margin: 0 0 8px; font-size: 9.5px; font-weight: 600; letter-spacing: 0.06em;
-      text-transform: uppercase; color: var(--ink-2); border-top: 2px solid var(--brand); padding-top: 8px;
-    }
-    .mm-card { background: #fff; border: 1px solid var(--line); border-radius: 5px; padding: 8px 9px; margin-bottom: 8px; }
-    .mm-card b { display: block; font-family: var(--mono); font-size: 10.5px; color: var(--ink); }
-    .mm-card em { font-style: normal; color: var(--muted); font-size: 10px; }
-    .mm-card .tag { display: inline-block; margin-top: 5px; font-size: 9px; font-weight: 600; padding: 1px 6px; border-radius: 3px; }
-    .mm-card .tag.alta { color: var(--danger); background: var(--danger-bg); border: 1px solid var(--danger-line); }
-    .mm-card .tag.go { color: #fff; background: var(--brand); }
     .landing-nav {
       display: flex;
       align-items: center;
@@ -124,6 +90,7 @@
     .landing-copy {
       align-self: center;
       max-width: 740px;
+      min-width: 0;
       padding: 42px 0 26px;
     }
     .landing-kicker {
@@ -222,6 +189,39 @@
       margin: 10px 0 0;
       color: rgba(255, 255, 255, 0.74);
       font-size: 13px;
+    }
+    .trial-issued {
+      max-width: 680px;
+      margin-top: 18px;
+      padding: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      border-radius: 5px;
+      background: rgba(255, 255, 255, 0.1);
+      color: rgba(255, 255, 255, 0.86);
+      font-size: 13px;
+    }
+    .trial-issued[hidden] { display: none; }
+    .trial-issued code {
+      display: block;
+      margin-top: 8px;
+      padding: 8px;
+      overflow-x: auto;
+      border-radius: 4px;
+      background: rgba(0, 0, 0, 0.22);
+      color: #fff;
+      font-family: var(--mono);
+      white-space: nowrap;
+    }
+    .agent-setup code {
+      display: block;
+      margin-top: 8px;
+      padding: 10px;
+      overflow-x: auto;
+      border-radius: 4px;
+      background: #fff;
+      color: var(--ink);
+      font-family: var(--mono);
+      white-space: nowrap;
     }
     #landing-login-error {
       grid-column: 1 / -1;
@@ -788,7 +788,7 @@
         padding: 18px 18px 38px;
         background:
           linear-gradient(90deg, rgba(23, 26, 32, 0.9) 0%, rgba(23, 26, 32, 0.76) 58%, rgba(23, 26, 32, 0.46) 100%),
-          url("/static/assets/causia-hero-legal-desk.jpg");
+          url("/static/assets/causia-hero-legal-desk-v2.jpg");
         background-size: cover;
         background-position: center;
       }
@@ -827,23 +827,38 @@
       .proc-row { grid-template-columns: 1fr; gap: 6px; }
       .proc-prazo { text-align: left; }
     }
-    @media (max-width: 980px) {
-      .landing-main { grid-template-columns: 1fr; gap: 32px; }
-      .app-frame { transform: none; max-width: 520px; }
-      .landing-showcase { order: 2; }
-    }
     @media (max-width: 640px) {
+      .landing-hero { overflow: hidden; }
+      .landing-main, .landing-copy, .landing-nav, .landing-nav-note {
+        box-sizing: border-box;
+        width: calc(100vw - 36px);
+        max-width: calc(100vw - 36px);
+        min-width: 0;
+      }
       .landing-copy { padding-top: 30px; }
-      .landing-copy h1 { font-size: 34px; }
-      .landing-copy .lede { font-size: 16px; }
+      .landing-copy h1 {
+        width: 100%;
+        max-width: 100%;
+        font-size: 30px;
+        line-height: 1.08;
+        overflow-wrap: break-word;
+      }
+      .landing-copy .lede, .landing-note {
+        width: 100%;
+        max-width: 100%;
+        font-size: 16px;
+        overflow-wrap: break-word;
+      }
+      .landing-note { font-size: 13px; }
+      .landing-cta { align-items: flex-start; flex-direction: column; gap: 12px; }
+      .landing-primary { width: 100%; text-align: center; }
       .landing-access { grid-template-columns: 1fr; }
       .landing-access button { width: 100%; }
       .landing-nav {
         display: grid;
         grid-template-columns: 1fr;
       }
-      .landing-nav-note { text-align: left; max-width: none; }
-      .landing-showcase { display: none; }
+      .landing-nav-note { text-align: left; overflow-wrap: anywhere; }
     }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { transition: none !important; animation: none !important; }
@@ -855,17 +870,18 @@
     <div class="landing-hero">
       <div class="landing-nav">
         <div class="brand"><div class="mark">C</div><div>Caus<span class="ia">ia</span></div></div>
-        <div class="landing-nav-note">Solicite uma chave de teste gratuita por 30 dias, sem criar conta no produto.</div>
+        <div class="landing-nav-note">Comece um teste anônimo por 30 dias, sem informar nome, e-mail ou escritório.</div>
       </div>
       <div class="landing-main">
         <div class="landing-copy">
           <p class="landing-kicker">IA jurídica privada para escritórios</p>
           <h1>Transforme processos em trabalho pronto sem expor os dados do cliente.</h1>
-          <p class="lede">Causia organiza acervo, prazos, minutas e protocolo controlado em uma mesa de trabalho jurídica. Solicite uma chave de teste e use por 30 dias, sem criar conta no produto.</p>
+          <p class="lede">Causia organiza acervo, prazos, minutas e protocolo controlado em uma mesa de trabalho jurídica. Gere um teste anônimo, conecte seu token no agente local e avalie por 30 dias.</p>
           <div class="landing-cta">
-            <a id="request-access" class="landing-primary" href="mailto:lages.raphael@gmail.com?subject=Quero%20testar%20o%20Causia%20(30%20dias)&body=Ol%C3%A1%2C%20gostaria%20de%20uma%20chave%20de%20teste%20do%20Causia.%0A%0AEscrit%C3%B3rio%3A%20%0AOAB%2FUF%3A%20%0ATelefone%3A%20">Solicitar acesso grátis</a>
+            <button type="button" id="start-trial" class="landing-primary">Começar teste anônimo</button>
             <button type="button" id="have-key-toggle" class="landing-secondary">Já tenho uma chave</button>
           </div>
+          <div id="trial-issued" class="trial-issued" role="status" aria-live="polite" hidden></div>
           <form id="landing-login-form" class="landing-access" hidden>
             <div>
               <label for="landing-api-key">Chave de acesso do teste</label>
@@ -874,27 +890,7 @@
             <button type="submit">Entrar</button>
             <p id="landing-login-error" hidden></p>
           </form>
-          <p class="landing-note">A chave fica apenas nesta aba do navegador. Não guardamos seus dados nem os dados dos seus processos.</p>
-        </div>
-        <div class="landing-showcase" aria-hidden="true">
-          <div class="app-frame">
-            <div class="app-frame-bar"><i></i><i></i><i></i><span class="u">causia.com.br</span></div>
-            <div class="app-frame-body">
-              <div class="mm-head"><strong>Mesa de trabalho</strong><span>sem alertas</span></div>
-              <div class="mm-cols">
-                <div class="mm-col">
-                  <h4>Prazos críticos</h4>
-                  <div class="mm-card"><b>5099887-21.2024.8.13.0145</b><em>04/07 · Razões de apelação</em><br><span class="tag alta">urgente</span></div>
-                  <div class="mm-card"><b>5012345-67.2024.8.13.0024</b><em>05/07 · Contestação</em><br><span class="tag alta">urgente</span></div>
-                </div>
-                <div class="mm-col">
-                  <h4>Prontos para rascunho</h4>
-                  <div class="mm-card"><b>1004821-90.2023.5.03.0114</b><em>Recurso de Revista · 1 prazo</em><br><span class="tag go">gerar minuta</span></div>
-                  <div class="mm-card"><b>0801234-56.2024.8.13.0672</b><em>Execução · honorários</em><br><span class="tag go">gerar minuta</span></div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <p class="landing-note">Não pedimos seus dados para liberar o teste. Não guardamos seus dados nem os dados dos seus processos; a chave fica nesta aba e expira em 30 dias.</p>
         </div>
       </div>
     </div>
@@ -904,7 +900,7 @@
       <div class="landing-features">
         <div class="landing-feature">
           <strong>Sem cadastro</strong>
-          <p>Você entra com a chave de teste e começa a avaliar o produto sem formulário comercial.</p>
+          <p>O teste nasce anônimo: sem nome, e-mail, telefone ou formulário comercial.</p>
         </div>
         <div class="landing-feature">
           <strong>30 dias gratuitos</strong>
@@ -950,6 +946,7 @@
       <button type="button" data-nav="agenda">Agenda</button>
       <button type="button" data-nav="caso">Novo caso</button>
       <button type="button" data-nav="protocolo">Protocolo</button>
+      <button type="button" data-nav="acessos">Acessos</button>
     </nav>
     <div class="header-actions">
       <div class="status" id="ai-session" role="status" aria-live="polite" title="Modo de IA e proteção de dados">IA: …</div>
@@ -967,6 +964,7 @@
     <section class="processos-panel" data-view="acervo" hidden>
       <h1>Meus processos</h1>
       <p class="lede">Acervo importado do seu token. Conecte para importar e manter atualizado; clique em "minuta" para redigir a partir de um processo.</p>
+      <div id="agent-setup" class="notice agent-setup" role="status" aria-live="polite" hidden></div>
       <form id="connect-form" class="connect-bar">
         <input id="c_cpf" placeholder="CPF do advogado" autocomplete="off" />
         <input id="c_pin" placeholder="PIN do token A3" type="password" autocomplete="off" />
@@ -998,6 +996,18 @@
         </select>
       </div>
       <div id="prazos" class="proc-empty">Carregando…</div>
+    </section>
+
+    <section class="processos-panel" data-view="acessos" hidden>
+      <h1>Acessos</h1>
+      <p class="lede">Gere uma chave para estagiário ou colega advogado acessar o mesmo acervo durante o período do teste.</p>
+      <form id="access-key-form" class="connect-bar">
+        <input id="access-key-label" placeholder="Nome do acesso (ex.: estagiário)" autocomplete="off" />
+        <button id="access-key-submit" type="submit">Gerar chave</button>
+        <span id="access-key-status"></span>
+      </form>
+      <div id="access-summary" class="proc-empty">Carregando…</div>
+      <div id="access-key-result" class="notice" role="status" aria-live="polite" hidden></div>
     </section>
 
     <section class="processos-panel" data-view="piloto" hidden>
@@ -1290,6 +1300,9 @@
     const landingForm = document.querySelector("#landing-login-form");
     const landingInput = document.querySelector("#landing-api-key");
     const landingError = document.querySelector("#landing-login-error");
+    const startTrialButton = document.querySelector("#start-trial");
+    const trialIssued = document.querySelector("#trial-issued");
+    const agentSetup = document.querySelector("#agent-setup");
     const loginOverlay = document.querySelector("#login-overlay");
     const loginForm = document.querySelector("#login-form");
     const loginInput = document.querySelector("#login-api-key");
@@ -1338,12 +1351,23 @@
     }
     function logout() {
       setApiKey("");
+      try {
+        sessionStorage.removeItem("causiaTrialSetup");
+        sessionStorage.removeItem("causiaTrialWelcome");
+        sessionStorage.removeItem("causiaStartView");
+      } catch (_) { /* private mode */ }
       hideLandingError();
       landingInput.value = "";
       showLanding();
     }
     function setFormBusy(formEl, busy, label) {
       const button = formEl.querySelector("button[type='submit']");
+      if (!button) return;
+      if (!button.dataset.idleLabel) button.dataset.idleLabel = button.textContent;
+      button.disabled = busy;
+      button.textContent = busy ? label : button.dataset.idleLabel;
+    }
+    function setButtonBusy(button, busy, label) {
       if (!button) return;
       if (!button.dataset.idleLabel) button.dataset.idleLabel = button.textContent;
       button.disabled = busy;
@@ -1402,6 +1426,38 @@
       hideLogin();
       bootConsole();
     });
+    if (startTrialButton) {
+      startTrialButton.addEventListener("click", async () => {
+        hideLandingError();
+        if (trialIssued) trialIssued.hidden = true;
+        setButtonBusy(startTrialButton, true, "Gerando teste...");
+        try {
+          const response = await window.fetch("/api/trial/start", { method: "POST" });
+          const data = await response.json();
+          if (!response.ok) throw new Error(apiErrorMessage(data, "Não foi possível gerar o teste."));
+          setApiKey(data.api_key);
+          try {
+            sessionStorage.setItem("causiaTrialWelcome", JSON.stringify(data));
+            sessionStorage.setItem("causiaTrialSetup", JSON.stringify(data));
+            sessionStorage.setItem("causiaStartView", "acervo");
+          } catch (_) { /* private mode */ }
+          if (trialIssued) {
+            trialIssued.innerHTML = "";
+            const msg = document.createElement("div");
+            msg.textContent = `Teste anônimo ativo até ${fmtDate(data.expires_at)}. Você vai entrar agora; guarde a chave se quiser voltar em outro navegador.`;
+            const code = document.createElement("code");
+            code.textContent = data.api_key;
+            trialIssued.append(msg, code);
+            trialIssued.hidden = false;
+          }
+          bootConsole();
+        } catch (error) {
+          showLandingError(error.message);
+        } finally {
+          setButtonBusy(startTrialButton, false, "");
+        }
+      });
+    }
     loginForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const candidate = loginInput.value.trim();
@@ -1416,8 +1472,8 @@
     });
     logoutButton.addEventListener("click", logout);
 
-    // "Já tenho uma chave" reveals the secondary key form (primary action is
-    // requesting access — most visitors have no key yet).
+    // "Já tenho uma chave" reveals the secondary key form; anonymous trial is the
+    // primary path for new visitors.
     const haveKeyToggle = document.querySelector("#have-key-toggle");
     if (haveKeyToggle) {
       haveKeyToggle.addEventListener("click", () => {
@@ -1625,8 +1681,9 @@
     })();
     const checked = (id) => document.querySelector(`#${id}`).checked;
 
-    // Split-trust mode (ADR-0015): the UI adapts to whether token ops are remote.
-    let AGENT_REMOTE = false;
+    // Split-trust mode (ADR-0015): hide local secrets until the backend explicitly
+    // confirms a co-located setup.
+    let AGENT_REMOTE = true;
     const sourceSel = document.querySelector("#source");
     const ncCpfRow = document.querySelector("#nc_cpf_row");
     function toggleNewCaseCpf() {
@@ -1652,6 +1709,28 @@
         if (cs) cs.textContent = "Modo seguro: o agente local no seu computador resolve o token (sem CPF/PIN aqui).";
       }
       toggleNewCaseCpf();
+    }
+    function renderTrialSetup() {
+      if (!agentSetup) return;
+      let data = null;
+      try {
+        data = JSON.parse(sessionStorage.getItem("causiaTrialSetup") || "null");
+      } catch (_) {
+        data = null;
+      }
+      const command = data && data.agent && data.agent.command;
+      if (!command) {
+        agentSetup.hidden = true;
+        agentSetup.innerHTML = "";
+        return;
+      }
+      agentSetup.innerHTML = "";
+      const p = document.createElement("p");
+      p.textContent = "No computador onde o token A3 está conectado, rode o comando abaixo para parear o agente local deste teste.";
+      const code = document.createElement("code");
+      code.textContent = command;
+      agentSetup.append(p, code);
+      agentSetup.hidden = false;
     }
     function renderAgentHealth(h) {
       const cs = document.querySelector("#connect-status");
@@ -1681,9 +1760,10 @@
         const r = await apiFetch("/api/agent-mode");
         if (r.ok) AGENT_REMOTE = (await r.json()).remote === true;
       } catch (_) {
-        /* default to co-located */
+        /* fail closed: keep the remote-safe UI until the mode can be confirmed */
       }
       applyAgentMode();
+      renderTrialSetup();
       if (AGENT_REMOTE) {
         try {
           const h = await apiFetch("/api/agent-health");
@@ -2318,6 +2398,76 @@
       renderPrazos(filteredPrazos());
     });
 
+    const accessForm = document.querySelector("#access-key-form");
+    const accessLabel = document.querySelector("#access-key-label");
+    const accessStatus = document.querySelector("#access-key-status");
+    const accessSummary = document.querySelector("#access-summary");
+    const accessKeyResult = document.querySelector("#access-key-result");
+    const accessSubmit = document.querySelector("#access-key-submit");
+
+    function renderAccessSummary(data) {
+      const keys = data.keys || [];
+      accessSummary.className = keys.length ? "proc-list" : "proc-empty";
+      accessSummary.innerHTML = "";
+      if (!keys.length) {
+        accessSummary.textContent = "Nenhuma chave adicional gerada.";
+        return;
+      }
+      keys.forEach((key) => {
+        const row = document.createElement("div");
+        row.className = "proc-row";
+        const left = document.createElement("div");
+        left.innerHTML = `<div class="proc-cnj">${escHtml(key.label || key.id)}</div><div class="proc-meta">${escHtml(key.id)}</div>`;
+        const meta = document.createElement("div");
+        meta.className = "proc-meta";
+        meta.textContent = data.expires_at ? `expira em ${fmtDate(data.expires_at)}` : "sem expiração de teste";
+        row.append(left, meta);
+        accessSummary.appendChild(row);
+      });
+    }
+
+    async function loadAccessSummary() {
+      try {
+        const response = await apiFetch("/api/access");
+        const data = await response.json();
+        if (!response.ok) throw new Error(apiErrorMessage(data, "Falha ao carregar acessos"));
+        renderAccessSummary(data);
+      } catch (error) {
+        accessSummary.className = "proc-empty";
+        accessSummary.textContent = error.message;
+      }
+    }
+
+    accessForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      accessKeyResult.hidden = true;
+      accessStatus.textContent = "";
+      setButtonBusy(accessSubmit, true, "Gerando...");
+      try {
+        const response = await apiFetch("/api/access-keys", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ label: accessLabel.value.trim() || "equipe" }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(apiErrorMessage(data, "Falha ao gerar chave"));
+        accessKeyResult.innerHTML = "";
+        const p = document.createElement("p");
+        p.textContent = `Chave gerada${data.expires_at ? `, válida até ${fmtDate(data.expires_at)}` : ""}. Ela aparece só agora.`;
+        const code = document.createElement("code");
+        code.textContent = data.api_key;
+        accessKeyResult.append(p, code);
+        accessKeyResult.className = "notice";
+        accessKeyResult.hidden = false;
+        accessLabel.value = "";
+        await loadAccessSummary();
+      } catch (error) {
+        accessStatus.textContent = error.message;
+      } finally {
+        setButtonBusy(accessSubmit, false, "");
+      }
+    });
+
     const filingStatusEl = document.querySelector("#filing-status");
     const filingResultEl = document.querySelector("#filing-result");
     const filingRecoveryEl = document.querySelector("#filing-recovery");
@@ -2946,12 +3096,29 @@
 
     function bootConsole() {
       showConsoleShell();
-      showView("mesa");
+      let initialView = "mesa";
+      try {
+        initialView = sessionStorage.getItem("causiaStartView") || "mesa";
+        sessionStorage.removeItem("causiaStartView");
+      } catch (_) { /* private mode */ }
+      showView(initialView);
+      renderTrialSetup();
+      try {
+        const welcome = sessionStorage.getItem("causiaTrialWelcome");
+        if (welcome && notice) {
+          const data = JSON.parse(welcome);
+          notice.textContent = `Teste anônimo ativo até ${fmtDate(data.expires_at)}. Conecte o agente local em Acervo para importar seus processos.`;
+          notice.className = "notice";
+          notice.hidden = false;
+          sessionStorage.removeItem("causiaTrialWelcome");
+        }
+      } catch (_) { /* private mode */ }
       if (consoleBooted) {
         loadAiSession();
         loadWorkbench();
         loadProcessos();
         loadPrazos();
+        loadAccessSummary();
         loadFilingStatus();
         return;
       }
@@ -2961,6 +3128,7 @@
       loadWorkbench();
       loadProcessos();
       loadPrazos();
+      loadAccessSummary();
       loadPilotFeedback();
       loadPilotSummary();
       loadCorpusQueue();
