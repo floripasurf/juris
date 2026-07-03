@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Causia</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14.5' fill='%237A2334'/%3E%3Ccircle cx='16' cy='16' r='11.5' fill='none' stroke='%23F6F5F1' stroke-width='1'/%3E%3Ctext x='16' y='21.5' text-anchor='middle' font-family='Georgia,serif' font-size='15' font-weight='600' fill='%23F6F5F1'%3EC%3C/text%3E%3C/svg%3E" />
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%237A2334'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='Georgia,serif' font-size='18' font-weight='600' fill='%23F6F5F1'%3EC%3C/text%3E%3C/svg%3E" />
+  <meta name="theme-color" content="#7A2334" />
+  <meta name="apple-mobile-web-app-title" content="Causia" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" />
@@ -56,11 +59,51 @@
       color: #fff;
       padding: 24px clamp(18px, 5vw, 64px) 54px;
       background:
-        linear-gradient(90deg, rgba(23, 26, 32, 0.88) 0%, rgba(23, 26, 32, 0.72) 42%, rgba(23, 26, 32, 0.28) 72%, rgba(23, 26, 32, 0.08) 100%),
-        url("/static/assets/causia-hero-legal-desk.jpg");
-      background-size: cover;
-      background-position: center;
+        radial-gradient(1200px 600px at 78% 18%, rgba(122, 35, 52, 0.55) 0%, rgba(122, 35, 52, 0) 60%),
+        linear-gradient(135deg, #2A1218 0%, #23252B 55%, #1B1D22 100%);
     }
+    .landing-main {
+      align-self: center;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 0.92fr);
+      align-items: center;
+      gap: clamp(28px, 5vw, 72px);
+      width: 100%;
+    }
+    /* Product showcase — a faithful mini "Mesa de trabalho" in a browser frame. */
+    .landing-showcase { perspective: 1400px; }
+    .app-frame {
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--paper);
+      box-shadow: 0 40px 90px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.06);
+      transform: rotateY(-4deg) rotateX(2deg);
+    }
+    .app-frame-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      background: #ECEAE3;
+      border-bottom: 1px solid var(--line);
+    }
+    .app-frame-bar i { width: 10px; height: 10px; border-radius: 50%; background: #CFCCC3; }
+    .app-frame-bar .u { margin-left: 10px; font-size: 11px; color: var(--muted); font-family: var(--mono); }
+    .app-frame-body { padding: 16px 16px 18px; color: var(--ink); }
+    .mm-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+    .mm-head strong { font-family: var(--serif); font-size: 15px; }
+    .mm-head span { font-size: 10.5px; color: var(--ok); background: var(--ok-bg); border: 1px solid var(--ok-line); padding: 2px 7px; border-radius: 3px; }
+    .mm-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .mm-col > h4 {
+      margin: 0 0 8px; font-size: 9.5px; font-weight: 600; letter-spacing: 0.06em;
+      text-transform: uppercase; color: var(--ink-2); border-top: 2px solid var(--brand); padding-top: 8px;
+    }
+    .mm-card { background: #fff; border: 1px solid var(--line); border-radius: 5px; padding: 8px 9px; margin-bottom: 8px; }
+    .mm-card b { display: block; font-family: var(--mono); font-size: 10.5px; color: var(--ink); }
+    .mm-card em { font-style: normal; color: var(--muted); font-size: 10px; }
+    .mm-card .tag { display: inline-block; margin-top: 5px; font-size: 9px; font-weight: 600; padding: 1px 6px; border-radius: 3px; }
+    .mm-card .tag.alta { color: var(--danger); background: var(--danger-bg); border: 1px solid var(--danger-line); }
+    .mm-card .tag.go { color: #fff; background: var(--brand); }
     .landing-nav {
       display: flex;
       align-items: center;
@@ -477,7 +520,7 @@
     .processos-panel, .workbench-panel { grid-column: 1 / -1; padding: 24px; }
     .workbench-grid {
       display: grid;
-      grid-template-columns: repeat(5, minmax(180px, 1fr));
+      grid-template-columns: repeat(3, minmax(200px, 1fr));
       gap: 12px;
       margin-top: 16px;
     }
@@ -759,12 +802,23 @@
       .landing-copy h1 { font-size: 40px; }
       .landing-copy .lede { font-size: 17px; }
       .landing-features { grid-template-columns: 1fr; }
-      header { padding: 0 16px; gap: 12px; height: auto; min-height: 58px; flex-wrap: wrap; }
+      header { padding: 8px 12px 0; gap: 8px; height: auto; min-height: 58px; flex-wrap: wrap; }
       .header-actions {
-        width: 100%;
-        justify-content: space-between;
-        padding-bottom: 10px;
+        order: 1;
+        margin-left: auto;
       }
+      #nav {
+        order: 2;
+        width: 100%;
+        margin-left: 0;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+      }
+      #nav::-webkit-scrollbar { display: none; }
+      #nav button { flex: 0 0 auto; padding: 10px 14px; }
       main { grid-template-columns: 1fr; padding: 16px; }
       .form-panel { position: static; }
       .artifact-list { grid-template-columns: 1fr; }
@@ -774,6 +828,11 @@
       .metric-grid { grid-template-columns: 1fr 1fr; }
       .proc-row { grid-template-columns: 1fr; gap: 6px; }
       .proc-prazo { text-align: left; }
+    }
+    @media (max-width: 980px) {
+      .landing-main { grid-template-columns: 1fr; gap: 32px; }
+      .app-frame { transform: none; max-width: 520px; }
+      .landing-showcase { order: 2; }
     }
     @media (max-width: 640px) {
       .landing-copy { padding-top: 30px; }
@@ -786,6 +845,7 @@
         grid-template-columns: 1fr;
       }
       .landing-nav-note { text-align: left; max-width: none; }
+      .landing-showcase { display: none; }
     }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { transition: none !important; animation: none !important; }
@@ -799,23 +859,45 @@
         <div class="brand"><div class="mark">C</div><div>Caus<span class="ia">ia</span></div></div>
         <div class="landing-nav-note">Solicite uma chave de teste gratuita por 30 dias, sem criar conta no produto.</div>
       </div>
-      <div class="landing-copy">
-        <p class="landing-kicker">IA jurídica privada para escritórios</p>
-        <h1>Transforme processos em trabalho pronto sem expor os dados do cliente.</h1>
-        <p class="lede">Causia organiza acervo, prazos, minutas e protocolo controlado em uma mesa de trabalho jurídica. Solicite uma chave de teste e use por 30 dias, sem criar conta no produto.</p>
-        <div class="landing-cta">
-          <a id="request-access" class="landing-primary" href="mailto:lages.raphael@gmail.com?subject=Quero%20testar%20o%20Causia%20(30%20dias)&body=Ol%C3%A1%2C%20gostaria%20de%20uma%20chave%20de%20teste%20do%20Causia.%0A%0AEscrit%C3%B3rio%3A%20%0AOAB%2FUF%3A%20%0ATelefone%3A%20">Solicitar acesso grátis</a>
-          <button type="button" id="have-key-toggle" class="landing-secondary">Já tenho uma chave</button>
-        </div>
-        <form id="landing-login-form" class="landing-access" hidden>
-          <div>
-            <label for="landing-api-key">Chave de acesso do teste</label>
-            <input id="landing-api-key" type="password" placeholder="Cole sua chave de acesso" autocomplete="off" required />
+      <div class="landing-main">
+        <div class="landing-copy">
+          <p class="landing-kicker">IA jurídica privada para escritórios</p>
+          <h1>Transforme processos em trabalho pronto sem expor os dados do cliente.</h1>
+          <p class="lede">Causia organiza acervo, prazos, minutas e protocolo controlado em uma mesa de trabalho jurídica. Solicite uma chave de teste e use por 30 dias, sem criar conta no produto.</p>
+          <div class="landing-cta">
+            <a id="request-access" class="landing-primary" href="mailto:lages.raphael@gmail.com?subject=Quero%20testar%20o%20Causia%20(30%20dias)&body=Ol%C3%A1%2C%20gostaria%20de%20uma%20chave%20de%20teste%20do%20Causia.%0A%0AEscrit%C3%B3rio%3A%20%0AOAB%2FUF%3A%20%0ATelefone%3A%20">Solicitar acesso grátis</a>
+            <button type="button" id="have-key-toggle" class="landing-secondary">Já tenho uma chave</button>
           </div>
-          <button type="submit">Entrar</button>
-          <p id="landing-login-error" hidden></p>
-        </form>
-        <p class="landing-note">A chave fica apenas nesta aba do navegador. Não guardamos seus dados nem os dados dos seus processos.</p>
+          <form id="landing-login-form" class="landing-access" hidden>
+            <div>
+              <label for="landing-api-key">Chave de acesso do teste</label>
+              <input id="landing-api-key" type="password" placeholder="Cole sua chave de acesso" autocomplete="off" required />
+            </div>
+            <button type="submit">Entrar</button>
+            <p id="landing-login-error" hidden></p>
+          </form>
+          <p class="landing-note">A chave fica apenas nesta aba do navegador. Não guardamos seus dados nem os dados dos seus processos.</p>
+        </div>
+        <div class="landing-showcase" aria-hidden="true">
+          <div class="app-frame">
+            <div class="app-frame-bar"><i></i><i></i><i></i><span class="u">causia.com.br</span></div>
+            <div class="app-frame-body">
+              <div class="mm-head"><strong>Mesa de trabalho</strong><span>sem alertas</span></div>
+              <div class="mm-cols">
+                <div class="mm-col">
+                  <h4>Prazos críticos</h4>
+                  <div class="mm-card"><b>5099887-21.2024.8.13.0145</b><em>04/07 · Razões de apelação</em><br><span class="tag alta">urgente</span></div>
+                  <div class="mm-card"><b>5012345-67.2024.8.13.0024</b><em>05/07 · Contestação</em><br><span class="tag alta">urgente</span></div>
+                </div>
+                <div class="mm-col">
+                  <h4>Prontos para rascunho</h4>
+                  <div class="mm-card"><b>1004821-90.2023.5.03.0114</b><em>Recurso de Revista · 1 prazo</em><br><span class="tag go">gerar minuta</span></div>
+                  <div class="mm-card"><b>0801234-56.2024.8.13.0672</b><em>Execução · honorários</em><br><span class="tag go">gerar minuta</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
     <div class="landing-band">
@@ -872,7 +954,7 @@
       <button type="button" data-nav="protocolo">Protocolo</button>
     </nav>
     <div class="header-actions">
-      <div class="status" id="ai-session" title="Modo de IA e proteção de dados">IA: …</div>
+      <div class="status" id="ai-session" role="status" aria-live="polite" title="Modo de IA e proteção de dados">IA: …</div>
       <button type="button" id="logout-button" class="header-logout">Sair</button>
     </div>
   </header>
@@ -898,7 +980,7 @@
         <input id="processos-filter" placeholder="Filtrar CNJ, classe ou assunto" autocomplete="off" />
         <select id="processos-sort">
           <option value="prazo">ordenar por prazo</option>
-          <option value="sync">ordenar por última sync</option>
+          <option value="sync">ordenar por última atualização</option>
           <option value="prazos">ordenar por nº de prazos</option>
         </select>
       </div>
@@ -1168,12 +1250,12 @@
         <textarea id="instructions" placeholder="Opcional"></textarea>
 
         <div class="checks">
-          <label class="check"><input id="cloud" type="checkbox" /> usar Claude cloud</label>
-          <label class="check"><input id="skip_review" type="checkbox" /> pular revisão pós-draft</label>
+          <label class="check"><input id="cloud" type="checkbox" /> Usar IA em nuvem, com dados protegidos</label>
+          <label class="check"><input id="skip_review" type="checkbox" /> pular a revisão automática</label>
         </div>
 
         <button id="submit" type="submit">Gerar artefatos</button>
-        <div id="notice" class="notice" hidden></div>
+        <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
       </form>
     </section>
 
@@ -1192,7 +1274,7 @@
     </section>
   </main>
 
-  <div id="proc-modal" class="modal" hidden>
+  <div id="proc-modal" class="modal" hidden role="dialog" aria-modal="true" aria-label="Detalhe do processo">
     <div class="modal-card">
       <button type="button" class="modal-close" aria-label="Fechar">×</button>
       <div id="proc-modal-body"></div>
@@ -1417,7 +1499,7 @@
 
     async function openAudit(dir) {
       procModalBody.innerHTML = "<p class='muted'>Verificando cadeia…</p>";
-      procModal.hidden = false;
+      openProcModal();
       try {
         const r = await apiFetch(`/api/audit?output_dir=${encodeURIComponent(dir)}`);
         if (!r.ok) throw new Error(r.status === 404 ? "audit.jsonl não encontrado" : "Falha ao verificar");
@@ -1516,7 +1598,10 @@
         el.hidden = el.dataset.view !== name;
       });
       document.querySelectorAll("#nav button").forEach((b) => {
-        b.classList.toggle("active", b.dataset.nav === name);
+        const isActive = b.dataset.nav === name;
+        b.classList.toggle("active", isActive);
+        if (isActive) b.setAttribute("aria-current", "page");
+        else b.removeAttribute("aria-current");
       });
     }
     document.querySelectorAll("#nav button").forEach((b) => {
@@ -1925,13 +2010,37 @@
 
     const procModal = document.querySelector("#proc-modal");
     const procModalBody = document.querySelector("#proc-modal-body");
-    function closeProcModal() { procModal.hidden = true; }
+    let procLastFocus = null;
+    function openProcModal() {
+      procLastFocus = document.activeElement;
+      procModal.hidden = false;
+      const closeBtn = procModal.querySelector(".modal-close");
+      if (closeBtn) closeBtn.focus();
+    }
+    function closeProcModal() {
+      procModal.hidden = true;
+      if (procLastFocus && procLastFocus.focus) procLastFocus.focus();
+      procLastFocus = null;
+    }
     procModal.querySelector(".modal-close").addEventListener("click", closeProcModal);
     procModal.addEventListener("click", (e) => { if (e.target === procModal) closeProcModal(); });
+    document.addEventListener("keydown", (e) => {
+      if (procModal.hidden) return;
+      if (e.key === "Escape") { closeProcModal(); return; }
+      if (e.key === "Tab") {
+        // focus trap: keep Tab within the modal
+        const focusables = procModal.querySelectorAll('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+        if (!focusables.length) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    });
 
     async function openProcessoDetail(cnj) {
       procModalBody.innerHTML = "<p class='muted'>Carregando…</p>";
-      procModal.hidden = false;
+      openProcModal();
       try {
         const r = await apiFetch(`/api/processos/${encodeURIComponent(cnj)}`);
         if (!r.ok) throw new Error(r.status === 404 ? "Processo não encontrado" : "Falha ao carregar");
@@ -1951,7 +2060,7 @@
 
     // Resume a pending filing from the case page: close the modal, go to Protocolo, load it.
     function resumeFilingFromCase(pendingKey) {
-      procModal.hidden = true;
+      closeProcModal();
       showView("protocolo");
       loadPendingRecovery(pendingKey);
     }
@@ -1993,7 +2102,7 @@
         btn.addEventListener("click", () => resumeFilingFromCase(btn.dataset.resume));
       });
       const protoBtn = procModalBody.querySelector("[data-protocolar]");
-      if (protoBtn) protoBtn.addEventListener("click", () => { procModal.hidden = true; showView("protocolo"); });
+      if (protoBtn) protoBtn.addEventListener("click", () => { closeProcModal(); showView("protocolo"); });
     }
 
     function filteredProcessos() {
@@ -2653,9 +2762,14 @@
           const ex = r.explain || {};
           const row = document.createElement("div");
           row.className = "queue-item";
+          const url = (r.source_url || "").trim();
+          const isHttp = /^https?:\/\//i.test(url);
+          const link = isHttp
+            ? `<div class="meta"><a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer">ver fonte oficial ↗</a></div>`
+            : "";
           row.innerHTML = `<strong>${escHtml(r.source_id)}</strong>
             <div class="meta">${escHtml(ex.fonte || r.tribunal || "—")} · <em>${escHtml(ex.motivo || "relevância textual")}</em> · score ${escHtml(String(r.score))}</div>
-            <div class="meta">${escHtml((r.texto || "").slice(0, 180))}…</div>`;
+            <div class="meta">${escHtml((r.texto || "").slice(0, 180))}…</div>${link}`;
           el.appendChild(row);
         });
       } catch (err) {

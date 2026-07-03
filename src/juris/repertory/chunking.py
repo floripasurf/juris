@@ -107,6 +107,8 @@ def _build_metadata(fonte: FonteJurisprudencia) -> dict[str, Any]:
         meta["relator"] = fonte.relator
     if fonte.data_julgamento:
         meta["data_julgamento"] = fonte.data_julgamento.isoformat()
+    if fonte.source_url:
+        meta["source_url"] = fonte.source_url
     return meta
 
 

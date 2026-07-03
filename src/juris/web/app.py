@@ -982,6 +982,7 @@ async def search_corpus(q: str, top_k: int = 8, tenant: Tenant = Depends(current
                 "tribunal": r.tribunal,
                 "hierarquia": r.hierarchy_label,
                 "texto": r.texto[:400],
+                "source_url": r.source_url,
                 "explain": explain_ranking(r),
             }
             for r in results

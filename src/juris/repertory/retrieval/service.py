@@ -69,6 +69,9 @@ class RetrievalResult:
     tribunal: str
     texto: str
     base_legal: list[str] = field(default_factory=list)
+    # Public provenance URL (when the chunk carries one) so the console can link
+    # the citation back to its official source.
+    source_url: str = ""
     # Per-component breakdown of the composite score (ADR-0017 auditability):
     # {relevancia, autoridade, vigencia, corroboracao, recencia, pacificacao, total}.
     # None when the composite ranker isn't active (relevance-only fallback).
@@ -210,6 +213,7 @@ class RepertoryService:
                     tribunal=result.metadata.get("tribunal", ""),
                     texto=result.text,
                     base_legal=result.metadata.get("base_legal", []),
+                    source_url=str(result.metadata.get("source_url") or ""),
                 )
             )
         return output
