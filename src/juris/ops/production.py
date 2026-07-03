@@ -188,6 +188,7 @@ def _plaintext_key_entries(tenant_keys: Mapping[str, object]) -> list[str]:
             if not isinstance(keys, Mapping):
                 continue
             for key_id, entry in keys.items():
+                key_value: object | None
                 if isinstance(entry, str):
                     key_value = entry
                 elif isinstance(entry, Mapping):

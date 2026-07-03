@@ -5,11 +5,12 @@ from __future__ import annotations
 import json
 import os
 import secrets
-from collections.abc import Iterator, MutableMapping
+from collections.abc import Iterator, Mapping, MutableMapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any, cast
 
 from juris.web.auth import hash_api_key, validate_tenant_id
 
@@ -105,7 +106,7 @@ def _clear_auth_caches() -> None:
     from juris.web.auth import default_registry
 
     default_registry.cache_clear()
-    _load_agent_bindings.cache_clear()
+    cast(Any, _load_agent_bindings).cache_clear()
 
 
 def create_trial_access(
@@ -226,7 +227,8 @@ def read_tenant_access_summary(tenant_id: str, *, tenants_path: Path | None = No
         }
     if not isinstance(raw, dict):
         return {"tenant_id": tenant_id, "trial": False, "expires_at": None, "keys": []}
-    keys = raw.get("keys") if isinstance(raw.get("keys"), dict) else {}
+    raw_keys = raw.get("keys")
+    keys: Mapping[str, object] = raw_keys if isinstance(raw_keys, dict) else {}
     return {
         "tenant_id": tenant_id,
         "trial": raw.get("kind") == "trial",
