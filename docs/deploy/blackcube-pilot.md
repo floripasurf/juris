@@ -201,24 +201,31 @@ o produto na primeira sessão enquanto o token não está configurado.
 
 ## 7. Agente local A3 (co-localizado no Mac Mini)
 
-O agente é o guardião do token (ADR-0015): roda no Mac Mini, resolve CPF/senha
-PJe/PIN localmente e expõe só um WebSocket em `127.0.0.1:8765`. Nada de segredo
-vai para a nuvem. Detalhe completo em `docs/deploy/agent-install.md`; resumo:
+O agente é o guardião do token (ADR-0015): resolve CPF/senha PJe/PIN localmente
+e expõe só um WebSocket em `127.0.0.1:8765`. Nada de segredo vai para a nuvem.
+Detalhe completo em `docs/deploy/agent-install.md`; resumo do caminho
+**recomendado** (instalador empacotado — o advogado instala sozinho, sem editar
+plist nem abrir terminal):
 
 1. **Token + driver**: plugue o e-CPF A3 e instale o módulo PKCS#11 (SafeNet/eToken).
-2. **Serviço do agente** (launchd):
-   ```bash
-   cp ~/juris-pilot/app/docs/deploy/com.juris.agent.plist ~/Library/LaunchAgents/
-   # edite: JURIS_AGENT_TOKEN (pareamento), JURIS_AGENT_CPF/SENHA/PIN, caminho PKCS#11
-   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.juris.agent.plist
-   uv run juris agent health --url ws://127.0.0.1:8765   # token conectado; cert válido
-   ```
-3. **Pareamento browser-first (mais fácil)**: no console → **Acervo → Conectar
-   agente local**. O navegador fala com `http://127.0.0.1:8765` (loopback; CORS +
-   Private Network Access já tratados) e configura CPF/PJe/PIN **direto no agente**,
-   sem passar pelo servidor. Fallback "comando técnico" se o navegador não alcançar
-   o agente.
-4. **Ligar o modo remoto na web**: gere o binding do tenant e reexecute o go-live:
+2. **Instalar o agente**: no console (causia.com.br) → **Acervo → "Baixar o
+   agente"** → escolha macOS ou Windows.
+   - **macOS**: abra o `.dmg` e arraste "Causia Agente" para Aplicativos. Na
+     **primeira vez**, clique com o botão direito em "Causia Agente" → Abrir →
+     Abrir (o aviso de "desenvolvedor não identificado" é esperado — o app
+     ainda não é assinado, ver `agent-install.md`). O agente instala sozinho o
+     LaunchAgent (`com.causia.agent`, `RunAtLoad`+`KeepAlive`) na primeira
+     execução e passa a subir sempre que a máquina liga — **sem `cp`/`launchctl`
+     manual**.
+   - **Windows**: baixe e extraia o `.zip`, rode `install.bat` (sem admin, sem
+     porta de entrada). O SmartScreen pode avisar sobre `.exe` não assinado —
+     "Mais informações" → "Executar assim mesmo".
+3. **Parear pelo próprio console**: **Acervo → Conectar agente local**. O
+   navegador fala com `http://127.0.0.1:8765` (loopback; CORS + Private Network
+   Access já tratados) e configura CPF/PJe/PIN **direto no agente**, sem passar
+   pelo servidor. Fallback "comando técnico" se o navegador não alcançar o agente.
+4. **Ligar o modo remoto na web** (piloto co-localizado no Mac Mini): gere o
+   binding do tenant e reexecute o go-live:
    ```bash
    printf '{"escritorio-piloto":{"url":"ws://127.0.0.1:8765","token":"<token pareado>"}}' \
      > ~/juris-pilot/agents.json && chmod 600 ~/juris-pilot/agents.json
@@ -227,3 +234,15 @@ vai para a nuvem. Detalhe completo em `docs/deploy/agent-install.md`; resumo:
    Com isso a UI para de pedir CPF/PIN/senha no navegador — o agente resolve tudo.
 5. **Validar ponta a ponta**: `uv run juris consulta <cnj> --tribunal tjmg` (leitura
    MNI real via token) e, no console, gerar minuta com `source=mni`.
+
+### Apêndice — instalação manual (técnicos)
+
+Caminho anterior ao instalador empacotado, mantido para debug/CI ou para quem
+prefere editar o plist à mão em vez de baixar o `.dmg`/`.zip`:
+
+```bash
+cp ~/juris-pilot/app/docs/deploy/com.juris.agent.plist ~/Library/LaunchAgents/
+# edite: JURIS_AGENT_TOKEN (pareamento), JURIS_AGENT_CPF/SENHA/PIN, caminho PKCS#11
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.juris.agent.plist
+uv run juris agent health --url ws://127.0.0.1:8765   # token conectado; cert válido
+```
