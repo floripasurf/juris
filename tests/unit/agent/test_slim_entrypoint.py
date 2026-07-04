@@ -28,10 +28,24 @@ def test_slim_entrypoint_imports_no_heavy_deps() -> None:
         "import sys; "
         "import juris.agent.main; "
         "heavy=[m for m in sys.modules if any(h in m for h in "
-        "('torch','transformers','sentence_transformers','qdrant','sqlalchemy'))]; "
+        "('torch','transformers','sentence_transformers','qdrant','sqlalchemy',"
+        "'juris.web.app','fitz','pymupdf','botocore','anthropic','PIL'))]; "
         "print('HEAVY:'+','.join(heavy)); "
         "assert not heavy, heavy"
     )
     r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)  # noqa: S603
     assert r.returncode == 0, r.stdout + r.stderr
     assert "HEAVY:" in r.stdout and r.stdout.strip().endswith("HEAVY:")
+
+
+def test_web_auth_import_does_not_pull_in_web_app() -> None:
+    # o agente só precisa de juris.web.auth (validate_tenant_id) — o __init__ lazy do
+    # pacote juris.web não pode puxar juris.web.app (e sua árvore pesada: anthropic,
+    # botocore, pymupdf/fitz, PIL) só por causa desse import de submódulo.
+    code = (
+        "import sys; "
+        "from juris.web.auth import validate_tenant_id; "
+        "assert 'juris.web.app' not in sys.modules, sorted(m for m in sys.modules if m.startswith('juris.web'))"
+    )
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)  # noqa: S603
+    assert r.returncode == 0, r.stdout + r.stderr

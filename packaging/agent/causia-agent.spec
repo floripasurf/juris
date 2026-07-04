@@ -19,7 +19,9 @@ a = Analysis(
         "uvicorn.lifespan.on", "websockets", "zeep", "pyhanko", "pkcs11",
     ],
     excludes=["torch", "transformers", "sentence_transformers", "sklearn",
-              "scipy", "matplotlib", "qdrant_client", "sqlalchemy", "alembic", "pandas"],
+              "scipy", "matplotlib", "qdrant_client", "sqlalchemy", "alembic", "pandas",
+              "juris.web.app", "pymupdf", "fitz", "PIL", "anthropic", "botocore", "boto3",
+              "numpy", "pyphen", "mypy", "python-docx", "docx"],
     hookspath=[], runtime_hooks=[], cipher=None, noarchive=False,
 )
 pyz = PYZ(a.pure, a.zipped_data, cipher=None)
