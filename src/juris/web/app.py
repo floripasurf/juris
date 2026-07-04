@@ -621,6 +621,17 @@ async def start_trial(request: Request) -> dict[str, object]:
     }
 
 
+@app.get("/api/agent/latest")
+async def get_agent_latest() -> dict[str, object]:
+    """Manifesto de auto-update do agente (público; a integridade vem da assinatura Ed25519)."""
+    from juris.web.agent_dist import latest_manifest
+
+    manifest = await asyncio.to_thread(latest_manifest)
+    if manifest is None:
+        raise HTTPException(status_code=404, detail="Nenhuma versão do agente publicada.")
+    return manifest
+
+
 @app.get("/api/access")
 async def get_access_summary(tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
     """Current tenant access metadata, excluding raw API keys."""
