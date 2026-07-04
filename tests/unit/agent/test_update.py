@@ -138,3 +138,36 @@ def test_no_public_key_returns_false_without_network(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(httpx, "get", boom)
 
     assert update_mod.maybe_self_update(public_key_pem="") is False
+
+
+def test_valid_newer_manifest_reaches_apply_update(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Controle positivo: manifesto genuinamente válido + versão mais nova + sha256 que
+    # BATE com o blob servido → maybe_self_update chega a _apply_update exatamente uma vez
+    # com os bytes corretos. Prova que os testes "never called" não passam vacuamente
+    # (i.e., o caminho feliz REALMENTE alcança a troca; se assim não fosse, aqueles
+    # testes provariam nada).
+    from juris.agent import update as update_mod
+
+    monkeypatch.setenv("JURIS_AGENT_VERSION", "1.0.0")
+    pub, priv = _keypair()
+    served_blob = b"the-legit-signed-payload-bytes"
+    good_sha = hashlib.sha256(served_blob).hexdigest()
+    meta = _sign(priv, {"version": "2.0.0", "sha256": good_sha, "url": "https://dl/agent"})
+
+    applied: list[bytes] = []
+
+    def spy_apply(blob: bytes) -> bool:
+        applied.append(blob)
+        return True
+
+    monkeypatch.setattr(update_mod, "_apply_update", spy_apply)
+
+    def fake_get(url: str, **_: Any) -> _FakeResp:
+        if url == update_mod._MANIFEST_URL:
+            return _FakeResp(json_data=meta)
+        return _FakeResp(content=served_blob)
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    assert update_mod.maybe_self_update(public_key_pem=pub) is True
+    assert applied == [served_blob]  # chamado exatamente uma vez, com os bytes certos
