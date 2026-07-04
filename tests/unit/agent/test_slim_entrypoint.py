@@ -16,5 +16,5 @@ def test_agent_dep_group_excludes_heavy_ml() -> None:
 
 def test_agent_dep_group_has_token_and_relay_deps() -> None:
     agent_deps = " ".join(_PYPROJECT["project"]["optional-dependencies"]["agent"]).lower()
-    for needed in ("zeep", "requests-pkcs12", "websockets", "python-pkcs11", "pyhanko", "cryptography"):
+    for needed in ("zeep", "requests-pkcs12", "websockets", "python-pkcs11", "pyhanko", "cryptography", "certifi"):
         assert needed in agent_deps, f"grupo agent precisa de: {needed}"

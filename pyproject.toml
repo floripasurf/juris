@@ -76,6 +76,7 @@ agent = [
     "typer>=0.14.0",
     "structlog>=24.4.0",
     "cryptography>=46.0.0",
+    "certifi>=2024.0.0",
 ]
 scraping = ["beautifulsoup4>=4.12.0", "lxml>=5.0.0"]
 
