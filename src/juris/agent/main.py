@@ -16,7 +16,7 @@ def main() -> None:
     """
     # Auto-update before serving (best-effort; never blocks the start).
     try:
-        from juris.agent.update import maybe_self_update  # type: ignore[import-untyped]
+        from juris.agent.update import maybe_self_update
 
         maybe_self_update()
     except Exception:  # noqa: BLE001, S110 - update is best-effort, never crashes the agent
