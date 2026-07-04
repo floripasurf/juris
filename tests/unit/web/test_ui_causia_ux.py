@@ -77,10 +77,18 @@ class TestConversionAndPromise:
         assert 'id="agent-credentials-form"' in _INDEX_HTML
         assert 'id="connect-btn"' in _INDEX_HTML
         assert 'id="agent-credentials-edit"' in _INDEX_HTML
+        assert 'id="first-access-credentials"' in _INDEX_HTML
+        assert 'id="first-access-connect"' in _INDEX_HTML
         assert 'id="c_seed"' in _INDEX_HTML
+        assert "Primeiro acesso: siga nesta ordem" in _INDEX_HTML
+        assert "Abra o Causia Agent" in _INDEX_HTML
+        assert "Informe CPF, senha PJe e PIN" in _INDEX_HTML
+        assert "Sincronize seus processos" in _INDEX_HTML
         assert "Salvar e sincronizar" in _INDEX_HTML
         assert "Atualizar credenciais" in _INDEX_HTML
         assert "Adicionar processos por número CNJ" in _INDEX_HTML
+        assert "Causia Agent ainda não conectado neste computador" in _INDEX_HTML
+        assert "Agente remoto indisponível" not in _INDEX_HTML
         assert "localAgentCredentialsStatus" in _INDEX_HTML
         assert "Credenciais locais já salvas neste computador" in _INDEX_HTML
         assert "por CNJs informados" in _INDEX_HTML

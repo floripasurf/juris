@@ -683,8 +683,61 @@
     .connect-bar input { width: auto; flex: 0 1 180px; margin: 0; }
     .connect-bar button { width: auto; flex: 0 0 auto; margin-top: 0; }
     #connect-status { color: var(--muted); font-size: 13px; }
+    .first-access-guide {
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--brand);
+      border-radius: 5px;
+      background: var(--panel-soft);
+      padding: 16px 18px;
+      margin: 18px 0 16px;
+    }
+    .first-access-title {
+      margin: 0 0 4px;
+      font-family: var(--serif);
+      font-size: 18px;
+      font-weight: 650;
+      text-transform: none;
+      letter-spacing: 0;
+      color: var(--ink);
+    }
+    .first-access-guide > p {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+      max-width: 78ch;
+    }
+    .first-access-steps {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(180px, 1fr));
+      gap: 12px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .first-access-step {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+    }
+    .step-number {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      background: var(--brand);
+      color: white;
+      font-weight: 700;
+      font-size: 13px;
+      line-height: 1;
+    }
+    .first-access-step strong { display: block; color: var(--ink); font-size: 13px; }
+    .first-access-step p { margin: 4px 0 10px; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+    .first-access-step button { width: auto; margin: 0; padding: 7px 11px; font-size: 12.5px; }
     .connect-seed {
-      flex-basis: 100%;
+      flex: 1 0 100%;
       margin-top: 4px;
       max-width: 640px;
     }
@@ -912,6 +965,7 @@
       .tabs { border-right: 0; border-bottom: 1px solid var(--line); }
       .row { grid-template-columns: 1fr; }
       .workbench-grid { grid-template-columns: 1fr; }
+      .first-access-steps { grid-template-columns: 1fr; }
       .metric-grid { grid-template-columns: 1fr 1fr; }
       .proc-row { grid-template-columns: 1fr; gap: 6px; }
       .proc-prazo { text-align: left; }
@@ -1055,6 +1109,35 @@
     <section class="processos-panel" data-view="acervo" hidden>
       <h1>Meus processos</h1>
       <p class="lede">Acervo importado pelo agente local do seu computador. Clique em conectar para importar e manter atualizado.</p>
+      <section class="first-access-guide" aria-labelledby="first-access-title">
+        <h2 id="first-access-title" class="first-access-title">Primeiro acesso: siga nesta ordem</h2>
+        <p>Use o computador onde o token A3 está conectado. CPF, senha PJe e PIN ficam salvos apenas no Causia Agent deste computador.</p>
+        <ol class="first-access-steps">
+          <li class="first-access-step">
+            <span class="step-number" aria-hidden="true">1</span>
+            <div>
+              <strong>Abra o Causia Agent</strong>
+              <p>Deixe o aplicativo local aberto e o token A3 conectado antes de sincronizar.</p>
+            </div>
+          </li>
+          <li class="first-access-step">
+            <span class="step-number" aria-hidden="true">2</span>
+            <div>
+              <strong>Informe CPF, senha PJe e PIN</strong>
+              <p>Essas credenciais são gravadas só neste computador.</p>
+              <button id="first-access-credentials" class="ghost" type="button">Atualizar credenciais</button>
+            </div>
+          </li>
+          <li class="first-access-step">
+            <span class="step-number" aria-hidden="true">3</span>
+            <div>
+              <strong>Sincronize seus processos</strong>
+              <p>Depois importe avisos pendentes ou informe CNJs para acompanhar processos específicos.</p>
+              <button id="first-access-connect" type="button">Conectar / sincronizar</button>
+            </div>
+          </li>
+        </ol>
+      </section>
       <div id="agent-setup" class="notice agent-setup" role="status" aria-live="polite" hidden></div>
       <div class="agent-tools"><span id="agent-pairing-status" role="status" aria-live="polite"></span></div>
       <form id="connect-form" class="connect-bar">
@@ -2104,19 +2187,19 @@
         return;
       }
       if (h.ready === true) {
-        cs.textContent = h.message || "Agente remoto pronto: token A3 conectado.";
+        cs.textContent = h.message || "Causia Agent conectado: token A3 detectado.";
         return;
       }
       if (h.error || h.reachable === false) {
-        cs.textContent = `Agente remoto indisponível: ${h.error || "sem resposta"}`;
+        cs.textContent = "Causia Agent ainda não conectado neste computador. Abra o aplicativo local e siga os passos abaixo.";
         return;
       }
       if (h.token_connected === false) {
-        cs.textContent = "Agente remoto alcançável, mas token A3 não detectado.";
+        cs.textContent = "Causia Agent conectado, mas o token A3 não foi detectado.";
         return;
       }
       if (h.token_connected === true) {
-        cs.textContent = "Agente remoto pronto: token A3 conectado.";
+        cs.textContent = "Causia Agent conectado: token A3 detectado.";
       }
     }
     async function loadAgentMode() {
@@ -2695,17 +2778,21 @@
     const connectBtn = document.querySelector("#connect-btn");
     const connectStatus = document.querySelector("#connect-status");
     const agentCredentialsEdit = document.querySelector("#agent-credentials-edit");
+    const firstAccessCredentials = document.querySelector("#first-access-credentials");
+    const firstAccessConnect = document.querySelector("#first-access-connect");
     const connectSeed = document.querySelector("#c_seed");
 
-    if (agentCredentialsEdit) {
-      agentCredentialsEdit.addEventListener("click", async () => {
-        connectStatus.textContent = "Atualize CPF, senha PJe e PIN do token neste computador.";
-        const saved = await openAgentCredentialsModal();
-        connectStatus.textContent = saved
-          ? "Credenciais atualizadas. Clique em Conectar / sincronizar para importar."
-          : "Atualização cancelada.";
-      });
+    async function updateAgentCredentialsFromAcervo() {
+      connectStatus.textContent = "Atualize CPF, senha PJe e PIN do token neste computador.";
+      const saved = await openAgentCredentialsModal();
+      connectStatus.textContent = saved
+        ? "Credenciais atualizadas. Agora clique em Conectar / sincronizar."
+        : "Atualização cancelada.";
     }
+
+    if (agentCredentialsEdit) agentCredentialsEdit.addEventListener("click", updateAgentCredentialsFromAcervo);
+    if (firstAccessCredentials) firstAccessCredentials.addEventListener("click", updateAgentCredentialsFromAcervo);
+    if (firstAccessConnect) firstAccessConnect.addEventListener("click", () => connectBtn.click());
 
     connectForm.addEventListener("submit", async (event) => {
       event.preventDefault();
