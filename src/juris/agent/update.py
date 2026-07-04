@@ -39,11 +39,13 @@ def _embedded_release_meta() -> tuple[str, str]:
 
     Returns:
         Tupla `(versão embutida, chave pública PEM embutida)`; `("", "")` quando
-        o módulo não existe (checkout de dev/teste — o CI só o gera na release).
+        o módulo não existe (checkout de dev/teste — o CI só o gera na release)
+        OU está malformado (ex.: PEM mal-templado → SyntaxError no compile do
+        arquivo gerado; NameError/ValueError também possíveis).
     """
     try:
         from juris.agent._release_meta import AGENT_VERSION, PUBLIC_KEY_PEM
-    except ImportError:
+    except Exception:  # noqa: BLE001 - arquivo gerado externamente (CI); malformado ⇒ sem metadados, nunca derruba o agente
         return "", ""
     return str(AGENT_VERSION), str(PUBLIC_KEY_PEM)
 

@@ -241,3 +241,64 @@ def test_release_meta_resolution_env_wins_else_embedded(monkeypatch: pytest.Monk
     monkeypatch.delitem(sys.modules, "juris.agent._release_meta", raising=False)
     assert update_mod.current_version() == __version__
     assert update_mod._resolve_public_key() == ""
+
+
+def test_malformed_release_meta_never_crashes_agent(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Um _release_meta.py malformado gerado pelo CI (PEM mal-templado → SyntaxError,
+    # NameError etc.) levanta exceções que NÃO são ImportError. O import contra este
+    # módulo levanta RuntimeError — um `except ImportError` deixaria propagar
+    # (verificado), violando o contrato "nunca lança" de maybe_self_update.
+    from juris import __version__
+    from juris.agent import update as update_mod
+
+    class _RaisingModule(types.ModuleType):
+        def __getattr__(self, name: str) -> Any:
+            raise RuntimeError(f"release meta corrompido ({name})")
+
+    monkeypatch.setitem(
+        sys.modules, "juris.agent._release_meta", _RaisingModule("juris.agent._release_meta")
+    )
+    monkeypatch.delenv("JURIS_AGENT_UPDATE_PUBKEY", raising=False)
+    monkeypatch.delenv("JURIS_AGENT_VERSION", raising=False)
+
+    assert update_mod._embedded_release_meta() == ("", "")
+    assert update_mod._resolve_public_key() == ""
+    assert update_mod.current_version() == __version__
+    # Entrada pública: chave resolve vazia → False imediato, sem levantar nem tocar rede.
+    assert update_mod.maybe_self_update() is False
+
+
+def test_default_call_path_equal_version_no_update_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Caminho de produção REAL: maybe_self_update() SEM argumentos e SEM env vars —
+    # chave e versão vêm do _release_meta embutido. O manifesto anuncia a MESMA
+    # versão embutida (cenário pós-update): deve retornar False SEM baixar o blob.
+    # Pina a propriedade sem-loop-de-re-update através do caminho default.
+    from juris.agent import update as update_mod
+
+    pub, priv = _keypair()
+    version = "2026.7.4.1"
+    fake = types.ModuleType("juris.agent._release_meta")
+    fake.AGENT_VERSION = version  # type: ignore[attr-defined]
+    fake.PUBLIC_KEY_PEM = pub  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "juris.agent._release_meta", fake)
+    monkeypatch.delenv("JURIS_AGENT_UPDATE_PUBKEY", raising=False)
+    monkeypatch.delenv("JURIS_AGENT_VERSION", raising=False)
+
+    url = f"https://dl/{update_mod._RAW_BINARY_BASENAME}"
+    meta = _sign(priv, {"version": version, "sha256": "a" * 64, "url": url})
+
+    fetched: list[str] = []
+
+    def fake_get(u: str, **_: Any) -> _FakeResp:
+        fetched.append(u)
+        if u == update_mod._MANIFEST_URL:
+            return _FakeResp(json_data=meta)
+        return _FakeResp(content=b"must-not-be-fetched")
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    # Se o fluxo erroneamente chegasse ao swap, retornaria True e falharia o assert.
+    monkeypatch.setattr(update_mod, "_apply_update", lambda _blob: True)
+
+    assert update_mod.maybe_self_update() is False
+    # Manifesto FOI buscado (chave embutida resolveu) — mas o blob nunca:
+    assert fetched == [update_mod._MANIFEST_URL]
