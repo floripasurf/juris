@@ -21,7 +21,12 @@ a = Analysis(
     excludes=["torch", "transformers", "sentence_transformers", "sklearn",
               "scipy", "matplotlib", "qdrant_client", "sqlalchemy", "alembic", "pandas",
               "juris.web.app", "pymupdf", "fitz", "PIL", "anthropic", "botocore", "boto3",
-              "numpy", "pyphen", "mypy", "python-docx", "docx"],
+              "numpy", "pyphen", "mypy", "python-docx", "docx",
+              # weasyprint needs native pango/gobject dylibs we don't ship in
+              # this bundle; excluding it makes the import fail fast (clean
+              # ImportError) so pdf_renderer's reportlab fallback kicks in
+              # instead of a half-loaded weasyprint crashing at render time.
+              "weasyprint"],
     hookspath=[], runtime_hooks=[], cipher=None, noarchive=False,
 )
 pyz = PYZ(a.pure, a.zipped_data, cipher=None)

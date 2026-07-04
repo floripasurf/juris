@@ -162,8 +162,10 @@ def _render_with_weasyprint(html: str) -> tuple[bytes, int]:
 
     Raises:
         ImportError: If weasyprint is not installed.
-        RuntimeError: If native libs (gobject/pango) are missing, with a
-            clear fix message instead of the cryptic ctypes error.
+        OSError: If native libs (gobject/pango) are missing — e.g. in a
+            frozen bundle that excludes weasyprint's dylibs. A hint with the
+            fix is logged before re-raising so callers can fall back to
+            another engine (see ``render_petition_pdf``) instead of crashing.
     """
     try:
         from weasyprint import HTML
@@ -179,7 +181,7 @@ def _render_with_weasyprint(html: str) -> tuple[bytes, int]:
                 )
             else:
                 hint += "Fix: apt install libpango-1.0-0 libgobject-2.0-0  (or equivalent)\n"
-            raise RuntimeError(hint) from exc
+            logger.warning("weasyprint_native_libs_missing", hint=hint)
         raise
 
     doc = HTML(string=html).render()
@@ -279,15 +281,20 @@ def render_petition_pdf(
     try:
         pdf_bytes, page_count = _render_with_weasyprint(full_html)
         logger.debug("pdf_rendered_with_weasyprint", pages=page_count)
-    except ImportError:
-        logger.warning("weasyprint_unavailable, falling_back_to_reportlab")
+    except (ImportError, OSError) as exc:
+        # ImportError: weasyprint not installed (e.g. excluded from a frozen
+        # bundle). OSError: weasyprint is importable but its native libs
+        # (gobject/pango) aren't on this machine — same outcome, same fallback.
+        logger.warning(
+            "weasyprint_unavailable, falling_back_to_reportlab", reason=str(exc)
+        )
         try:
             pdf_bytes, page_count = _render_with_reportlab(full_html, markdown_text)
             logger.debug("pdf_rendered_with_reportlab", pages=page_count)
-        except ImportError as exc:
+        except ImportError as reportlab_exc:
             raise RuntimeError(
                 "No PDF backend available. Install weasyprint or reportlab."
-            ) from exc
+            ) from reportlab_exc
 
     pdf_hash = hashlib.sha256(pdf_bytes).hexdigest()
 

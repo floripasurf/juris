@@ -1231,6 +1231,7 @@ dependencies = [
     { name = "python-pkcs11" },
     { name = "qdrant-client" },
     { name = "redis" },
+    { name = "reportlab" },
     { name = "requests-pkcs12" },
     { name = "rich" },
     { name = "sentence-transformers" },
@@ -1247,6 +1248,19 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+agent = [
+    { name = "certifi" },
+    { name = "cryptography" },
+    { name = "httpx" },
+    { name = "pyhanko" },
+    { name = "python-pkcs11" },
+    { name = "requests-pkcs12" },
+    { name = "signxml" },
+    { name = "structlog" },
+    { name = "typer" },
+    { name = "websockets" },
+    { name = "zeep" },
+]
 scraping = [
     { name = "beautifulsoup4" },
     { name = "lxml" },
@@ -1271,10 +1285,13 @@ requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.14.3" },
     { name = "beautifulsoup4", marker = "extra == 'scraping'", specifier = ">=4.12.0" },
     { name = "boto3", specifier = ">=1.35.0" },
+    { name = "certifi", marker = "extra == 'agent'", specifier = ">=2024.0.0" },
     { name = "cryptography", specifier = ">=46.0.0" },
+    { name = "cryptography", marker = "extra == 'agent'", specifier = ">=46.0.0" },
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "feedparser", specifier = ">=6.0.12" },
     { name = "httpx", specifier = ">=0.27.0" },
+    { name = "httpx", marker = "extra == 'agent'", specifier = ">=0.27.0" },
     { name = "lxml", specifier = ">=5.1.0" },
     { name = "lxml", marker = "extra == 'scraping'", specifier = ">=5.0.0" },
     { name = "markdown", specifier = ">=3.6" },
@@ -1283,27 +1300,36 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.10.0" },
     { name = "pydantic-settings", specifier = ">=2.6.0" },
     { name = "pyhanko", specifier = ">=0.25.0" },
+    { name = "pyhanko", marker = "extra == 'agent'", specifier = ">=0.25.0" },
     { name = "pymupdf", specifier = ">=1.25.0" },
     { name = "python-docx", specifier = ">=1.2.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "python-pkcs11", specifier = ">=0.9.4" },
+    { name = "python-pkcs11", marker = "extra == 'agent'", specifier = ">=0.9.4" },
     { name = "qdrant-client", specifier = ">=1.12.0" },
     { name = "redis", specifier = ">=5.2.0" },
+    { name = "reportlab", specifier = ">=5.0.0" },
     { name = "requests-pkcs12", specifier = ">=1.16" },
+    { name = "requests-pkcs12", marker = "extra == 'agent'", specifier = ">=1.16" },
     { name = "rich", specifier = ">=13.9.0" },
     { name = "sentence-transformers", specifier = ">=3.3.0" },
     { name = "signxml", specifier = ">=3.2.0" },
+    { name = "signxml", marker = "extra == 'agent'", specifier = ">=3.2.0" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.35" },
     { name = "structlog", specifier = ">=24.4.0" },
+    { name = "structlog", marker = "extra == 'agent'", specifier = ">=24.4.0" },
     { name = "tenacity", specifier = ">=9.0.0" },
     { name = "truststore", specifier = ">=0.10.4" },
     { name = "typer", specifier = ">=0.14.0" },
+    { name = "typer", marker = "extra == 'agent'", specifier = ">=0.14.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
     { name = "weasyprint", specifier = ">=61.0" },
     { name = "websockets", specifier = ">=13.0" },
+    { name = "websockets", marker = "extra == 'agent'", specifier = ">=13.0" },
     { name = "zeep", specifier = ">=4.2.1" },
+    { name = "zeep", marker = "extra == 'agent'", specifier = ">=4.2.1" },
 ]
-provides-extras = ["scraping"]
+provides-extras = ["agent", "scraping"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -2596,6 +2622,19 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/19/eb/ef32dcd2cb69b69bc0c3e55205bce94a7def48d495358946bc42186dcccc/regex-2026.4.4-cp314-cp314t-win32.whl", hash = "sha256:385edaebde5db5be103577afc8699fea73a0e36a734ba24870be7ffa61119d74", size = 275709, upload-time = "2026-04-03T20:56:20.996Z" },
     { url = "https://files.pythonhosted.org/packages/a0/86/c291bf740945acbf35ed7dbebf8e2eea2f3f78041f6bd7cdab80cb274dc0/regex-2026.4.4-cp314-cp314t-win_amd64.whl", hash = "sha256:5d354b18839328927832e2fa5f7c95b7a3ccc39e7a681529e1685898e6436d45", size = 285622, upload-time = "2026-04-03T20:56:23.641Z" },
     { url = "https://files.pythonhosted.org/packages/d5/e7/ec846d560ae6a597115153c02ca6138a7877a1748b2072d9521c10a93e58/regex-2026.4.4-cp314-cp314t-win_arm64.whl", hash = "sha256:af0384cb01a33600c49505c27c6c57ab0b27bf84a74e28524c92ca897ebdac9d", size = 275773, upload-time = "2026-04-03T20:56:26.07Z" },
+]
+
+[[package]]
+name = "reportlab"
+version = "5.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "charset-normalizer" },
+    { name = "pillow" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/41/d6/4b7b0cf56880eb96533e607967be6a939e344675601e033d113a0bfa1f4e/reportlab-5.0.0.tar.gz", hash = "sha256:e4494a0c6623ae213bb856fba523171b2b54a7bf629fda02d5e525a7b899a784", size = 3701928, upload-time = "2026-06-18T11:34:31.145Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a3/07/70085c17a369605f15e301d10ab902115019b1126c7253d964afc230c7d6/reportlab-5.0.0-py3-none-any.whl", hash = "sha256:9d5a3affa84919e1111ede580031266a570e93b1ce388219621347965ff1d93c", size = 1956710, upload-time = "2026-06-18T11:34:29.07Z" },
 ]
 
 [[package]]
