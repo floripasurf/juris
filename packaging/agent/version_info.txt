@@ -1,0 +1,20 @@
+# packaging/agent/version_info.txt — VSVersionInfo do causia-agent.exe.
+# Metadados legítimos de editor/produto reduzem falso-positivo de AV em .exe não
+# assinado; a solução definitiva é assinar (Azure Trusted Signing — follow-up).
+VSVersionInfo(
+  ffi=FixedFileInfo(filevers=(2026, 7, 4, 1), prodvers=(2026, 7, 4, 1),
+    mask=0x3F, flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)),
+  kids=[
+    StringFileInfo([StringTable("041604B0", [
+      StringStruct("CompanyName", "Causia"),
+      StringStruct("FileDescription", "Agente local do Causia (guardião do token A3 — assina e lê processos com consentimento)"),
+      StringStruct("FileVersion", "2026.7.4.1"),
+      StringStruct("InternalName", "causia-agent"),
+      StringStruct("LegalCopyright", "Causia - uso autorizado pelo escritório"),
+      StringStruct("OriginalFilename", "causia-agent.exe"),
+      StringStruct("ProductName", "Agente Causia"),
+      StringStruct("ProductVersion", "2026.7.4.1"),
+    ])]),
+    VarFileInfo([VarStruct("Translation", [1046, 1200])]),
+  ],
+)
