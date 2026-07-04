@@ -113,10 +113,16 @@ def maybe_self_update(*, public_key_pem: str | None = None) -> bool:
         meta = httpx.get(_MANIFEST_URL, timeout=10.0).json()
     except (httpx.HTTPError, ValueError):
         return False
-    if not verify_manifest(meta, pub) or not is_newer(str(meta.get("version") or ""), current=current_version()):
+    if not isinstance(meta, dict):
+        return False  # .json() pode devolver lista/escalar → não é manifesto
+    try:
+        current = current_version()
+    except ImportError:
+        return False  # versão atual indeterminável → não arrisca trocar binário
+    if not verify_manifest(meta, pub) or not is_newer(str(meta.get("version") or ""), current=current):
         return False
     try:
-        blob = httpx.get(str(meta["url"]), timeout=120.0, follow_redirects=True).content
+        blob = httpx.get(str(meta.get("url") or ""), timeout=120.0, follow_redirects=True).content
     except httpx.HTTPError:
         return False
     if hashlib.sha256(blob).hexdigest() != str(meta.get("sha256") or ""):
