@@ -1152,6 +1152,11 @@
         </details>
       </form>
       <p id="connect-note" class="field-note">O PIN é usado só para assinar no seu computador e não é armazenado.</p>
+      <p class="field-note">
+        Ainda não instalou? <a id="agent-download-mac" href="#" target="_blank" rel="noopener">Baixar o agente (macOS)</a>
+        · <a id="agent-download-win" href="#" target="_blank" rel="noopener">Windows</a>
+        <span id="agent-latest-version" class="muted"></span>
+      </p>
       <div class="list-tools">
         <input id="processos-filter" placeholder="Filtrar CNJ, classe ou assunto" autocomplete="off" />
         <select id="processos-sort">
@@ -2219,6 +2224,17 @@
           /* keep the mode message */
         }
       }
+    }
+    async function loadAgentDownload() {
+      const REL = "https://github.com/floripasurf/juris/releases/latest/download";
+      const mac = document.querySelector("#agent-download-mac");
+      const win = document.querySelector("#agent-download-win");
+      if (mac) mac.href = `${REL}/CausiaAgente.dmg`;
+      if (win) win.href = `${REL}/CausiaAgente-win.zip`;
+      try {
+        const r = await window.fetch("/api/agent/latest");   // público (pré-auth ok)
+        if (r.ok) { const d = await r.json(); const v = document.querySelector("#agent-latest-version"); if (v && d.version) v.textContent = `· versão ${d.version}`; }
+      } catch (_) { /* opcional */ }
     }
     sourceSel.addEventListener("change", toggleNewCaseCpf);
 
@@ -3678,6 +3694,7 @@
       }
       consoleBooted = true;
       loadAgentMode();
+      loadAgentDownload();
       loadAiSession();
       loadWorkbench();
       loadProcessos();

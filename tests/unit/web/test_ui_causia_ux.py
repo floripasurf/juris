@@ -106,6 +106,10 @@ class TestConversionAndPromise:
         assert "show_agent_command" in _INDEX_HTML
         assert "comando técnico" in _INDEX_HTML
 
+    def test_console_offers_agent_download(self) -> None:
+        assert "Baixar o agente" in _INDEX_HTML
+        assert "CausiaAgente.dmg" in _INDEX_HTML or "agent/download" in _INDEX_HTML
+
 
 class TestConsoleOnboarding:
     def test_workbench_ships_two_path_empty_state(self) -> None:
