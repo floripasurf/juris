@@ -5,6 +5,7 @@ REM em .exe nao assinado: "Mais informacoes" -> "Executar assim mesmo" (esperado
 setlocal
 set DEST=%LOCALAPPDATA%\CausiaAgente
 echo Instalando em %DEST% ...
+taskkill /im causia-agent.exe /f >nul 2>&1
 if exist "%DEST%" rmdir /s /q "%DEST%"
 xcopy /e /i /y "%~dp0causia-agent" "%DEST%" >nul
 REM auto-start no login (Run key do usuario — nao precisa de admin)

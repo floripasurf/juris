@@ -16,4 +16,5 @@ CONECTAR (uma vez):
    Isso vai direto para o agente no SEU computador — o site não recebe.
 
 Não precisa mexer em firewall: o agente não abre porta; ele só liga para fora.
-Atualiza sozinho — você nunca precisa baixar de novo.
+Quando sair uma versão nova, o Causia avisa no site e você baixa o instalador
+de novo — mesmo processo, 1 minuto.
