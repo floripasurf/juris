@@ -245,10 +245,26 @@ para não se perder):
   aviso de "desenvolvedor não identificado"/SmartScreen. Até lá, os passos de
   "abrir mesmo assim" no LEIA-ME e neste runbook seguem necessários.
 - **Swap real de onedir**: hoje o auto-update é um no-op seguro (v1 só verifica
-  a assinatura, nunca troca o binário — ver §2). O swap de verdade precisa
-  apontar a `url` do manifesto para um asset avulso com o basename cru exato
-  (`causia-agent` / `causia-agent.exe`) em vez do `.dmg`/`.zip` — o workflow
-  atual não publica esse asset avulso.
+  a assinatura, nunca troca o binário — ver §2). **Não** basta apontar a `url`
+  do manifesto atual para um asset avulso com o basename cru de hoje
+  (`causia-agent` / `causia-agent.exe`): (1) um único campo `url`/`sha256` não
+  serve duas plataformas ao mesmo tempo; e (2) se o manifesto um dia apontar
+  para esses basenames, todo cliente v1 já publicado troca **só o `.exe`**
+  contra uma árvore `_internal/` que ficou parada na versão antiga —
+  descompasso de bootloader/libs que crash-loopa sob `KeepAlive`/Run key, sem
+  jeito de corrigir remotamente (o próprio agente quebrado é quem buscaria o
+  próximo update). O swap de verdade precisa: **(a)** campos novos e
+  assinados por plataforma no manifesto (ex.: `url_macos`/`sha256_macos` e
+  `url_windows`/`sha256_windows`, ou um manifesto por plataforma) — nunca
+  reaproveitar os campos genéricos de hoje; e **(b)** basenames de asset
+  novos, que `_is_raw_binary_url()` do v1 **não reconheça** (o guard é
+  fail-closed por desenho: qualquer basename fora da lista permitida vira
+  no-op) — assim os clientes v1 já publicados continuam no-op'ando com
+  segurança até serem migrados para a lógica de swap nova, em vez de tentar
+  aplicar um blob incompatível. Vale considerar trocar o **onedir inteiro**
+  (arquivo/diretório completo, não só o executável) para eliminar de vez o
+  risco de descompasso exe/`_internal`. O workflow atual não publica nenhum
+  desses assets.
 - **`version_info.txt` hardcoded**: `packaging/agent/version_info.txt` fixa
   `filevers`/`ProductVersion` em `2026.7.4.1` — o "Detalhes" do `.exe` no
   Explorer do Windows pode divergir da tag real até esse arquivo virar gerado
