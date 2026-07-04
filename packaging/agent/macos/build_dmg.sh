@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # packaging/agent/macos/build_dmg.sh — gera dist/CausiaAgente.dmg (não assinado).
+# Uso: build_dmg.sh [version]  — version vira o CFBundleVersion do bundle.
+# Sem argumento, mantém o valor histórico (compat com chamadas antigas/manuais).
 set -euo pipefail
+VERSION="${1:-2026.7.4.1}"
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 APP="$ROOT/dist/Causia Agente.app"
 rm -rf "$APP"; mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
@@ -17,7 +20,7 @@ cat > "$APP/Contents/Info.plist" <<PL
 <plist version="1.0"><dict>
   <key>CFBundleName</key><string>Causia Agente</string>
   <key>CFBundleIdentifier</key><string>br.com.causia.agent</string>
-  <key>CFBundleVersion</key><string>2026.7.4.1</string>
+  <key>CFBundleVersion</key><string>$VERSION</string>
   <key>CFBundleExecutable</key><string>causia-agent</string>
   <key>LSUIElement</key><true/>
 </dict></plist>
