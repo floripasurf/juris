@@ -63,6 +63,7 @@ dependencies = [
 
 [project.scripts]
 juris = "juris.cli.main:app"
+juris-agent = "juris.agent.main:main"
 
 [project.optional-dependencies]
 agent = [
