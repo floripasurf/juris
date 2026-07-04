@@ -3,7 +3,15 @@
 
 Um servidor comprometido não injeta binário malicioso: o manifesto é assinado com
 uma chave privada que vive fora do servidor (só no CI), e o agente valida com a
-chave pública embutida antes de trocar o binário."""
+chave pública embutida antes de trocar o binário.
+
+Contrato de metadados embutidos (release): o CI de release GERA o módulo
+``src/juris/agent/_release_meta.py`` (gitignored — nunca commitado) antes de
+rodar o PyInstaller, contendo ``AGENT_VERSION: str`` e ``PUBLIC_KEY_PEM: str``.
+O import em try/except faz o PyInstaller tratá-lo como módulo opcional: empacota
+quando o arquivo existe no build, ignora quando ausente (dev/teste). Env vars
+(`JURIS_AGENT_VERSION`, `JURIS_AGENT_UPDATE_PUBKEY`) sempre vencem o embutido —
+override de dev/teste, resolvido em tempo de CHAMADA, não de import."""
 from __future__ import annotations
 
 import base64
@@ -12,15 +20,65 @@ import json
 import os
 import sys
 from typing import Any
+from urllib.parse import urlsplit
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from cryptography.hazmat.primitives.serialization import load_pem_public_key
 
 _MANIFEST_URL = os.environ.get("JURIS_AGENT_UPDATE_URL", "https://causia.com.br/api/agent/latest")
-# Substituída na release pela chave pública real (a privada fica só no CI).
-_UPDATE_PUBLIC_KEY_PEM = os.environ.get("JURIS_AGENT_UPDATE_PUBKEY", "")
 _SIGNED_FIELDS = ("version", "sha256", "url")
+# v1 dos manifestos aponta p/ instaladores (.dmg/.zip): o cliente valida mas NÃO
+# troca (no-op seguro). Só binário cru da plataforma pode ser aplicado — o swap
+# onedir real é follow-up planejado.
+_RAW_BINARY_BASENAME = "causia-agent.exe" if sys.platform == "win32" else "causia-agent"
+
+
+def _embedded_release_meta() -> tuple[str, str]:
+    """Lê (AGENT_VERSION, PUBLIC_KEY_PEM) do módulo de release embutido, se existir.
+
+    Returns:
+        Tupla `(versão embutida, chave pública PEM embutida)`; `("", "")` quando
+        o módulo não existe (checkout de dev/teste — o CI só o gera na release).
+    """
+    try:
+        from juris.agent._release_meta import AGENT_VERSION, PUBLIC_KEY_PEM
+    except ImportError:
+        return "", ""
+    return str(AGENT_VERSION), str(PUBLIC_KEY_PEM)
+
+
+def _resolve_public_key() -> str:
+    """Resolve a chave pública de update em tempo de chamada.
+
+    Returns:
+        Env `JURIS_AGENT_UPDATE_PUBKEY` se definida (override dev/teste), senão
+        `PUBLIC_KEY_PEM` do módulo embutido, senão `""` (auto-update desligado).
+    """
+    env = os.environ.get("JURIS_AGENT_UPDATE_PUBKEY", "")
+    if env:
+        return env
+    return _embedded_release_meta()[1]
+
+
+def _is_raw_binary_url(url: str) -> bool:
+    """True se a URL assinada aponta para o binário cru da plataforma atual.
+
+    Trocar `sys.executable` pelos bytes de um instalador (.dmg/.zip) corromperia
+    a instalação; só um blob cujo basename é exatamente o binário cru da
+    plataforma (`causia-agent` / `causia-agent.exe`) pode ser aplicado.
+
+    Args:
+        url: URL assinada do manifesto.
+
+    Returns:
+        True somente se o último segmento do path for o basename esperado.
+    """
+    try:
+        path = urlsplit(url).path
+    except ValueError:
+        return False  # URL malformada → fail-closed
+    return path.rsplit("/", 1)[-1] == _RAW_BINARY_BASENAME
 
 
 def _signed_payload(meta: dict[str, Any]) -> bytes:
@@ -84,11 +142,18 @@ def current_version() -> str:
     """Retorna a versão atual do agente (override via env para testes/CI).
 
     Returns:
-        A versão em `JURIS_AGENT_VERSION`, ou `juris.__version__` como padrão.
+        Env `JURIS_AGENT_VERSION` se definida, senão `AGENT_VERSION` do módulo
+        de release embutido (build congelado), senão `juris.__version__`.
     """
+    env = os.environ.get("JURIS_AGENT_VERSION", "")
+    if env:
+        return env
+    embedded = _embedded_release_meta()[0]
+    if embedded:
+        return embedded
     from juris import __version__
 
-    return os.environ.get("JURIS_AGENT_VERSION", __version__)
+    return __version__
 
 
 def maybe_self_update(*, public_key_pem: str | None = None) -> bool:
@@ -99,14 +164,15 @@ def maybe_self_update(*, public_key_pem: str | None = None) -> bool:
 
     Args:
         public_key_pem: Chave pública Ed25519 em PEM a usar na verificação.
-            Se None, usa `_UPDATE_PUBLIC_KEY_PEM` (embutida/via env).
+            Se None, resolve em tempo de chamada: env `JURIS_AGENT_UPDATE_PUBKEY`
+            → `PUBLIC_KEY_PEM` embutida na release → desligado.
 
     Returns:
         True se uma atualização válida foi baixada e aplicada.
     """
     import httpx
 
-    pub = public_key_pem if public_key_pem is not None else _UPDATE_PUBLIC_KEY_PEM
+    pub = public_key_pem if public_key_pem is not None else _resolve_public_key()
     if not pub:
         return False  # sem chave embutida → auto-update desligado (dev)
     try:
@@ -121,8 +187,11 @@ def maybe_self_update(*, public_key_pem: str | None = None) -> bool:
         return False  # versão atual indeterminável → não arrisca trocar binário
     if not verify_manifest(meta, pub) or not is_newer(str(meta.get("version") or ""), current=current):
         return False
+    url = str(meta.get("url") or "")
+    if not _is_raw_binary_url(url):
+        return False  # instalador (.dmg/.zip) ou URL estranha → no-op seguro, nunca troca
     try:
-        blob = httpx.get(str(meta.get("url") or ""), timeout=120.0, follow_redirects=True).content
+        blob = httpx.get(url, timeout=120.0, follow_redirects=True).content
     except httpx.HTTPError:
         return False
     if hashlib.sha256(blob).hexdigest() != str(meta.get("sha256") or ""):

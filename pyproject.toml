@@ -136,6 +136,12 @@ module = [
 ]
 ignore_missing_imports = true
 
+# Metadados de release do agente: GERADO pelo CI antes do PyInstaller
+# (gitignored) — ausente em checkouts de dev, então mypy não o encontra.
+[[tool.mypy.overrides]]
+module = ["juris.agent._release_meta"]
+ignore_missing_imports = true
+
 # Thin wrappers over untyped native/SOAP libs (PKCS#11 token, pyhanko, zeep,
 # pymupdf) — calls into those libs are necessarily untyped, so don't enforce
 # typed-call strictness here. The wrappers' own signatures stay typed.

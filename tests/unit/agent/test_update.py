@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import sys
+import types
 from typing import Any
 
 import httpx
@@ -82,7 +84,9 @@ def test_sha256_mismatch_rejected_and_apply_never_called(monkeypatch: pytest.Mon
     pub, priv = _keypair()
     served_blob = b"the-actual-served-bytes"
     wrong_sha = hashlib.sha256(b"a-completely-different-blob").hexdigest()
-    meta = _sign(priv, {"version": "2.0.0", "sha256": wrong_sha, "url": "https://dl/agent"})
+    # Basename compatível com o guard de binário cru — o teste deve alcançar o gate de sha256.
+    url = f"https://dl/{update_mod._RAW_BINARY_BASENAME}"
+    meta = _sign(priv, {"version": "2.0.0", "sha256": wrong_sha, "url": url})
 
     apply_calls = 0
 
@@ -152,7 +156,9 @@ def test_valid_newer_manifest_reaches_apply_update(monkeypatch: pytest.MonkeyPat
     pub, priv = _keypair()
     served_blob = b"the-legit-signed-payload-bytes"
     good_sha = hashlib.sha256(served_blob).hexdigest()
-    meta = _sign(priv, {"version": "2.0.0", "sha256": good_sha, "url": "https://dl/agent"})
+    # URL de binário cru da plataforma atual — a única forma que pode alcançar o swap.
+    url = f"https://dl/{update_mod._RAW_BINARY_BASENAME}"
+    meta = _sign(priv, {"version": "2.0.0", "sha256": good_sha, "url": url})
 
     applied: list[bytes] = []
 
@@ -171,3 +177,67 @@ def test_valid_newer_manifest_reaches_apply_update(monkeypatch: pytest.MonkeyPat
 
     assert update_mod.maybe_self_update(public_key_pem=pub) is True
     assert applied == [served_blob]  # chamado exatamente uma vez, com os bytes certos
+
+
+@pytest.mark.parametrize("installer_url", ["https://x/CausiaAgente.dmg", "https://x/causia-agent.zip"])
+def test_installer_url_never_swaps_binary(monkeypatch: pytest.MonkeyPatch, installer_url: str) -> None:
+    # Pino da correção de corrupção: manifesto v1 aponta p/ instalador (.dmg/.zip).
+    # Mesmo com assinatura válida + versão mais nova + sha256 batendo, o guard de
+    # binário cru retorna False ANTES de baixar — os.replace(sys.executable, <dmg>)
+    # corromperia a instalação.
+    from juris.agent import update as update_mod
+
+    monkeypatch.setenv("JURIS_AGENT_VERSION", "1.0.0")
+    pub, priv = _keypair()
+    served_blob = b"installer-image-bytes"
+    good_sha = hashlib.sha256(served_blob).hexdigest()
+    meta = _sign(priv, {"version": "2.0.0", "sha256": good_sha, "url": installer_url})
+
+    applied: list[bytes] = []
+    monkeypatch.setattr(update_mod, "_apply_update", lambda blob: applied.append(blob) or True)
+
+    fetched: list[str] = []
+
+    def fake_get(url: str, **_: Any) -> _FakeResp:
+        fetched.append(url)
+        if url == update_mod._MANIFEST_URL:
+            return _FakeResp(json_data=meta)
+        return _FakeResp(content=served_blob)
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    assert update_mod.maybe_self_update(public_key_pem=pub) is False
+    assert applied == []  # nunca troca o executável
+    assert fetched == [update_mod._MANIFEST_URL]  # instalador nem sequer é baixado
+
+
+def test_release_meta_resolution_env_wins_else_embedded(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Injeta um _release_meta falso (como o CI geraria no build) e verifica a
+    # ordem de resolução: env vence → senão embutido → senão juris.__version__.
+    from juris import __version__
+    from juris.agent import update as update_mod
+
+    embedded_pem = "-----BEGIN PUBLIC KEY-----\nembutida\n-----END PUBLIC KEY-----\n"
+    fake = types.ModuleType("juris.agent._release_meta")
+    fake.AGENT_VERSION = "2026.7.4.1"  # type: ignore[attr-defined]
+    fake.PUBLIC_KEY_PEM = embedded_pem  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "juris.agent._release_meta", fake)
+
+    # Sem env → embutido vence
+    monkeypatch.delenv("JURIS_AGENT_VERSION", raising=False)
+    monkeypatch.delenv("JURIS_AGENT_UPDATE_PUBKEY", raising=False)
+    assert update_mod.current_version() == "2026.7.4.1"
+    assert update_mod._resolve_public_key() == embedded_pem
+
+    # Env presente → env vence (override dev/teste)
+    monkeypatch.setenv("JURIS_AGENT_VERSION", "9.9.9.9")
+    monkeypatch.setenv("JURIS_AGENT_UPDATE_PUBKEY", "pem-do-env")
+    assert update_mod.current_version() == "9.9.9.9"
+    assert update_mod._resolve_public_key() == "pem-do-env"
+
+    # Sem env e sem módulo embutido → cai em juris.__version__ / chave vazia
+    monkeypatch.delenv("JURIS_AGENT_VERSION", raising=False)
+    monkeypatch.delenv("JURIS_AGENT_UPDATE_PUBKEY", raising=False)
+    monkeypatch.delitem(sys.modules, "juris.agent._release_meta", raising=False)
+    assert update_mod.current_version() == __version__
+    assert update_mod._resolve_public_key() == ""

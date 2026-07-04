@@ -28,6 +28,9 @@ coverage.xml
 *.pem
 *.key
 
+# Metadados de release do agente — GERADO pelo CI antes do PyInstaller, nunca commitado
+src/juris/agent/_release_meta.py
+
 # Data files (large, local)
 /data/*
 !/data/corpus/
