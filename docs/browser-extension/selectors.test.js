@@ -2,7 +2,7 @@
 // These cover the brittle part — the DOM extraction — so a UI change is caught
 // here and retuned in one place. The live integration is the manual Chrome smoke.
 import { describe, it, expect } from "vitest";
-import { providerFor, findComposer, isStreaming, extractResponse, detectBlocker } from "./selectors.js";
+import { providerFor, providerIdFor, findComposer, isStreaming, extractResponse, detectBlocker } from "./selectors.js";
 
 describe("providerFor", () => {
   it("maps hosts to providers", () => {
@@ -10,6 +10,15 @@ describe("providerFor", () => {
     expect(providerFor("chatgpt.com")).toBeTruthy();
     expect(providerFor("chat.openai.com")).toBeTruthy();
     expect(providerFor("example.com")).toBeNull();
+  });
+});
+
+describe("providerIdFor", () => {
+  it("maps hosts to canonical ids", () => {
+    expect(providerIdFor("claude.ai")).toBe("claude");
+    expect(providerIdFor("chatgpt.com")).toBe("chatgpt");
+    expect(providerIdFor("chat.openai.com")).toBe("chatgpt");
+    expect(providerIdFor("example.com")).toBeNull();
   });
 });
 

@@ -40,6 +40,14 @@ export function providerFor(host) {
   return null;
 }
 
+// Canonical provider id for the wire ("claude"/"chatgpt") — the server compares
+// canonical ids, never UI labels (spec 2026-07-05).
+export function providerIdFor(host) {
+  if (host.includes("claude.ai")) return "claude";
+  if (host.includes("chatgpt.com") || host.includes("chat.openai.com")) return "chatgpt";
+  return null;
+}
+
 export function findComposer(doc, provider) {
   return doc.querySelector(provider.composer);
 }

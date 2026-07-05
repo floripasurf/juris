@@ -9,7 +9,7 @@
 // persist the prompt — no localStorage/sessionStorage, just a transient closure GC'd
 // after the reply.
 
-import { providerFor, findComposer, isStreaming, extractResponse, detectBlocker } from "./selectors.js";
+import { providerFor, providerIdFor, findComposer, isStreaming, extractResponse, detectBlocker } from "./selectors.js";
 
 const TIMEOUT_MS = 120000; // hard cap on a single completion
 const POLL_MS = 400;
@@ -193,14 +193,16 @@ async function complete(request) {
 
   const provider = providerFor(location.host);
   if (!provider) return fail(request_id, "provedor não suportado nesta aba");
+  const providerId = providerIdFor(location.host);
 
   const blocker = detectBlocker(document, provider);
-  if (blocker) return fail(request_id, BLOCKER_MESSAGES[blocker]);
+  if (blocker) return { ...fail(request_id, BLOCKER_MESSAGES[blocker]), provider: providerId };
 
   const composer = findComposer(document, provider);
   // Login was already ruled out by detectBlocker above, so a missing composer means the
   // provider's DOM changed (its selectors moved) — a distinct, actionable status.
-  if (!composer) return fail(request_id, "dom_changed: composer não encontrado (a interface do provedor mudou)");
+  if (!composer)
+    return { ...fail(request_id, "dom_changed: composer não encontrado (a interface do provedor mudou)"), provider: providerId };
 
   try {
     const full = system ? `${system}\n\n${prompt}` : prompt;
@@ -210,11 +212,11 @@ async function complete(request) {
     if (!result.success) {
       // a usage limit can appear mid-generation — report it precisely
       const post = detectBlocker(document, provider);
-      if (post) return fail(request_id, BLOCKER_MESSAGES[post]);
+      if (post) return { ...fail(request_id, BLOCKER_MESSAGES[post]), provider: providerId };
     }
-    return result;
+    return { ...result, provider: providerId };
   } catch (e) {
-    return fail(request_id, `falha ao injetar/extrair: ${e?.message ?? e}`);
+    return { ...fail(request_id, `falha ao injetar/extrair: ${e?.message ?? e}`), provider: providerId };
   }
 }
 
