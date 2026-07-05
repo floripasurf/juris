@@ -90,7 +90,8 @@ class TestSpaLoginGate:
         assert 'id="landing-login-form"' in _INDEX_HTML
         assert 'id="landing-api-key"' in _INDEX_HTML
         assert "sem informar nome, e-mail ou escritório" in _INDEX_HTML
-        assert "Não guardamos seus dados nem os dados dos seus processos" in _INDEX_HTML
+        assert "Seus processos ficam isolados no ambiente Causia" in _INDEX_HTML
+        assert "apagados automaticamente ao final" in _INDEX_HTML
 
     def test_console_is_hidden_until_key_exists(self) -> None:
         assert 'id="app-header" hidden' in _INDEX_HTML
