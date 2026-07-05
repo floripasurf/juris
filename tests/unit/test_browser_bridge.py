@@ -57,11 +57,45 @@ async def test_send_relays_completion_request_and_returns_content() -> None:
 
     result = await transport.send(prompt="Tese?", system="Sys")
 
-    assert result == "A resposta"
+    assert result.content == "A resposta"
     sent = channel.request.await_args.args[0]
     assert sent["prompt"] == "Tese?"
     assert sent["system"] == "Sys"
     assert sent["request_id"]  # a correlation id is generated
+
+
+@pytest.mark.asyncio
+async def test_transport_returns_browser_reply_with_provider() -> None:
+    from juris.llm.browser_session import BrowserReply
+
+    class _Channel:
+        async def request(self, message: dict[str, object]) -> dict[str, object]:
+            return {
+                "request_id": message["request_id"],
+                "success": True,
+                "content": "ok",
+                "error": None,
+                "provider": "chatgpt",
+            }
+
+    transport = NativeBridgeTransport(_Channel())
+    reply = await transport.send(prompt="p", system=None)
+    assert isinstance(reply, BrowserReply)
+    assert reply.content == "ok"
+    assert reply.provider == "chatgpt"
+
+
+@pytest.mark.asyncio
+async def test_transport_tolerates_missing_provider_field() -> None:
+    from juris.llm.browser_session import BrowserReply
+
+    class _Channel:
+        async def request(self, message: dict[str, object]) -> dict[str, object]:
+            return {"request_id": message["request_id"], "success": True, "content": "ok", "error": None}
+
+    reply = await NativeBridgeTransport(_Channel()).send(prompt="p", system=None)
+    assert isinstance(reply, BrowserReply)
+    assert reply.provider is None
 
 
 @pytest.mark.asyncio
@@ -170,7 +204,8 @@ async def test_ws_channel_drives_transport_end_to_end() -> None:
     conn = _FakeConn('{"request_id": "x", "success": true, "content": "A tese"}')
     transport = NativeBridgeTransport(WebSocketBridgeChannel(connect=AsyncMock(return_value=conn)))
 
-    assert await transport.send(prompt="Qual a tese?", system=None) == "A tese"
+    reply = await transport.send(prompt="Qual a tese?", system=None)
+    assert reply.content == "A tese"
 
 
 def test_probe_bridge_classifies_pong_token_and_unreachable(monkeypatch) -> None:

@@ -101,3 +101,7 @@ class CompletionResponse(BaseModel):
     success: bool
     content: str | None = None
     error: str | None = None
+    # Canonical id of the provider the extension ACTUALLY drove ("claude"/"chatgpt").
+    # Lenient str on the wire: an unexpected value must never fail the completion
+    # parse (observability field — normalized server-side, spec 2026-07-05).
+    provider: str | None = None

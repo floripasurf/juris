@@ -21,6 +21,7 @@ from urllib.parse import urlparse, urlunparse
 
 from juris.api.ws_schemas import CompletionRequest, CompletionResponse
 from juris.core.observability import get_logger
+from juris.llm.browser_session import BrowserReply
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -135,7 +136,7 @@ class NativeBridgeTransport:
         # and native host can be paired without threading it through every caller.
         self._token = token or os.environ.get("JURIS_BROWSER_BRIDGE_TOKEN") or None
 
-    async def send(self, *, prompt: str, system: str | None) -> str:
+    async def send(self, *, prompt: str, system: str | None) -> BrowserReply:
         request = CompletionRequest(
             request_id=uuid.uuid4().hex,
             prompt=prompt,
@@ -158,7 +159,7 @@ class NativeBridgeTransport:
             msg = response.error or "browser session completion failed"
             raise RuntimeError(msg)
         logger.info("browser_bridge_completion", request_id=request.request_id)
-        return response.content or ""
+        return BrowserReply(content=response.content or "", provider=response.provider)
 
 
 def probe_bridge(url: str, token: str | None, *, timeout: float = 3.0) -> tuple[bool, str]:
