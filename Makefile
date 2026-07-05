@@ -21,7 +21,7 @@ migration:
 
 # === Development ===
 dev:
-	uv run uvicorn juris.api.orchestrator:app --reload --port 8000
+	uv run juris web --port 8000
 
 # === Quality ===
 test:
