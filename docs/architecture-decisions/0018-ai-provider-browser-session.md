@@ -68,3 +68,11 @@ the training concern.
   `BrowserSessionLLM` (`AbstractLLM`) that relays prompts to the logged-in
   Claude.ai/ChatGPT tab and extracts the reply; a localhost channel between the
   juris local agent and the extension (mirrors the token agent in ADR-0015).
+- **ChatGPT first-class (2026-07-05):** `LLMProvider.BROWSER` (neutro, era
+  `CLAUDE_BROWSER`), preferência declarada via `JURIS_AI_BROWSER_PROVIDER`, a
+  extensão reporta o provider canônico realmente dirigido (`claude`/`chatgpt`),
+  `ai_model` no audit (`demo.finished`) e no payload de `/api/demo-runs`, e aviso
+  de divergência declarado×real por-run. A guarda de PII (de-id fail-closed) é
+  neutra de fornecedor e permanece intocada. Spec:
+  `docs/superpowers/specs/2026-07-05-chatgpt-browser-provider-design.md`;
+  plano: `docs/superpowers/plans/2026-07-05-chatgpt-browser-provider.md`.
