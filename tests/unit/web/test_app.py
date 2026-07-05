@@ -232,7 +232,8 @@ def test_connect_job_error_message_guides_missing_relay_agent() -> None:
         RuntimeError("nenhum agente conectado para o tenant 'trial_x' (reverse-channel)")
     )
 
-    assert "Agente local não conectado" in message
+    assert "agente Causia ainda não foi conectado" in message
+    assert "Conectar / sincronizar" in message
     assert "token=abc" not in message
 
 
@@ -243,7 +244,7 @@ def test_connect_job_error_message_guides_missing_local_credentials() -> None:
         RuntimeError("credenciais do advogado ausentes no agente (JURIS_AGENT_CPF/SENHA/PIN).")
     )
 
-    assert "sem credenciais locais" in message
+    assert "Atualizar credenciais" in message
     assert "servidor" in message
 
 
@@ -459,7 +460,7 @@ def test_filing_pending_retry_endpoint_rejects_remote_mode(monkeypatch) -> None:
     )
 
     assert response.status_code == 400
-    assert "agente local" in response.json()["detail"]
+    assert "agente Causia" in response.json()["detail"]
 
 
 def test_filing_artifact_endpoints_are_confined(monkeypatch, tmp_path) -> None:
@@ -1477,7 +1478,7 @@ def test_agent_health_remote_unmapped_tenant_reports_error(tmp_path, monkeypatch
     assert body["ready"] is False
     assert body["status"] == "missing_binding"
     assert body["error_code"] == "agent_missing"
-    assert "sem binding" in body["error"]
+    assert "agente Causia conectado" in body["error"]
 
 
 def test_agent_health_remote_does_not_leak_internal_error(monkeypatch) -> None:
@@ -1503,7 +1504,7 @@ def test_agent_health_remote_does_not_leak_internal_error(monkeypatch) -> None:
     assert body["ready"] is False
     assert body["status"] == "offline"
     assert body["error_code"] == "agent_offline"
-    assert "Agente remoto configurado" in body["error"]
+    assert "agente Causia está configurado" in body["error"]
     assert "token=abc" not in response.text
     assert "pin=1234" not in response.text
     assert "/var/private/cert" not in response.text

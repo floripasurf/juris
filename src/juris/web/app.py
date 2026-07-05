@@ -705,12 +705,14 @@ def _serialize_connect(result: Any) -> dict[str, object]:
 _MAX_CONNECT_JOBS = 200
 _CONNECT_JOB_ERROR = "Falha operacional ao conectar/sincronizar. Verifique agente, token e credenciais locais."
 _CONNECT_AGENT_MISSING = (
-    "Agente local não conectado ao teste. Em Acervo, clique em Conectar agente local "
-    "no computador onde o token A3 está conectado e tente novamente."
+    "O agente Causia ainda não foi conectado a este teste. Instale ou abra o agente Causia "
+    "no computador onde o token A3 está conectado (veja os links de download em Acervo) "
+    "e clique em Conectar / sincronizar novamente."
 )
 _CONNECT_AGENT_CREDS_MISSING = (
-    "Agente local conectado, mas sem credenciais locais. Em Acervo, abra Configurar token/PJe "
-    "e salve CPF, senha PJe e PIN do A3 no agente local; esses dados não são enviados ao servidor."
+    "O agente Causia está conectado, mas ainda não tem suas credenciais salvas. Em Acervo, "
+    "clique em Atualizar credenciais e informe CPF, senha PJe e PIN do token A3; esses dados "
+    "ficam só no seu computador e não são enviados ao servidor."
 )
 # Strong refs to in-flight background tasks so the event loop doesn't GC them mid-run.
 _BACKGROUND_TASKS: set[asyncio.Task[None]] = set()
@@ -945,15 +947,15 @@ async def get_agent_health(tenant: Tenant = Depends(current_tenant)) -> dict[str
     if ready:
         status = "ready"
         error_code = None
-        message = "Agente remoto pronto: token A3 conectado."
+        message = "Agente Causia pronto: token A3 conectado."
     elif cert_expired:
         status = "cert_expired"
         error_code = "agent_cert_expired"
-        message = "Agente remoto alcançável, mas o certificado do token está vencido."
+        message = "Agente Causia encontrado, mas o certificado do token A3 está vencido."
     else:
         status = "token_absent"
         error_code = "agent_token_missing"
-        message = "Agente remoto alcançável, mas o token A3 não foi detectado."
+        message = "Agente Causia encontrado, mas não detectou o token A3."
 
     payload.update(
         {
@@ -998,11 +1000,15 @@ def _agent_health_status(error_code: str) -> str:
 
 def _agent_health_message(error_code: str) -> str:
     return {
-        "agent_missing": "Tenant sem binding de agente remoto.",
-        "agent_token_missing": "Agente remoto sem token A3 conectado.",
-        "agent_cert_expired": "Agente remoto com certificado do token vencido.",
-        "agent_offline": "Agente remoto configurado, mas inacessível.",
-    }.get(error_code, "Agente remoto indisponível.")
+        "agent_missing": "Este escritório ainda não tem um agente Causia conectado.",
+        "agent_token_missing": (
+            "O agente Causia não encontrou o token A3. Conecte o token na máquina e tente de novo."
+        ),
+        "agent_cert_expired": "O agente Causia encontrou o token A3, mas o certificado está vencido.",
+        "agent_offline": (
+            "O agente Causia está configurado, mas não respondeu. Abra o agente no computador e tente de novo."
+        ),
+    }.get(error_code, "O agente Causia não está disponível no momento.")
 
 
 @app.get("/api/connect/{job_id}")
@@ -1409,8 +1415,8 @@ async def retry_pending_filing(
         raise HTTPException(
             status_code=400,
             detail=(
-                "retry de _pending remoto deve ser executado no agente local; "
-                "a nuvem não acessa signed.pdf nem credenciais"
+                "Este retry manual só pode ser feito no agente Causia, no computador do "
+                "escritório; a nuvem não acessa o PDF assinado nem as credenciais."
             ),
         )
     if not (payload.cpf and payload.senha):
