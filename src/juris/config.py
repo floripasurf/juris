@@ -71,6 +71,11 @@ class Settings(BaseSettings):
         validation_alias="JURIS_CLOCK_SKEW_PROBE",
         description="Se 1, o preflight de assinatura sonda o header Date do tribunal para medir clock skew (aviso).",
     )
+    ai_browser_provider: Literal["claude", "chatgpt"] | None = Field(
+        None,
+        validation_alias="JURIS_AI_BROWSER_PROVIDER",
+        description="Fornecedor da sessão de browser declarado pelo advogado (ADR-0018).",
+    )
     strict_prod_urls: bool = Field(
         False,
         validation_alias="JURIS_STRICT_PROD_URLS",
