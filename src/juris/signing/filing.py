@@ -29,6 +29,25 @@ _PUBLIC_SIGNING_ERROR = "Signing failed: falha operacional ao assinar o PDF."
 _PUBLIC_SUBMIT_ERROR = "MNI filing failed: falha operacional ao protocolar no MNI."
 
 
+def _clock_skew_probe_url(tribunal: str) -> str | None:
+    """Endpoint do tribunal para o probe de clock skew, só quando habilitado.
+
+    Retorna ``None`` (probe pulado) quando ``JURIS_CLOCK_SKEW_PROBE`` não está
+    ligado ou o tribunal é desconhecido — o check de skew degrada para aviso
+    "não verificado" e nunca introduz uma chamada de rede não solicitada.
+    """
+    from juris.config import get_settings
+    from juris.mni.tribunais import get_tribunal
+
+    if not get_settings().clock_skew_probe_enabled:
+        return None
+    try:
+        cfg = get_tribunal(tribunal)
+    except KeyError:
+        return None
+    return cfg.service_url_override or cfg.wsdl_url
+
+
 @dataclass(frozen=True, slots=True)
 class FilingRequest:
     """Input for a filing operation."""
@@ -207,6 +226,7 @@ class FilingOrchestrator:
                 pdf_bytes=render_result.pdf_bytes,
                 cert_status=cert_status,
                 prazo_override=request.prazo_override,
+                tribunal_url=_clock_skew_probe_url(request.tribunal),
             )
 
             entry = self._audit.log(

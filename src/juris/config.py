@@ -66,6 +66,11 @@ class Settings(BaseSettings):
     rate_limit_redis_url: str = Field("", validation_alias="JURIS_RATE_LIMIT_REDIS_URL")
     connect_timeout_seconds: int = Field(900, validation_alias="JURIS_CONNECT_TIMEOUT_SECONDS", gt=0)
     tst_inteiro_teor_enabled: bool = Field(False, validation_alias="JURIS_TST_INTEIRO_TEOR_ENABLED")
+    clock_skew_probe_enabled: bool = Field(
+        False,
+        validation_alias="JURIS_CLOCK_SKEW_PROBE",
+        description="Se 1, o preflight de assinatura sonda o header Date do tribunal para medir clock skew (aviso).",
+    )
     strict_prod_urls: bool = Field(
         False,
         validation_alias="JURIS_STRICT_PROD_URLS",

@@ -8,9 +8,12 @@ allowing a signing+filing operation to proceed.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime
+from email.utils import parsedate_to_datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Literal
+
+import httpx
 
 from juris.core.observability import get_logger
 
@@ -287,16 +290,57 @@ def _check_prazo(
     return None
 
 
-def _check_clock_skew() -> PreflightCheck:
-    """Placeholder for clock-skew detection.
+# Skew acima disto vira aviso (nunca bloqueio): timestamps PAdES e o cálculo
+# "protocolei dentro do prazo?" ficam frágeis se o relógio local derivar demais.
+_CLOCK_SKEW_WARN_SECONDS = 120.0
 
-    TODO: compare local UTC vs tribunal response header timestamp.
+
+def _check_clock_skew(tribunal_url: str | None = None, *, timeout_seconds: float = 3.0) -> PreflightCheck:
+    """Compara o relógio local (UTC) com o header ``Date`` do endpoint do tribunal.
+
+    Warning-only: skew > 120s reprova o check como AVISO, sem bloquear o filing.
+    Sem URL ou com tribunal inacessível/sem header ``Date``, degrada para o
+    comportamento anterior (passa com aviso de indisponibilidade).
+
+    Args:
+        tribunal_url: Endpoint do tribunal para um ``HEAD`` de sondagem.
+        timeout_seconds: Timeout do probe HTTP.
+
+    Returns:
+        PreflightCheck ``clock_skew`` de severidade ``warning``.
     """
+    if not tribunal_url:
+        return PreflightCheck(
+            name="clock_skew",
+            passed=True,
+            severity="warning",
+            message="Clock skew não verificado (URL do tribunal ausente).",
+        )
+    try:
+        response = httpx.head(tribunal_url, timeout=timeout_seconds, follow_redirects=True)
+        server_date = parsedate_to_datetime(response.headers["Date"])
+    except (httpx.HTTPError, KeyError, ValueError, TypeError):
+        return PreflightCheck(
+            name="clock_skew",
+            passed=True,
+            severity="warning",
+            message="Clock skew indisponível (tribunal não respondeu ao probe).",
+        )
+    if server_date.tzinfo is None:
+        server_date = server_date.replace(tzinfo=UTC)
+    skew_seconds = abs((datetime.now(UTC) - server_date).total_seconds())
+    if skew_seconds > _CLOCK_SKEW_WARN_SECONDS:
+        return PreflightCheck(
+            name="clock_skew",
+            passed=False,
+            severity="warning",
+            message=f"Relógio local difere do tribunal em {skew_seconds:.0f}s — verifique NTP antes de protocolar.",
+        )
     return PreflightCheck(
         name="clock_skew",
         passed=True,
         severity="warning",
-        message="Verificação de clock skew não implementada (v1).",
+        message=f"Clock skew ok ({skew_seconds:.0f}s).",
     )
 
 
@@ -308,6 +352,7 @@ def run_preflight(
     cert_status: CertStatus | None = None,
     prazo_report: PrazoReport | None = None,
     prazo_override: str | None = None,
+    tribunal_url: str | None = None,
 ) -> PreflightResult:
     """Run all pre-flight checks before signing and filing.
 
@@ -319,6 +364,8 @@ def run_preflight(
         cert_status: Optional certificate status.
         prazo_report: Optional deadline report from the prazo engine.
         prazo_override: Justificativa to override an expired prazo blocker.
+        tribunal_url: Endpoint do tribunal para o probe de clock skew (opcional;
+            sem ele o check de skew só avisa que não foi verificado).
 
     Returns:
         PreflightResult with aggregated pass/fail and individual checks.
@@ -358,8 +405,8 @@ def run_preflight(
     if prazo_check is not None:
         checks.append(prazo_check)
 
-    # Clock skew placeholder
-    checks.append(_check_clock_skew())
+    # Clock skew (warning-only): probes the tribunal's Date header if a URL is given.
+    checks.append(_check_clock_skew(tribunal_url))
 
     # Aggregate
     blockers = [c for c in checks if not c.passed and c.severity == "blocker"]
