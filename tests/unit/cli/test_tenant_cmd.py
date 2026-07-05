@@ -129,11 +129,19 @@ def test_purge_expired_never_erases_tenant_still_active_in_tenants_json(tmp_path
     assert body["erased"] == []
     assert body["failed"] == []
     assert (home / "tenants" / tenant_id).exists()
-    assert not (home / "compliance-erasure.jsonl").exists()
     ledger_path = tmp_path / "pending-erasure.json"
     assert json.loads(ledger_path.read_text(encoding="utf-8")) == {}
     # And the tenant is still listed (access untouched).
     assert tenant_id in json.loads(tenants_path.read_text(encoding="utf-8"))
+    # Dropping an LGPD erasure obligation leaves a persistent compliance event
+    # (same jsonl as the certificates, same 600 posture) — no certificate though.
+    trail_path = home / "compliance-erasure.jsonl"
+    events = [json.loads(line) for line in trail_path.read_text(encoding="utf-8").splitlines()]
+    assert [event["event"] for event in events] == ["tenant.erasure.stale-dropped"]
+    assert events[0]["tenant_id"] == tenant_id
+    assert events[0]["reason"]
+    assert events[0]["dropped_at"]
+    assert (trail_path.stat().st_mode & 0o777) == 0o600
 
 
 def test_purge_expired_recovers_crash_leftover_expired_trial(tmp_path, monkeypatch) -> None:

@@ -187,7 +187,7 @@ def _abort_purge(json_output: bool, dry_run: bool, error: str) -> NoReturn:
 
 
 def _run_purge(tenants_path: Path, *, now: datetime, dry_run: bool, yes: bool, json_output: bool) -> None:
-    from juris.ops.erasure import build_tenant_erasure_plan, execute_tenant_erasure
+    from juris.ops.erasure import append_stale_drop_event, build_tenant_erasure_plan, execute_tenant_erasure
     from juris.web.trial_access import (
         agents_file_path,
         is_tenant_active,
@@ -234,10 +234,18 @@ def _run_purge(tenants_path: Path, *, now: datetime, dry_run: bool, yes: bool, j
         if active:
             # Ledger leftover: crash between ledger-write and pop, or a hand-edit.
             # Active + non-expired must never be erased — drop the stale entry.
+            # Dropping discards an LGPD erasure obligation, so persist the event
+            # to the compliance trail BEFORE clearing the ledger (crash between
+            # the two just re-drops on the next run, appending a duplicate event).
+            reason = "ativo e não-expirado no tenants.json (leftover de crash ou reuso de id)"
             if not dry_run:
-                remove_from_pending_erasure(tenants_path, tenant_id)
-            reason = "presente e ativo em tenants.json; entrada obsoleta do ledger, nada apagado"
-            stale.append({"tenant_id": tenant_id, "reason": reason})
+                try:
+                    append_stale_drop_event(tenant_id, reason=reason)
+                    remove_from_pending_erasure(tenants_path, tenant_id)
+                except OSError as exc:
+                    failed.append({"tenant_id": tenant_id, "error": f"falha ao registrar stale-drop: {exc}"})
+                    continue
+            stale.append({"tenant_id": tenant_id, "reason": f"{reason}; removido do ledger, nada apagado"})
             continue
         try:
             plan = build_tenant_erasure_plan(tenant_id)

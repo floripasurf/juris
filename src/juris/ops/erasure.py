@@ -12,6 +12,7 @@ import json
 import os
 import shutil
 import sqlite3
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -351,12 +352,42 @@ def _column_exists(conn: sqlite3.Connection, table: str, column: str) -> bool:
 
 
 def _append_erasure_certificate(result: TenantErasureResult) -> None:
-    ensure_private_dir(result.erasure_log_path.parent)
     record = {
         "event": "tenant.erasure",
         "created_at": datetime.now(UTC).isoformat(),
         **result.to_dict(),
     }
-    with result.erasure_log_path.open("a", encoding="utf-8") as fh:
+    _append_compliance_record(result.erasure_log_path, record)
+
+
+def append_stale_drop_event(
+    tenant_id: str,
+    *,
+    reason: str,
+    juris_home_path: Path | None = None,
+) -> Path:
+    """Persist that a pending-erasure ledger entry was dropped WITHOUT erasure.
+
+    Dropping an id from the auto-erasure ledger discards an LGPD erasure
+    obligation, so it must leave a durable trail — not just a line in one run's
+    stdout. Appends to the same compliance log as the erasure certificates and
+    returns its path. Contains no PII: only the tenant id, the reason, and a
+    timestamp.
+    """
+    home = (juris_home_path or juris_home()).expanduser()
+    log_path = home / ERASURE_LOG_NAME
+    record = {
+        "event": "tenant.erasure.stale-dropped",
+        "tenant_id": tenant_id,
+        "reason": reason,
+        "dropped_at": datetime.now(UTC).isoformat(),
+    }
+    _append_compliance_record(log_path, record)
+    return log_path
+
+
+def _append_compliance_record(log_path: Path, record: Mapping[str, object]) -> None:
+    ensure_private_dir(log_path.parent)
+    with log_path.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
-    restrict_file(result.erasure_log_path)
+    restrict_file(log_path)

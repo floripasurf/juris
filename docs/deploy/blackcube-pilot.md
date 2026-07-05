@@ -198,7 +198,13 @@ chave do escritório → Mesa de trabalho. Chave errada reabre o login com erro.
   `juris tenant purge-expired --dry-run --json` antes de instalar o launchd.
   Certificados de erasure ficam em
   `${JURIS_HOME:-~/.juris}/compliance-erasure.jsonl` (mesmo arquivo do
-  `erase-data` manual — ver `docs/deploy/data-erasure.md`).
+  `erase-data` manual — ver `docs/deploy/data-erasure.md`; entradas obsoletas
+  do ledger descartadas também deixam evento `tenant.erasure.stale-dropped` aí).
+  Entradas `failed` permanentemente inválidas (ex.: id `public` ou malformado
+  no ledger) mantêm o job em **exit 1 a cada noite por design** — isso sinaliza
+  reparo manual, não retry: inspecione com
+  `juris tenant purge-expired --dry-run --json` e edite/remova a entrada
+  inválida direto no `pending-erasure.json` (mantenha chmod 600).
 - Logs: `<path>/logs/web.log` (dir **chmod 700**, nunca `/tmp` — pode conter
   contexto operacional). O access log do uvicorn fica **desligado** (registraria
   CNJ/termos de busca em texto puro); só habilite com `JURIS_WEB_ACCESS_LOG=1` se
