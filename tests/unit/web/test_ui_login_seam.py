@@ -102,11 +102,12 @@ class TestSpaLoginGate:
         A revert to the old absolute overpromise must fail here.
         """
         # "Privacidade por desenho" feature card
-        assert "Credenciais nunca ficam armazenadas." in _INDEX_HTML
+        assert "Credenciais nunca ficam armazenadas em nossos servidores." in _INDEX_HTML
         assert "apagados automaticamente, com certificado" in _INDEX_HTML
         # footer legal line
         assert (
-            "Credenciais nunca ficam armazenadas; dados de processo, isolados por escritório" in _INDEX_HTML
+            "Credenciais nunca ficam armazenadas em nossos servidores; dados de processo, isolados por escritório"
+            in _INDEX_HTML
         )
         # the overclaims must never come back
         assert "nunca saem do seu computador" not in _INDEX_HTML
