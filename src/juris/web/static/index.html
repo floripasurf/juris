@@ -1141,8 +1141,8 @@
       <div id="agent-setup" class="notice agent-setup" role="status" aria-live="polite" hidden></div>
       <div class="agent-tools"><span id="agent-pairing-status" role="status" aria-live="polite"></span></div>
       <form id="connect-form" class="connect-bar">
-        <input id="c_cpf" placeholder="CPF do advogado" autocomplete="off" />
-        <input id="c_pin" placeholder="PIN do token A3" type="password" autocomplete="off" />
+        <input id="c_cpf" placeholder="CPF do advogado" autocomplete="off" hidden disabled />
+        <input id="c_pin" placeholder="PIN do token A3" type="password" autocomplete="off" hidden disabled />
         <button id="connect-btn" type="submit">Conectar / sincronizar</button>
         <button id="agent-credentials-edit" class="ghost" type="button">Atualizar credenciais</button>
         <span id="connect-status"></span>
@@ -1994,7 +1994,7 @@
       ["#c_cpf", "#c_pin"].forEach((sel) => {
         const el = document.querySelector(sel);
         if (el) {
-          el.style.display = AGENT_REMOTE ? "none" : "";
+          el.hidden = AGENT_REMOTE;
           el.disabled = AGENT_REMOTE;
         }
       });

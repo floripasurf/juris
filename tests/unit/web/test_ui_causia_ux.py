@@ -12,6 +12,7 @@ copy/structure can't silently regress:
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -105,6 +106,18 @@ class TestConversionAndPromise:
         assert "local.endpoint" in _INDEX_HTML
         assert "show_agent_command" in _INDEX_HTML
         assert "comando técnico" in _INDEX_HTML
+
+    def test_credential_inputs_hidden_by_default(self) -> None:
+        """CPF/PIN must not flash visible before loadAgentMode() confirms co-located mode.
+
+        The raw HTML must ship these inputs hidden; JS (applyAgentMode()) only reveals them
+        once the backend confirms remote mode is False. If the /api/agent-mode fetch fails
+        entirely, the fail-closed default (AGENT_REMOTE stays True) must keep them hidden too.
+        """
+        cpf_tag = re.search(r'<input id="c_cpf"[^>]*>', _INDEX_HTML)
+        pin_tag = re.search(r'<input id="c_pin"[^>]*>', _INDEX_HTML)
+        assert cpf_tag is not None and "hidden" in cpf_tag.group(0), cpf_tag
+        assert pin_tag is not None and "hidden" in pin_tag.group(0), pin_tag
 
     def test_console_offers_agent_download(self) -> None:
         assert "Baixar o agente" in _INDEX_HTML
