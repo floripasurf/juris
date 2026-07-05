@@ -294,7 +294,9 @@ CLI" voltar, partir do ADR-0018, não do branch antigo.
 - **Sprint 8 — Broker de canal reverso.** Entregue em código com Redis pub/sub:
   worker com agente assina o canal do tenant, qualquer worker publica a operação e
   aguarda reply correlacionado; `SET NX` dedupe protege `request_id` pendente.
-  Falta smoke com Redis real e dois workers antes de habilitar em produção.
+  **Concluído (2026-07-05):** smoke real automatizado em
+  `scripts/smoke_relay_broker.py` (Redis 7 + dois `RelayHub`/workers) prova
+  roteamento cross-worker + dedupe de `request_id`; runbook em `docs/deployment.md`.
 - **Sprint 9 — Zero-PII-to-cloud completo.** Entregue em fatia técnica: o
   `RemoteFilingService` envia markdown de-identificado e sem mapa de re-id; o
   agente carrega o mapa local por tenant/CNJ e restaura o rascunho apenas antes

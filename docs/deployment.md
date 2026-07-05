@@ -47,9 +47,10 @@ the new socket and the stale one can't hijack).
 
 ## Scaling option B — Redis relay broker (real horizontal scale)
 
-Status: **built in code; real Redis integration smoke passed locally** with two
-`RelayHub` instances sharing one Redis broker. Repeat the smoke against the target
-Redis/network before enabling production multi-worker remote mode.
+Status: **built in code; real Redis integration smoke automated and passing**
+(`scripts/smoke_relay_broker.py`, 2026-07-05) — two `RelayHub` instances sharing
+one real Redis prove cross-worker routing + `SET NX` dedupe. Repeat the smoke
+against the target Redis/network before enabling production multi-worker remote mode.
 Set:
 
 ```bash
@@ -72,12 +73,23 @@ How it works:
    checks can report a tenant agent connected even if the current HTTP request lands on a
    different worker.
 
-Before enabling in production, run a real Redis integration smoke:
+Before enabling in production, run the real Redis integration smoke
+(`scripts/smoke_relay_broker.py`) — it stands up two `RelayHub(broker=...)`
+instances (worker A + worker B) sharing one Redis and asserts (1) an agent on A
+answers a request entering B and (2) a concurrent duplicate `request_id` is
+rejected by `SET NX`:
 
-1. Start two orchestrator workers/instances with the same `JURIS_RELAY_BROKER`.
-2. Connect one tenant agent to worker A.
-3. Force an MNI read/dry-run filing request through worker B.
-4. Confirm the request reaches the agent and the response correlates by `request_id`.
+```bash
+docker run -d --name smoke-redis -p 6399:6379 redis:7-alpine
+JURIS_RELAY_BROKER=redis://127.0.0.1:6399/0 uv run python scripts/smoke_relay_broker.py
+docker rm -f smoke-redis
+```
+
+Expected: `SMOKE BROKER OK` and exit 0. The WebSocket transport itself (agent
+dialer ↔ `/ws/agent-relay`) is covered by `tests/unit/api/test_relay.py`; this
+smoke covers the routing/dedupe layer that needs a real Redis + two workers. For
+a full end-to-end proof against your target infra, additionally connect a real
+agent to worker A and force an MNI read/dry-run filing through worker B.
 
 ## Rate limit for production
 
