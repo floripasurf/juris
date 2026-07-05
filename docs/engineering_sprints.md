@@ -274,6 +274,21 @@ launchd em `docs/deploy/com.juris.web.plist`).
 Bloqueado por dependência humana: **evidência de piloto** (rodar casos com A3 — ver
 `docs/pilot_runbook.md`) e **fonte real de inteiro teor** (decisão de ToS).
 
+**Consolidação de Git (2026-07-05):** criado o branch `main` a partir de
+`feat/mni-mtls-token` e tornado o default do repositório (o antigo default
+`feat/sprint-14-unified-search` estava ~297 commits atrás). Os PRs #3 e #7 foram
+fechados após integração/consolidação. Todo branch antigo foi preservado como tag
+`archive/*` antes de remoção.
+
+**Decisão (2026-07-05) — adapter CLI-cloud (PRs #2/#6):** o adapter de LLM via
+CLI de assinatura (Haiku sem API key) que vivia em `feat/cli-cloud-haiku` /
+`feat/llm-cli-cloud-adapter` **não foi portado** para `main`: o caminho de nuvem
+por assinatura foi superado pela sessão de browser do provedor (ADR-0018,
+`llm/browser_session.py`), e os seeds de corpus daqueles branches já existem em
+`data/corpus/` (súmulas/OJs TST, temas de repercussão geral do STF). Os branches
+ficam arquivados como tags `archive/*`; se a demanda "Haiku por assinatura via
+CLI" voltar, partir do ADR-0018, não do branch antigo.
+
 ## Próxima sequência proposta
 
 - **Sprint 8 — Broker de canal reverso.** Entregue em código com Redis pub/sub:
