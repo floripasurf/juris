@@ -15,6 +15,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from juris.config import _DEV_DEFAULT_URLS
+
 _TRUTHY = {"1", "true", "yes"}
 
 
@@ -151,6 +153,9 @@ def check_production_readiness(env: Mapping[str, str] | None = None) -> list[Che
 
     # 11. In production, audit logs need an HMAC key to anchor head/tail integrity.
     checks.append(_check_audit_hmac(env))
+
+    # 12. Backend URLs still on dev localhost defaults in prod = a forgotten env var.
+    checks.append(_check_dev_default_urls(env))
 
     return checks
 
@@ -318,6 +323,34 @@ def _check_audit_hmac(env: Mapping[str, str]) -> Check:
         not prod_env,
         "ausente — audit.jsonl não terá âncora HMAC contra truncamento/recomputação",
         severity="error" if prod_env else "warn",
+    )
+
+
+def _check_dev_default_urls(env: Mapping[str, str]) -> Check:
+    """Em prod, URLs de backend ainda no default localhost de dev = env var esquecida.
+
+    Warn por padrão (o piloto SQLite-first não define essas URLs e não pode ser
+    bloqueado por isso); vira ``error`` só com ``JURIS_STRICT_PROD_URLS=1``, quando
+    o próprio ``Settings`` já falha fechado no boot.
+    """
+    prod_env = env.get("ENVIRONMENT", "").strip().lower() == "prod"
+    if not prod_env:
+        return Check("backend_urls", True, "checagem de URLs de dev só se aplica em prod", severity="warn")
+    leaked = [
+        name
+        for name, dev_value in _DEV_DEFAULT_URLS.items()
+        if env.get(name.upper(), "").strip() in ("", dev_value)
+    ]
+    if not leaked:
+        return Check("backend_urls", True, "URLs de backend sobrescritas para prod")
+    joined = ", ".join(sorted(leaked))
+    strict = _flag(env, "JURIS_STRICT_PROD_URLS")
+    return Check(
+        "backend_urls",
+        not strict,
+        f"ainda no default de dev: {joined} — defina as env vars ou ative "
+        "JURIS_STRICT_PROD_URLS=1 no deploy docker",
+        severity="error" if strict else "warn",
     )
 
 

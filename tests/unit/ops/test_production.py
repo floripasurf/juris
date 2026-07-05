@@ -39,6 +39,44 @@ def test_audit_hmac_is_warn_only_outside_prod(tmp_path) -> None:
     assert checks["audit_hmac_key"].severity == "warn"
 
 
+def test_backend_urls_dev_default_in_prod_is_warn_not_block(tmp_path) -> None:
+    checks = _by_name(check_production_readiness(env={"ENVIRONMENT": "prod", "JURIS_HOME": str(tmp_path)}))
+    c = checks["backend_urls"]
+    assert c.ok is True  # não bloqueia o piloto SQLite-first
+    assert c.severity == "warn"
+    assert "database_url" in c.detail
+
+
+def test_backend_urls_dev_default_in_prod_strict_blocks(tmp_path) -> None:
+    checks = _by_name(
+        check_production_readiness(
+            env={"ENVIRONMENT": "prod", "JURIS_HOME": str(tmp_path), "JURIS_STRICT_PROD_URLS": "1"}
+        )
+    )
+    c = checks["backend_urls"]
+    assert c.ok is False
+    assert c.severity == "error"
+
+
+def test_backend_urls_overridden_in_prod_passes(tmp_path) -> None:
+    checks = _by_name(
+        check_production_readiness(
+            env={
+                "ENVIRONMENT": "prod",
+                "JURIS_HOME": str(tmp_path),
+                "DATABASE_URL": "postgresql+asyncpg://u:p@db:5432/j",
+                "DATABASE_URL_SYNC": "postgresql+psycopg://u:p@db:5432/j",
+                "QDRANT_URL": "http://qdrant:6333",
+                "REDIS_URL": "redis://redis:6379/0",
+                "OLLAMA_URL": "http://ollama:11434",
+            }
+        )
+    )
+    c = checks["backend_urls"]
+    assert c.ok is True
+    assert "sobrescritas" in c.detail
+
+
 def test_full_inprocess_prod_config_passes(tmp_path) -> None:
     import os
 
