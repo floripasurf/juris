@@ -23,6 +23,10 @@ _INDEX_HTML = (
     Path(__file__).resolve().parents[3] / "src" / "juris" / "web" / "static" / "index.html"
 ).read_text(encoding="utf-8")
 
+_PRIVACIDADE_HTML = (
+    Path(__file__).resolve().parents[3] / "src" / "juris" / "web" / "static" / "privacidade.html"
+).read_text(encoding="utf-8")
+
 # The <nav id="nav"> … </nav> block: what the lawyer sees as primary tasks.
 _NAV_START = _INDEX_HTML.index('<nav id="nav">')
 _MAIN_NAV = _INDEX_HTML[_NAV_START : _INDEX_HTML.index("</nav>", _NAV_START)]
@@ -66,6 +70,38 @@ class TestConversionAndPromise:
             assert resp.headers["content-type"].startswith("text/html")
         # allowlist: no arbitrary .html leaks
         assert client.get("/static/index-secret.html").status_code == 404
+
+    def test_privacy_policy_pins_honest_retention_claims(self) -> None:
+        """Pin every load-bearing sentence of §1/§5 of privacidade.html.
+
+        The audited overpromise ("não reter" absolute) and its first replacement
+        ("nunca saem do computador" — false in co-located mode, where credentials
+        transit the server transiently) must never come back. What IS promised:
+        credentials never STORED; process data retained per-office only while the
+        account is active; auto-erasure at trial end with a registered certificate;
+        on-demand LGPD erasure.
+        """
+        # §1 ¶1 — credentials: transient use, never stored; agent-local as opt-in stronger mode
+        assert "nunca ficam armazenadas por nós" in _PRIVACIDADE_HTML
+        assert "usadas apenas de forma transitória para autenticar no PJe/MNI" in _PRIVACIDADE_HTML
+        assert "instalado no seu próprio computador, elas nem chegam a sair dele" in _PRIVACIDADE_HTML
+        # §1 ¶2 — process data: per-office retention while active, auto-erasure with certificate
+        assert "isolados por escritório, enquanto sua conta estiver ativa" in _PRIVACIDADE_HTML
+        assert "apagados automaticamente" in _PRIVACIDADE_HTML
+        assert "certificado de eliminação registrado" in _PRIVACIDADE_HTML
+        assert "pedir a eliminação a qualquer momento" in _PRIVACIDADE_HTML
+        assert "LGPD, Lei 13.709/2018" in _PRIVACIDADE_HTML
+        # §3 — credentials transient + de-identified cloud AI
+        assert "nunca ficam armazenadas pelo Causia" in _PRIVACIDADE_HTML
+        assert "de forma de-identificada" in _PRIVACIDADE_HTML
+        # §5 — trial-end auto-erasure + on-demand (LGPD) erasure
+        assert "apagados automaticamente do ambiente Causia" in _PRIVACIDADE_HTML
+        assert "certificado de eliminação registrado em nossos logs de conformidade" in _PRIVACIDADE_HTML
+        assert "eliminação antecipada" in _PRIVACIDADE_HTML
+        assert "direito garantido pela LGPD" in _PRIVACIDADE_HTML
+        # the retired overclaims
+        assert "não reter" not in _PRIVACIDADE_HTML
+        assert "nunca saem do computador" not in _PRIVACIDADE_HTML
 
     def test_access_key_generation_for_team_is_visible(self) -> None:
         assert 'data-nav="acessos"' in _MAIN_NAV

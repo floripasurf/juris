@@ -93,6 +93,26 @@ class TestSpaLoginGate:
         assert "Seus processos ficam isolados no ambiente Causia" in _INDEX_HTML
         assert "apagados automaticamente ao final" in _INDEX_HTML
 
+    def test_landing_privacy_claims_stay_honest(self) -> None:
+        """Pin the honest retention framing on the card + footer.
+
+        Credentials are never STORED (they DO transit the server in co-located
+        mode, so "nunca saem do seu computador" would be false); process data is
+        retained per-office while active and auto-erased with a certificate.
+        A revert to the old absolute overpromise must fail here.
+        """
+        # "Privacidade por desenho" feature card
+        assert "Credenciais nunca ficam armazenadas." in _INDEX_HTML
+        assert "apagados automaticamente, com certificado" in _INDEX_HTML
+        # footer legal line
+        assert (
+            "Credenciais nunca ficam armazenadas; dados de processo, isolados por escritório" in _INDEX_HTML
+        )
+        # the overclaims must never come back
+        assert "nunca saem do seu computador" not in _INDEX_HTML
+        assert "Não guardamos seus dados" not in _INDEX_HTML
+        assert "não são retidos" not in _INDEX_HTML
+
     def test_console_is_hidden_until_key_exists(self) -> None:
         assert 'id="app-header" hidden' in _INDEX_HTML
         assert 'id="app-shell" hidden' in _INDEX_HTML
