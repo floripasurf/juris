@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd template for the CAUSIA local watchdog on the Mac Mini
+  (docs/deploy/blackcube-pilot.md §5). Every 5 minutes, scripts/causia_watchdog.sh
+  probes 127.0.0.1:8100/api/health; after 2 consecutive no-HTTP results it runs
+  `launchctl kickstart -k` on com.causia.web. This covers a HUNG web process,
+  which the web plist's KeepAlive (crash-only restart) does not.
+
+  A dead tunnel/DNS is NOT visible from inside the Mini — use the external
+  uptime monitor described in the runbook §5 for that.
+
+  Copy to ~/Library/LaunchAgents/com.causia.watchdog.plist, fill in the
+  REPLACE_WITH_PATH_TO value, then:
+  launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.causia.watchdog.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.causia.watchdog</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>REPLACE_WITH_PATH_TO/juris-pilot/app/scripts/causia_watchdog.sh</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>REPLACE_WITH_PATH_TO/juris-pilot/app</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <!-- Porta/label do serviço web no Mac Mini (blackcube-pilot.md §0). -->
+    <key>CAUSIA_WEB_PORT</key>
+    <string>8100</string>
+    <key>CAUSIA_WEB_LABEL</key>
+    <string>com.causia.web</string>
+  </dict>
+
+  <key>StartInterval</key>
+  <integer>300</integer>
+
+  <!-- Owner-only log dir (chmod 700); NOT /tmp — same convention as com.causia.web. -->
+  <key>StandardOutPath</key>
+  <string>REPLACE_WITH_PATH_TO/juris-pilot/logs/watchdog.log</string>
+  <key>StandardErrorPath</key>
+  <string>REPLACE_WITH_PATH_TO/juris-pilot/logs/watchdog.err</string>
+</dict>
+</plist>

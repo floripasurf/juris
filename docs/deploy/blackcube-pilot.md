@@ -223,6 +223,24 @@ chave do escritório → Mesa de trabalho. Chave errada reabre o login com erro.
   reidrata um `.tar.gz` num diretório temporário (`docs/deploy/backup-restore.md`).
   **Cópia offsite (recomendado):** `rsync` semanal do diretório `backups/` para o
   MacBook via Tailscale — o backup local não protege contra perda do próprio Mini.
+- **Watchdog local (`com.causia.watchdog`):** `scripts/causia_watchdog.sh` faz
+  probe em `127.0.0.1:8100/api/health` a cada 5 min; 2 falhas seguidas de resposta
+  → `launchctl kickstart -k com.causia.web`. Cobre processo **pendurado** (hang);
+  crash já é coberto pelo `KeepAlive` do `com.causia.web`. Qualquer status HTTP
+  (inclusive 401 sem chave) conta como vivo. Instalar:
+  ```bash
+  cp docs/deploy/com.causia.watchdog.plist ~/Library/LaunchAgents/
+  # editar: os REPLACE_WITH_PATH_TO (WorkingDirectory + logs)
+  launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.causia.watchdog.plist
+  ```
+- **Monitor externo de uptime (detecta tunnel/DNS caído — o watchdog não vê isso,
+  é interno ao Mini):** registrar `https://causia.com.br/` e
+  `https://causia.com.br/api/health` num monitor FORA da rede (ex.: UptimeRobot
+  free, intervalo 5 min, alerta para `lages.raphael@gmail.com`). Critério de UP:
+  qualquer HTTP < 500 — a raiz responde 200 (landing) e `/api/health` sem chave
+  responde 401 estruturado; ambos provam web + tunnel vivos. É o único sinal de
+  que o caminho público inteiro está no ar; sem ele, uma queda do `cloudflared`
+  passa despercebida até o advogado reclamar.
 - Logs: `<path>/logs/web.log` (dir **chmod 700**, nunca `/tmp` — pode conter
   contexto operacional). O access log do uvicorn fica **desligado** (registraria
   CNJ/termos de busca em texto puro); só habilite com `JURIS_WEB_ACCESS_LOG=1` se
