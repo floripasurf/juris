@@ -146,6 +146,133 @@ def test_start_trial_prunes_expired_trials_and_agent_bindings(trial_env) -> None
     assert created.tenant_id in agent_data
 
 
+def test_start_trial_records_pruned_trial_in_pending_erasure_ledger(trial_env) -> None:
+    tenants, agents = trial_env
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    tenants.write_text(
+        json.dumps(
+            {
+                "trial_old": {
+                    "kind": "trial",
+                    "trial_expires_at": "2025-01-01T00:00:00Z",
+                    "keys": {"owner": {"hash": "sha256:" + "a" * 64}},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    from juris.web.trial_access import create_trial_access, read_pending_erasure
+
+    create_trial_access(tenants_path=tenants, agents_path=agents, now=now)
+
+    ledger = read_pending_erasure(tenants)
+    assert set(ledger) == {"trial_old"}
+    assert ledger["trial_old"]["trial_expires_at"] == "2025-01-01T00:00:00Z"
+    assert ledger["trial_old"]["pruned_at"]
+
+
+def test_sweep_expired_trials_prunes_and_enqueues_only_expired(tmp_path) -> None:
+    tenants = tmp_path / "tenants.json"
+    tenants.write_text(
+        json.dumps(
+            {
+                "trial_old": {
+                    "kind": "trial",
+                    "trial_expires_at": "2025-01-01T00:00:00Z",
+                    "keys": {"owner": {"hash": "sha256:" + "a" * 64}},
+                },
+                "trial_active": {
+                    "kind": "trial",
+                    "trial_expires_at": "2999-01-01T00:00:00Z",
+                    "keys": {"owner": {"hash": "sha256:" + "b" * 64}},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+
+    from juris.web.trial_access import read_pending_erasure, sweep_expired_trials
+
+    pruned = sweep_expired_trials(tenants_path=tenants, agents_path=None, now=now)
+
+    assert set(pruned) == {"trial_old"}
+    tenant_data = json.loads(tenants.read_text(encoding="utf-8"))
+    assert "trial_old" not in tenant_data
+    assert "trial_active" in tenant_data
+    ledger = read_pending_erasure(tenants)
+    assert set(ledger) == {"trial_old"}
+
+
+def test_sweep_expired_trials_is_idempotent_and_never_loses_ledger_entries(tmp_path) -> None:
+    tenants = tmp_path / "tenants.json"
+    tenants.write_text(
+        json.dumps(
+            {
+                "trial_old": {
+                    "kind": "trial",
+                    "trial_expires_at": "2025-01-01T00:00:00Z",
+                    "keys": {"owner": {"hash": "sha256:" + "a" * 64}},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    from juris.web.trial_access import read_pending_erasure, sweep_expired_trials
+
+    first_now = datetime(2026, 1, 1, tzinfo=UTC)
+    sweep_expired_trials(tenants_path=tenants, agents_path=None, now=first_now)
+    first_ledger = read_pending_erasure(tenants)
+    assert set(first_ledger) == {"trial_old"}
+    first_pruned_at = first_ledger["trial_old"]["pruned_at"]
+
+    # Simulate the same id being pruned a second time (e.g. re-added and expired
+    # again): the ledger entry must not be duplicated or overwritten/lost.
+    tenants.write_text(
+        json.dumps(
+            {
+                "trial_old": {
+                    "kind": "trial",
+                    "trial_expires_at": "2025-06-01T00:00:00Z",
+                    "keys": {"owner": {"hash": "sha256:" + "a" * 64}},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    second_now = datetime(2026, 2, 1, tzinfo=UTC)
+    pruned_again = sweep_expired_trials(tenants_path=tenants, agents_path=None, now=second_now)
+
+    assert set(pruned_again) == {"trial_old"}
+    second_ledger = read_pending_erasure(tenants)
+    assert set(second_ledger) == {"trial_old"}
+    assert second_ledger["trial_old"]["pruned_at"] == first_pruned_at
+
+
+def test_is_tenant_active(tmp_path) -> None:
+    tenants = tmp_path / "tenants.json"
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    tenants.write_text(
+        json.dumps(
+            {
+                "trial_active": {"kind": "trial", "trial_expires_at": "2999-01-01T00:00:00Z", "keys": {}},
+                "trial_expired": {"kind": "trial", "trial_expires_at": "2020-01-01T00:00:00Z", "keys": {}},
+                "conta-legada": "sha256:" + "c" * 64,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    from juris.web.trial_access import is_tenant_active
+
+    assert is_tenant_active(tenants, "trial_active", now=now) is True
+    assert is_tenant_active(tenants, "trial_expired", now=now) is False
+    assert is_tenant_active(tenants, "conta-legada", now=now) is True
+    assert is_tenant_active(tenants, "nao-existe", now=now) is False
+
+
 def test_start_trial_enforces_active_trial_cap(trial_env, monkeypatch) -> None:
     tenants, agents = trial_env
     monkeypatch.setenv("JURIS_TRIAL_MAX_ACTIVE", "1")

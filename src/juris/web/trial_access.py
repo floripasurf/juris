@@ -123,8 +123,13 @@ def _is_expired_trial(raw: object, *, now: datetime) -> bool:
     return expires_at is not None and expires_at <= now
 
 
-def _prune_expired_trials(tenants: MutableMapping[str, object], *, now: datetime) -> set[str]:
-    expired = {tenant_id for tenant_id, raw in tenants.items() if _is_expired_trial(raw, now=now)}
+def _prune_expired_trials(tenants: MutableMapping[str, object], *, now: datetime) -> dict[str, object]:
+    """Pop expired trials from ``tenants`` and return ``{tenant_id: popped_raw_entry}``.
+
+    The raw entry is returned (not just the id) so callers can enqueue it for data
+    erasure with its original ``trial_expires_at`` before the record disappears.
+    """
+    expired = {tenant_id: raw for tenant_id, raw in tenants.items() if _is_expired_trial(raw, now=now)}
     for tenant_id in expired:
         tenants.pop(tenant_id, None)
     return expired
@@ -144,6 +149,97 @@ def _prune_agent_bindings(agents_path: Path | None, tenant_ids: set[str]) -> Non
     with _locked_json(agents_path) as agents:
         for tenant_id in tenant_ids:
             agents.pop(tenant_id, None)
+
+
+PENDING_ERASURE_FILENAME = "pending-erasure.json"
+
+
+def pending_erasure_path(tenants_path: Path) -> Path:
+    """Sidecar ledger, next to the tenants file, of ids awaiting data erasure.
+
+    Trial expiry cuts ACCESS immediately (the tenant is popped from tenants.json by
+    ``_prune_expired_trials``), but the tenant's on-disk data — ``juris.db``,
+    artefatos, corpus chunks — is only actually deleted by
+    ``juris tenant purge-expired``. This ledger is the *only* source of truth for
+    that pending work: an id absent from tenants.json but not listed here must
+    never be auto-erased (it could be operator error, not an expired trial).
+    """
+    return tenants_path.parent / PENDING_ERASURE_FILENAME
+
+
+def _record_pending_erasure(tenants_path: Path, pruned: Mapping[str, object], *, now: datetime) -> None:
+    """Merge newly popped trial ids into the pending-erasure ledger.
+
+    Append-only merge: an id already on the ledger keeps its original entry (so
+    pruning the same id more than once is idempotent and never loses data already
+    recorded there).
+    """
+    if not pruned:
+        return
+    ledger_path = pending_erasure_path(tenants_path)
+    with _locked_json(ledger_path) as ledger:
+        for tenant_id, raw in pruned.items():
+            expires_at = None
+            if isinstance(raw, Mapping):
+                expires_at = raw.get("trial_expires_at") or raw.get("expires_at")
+            ledger.setdefault(tenant_id, {"trial_expires_at": expires_at, "pruned_at": _iso(now)})
+
+
+def read_pending_erasure(tenants_path: Path) -> dict[str, object]:
+    """Read the pending-erasure ledger for the given tenants file (``{}`` if none)."""
+    return _load_json_object(pending_erasure_path(tenants_path))
+
+
+def remove_from_pending_erasure(tenants_path: Path, tenant_id: str) -> None:
+    """Clear one tenant id from the pending-erasure ledger.
+
+    Callers must only do this after a *successful* erasure — on failure the id
+    should stay pending so the next run retries it.
+    """
+    ledger_path = pending_erasure_path(tenants_path)
+    with _locked_json(ledger_path) as ledger:
+        ledger.pop(tenant_id, None)
+
+
+def is_tenant_active(tenants_path: Path, tenant_id: str, *, now: datetime) -> bool:
+    """True if ``tenant_id`` is currently present in tenants.json and not an expired trial.
+
+    Hard guard for automatic erasure: a tenant that is still active must never be
+    erased, even if it (erroneously or maliciously) appears in the pending-erasure
+    ledger.
+    """
+    raw = _load_json_object(tenants_path).get(tenant_id)
+    if raw is None:
+        return False
+    if isinstance(raw, Mapping):
+        return not _is_expired_trial(raw, now=now)
+    return True  # legacy string-hash entries are always active accounts
+
+
+def sweep_expired_trials(
+    *,
+    tenants_path: Path,
+    agents_path: Path | None,
+    now: datetime | None = None,
+) -> dict[str, object]:
+    """Prune any expired trials still listed in tenants.json and enqueue them for erasure.
+
+    Belt-and-braces companion to the opportunistic pruning inside
+    :func:`create_trial_access`: a trial that expires with no further trial signup
+    afterwards would otherwise sit untouched in tenants.json indefinitely. Safe to
+    call standalone (e.g. from ``juris tenant purge-expired``) — it takes its own
+    lock on ``tenants_path``, so do not call it from inside an already-open
+    ``_locked_json(tenants_path)`` block (same-process re-lock on the same file
+    would deadlock).
+    """
+    now = now or _utc_now()
+    with _locked_json(tenants_path) as tenants:
+        pruned = _prune_expired_trials(tenants, now=now)
+    if pruned:
+        _record_pending_erasure(tenants_path, pruned, now=now)
+        _prune_agent_bindings(agents_path, set(pruned))
+        _clear_auth_caches()
+    return pruned
 
 
 def _load_json_object(path: Path) -> dict[str, object]:
@@ -199,7 +295,7 @@ def create_trial_access(
     expires_at = now + timedelta(days=trial_days())
     relay_url = trial_relay_url()
     max_active = trial_max_active()
-    pruned_tenant_ids: set[str] = set()
+    pruned_trials: dict[str, object] = {}
     capacity_exceeded = False
 
     for _ in range(10):
@@ -207,7 +303,7 @@ def create_trial_access(
         api_key = f"causia_{secrets.token_urlsafe(32)}"
         agent_token = secrets.token_urlsafe(32)
         with _locked_json(tenants_path) as tenants:
-            pruned_tenant_ids.update(_prune_expired_trials(tenants, now=now))
+            pruned_trials.update(_prune_expired_trials(tenants, now=now))
             if _active_trial_count(tenants, now=now) >= max_active:
                 capacity_exceeded = True
                 break
@@ -231,7 +327,8 @@ def create_trial_access(
         msg = "não foi possível gerar tenant de teste único."
         raise RuntimeError(msg)
 
-    _prune_agent_bindings(agents_path, pruned_tenant_ids)
+    _record_pending_erasure(tenants_path, pruned_trials, now=now)
+    _prune_agent_bindings(agents_path, set(pruned_trials))
     if capacity_exceeded:
         _clear_auth_caches()
         msg = "limite de testes anônimos ativos atingido."
