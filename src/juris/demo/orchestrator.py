@@ -233,6 +233,8 @@ class DemoOrchestrator:
                 "draft_revisions": result.draft.revisions if result.draft else None,
                 "prazos_count": len(result.prazo_report.prazos) if result.prazo_report else 0,
                 "actionable_count": (len(result.analysis.actionable) if result.analysis else 0),
+                "ai_model": result.draft.ai_model if result.draft else None,
+                "ai_model_thesis": result.draft.ai_model_thesis if result.draft else None,
             },
         )
         return result

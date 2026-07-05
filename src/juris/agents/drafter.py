@@ -87,6 +87,10 @@ class DraftResult:
         default_factory=GroundingReport.verified
     )
     blocked_reason: str | None = None
+    # Modelo efetivo da geração da minuta FINAL (última geração vence) e da
+    # inferência de tese — a resposta a "qual IA escreveu isto?" (spec 2026-07-05).
+    ai_model: str | None = None
+    ai_model_thesis: str | None = None
 
     @property
     def is_grounded(self) -> bool:
@@ -166,7 +170,10 @@ class DrafterAgent:
                 )
 
         # Step 3: Determine thesis
-        thesis = request.thesis or await self._infer_thesis(request, context)
+        if request.thesis:
+            thesis = request.thesis
+        else:
+            thesis, result.ai_model_thesis = await self._infer_thesis(request, context)
         self._log_audit(
             "draft.thesis_chosen",
             request.numero_cnj,
@@ -290,7 +297,7 @@ class DrafterAgent:
 
         for revision in range(request.max_revision_rounds + 1):
             # Generate
-            draft_text = await self._generate(
+            draft_text, generation_model = await self._generate(
                 request=request,
                 case_context=case_ctx,
                 thesis=thesis,
@@ -300,6 +307,7 @@ class DrafterAgent:
                 revision_feedback=revision_feedback,
                 tone=tone,
             )
+            result.ai_model = generation_model
 
             # Verify citations
             verification = self._verifier.verify(
@@ -397,7 +405,7 @@ class DrafterAgent:
                         + "\n".join(feedback_parts)
                         + "\n\n"
                     )
-                    draft_text = await self._generate(
+                    draft_text, generation_model = await self._generate(
                         request=request,
                         case_context=case_ctx,
                         thesis=thesis,
@@ -407,6 +415,7 @@ class DrafterAgent:
                         revision_feedback=revision_feedback,
                         tone=tone,
                     )
+                    result.ai_model = generation_model
                     verification = self._verifier.verify(
                         draft_text, allowed_source_ids=allowed_ids
                     )
@@ -538,8 +547,8 @@ class DrafterAgent:
         style_text: str,
         revision_feedback: str,
         tone: str = "",
-    ) -> str:
-        """Generate a draft via LLM call."""
+    ) -> tuple[str, str]:
+        """Generate a draft via LLM call; returns (markdown, effective model label)."""
         instruction = _TONE_INSTRUCTIONS.get(tone)
         tone_section = f"## TOM DA MINUTA ({tone})\n{instruction}\n\n" if instruction else ""
         prompt = DRAFT_PROMPT.format(
@@ -565,14 +574,14 @@ class DrafterAgent:
             max_tokens=4096,
             temperature=0.15,
         )
-        return response.content
+        return response.content, response.model
 
     async def _infer_thesis(
         self,
         request: DraftRequest,
         context: ProcessoContext,
-    ) -> str:
-        """Infer thesis via small LLM call when not explicitly provided."""
+    ) -> tuple[str, str | None]:
+        """Infer thesis via small LLM call; returns (thesis, effective model or None)."""
         prompt = THESIS_INFERENCE_PROMPT.format(
             classe=context.classe,
             assuntos=", ".join(context.assuntos),
@@ -585,10 +594,10 @@ class DrafterAgent:
                 temperature=0.1,
                 max_tokens=256,
             )
-            return response.content.strip()
+            return response.content.strip(), response.model
         except Exception:  # noqa: BLE001
             logger.warning("thesis_inference_failed")
-            return f"Defesa em {request.tipo_peticao.value}"
+            return f"Defesa em {request.tipo_peticao.value}", None
 
     @staticmethod
     def _build_case_context(context: ProcessoContext) -> dict[str, Any]:
