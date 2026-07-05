@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
+from juris.core.paths import restrict_file
 from juris.web.auth import hash_api_key, validate_tenant_id
 
 
@@ -123,16 +124,9 @@ def _is_expired_trial(raw: object, *, now: datetime) -> bool:
     return expires_at is not None and expires_at <= now
 
 
-def _prune_expired_trials(tenants: MutableMapping[str, object], *, now: datetime) -> dict[str, object]:
-    """Pop expired trials from ``tenants`` and return ``{tenant_id: popped_raw_entry}``.
-
-    The raw entry is returned (not just the id) so callers can enqueue it for data
-    erasure with its original ``trial_expires_at`` before the record disappears.
-    """
-    expired = {tenant_id: raw for tenant_id, raw in tenants.items() if _is_expired_trial(raw, now=now)}
-    for tenant_id in expired:
-        tenants.pop(tenant_id, None)
-    return expired
+def _expired_trials(tenants: Mapping[str, object], *, now: datetime) -> dict[str, object]:
+    """Return ``{tenant_id: raw_entry}`` of every expired trial in ``tenants``."""
+    return {tenant_id: raw for tenant_id, raw in tenants.items() if _is_expired_trial(raw, now=now)}
 
 
 def _active_trial_count(tenants: Mapping[str, object], *, now: datetime) -> int:
@@ -157,22 +151,23 @@ PENDING_ERASURE_FILENAME = "pending-erasure.json"
 def pending_erasure_path(tenants_path: Path) -> Path:
     """Sidecar ledger, next to the tenants file, of ids awaiting data erasure.
 
-    Trial expiry cuts ACCESS immediately (the tenant is popped from tenants.json by
-    ``_prune_expired_trials``), but the tenant's on-disk data — ``juris.db``,
-    artefatos, corpus chunks — is only actually deleted by
-    ``juris tenant purge-expired``. This ledger is the *only* source of truth for
-    that pending work: an id absent from tenants.json but not listed here must
-    never be auto-erased (it could be operator error, not an expired trial).
+    Trial expiry cuts ACCESS immediately (the tenant is popped from tenants.json),
+    but the tenant's on-disk data — ``juris.db``, artefatos, corpus chunks — is
+    only actually deleted by ``juris tenant purge-expired``. This ledger is the
+    *only* source of truth for that pending work: an id absent from tenants.json
+    but not listed here must never be auto-erased (it could be operator error,
+    not an expired trial).
     """
     return tenants_path.parent / PENDING_ERASURE_FILENAME
 
 
 def _record_pending_erasure(tenants_path: Path, pruned: Mapping[str, object], *, now: datetime) -> None:
-    """Merge newly popped trial ids into the pending-erasure ledger.
+    """Merge trial ids slated for erasure into the pending-erasure ledger.
 
     Append-only merge: an id already on the ledger keeps its original entry (so
-    pruning the same id more than once is idempotent and never loses data already
-    recorded there).
+    recording the same id more than once is idempotent and never loses data
+    already recorded there). The ledger holds no PII — only tenant ids and
+    timestamps — but is chmod 600 to match compliance-erasure.jsonl's posture.
     """
     if not pruned:
         return
@@ -183,6 +178,7 @@ def _record_pending_erasure(tenants_path: Path, pruned: Mapping[str, object], *,
             if isinstance(raw, Mapping):
                 expires_at = raw.get("trial_expires_at") or raw.get("expires_at")
             ledger.setdefault(tenant_id, {"trial_expires_at": expires_at, "pruned_at": _iso(now)})
+    restrict_file(ledger_path)
 
 
 def read_pending_erasure(tenants_path: Path) -> dict[str, object]:
@@ -193,12 +189,14 @@ def read_pending_erasure(tenants_path: Path) -> dict[str, object]:
 def remove_from_pending_erasure(tenants_path: Path, tenant_id: str) -> None:
     """Clear one tenant id from the pending-erasure ledger.
 
-    Callers must only do this after a *successful* erasure — on failure the id
-    should stay pending so the next run retries it.
+    Callers must only do this after a *successful* erasure (or after verifying
+    the id is a stale leftover of an active tenant) — on failure the id should
+    stay pending so the next run retries it.
     """
     ledger_path = pending_erasure_path(tenants_path)
     with _locked_json(ledger_path) as ledger:
         ledger.pop(tenant_id, None)
+    restrict_file(ledger_path)
 
 
 def is_tenant_active(tenants_path: Path, tenant_id: str, *, now: datetime) -> bool:
@@ -216,6 +214,42 @@ def is_tenant_active(tenants_path: Path, tenant_id: str, *, now: datetime) -> bo
     return True  # legacy string-hash entries are always active accounts
 
 
+def preview_expired_trials(tenants_path: Path, *, now: datetime | None = None) -> dict[str, object]:
+    """Read-only: which trials in tenants.json a sweep would prune+enqueue right now.
+
+    Used by ``purge-expired --dry-run`` so the preview matches what the next real
+    run will actually do — without writing anything (no pop, no ledger entry).
+    """
+    return _expired_trials(_load_json_object(tenants_path), now=now or _utc_now())
+
+
+def _sweep_ledger_first(tenants_path: Path, *, now: datetime) -> dict[str, object]:
+    """Enqueue expired trials on the erasure ledger, THEN pop them from tenants.json.
+
+    The ordering is deliberate crash-safety: the ledger entry is committed to disk
+    *before* the tenants.json pop. If the process dies between the two writes, the
+    id sits on the ledger while still listed in tenants.json — purge-expired then
+    either re-sweeps it (still expired) or drops it as a stale ledger entry
+    (active and non-expired). The reverse order would cut access first and, on a
+    crash, orphan the tenant's data forever with no erasure record.
+
+    Takes its own lock on ``tenants_path`` — never call it from inside an open
+    ``_locked_json(tenants_path)`` block (same-process re-lock would deadlock).
+    """
+    candidates = _expired_trials(_load_json_object(tenants_path), now=now)
+    if not candidates:
+        return {}
+    _record_pending_erasure(tenants_path, candidates, now=now)  # ledger FIRST
+    popped: dict[str, object] = {}
+    with _locked_json(tenants_path) as tenants:
+        for tenant_id in candidates:
+            raw = tenants.get(tenant_id)
+            if raw is not None and _is_expired_trial(raw, now=now):
+                popped[tenant_id] = raw
+                tenants.pop(tenant_id, None)
+    return popped
+
+
 def sweep_expired_trials(
     *,
     tenants_path: Path,
@@ -226,20 +260,40 @@ def sweep_expired_trials(
 
     Belt-and-braces companion to the opportunistic pruning inside
     :func:`create_trial_access`: a trial that expires with no further trial signup
-    afterwards would otherwise sit untouched in tenants.json indefinitely. Safe to
-    call standalone (e.g. from ``juris tenant purge-expired``) — it takes its own
-    lock on ``tenants_path``, so do not call it from inside an already-open
-    ``_locked_json(tenants_path)`` block (same-process re-lock on the same file
-    would deadlock).
+    afterwards would otherwise sit untouched in tenants.json indefinitely. The
+    ledger entry is written before the tenants.json pop (see
+    :func:`_sweep_ledger_first` for the crash-safety rationale).
     """
     now = now or _utc_now()
-    with _locked_json(tenants_path) as tenants:
-        pruned = _prune_expired_trials(tenants, now=now)
+    pruned = _sweep_ledger_first(tenants_path, now=now)
     if pruned:
-        _record_pending_erasure(tenants_path, pruned, now=now)
         _prune_agent_bindings(agents_path, set(pruned))
         _clear_auth_caches()
     return pruned
+
+
+@contextmanager
+def acquire_purge_lock(tenants_path: Path) -> Iterator[bool]:
+    """Cross-process lock for a purge run; yields False if another purge holds it.
+
+    Prevents an overlapping manual + scheduled ``purge-expired`` from racing
+    ``rmtree`` on the same tenant. Non-blocking: the loser reports and exits
+    instead of queueing behind a long erasure.
+    """
+    import fcntl
+
+    lock_path = pending_erasure_path(tenants_path).with_suffix(".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            yield False
+            return
+        yield True
+    finally:
+        os.close(fd)  # releases the flock
 
 
 def _load_json_object(path: Path) -> dict[str, object]:
@@ -295,7 +349,9 @@ def create_trial_access(
     expires_at = now + timedelta(days=trial_days())
     relay_url = trial_relay_url()
     max_active = trial_max_active()
-    pruned_trials: dict[str, object] = {}
+    # Opportunistic prune, ledger-first (see _sweep_ledger_first): enqueue expired
+    # trials for erasure BEFORE their tenants.json entries are popped.
+    pruned_trials: dict[str, object] = _sweep_ledger_first(tenants_path, now=now)
     capacity_exceeded = False
 
     for _ in range(10):
@@ -303,7 +359,6 @@ def create_trial_access(
         api_key = f"causia_{secrets.token_urlsafe(32)}"
         agent_token = secrets.token_urlsafe(32)
         with _locked_json(tenants_path) as tenants:
-            pruned_trials.update(_prune_expired_trials(tenants, now=now))
             if _active_trial_count(tenants, now=now) >= max_active:
                 capacity_exceeded = True
                 break
@@ -327,7 +382,6 @@ def create_trial_access(
         msg = "não foi possível gerar tenant de teste único."
         raise RuntimeError(msg)
 
-    _record_pending_erasure(tenants_path, pruned_trials, now=now)
     _prune_agent_bindings(agents_path, set(pruned_trials))
     if capacity_exceeded:
         _clear_auth_caches()

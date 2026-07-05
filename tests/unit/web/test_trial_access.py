@@ -170,6 +170,71 @@ def test_start_trial_records_pruned_trial_in_pending_erasure_ledger(trial_env) -
     assert set(ledger) == {"trial_old"}
     assert ledger["trial_old"]["trial_expires_at"] == "2025-01-01T00:00:00Z"
     assert ledger["trial_old"]["pruned_at"]
+    ledger_path = tenants.parent / "pending-erasure.json"
+    assert (ledger_path.stat().st_mode & 0o777) == 0o600
+
+
+def test_sweep_writes_ledger_before_popping_tenants(tmp_path, monkeypatch) -> None:
+    """Crash between ledger-write and tenants.json pop must NOT orphan the tenant.
+
+    Simulates a SIGKILL right after the ledger commit: the id must already be on
+    the ledger while tenants.json still lists it, so a later purge can recover
+    (re-sweep if still expired; drop as stale if somehow active again).
+    """
+    import juris.web.trial_access as trial_access
+    from juris.web.trial_access import read_pending_erasure, sweep_expired_trials
+
+    tenants = tmp_path / "tenants.json"
+    tenants.write_text(
+        json.dumps(
+            {
+                "trial_old": {
+                    "kind": "trial",
+                    "trial_expires_at": "2025-01-01T00:00:00Z",
+                    "keys": {"owner": {"hash": "sha256:" + "a" * 64}},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+
+    real_record = trial_access._record_pending_erasure
+    calls = {"n": 0}
+
+    def record_then_crash(*args, **kwargs):
+        real_record(*args, **kwargs)
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("crash simulado pós-ledger")
+
+    monkeypatch.setattr(trial_access, "_record_pending_erasure", record_then_crash)
+
+    with pytest.raises(RuntimeError, match="crash simulado"):
+        sweep_expired_trials(tenants_path=tenants, agents_path=None, now=now)
+
+    # Ledger committed FIRST; the pop never happened — no orphan possible.
+    assert set(read_pending_erasure(tenants)) == {"trial_old"}
+    assert "trial_old" in json.loads(tenants.read_text(encoding="utf-8"))
+
+    # Recovery: the next sweep (still expired) prunes it; ledger entry preserved.
+    pruned = sweep_expired_trials(tenants_path=tenants, agents_path=None, now=now)
+    assert set(pruned) == {"trial_old"}
+    assert "trial_old" not in json.loads(tenants.read_text(encoding="utf-8"))
+    assert set(read_pending_erasure(tenants)) == {"trial_old"}
+
+
+def test_acquire_purge_lock_blocks_concurrent_runs(tmp_path) -> None:
+    from juris.web.trial_access import acquire_purge_lock
+
+    tenants = tmp_path / "tenants.json"
+    with acquire_purge_lock(tenants) as first:
+        assert first is True
+        with acquire_purge_lock(tenants) as second:
+            assert second is False
+    # Released after the first holder exits.
+    with acquire_purge_lock(tenants) as again:
+        assert again is True
 
 
 def test_sweep_expired_trials_prunes_and_enqueues_only_expired(tmp_path) -> None:
