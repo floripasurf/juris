@@ -945,6 +945,9 @@ def test_create_demo_run_returns_artifact_previews(monkeypatch) -> None:
             ),
             estrategia={"escolhida": {"tese": "forte", "confianca": "alta"}, "revisao_humana_obrigatoria": False},
             review={"counts": {"critical": 1}, "issues": [{"severity": "critical", "title": "x"}], "citations": []},
+            ai_model="chatgpt (browser session)",
+            ai_browser_provider_declared="claude",
+            provider_warning="Você declarou Claude.ai como IA de preferência, mas a extensão dirigiu ChatGPT.",
         )
 
     monkeypatch.setattr(app_module, "execute_demo_run", fake_execute)
@@ -966,6 +969,9 @@ def test_create_demo_run_returns_artifact_previews(monkeypatch) -> None:
     assert body["artifacts"][0]["preview"] == "# Rascunho"
     assert body["estrategia"]["escolhida"]["tese"] == "forte"  # strategy surfaced to the console
     assert body["review"]["counts"]["critical"] == 1  # review surfaced to the console
+    assert body["ai_model"] == "chatgpt (browser session)"
+    assert body["ai_browser_provider_declared"] == "claude"
+    assert body["provider_warning"].startswith("Você declarou")
 
 
 def test_create_demo_run_executes_real_service_path(monkeypatch, tmp_path: Path) -> None:

@@ -1613,4 +1613,7 @@ async def create_demo_run(payload: DemoRunPayload, tenant: Tenant = Depends(curr
         "estrategia": result.estrategia,
         "review": result.review,
         "grounding": result.grounding,  # anti-hallucination chip (first-class state)
+        "ai_model": result.ai_model,
+        "ai_browser_provider_declared": result.ai_browser_provider_declared,
+        "provider_warning": result.provider_warning,
     }

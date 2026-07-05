@@ -83,6 +83,11 @@ class WebDemoRun:
     estrategia: dict[str, object] | None = None  # the selected argumentative line (Relatório)
     review: dict[str, object] | None = None  # structured reviewer report
     grounding: dict[str, object] | None = None  # anti-hallucination state (verified/blocked)
+    # IA do run (spec 2026-07-05): modelo efetivo da minuta final, preferência
+    # declarada e aviso de divergência declarado×real (por-run, sem store).
+    ai_model: str | None = None
+    ai_browser_provider_declared: str | None = None
+    provider_warning: str | None = None
 
 
 def estrategia_payload(draft: object) -> dict[str, object] | None:
@@ -278,6 +283,13 @@ async def execute_demo_run(request: WebDemoRunRequest) -> WebDemoRun:
 
     artifact_hashes = write_artifacts(result)
     artifacts = tuple(_artifact_preview(case_dir, name, sha256) for name, sha256 in sorted(artifact_hashes.items()))
+
+    from juris.config import get_settings
+    from juris.llm.browser_session import label_to_browser_provider, provider_divergence
+
+    draft = getattr(result, "draft", None)
+    ai_model = getattr(draft, "ai_model", None)
+    declared = get_settings().ai_browser_provider
     return WebDemoRun(
         succeeded=result.succeeded,
         degraded=result.degraded,
@@ -286,9 +298,12 @@ async def execute_demo_run(request: WebDemoRunRequest) -> WebDemoRun:
         duration_seconds=result.duration_seconds,
         output_dir=_relative_key(case_dir, request.out_root),
         artifacts=artifacts,
-        estrategia=estrategia_payload(getattr(result, "draft", None)),
-        review=review_payload(getattr(result, "draft", None)),
-        grounding=grounding_payload(getattr(result, "draft", None)),
+        estrategia=estrategia_payload(draft),
+        review=review_payload(draft),
+        grounding=grounding_payload(draft),
+        ai_model=ai_model,
+        ai_browser_provider_declared=declared,
+        provider_warning=provider_divergence(declared, label_to_browser_provider(ai_model)),
     )
 
 
