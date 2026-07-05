@@ -205,6 +205,24 @@ chave do escritório → Mesa de trabalho. Chave errada reabre o login com erro.
   reparo manual, não retry: inspecione com
   `juris tenant purge-expired --dry-run --json` e edite/remova a entrada
   inválida direto no `pending-erasure.json` (mantenha chmod 600).
+- **Backup diário automatizado (`com.causia.backup`):** roda
+  `scripts/backup_daily.sh` às **03:45** (antes do purge das 04:30, para que um
+  trial purgado seja capturado na íntegra naquela noite), grava
+  `juris-backup-<ts>.tar.gz` + `.sha256` em `~/juris-pilot/backups/` (chmod 700,
+  manifesto + SHA-256 por arquivo cobrindo `JURIS_HOME`, `JURIS_OUT_ROOT`,
+  `repertory.db`, audit e recibos) e mantém os **14 mais recentes**; expirados
+  vão para `backups/.expired/` (purge manual — nada é deletado pelo job). Instalar
+  igual ao purge:
+  ```bash
+  cp docs/deploy/com.causia.backup.plist ~/Library/LaunchAgents/
+  # editar: os mesmos REPLACE_WITH_PATH_TO de com.causia.web + JURIS_BACKUP_DIR e CAUSIA_APP_DIR
+  launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.causia.backup.plist
+  ```
+  Ajustar a retenção com `CAUSIA_BACKUP_KEEP` (default 14). Testar antes com
+  `sh scripts/backup_daily.sh` manual e conferir que `juris backup restore`
+  reidrata um `.tar.gz` num diretório temporário (`docs/deploy/backup-restore.md`).
+  **Cópia offsite (recomendado):** `rsync` semanal do diretório `backups/` para o
+  MacBook via Tailscale — o backup local não protege contra perda do próprio Mini.
 - Logs: `<path>/logs/web.log` (dir **chmod 700**, nunca `/tmp` — pode conter
   contexto operacional). O access log do uvicorn fica **desligado** (registraria
   CNJ/termos de busca em texto puro); só habilite com `JURIS_WEB_ACCESS_LOG=1` se

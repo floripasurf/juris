@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd template for the daily operational backup of the CAUSIA pilot on the
+  Mac Mini (docs/deploy/blackcube-pilot.md §5). Runs scripts/backup_daily.sh,
+  which calls `juris backup create` (manifest + per-file SHA-256 covering
+  JURIS_HOME, JURIS_OUT_ROOT, repertory.db, audit logs and receipts) and keeps
+  the 14 most recent archives; expired ones move to backups/.expired/ (manual
+  purge — nothing is deleted automatically).
+
+  Runs at 03:45, BEFORE the 04:30 purge, so a purged trial is always captured in
+  that night's backup first. Same deadlock note as com.causia.purge.plist: the
+  script calls the venv's `juris` entrypoint directly (uv run under launchd hangs).
+
+  Copy to ~/Library/LaunchAgents/com.causia.backup.plist, fill in the
+  REPLACE_WITH_PATH_TO values (same paths as com.causia.web/com.causia.purge), then:
+  launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.causia.backup.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.causia.backup</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>REPLACE_WITH_PATH_TO/juris-pilot/app/scripts/backup_daily.sh</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>REPLACE_WITH_PATH_TO/juris-pilot/app</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <!-- Same posture/paths as com.causia.web (docs/deploy/blackcube-pilot.md §0). -->
+    <key>ENVIRONMENT</key>
+    <string>prod</string>
+    <key>JURIS_REQUIRE_TENANTS</key>
+    <string>1</string>
+    <key>JURIS_LOG_LEVEL</key>
+    <string>INFO</string>
+    <key>JURIS_TENANTS_FILE</key>
+    <string>REPLACE_WITH_PATH_TO/juris-pilot/tenants.json</string>
+    <key>JURIS_HOME</key>
+    <string>REPLACE_WITH_PATH_TO/juris-pilot/home</string>
+    <key>JURIS_OUT_ROOT</key>
+    <string>REPLACE_WITH_PATH_TO/juris-pilot/home/out</string>
+    <key>JURIS_BACKUP_DIR</key>
+    <string>REPLACE_WITH_PATH_TO/juris-pilot/backups</string>
+    <key>CAUSIA_APP_DIR</key>
+    <string>REPLACE_WITH_PATH_TO/juris-pilot/app</string>
+  </dict>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>3</integer>
+    <key>Minute</key>
+    <integer>45</integer>
+  </dict>
+
+  <!-- Owner-only log dir (chmod 700); NOT /tmp — same convention as com.causia.web. -->
+  <key>StandardOutPath</key>
+  <string>REPLACE_WITH_PATH_TO/juris-pilot/logs/backup.log</string>
+  <key>StandardErrorPath</key>
+  <string>REPLACE_WITH_PATH_TO/juris-pilot/logs/backup.err</string>
+</dict>
+</plist>
