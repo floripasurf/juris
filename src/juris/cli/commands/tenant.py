@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import typer
 from rich.table import Table
 
@@ -67,8 +69,6 @@ def erase_data(
     json_output: bool = typer.Option(False, "--json", help="Emite JSON para automação/runbook."),
 ) -> None:
     """Planeja ou executa a deleção LGPD de dados locais de um tenant."""
-    import json
-
     from juris.ops.erasure import build_tenant_erasure_plan, execute_tenant_erasure
 
     try:
@@ -127,3 +127,119 @@ def _print_erasure_plan(plan: TenantErasurePlan) -> None:
     for warning in plan.warnings:
         console.print(f"[yellow]Aviso:[/yellow] {warning}")
     console.print(f"[yellow]Dry-run apenas.[/yellow] Para executar: --execute --confirm {plan.confirmation_phrase}")
+
+
+@tenant_app.command("purge-expired")
+def purge_expired(
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Mostra o que seria apagado; não muda nada em disco (nem tenants.json nem o ledger)."
+    ),
+    yes: bool = typer.Option(
+        False, "--yes", help="Pula a confirmação interativa (uso não-interativo, ex.: launchd/cron)."
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Emite JSON para automação/runbook."),
+) -> None:
+    """Apaga dados de trials expirados e emite o certificado de erasure de cada um.
+
+    Fonte da verdade: o ledger ``pending-erasure.json`` ao lado de
+    ``JURIS_TENANTS_FILE``, populado quando um trial expirado é removido de
+    tenants.json (a perda de ACESSO já acontece ali; este comando fecha o ciclo
+    apagando os DADOS). Também varre tenants.json por trials ainda
+    expirados-mas-presentes antes de processar (prune + enqueue + erase no mesmo
+    run) — exceto em ``--dry-run``, que não faz nenhuma escrita.
+
+    Nunca apaga um tenant_id presente e não-expirado em tenants.json, mesmo que
+    ele apareça (erroneamente) no ledger.
+    """
+    from datetime import UTC, datetime
+
+    from juris.ops.erasure import build_tenant_erasure_plan, execute_tenant_erasure
+    from juris.web.trial_access import (
+        agents_file_path,
+        is_tenant_active,
+        read_pending_erasure,
+        remove_from_pending_erasure,
+        sweep_expired_trials,
+        tenants_file_path,
+    )
+
+    now = datetime.now(UTC)
+    tenants_path = tenants_file_path()
+
+    swept: dict[str, object] = {}
+    if not dry_run:
+        swept = sweep_expired_trials(tenants_path=tenants_path, agents_path=agents_file_path(), now=now)
+    pending = read_pending_erasure(tenants_path)
+
+    if not pending:
+        _print_purge_summary(json_output, swept=swept, erased=[], skipped=[], failed=[], dry_run=dry_run)
+        raise typer.Exit(code=0)
+
+    if not dry_run and not yes and not typer.confirm(
+        f"Apagar dados de {len(pending)} tenant(s) de trial expirado(s)?", default=False
+    ):
+        console.print("[yellow]Cancelado.[/yellow]")
+        raise typer.Exit(code=1)
+
+    erased: list[dict[str, object]] = []
+    skipped: list[dict[str, object]] = []
+    failed: list[dict[str, object]] = []
+
+    for tenant_id in sorted(pending):
+        if is_tenant_active(tenants_path, tenant_id, now=now):
+            skipped.append({"tenant_id": tenant_id, "reason": "presente e ativo em tenants.json"})
+            continue
+        try:
+            plan = build_tenant_erasure_plan(tenant_id)
+        except ValueError as exc:
+            failed.append({"tenant_id": tenant_id, "error": str(exc)})
+            continue
+        if dry_run:
+            erased.append({"tenant_id": tenant_id, "dry_run": True, "plan": plan.to_dict()})
+            continue
+        try:
+            result = execute_tenant_erasure(plan, confirmation=plan.confirmation_phrase)
+        except Exception as exc:  # noqa: BLE001 -- one tenant's I/O failure must not abort the batch;
+            # the id simply stays in the ledger for the next scheduled run to retry.
+            failed.append({"tenant_id": tenant_id, "error": str(exc)})
+            continue
+        remove_from_pending_erasure(tenants_path, tenant_id)
+        erased.append({"tenant_id": tenant_id, "result": result.to_dict()})
+
+    _print_purge_summary(json_output, swept=swept, erased=erased, skipped=skipped, failed=failed, dry_run=dry_run)
+    raise typer.Exit(code=1 if failed else 0)
+
+
+def _print_purge_summary(
+    json_output: bool,
+    *,
+    swept: dict[str, object],
+    erased: list[dict[str, object]],
+    skipped: list[dict[str, object]],
+    failed: list[dict[str, object]],
+    dry_run: bool,
+) -> None:
+    if json_output:
+        console.print_json(
+            json.dumps(
+                {
+                    "dry_run": dry_run,
+                    "swept": sorted(swept),
+                    "erased": erased,
+                    "skipped": skipped,
+                    "failed": failed,
+                },
+                ensure_ascii=False,
+            )
+        )
+        return
+    if not erased and not skipped and not failed:
+        console.print("[green]Nada pendente de erasure.[/green]")
+        return
+    console.print(f"[bold]Purge de trials expirados[/bold]{' (dry-run)' if dry_run else ''}:")
+    for item in erased:
+        console.print(f"  [green]OK[/green] {item['tenant_id']}")
+    for item in skipped:
+        console.print(f"  [yellow]pulado[/yellow] {item['tenant_id']}: {item['reason']}")
+    for item in failed:
+        console.print(f"  [red]falhou[/red] {item['tenant_id']}: {item['error']}")
