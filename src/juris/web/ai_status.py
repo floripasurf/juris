@@ -22,12 +22,23 @@ def ai_session_status(
     browser_bridge_url: str | None = None,
     native_host_manifest: str | None = None,
     browser_bridge_reachable: bool | None = None,
+    declared_provider: str | None = None,
 ) -> dict[str, object]:
     """Resolve the active AI mode + de-id posture from what's available.
 
     Precedence: the lawyer's browser session (ADR-0018) > cloud API (de-identified)
     > local model. De-id is on for any off-device AI; local keeps PII on the box.
+    ``declared_provider`` ("claude"/"chatgpt") tailors the browser copy + training
+    opt-out step to the vendor the lawyer declared (spec 2026-07-05).
     """
+    display = {"claude": "Claude.ai", "chatgpt": "ChatGPT"}.get(declared_provider or "", "Claude.ai/ChatGPT")
+    training_optout = {
+        "claude": "Claude.ai: Settings → Privacy → desative 'Help improve Claude'.",
+        "chatgpt": "ChatGPT: Settings → Data Controls → 'Improve the model for everyone' = off.",
+    }.get(
+        declared_provider or "",
+        "Claude.ai: Privacy → desative 'Help improve Claude'. ChatGPT: Data Controls → 'Improve the model' = off.",
+    )
     bridge_valid = False
     bridge_error: str | None = None
     if browser_bridge:
@@ -50,10 +61,10 @@ def ai_session_status(
         browser_message = bridge_error or "configure JURIS_BROWSER_BRIDGE_URL para ws://127.0.0.1:<porta>"
     elif bridge_valid and native_host_installed and effective_bridge_reachable:
         browser_status = "ready"
-        browser_message = "bridge ativo; mantenha Claude.ai/ChatGPT logado e aberto"
+        browser_message = f"bridge ativo; mantenha {display} logado e aberto"
     elif bridge_valid and native_host_installed:
         browser_status = "agent_offline"
-        browser_message = "host instalado, mas bridge WS não respondeu; recarregue a extensão e abra Claude.ai/ChatGPT"
+        browser_message = f"host instalado, mas bridge WS não respondeu; recarregue a extensão e abra {display}"
     elif bridge_valid:
         browser_status = "needs_native_host"
         browser_message = "configure o host nativo com `juris browser install-native-host`"
@@ -71,6 +82,8 @@ def ai_session_status(
             "bridge_reachable": effective_bridge_reachable,
             "status": browser_status,
             "message": browser_message,
+            "declared_provider": declared_provider,
+            "training_optout": training_optout,
         },
     }
 
@@ -99,6 +112,8 @@ def resolve_ai_session_status() -> dict[str, object]:
         manifest_path = str(default_manifest_path())
     except RuntimeError:
         manifest_path = None
+    from juris.llm.browser_session import normalize_browser_provider
+
     return ai_session_status(
         anthropic_key=bool(os.environ.get("ANTHROPIC_API_KEY")),
         browser_bridge=bool(bridge_url),
@@ -106,4 +121,5 @@ def resolve_ai_session_status() -> dict[str, object]:
         native_host_manifest=manifest_path,
         browser_bridge_reachable=_bridge_reachable(bridge_url),
         ollama_reachable=bool(os.environ.get("OLLAMA_URL")),
+        declared_provider=normalize_browser_provider(os.environ.get("JURIS_AI_BROWSER_PROVIDER")),
     )

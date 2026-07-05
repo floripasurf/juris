@@ -2461,7 +2461,19 @@ def browser_install_native_host(
     console.print(f"  Launcher: {installation.launcher_path}")
     console.print("\nConfigure o juris para usar a ponte local:")
     console.print(f"  export JURIS_BROWSER_BRIDGE_URL={installation.bridge_url}")
-    console.print("Depois recarregue a extensão e mantenha Claude.ai/ChatGPT logado em uma aba.")
+
+    import os
+
+    from juris.llm.browser_session import normalize_browser_provider
+
+    declared = normalize_browser_provider(os.environ.get("JURIS_AI_BROWSER_PROVIDER"))
+    display = {"claude": "Claude.ai", "chatgpt": "ChatGPT"}.get(declared or "", "Claude.ai/ChatGPT")
+    console.print(f"Depois recarregue a extensão e mantenha {display} logado em uma aba.")
+    console.print("Desligue o treino do provedor (LGPD/ADR-0018):")
+    if declared in (None, "claude"):
+        console.print("  Claude.ai: Settings → Privacy → desative 'Help improve Claude'.")
+    if declared in (None, "chatgpt"):
+        console.print("  ChatGPT: Settings → Data Controls → 'Improve the model for everyone' = off.")
 
 
 @browser_app.command("status")

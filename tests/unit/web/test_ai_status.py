@@ -103,3 +103,37 @@ def test_reports_browser_ready_when_bridge_is_reachable(tmp_path) -> None:
     assert "native_host_manifest" not in status["browser"]
     assert "bridge_url" not in status["browser"]
     assert str(tmp_path) not in json.dumps(status)
+
+
+def test_status_names_declared_provider_chatgpt() -> None:
+    from juris.web.ai_status import ai_session_status
+
+    status = ai_session_status(
+        anthropic_key=False,
+        browser_bridge=True,
+        ollama_reachable=False,
+        browser_bridge_url="ws://127.0.0.1:8777",
+        native_host_manifest=None,
+        browser_bridge_reachable=False,
+        declared_provider="chatgpt",
+    )
+    browser = status["browser"]
+    assert browser["declared_provider"] == "chatgpt"
+    assert "ChatGPT" in browser["training_optout"]
+    assert "Improve the model" in browser["training_optout"]
+
+
+def test_status_without_declared_provider_keeps_generic_copy() -> None:
+    from juris.web.ai_status import ai_session_status
+
+    status = ai_session_status(
+        anthropic_key=False,
+        browser_bridge=True,
+        ollama_reachable=False,
+        browser_bridge_url="ws://127.0.0.1:8777",
+        native_host_manifest=None,
+        browser_bridge_reachable=False,
+    )
+    browser = status["browser"]
+    assert browser["declared_provider"] is None
+    assert "Claude.ai" in browser["training_optout"] and "ChatGPT" in browser["training_optout"]
