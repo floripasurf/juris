@@ -98,5 +98,7 @@ class TestPIIModesAndDeid:
         # De-id stays ON (consumer plans may train) — defense in depth.
         router = LLMRouter(_make_settings(has_api_key=False))  # no API key needed
         route = router.route(LLMTask.DRAFT, contains_pii=True, pii_mode=PIIMode.BROWSER_DEID)
-        assert route.provider == LLMProvider.CLAUDE_BROWSER
+        assert route.provider == LLMProvider.BROWSER
+        assert route.provider.value == "browser"
         assert route.deidentify is True
+        assert route.model == "browser session"

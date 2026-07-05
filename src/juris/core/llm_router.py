@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 class LLMProvider(StrEnum):
     ANTHROPIC = "anthropic"
     OLLAMA = "ollama"
-    CLAUDE_BROWSER = "claude_browser"  # lawyer's own subscription via browser extension
+    BROWSER = "browser"  # lawyer's own subscription (Claude.ai/ChatGPT) via browser extension
 
 
 class PIIMode(StrEnum):
@@ -69,7 +69,7 @@ class LLMRouter:
     MODELS: dict[LLMProvider, str] = {
         LLMProvider.ANTHROPIC: "claude-sonnet-4-6",
         LLMProvider.OLLAMA: "qwen3:latest",
-        LLMProvider.CLAUDE_BROWSER: "claude.ai (browser session)",
+        LLMProvider.BROWSER: "browser session",
     }
 
     def __init__(self, settings: Settings) -> None:
@@ -102,7 +102,7 @@ class LLMRouter:
             elif pii_mode is PIIMode.BROWSER_DEID:
                 # Lawyer's own subscription, locally via the extension; de-id
                 # stays on as defense in depth (consumer plans may train).
-                provider = LLMProvider.CLAUDE_BROWSER
+                provider = LLMProvider.BROWSER
                 deidentify = True
             else:  # LOCAL_RAW
                 provider = LLMProvider.OLLAMA
