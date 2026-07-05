@@ -64,3 +64,35 @@ def test_ai_preference_local_fallback_still_ner_deids_the_browser(monkeypatch) -
     browser_wrap = llm._primary  # FallbackLLM primary = the de-id-wrapped browser
     assert browser_wrap._allow_partial is False  # fail-closed
     assert browser_wrap._ner is not None  # NER active → names removed before claude.ai
+
+
+def test_declared_chatgpt_drives_requested_label_and_keeps_deid(monkeypatch) -> None:
+    """Preferência=chatgpt: o label pedido muda; a de-id fail-closed NÃO muda (invariante PII)."""
+    from juris.api import browser_bridge
+    from juris.core import deid_llm
+    from juris.web import demo_service
+
+    monkeypatch.setenv("JURIS_AI_PREFERENCE", "1")
+    monkeypatch.setenv("JURIS_BROWSER_BRIDGE_URL", "ws://127.0.0.1:8777")
+    monkeypatch.setenv("JURIS_AI_BROWSER_PROVIDER", "chatgpt")
+    monkeypatch.setattr(deid_llm, "default_ner_redactor", lambda: (lambda _t: []))
+    # settings é singleton — forçar releitura do env neste teste
+    import juris.config as config
+
+    monkeypatch.setattr(config, "_settings", None)
+
+    class _StubChannel:
+        async def request(self, message: dict) -> dict:
+            return {}
+
+    monkeypatch.setattr(
+        browser_bridge.WebSocketBridgeChannel,
+        "to_localhost",
+        classmethod(lambda cls, url, **kw: _StubChannel()),
+    )
+
+    llm = demo_service._build_llm(use_cloud=False)
+    assert "chatgpt (browser session)" in llm.model_name  # label pedido veio da preferência
+    browser_wrap = llm._primary
+    assert browser_wrap._allow_partial is False  # PII: fail-closed intocado
+    assert browser_wrap._ner is not None
