@@ -179,6 +179,26 @@ chave do escritório → Mesa de trabalho. Chave errada reabre o login com erro.
 
 - Backup desde o dia 1: `docs/deploy/backup-restore.md` (dados reais de processo).
 - Loop noturno/alertas: `com.juris.overnight.plist`.
+- **Purge diário de trials expirados (`com.causia.purge`):** trial expirado perde
+  ACESSO na hora (`tenants.json`), mas os DADOS (`juris.db`, artefatos, corpus)
+  só são apagados por `juris tenant purge-expired`, que lê o ledger
+  `pending-erasure.json` (ao lado de `JURIS_TENANTS_FILE`), varre `tenants.json`
+  por trials ainda expirados-mas-presentes, e apaga cada tenant pendente com
+  certificado (nunca apaga um tenant presente e não-expirado, mesmo que
+  apareça, por engano, no ledger). Instalar:
+  ```bash
+  cp docs/deploy/com.causia.purge.plist ~/Library/LaunchAgents/
+  # editar: os mesmos REPLACE_WITH_PATH_TO de com.causia.web (tenants.json,
+  # agents.json, juris-home, out)
+  launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.causia.purge.plist
+  ```
+  Roda diariamente às 04:30 (`StartCalendarInterval`), chamando
+  `~/juris-pilot/app/.venv/bin/juris tenant purge-expired --yes` com as mesmas
+  env vars de `com.causia.web`. Testar manualmente com
+  `juris tenant purge-expired --dry-run --json` antes de instalar o launchd.
+  Certificados de erasure ficam em
+  `${JURIS_HOME:-~/.juris}/compliance-erasure.jsonl` (mesmo arquivo do
+  `erase-data` manual — ver `docs/deploy/data-erasure.md`).
 - Logs: `<path>/logs/web.log` (dir **chmod 700**, nunca `/tmp` — pode conter
   contexto operacional). O access log do uvicorn fica **desligado** (registraria
   CNJ/termos de busca em texto puro); só habilite com `JURIS_WEB_ACCESS_LOG=1` se

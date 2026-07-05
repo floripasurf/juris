@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd template for the daily LGPD purge of expired trial tenants on the
+  Mac Mini (docs/deploy/blackcube-pilot.md §5). Trial expiry cuts ACCESS
+  immediately (tenants.json), but the tenant's on-disk data only gets deleted
+  when this job runs `juris tenant purge-expired`, which reads the
+  pending-erasure.json ledger, sweeps tenants.json for any still-listed expired
+  trials, deletes each pending tenant's data, and writes an erasure certificate
+  to compliance-erasure.jsonl.
+
+  Same deadlock note as com.juris.web.plist: call the venv's `juris` entrypoint
+  directly — `uv run juris ...` invoked by launchd hangs silently.
+
+  Copy to ~/Library/LaunchAgents/com.causia.purge.plist, fill in the
+  REPLACE_WITH_PATH_TO values (same paths as com.causia.web/com.juris.web), then:
+  launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.causia.purge.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.causia.purge</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>REPLACE_WITH_PATH_TO/juris-pilot/app/.venv/bin/juris</string>
+    <string>tenant</string>
+    <string>purge-expired</string>
+    <string>--yes</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>REPLACE_WITH_PATH_TO/juris-pilot/app</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <!-- Same posture/paths as com.causia.web (docs/deploy/blackcube-pilot.md §0). -->
+    <key>ENVIRONMENT</key>
+    <string>prod</string>
+    <key>JURIS_REQUIRE_TENANTS</key>
+    <string>1</string>
+    <key>JURIS_LOG_LEVEL</key>
+    <string>INFO</string>
+    <key>JURIS_TENANTS_FILE</key>
+    <string>REPLACE_WITH_PATH_TO/juris-pilot/tenants.json</string>
+    <key>JURIS_AGENTS_FILE</key>
+    <string>REPLACE_WITH_PATH_TO/juris-pilot/agents.json</string>
+    <key>JURIS_HOME</key>
+    <string>REPLACE_WITH_PATH_TO/juris-pilot/home</string>
+    <key>JURIS_OUT_ROOT</key>
+    <string>REPLACE_WITH_PATH_TO/juris-pilot/home/out</string>
+  </dict>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>4</integer>
+    <key>Minute</key>
+    <integer>30</integer>
+  </dict>
+
+  <!-- Owner-only log dir (chmod 700); NOT /tmp — same convention as com.causia.web. -->
+  <key>StandardOutPath</key>
+  <string>REPLACE_WITH_PATH_TO/juris-pilot/logs/purge.log</string>
+  <key>StandardErrorPath</key>
+  <string>REPLACE_WITH_PATH_TO/juris-pilot/logs/purge.err</string>
+</dict>
+</plist>
