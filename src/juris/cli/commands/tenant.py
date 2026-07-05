@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import NoReturn
 
 import typer
 from rich.table import Table
@@ -132,7 +135,9 @@ def _print_erasure_plan(plan: TenantErasurePlan) -> None:
 @tenant_app.command("purge-expired")
 def purge_expired(
     dry_run: bool = typer.Option(
-        False, "--dry-run", help="Mostra o que seria apagado; não muda nada em disco (nem tenants.json nem o ledger)."
+        False,
+        "--dry-run",
+        help="Prevê a varredura e o que seria apagado; não muda nada em disco (nem tenants.json nem o ledger).",
     ),
     yes: bool = typer.Option(
         False, "--yes", help="Pula a confirmação interativa (uso não-interativo, ex.: launchd/cron)."
@@ -146,33 +151,68 @@ def purge_expired(
     tenants.json (a perda de ACESSO já acontece ali; este comando fecha o ciclo
     apagando os DADOS). Também varre tenants.json por trials ainda
     expirados-mas-presentes antes de processar (prune + enqueue + erase no mesmo
-    run) — exceto em ``--dry-run``, que não faz nenhuma escrita.
+    run); ``--dry-run`` prevê essa varredura em memória, sem nenhuma escrita.
 
-    Nunca apaga um tenant_id presente e não-expirado em tenants.json, mesmo que
-    ele apareça (erroneamente) no ledger.
+    Nunca apaga um tenant_id presente e não-expirado em tenants.json; um id
+    assim no ledger é leftover (crash entre ledger e pop, ou edição manual) e é
+    removido do ledger sem apagar nada. JSON ilegível em qualquer arquivo →
+    fail-closed: nada é apagado, ids continuam pendentes, exit não-zero.
     """
-    from datetime import UTC, datetime
+    from contextlib import nullcontext
 
-    from juris.ops.erasure import build_tenant_erasure_plan, execute_tenant_erasure
-    from juris.web.trial_access import (
-        agents_file_path,
-        is_tenant_active,
-        read_pending_erasure,
-        remove_from_pending_erasure,
-        sweep_expired_trials,
-        tenants_file_path,
-    )
+    from juris.web.trial_access import acquire_purge_lock, tenants_file_path
 
     now = datetime.now(UTC)
     tenants_path = tenants_file_path()
 
-    swept: dict[str, object] = {}
-    if not dry_run:
-        swept = sweep_expired_trials(tenants_path=tenants_path, agents_path=agents_file_path(), now=now)
-    pending = read_pending_erasure(tenants_path)
+    lock_ctx = nullcontext(True) if dry_run else acquire_purge_lock(tenants_path)
+    with lock_ctx as acquired:
+        if not acquired:
+            _abort_purge(json_output, dry_run, "outra execução de purge-expired em andamento (lock ocupado)")
+        _run_purge(tenants_path, now=now, dry_run=dry_run, yes=yes, json_output=json_output)
+
+
+def _abort_purge(json_output: bool, dry_run: bool, error: str) -> NoReturn:
+    """Fail closed: report a clean error (visible in --json) and exit non-zero."""
+    _print_purge_summary(
+        json_output,
+        swept=[],
+        erased=[],
+        stale=[],
+        failed=[],
+        errors=[{"error": f"{error}; nada foi apagado."}],
+        dry_run=dry_run,
+    )
+    raise typer.Exit(code=1)
+
+
+def _run_purge(tenants_path: Path, *, now: datetime, dry_run: bool, yes: bool, json_output: bool) -> None:
+    from juris.ops.erasure import build_tenant_erasure_plan, execute_tenant_erasure
+    from juris.web.trial_access import (
+        agents_file_path,
+        is_tenant_active,
+        preview_expired_trials,
+        read_pending_erasure,
+        remove_from_pending_erasure,
+        sweep_expired_trials,
+    )
+
+    try:
+        if dry_run:
+            # In-memory preview of the sweep: expired-but-still-listed trials are
+            # shown exactly as the next real run would treat them, with zero writes.
+            swept = sorted(preview_expired_trials(tenants_path, now=now))
+            pending = read_pending_erasure(tenants_path)
+            for tenant_id in swept:
+                pending.setdefault(tenant_id, {"preview": True})
+        else:
+            swept = sorted(sweep_expired_trials(tenants_path=tenants_path, agents_path=agents_file_path(), now=now))
+            pending = read_pending_erasure(tenants_path)
+    except (ValueError, OSError) as exc:  # includes json.JSONDecodeError
+        _abort_purge(json_output, dry_run, f"estado ilegível (fail-closed): {exc}")
 
     if not pending:
-        _print_purge_summary(json_output, swept=swept, erased=[], skipped=[], failed=[], dry_run=dry_run)
+        _print_purge_summary(json_output, swept=swept, erased=[], stale=[], failed=[], errors=[], dry_run=dry_run)
         raise typer.Exit(code=0)
 
     if not dry_run and not yes and not typer.confirm(
@@ -182,12 +222,22 @@ def purge_expired(
         raise typer.Exit(code=1)
 
     erased: list[dict[str, object]] = []
-    skipped: list[dict[str, object]] = []
+    stale: list[dict[str, object]] = []
     failed: list[dict[str, object]] = []
 
     for tenant_id in sorted(pending):
-        if is_tenant_active(tenants_path, tenant_id, now=now):
-            skipped.append({"tenant_id": tenant_id, "reason": "presente e ativo em tenants.json"})
+        try:
+            active = is_tenant_active(tenants_path, tenant_id, now=now)
+        except (ValueError, OSError) as exc:
+            failed.append({"tenant_id": tenant_id, "error": f"tenants.json ilegível (fail-closed): {exc}"})
+            continue
+        if active:
+            # Ledger leftover: crash between ledger-write and pop, or a hand-edit.
+            # Active + non-expired must never be erased — drop the stale entry.
+            if not dry_run:
+                remove_from_pending_erasure(tenants_path, tenant_id)
+            reason = "presente e ativo em tenants.json; entrada obsoleta do ledger, nada apagado"
+            stale.append({"tenant_id": tenant_id, "reason": reason})
             continue
         try:
             plan = build_tenant_erasure_plan(tenant_id)
@@ -206,17 +256,20 @@ def purge_expired(
         remove_from_pending_erasure(tenants_path, tenant_id)
         erased.append({"tenant_id": tenant_id, "result": result.to_dict()})
 
-    _print_purge_summary(json_output, swept=swept, erased=erased, skipped=skipped, failed=failed, dry_run=dry_run)
+    _print_purge_summary(
+        json_output, swept=swept, erased=erased, stale=stale, failed=failed, errors=[], dry_run=dry_run
+    )
     raise typer.Exit(code=1 if failed else 0)
 
 
 def _print_purge_summary(
     json_output: bool,
     *,
-    swept: dict[str, object],
+    swept: list[str],
     erased: list[dict[str, object]],
-    skipped: list[dict[str, object]],
+    stale: list[dict[str, object]],
     failed: list[dict[str, object]],
+    errors: list[dict[str, object]],
     dry_run: bool,
 ) -> None:
     if json_output:
@@ -224,22 +277,29 @@ def _print_purge_summary(
             json.dumps(
                 {
                     "dry_run": dry_run,
-                    "swept": sorted(swept),
+                    "swept": swept,
                     "erased": erased,
-                    "skipped": skipped,
+                    "stale": stale,
                     "failed": failed,
+                    "errors": errors,
                 },
                 ensure_ascii=False,
             )
         )
         return
-    if not erased and not skipped and not failed:
+    if not erased and not stale and not failed and not errors:
         console.print("[green]Nada pendente de erasure.[/green]")
         return
     console.print(f"[bold]Purge de trials expirados[/bold]{' (dry-run)' if dry_run else ''}:")
+    if swept:
+        label = "Seriam varridos de tenants.json (expirados)" if dry_run else "Varridos de tenants.json (expirados)"
+        console.print(f"  {label}: {', '.join(swept)}")
     for item in erased:
-        console.print(f"  [green]OK[/green] {item['tenant_id']}")
-    for item in skipped:
-        console.print(f"  [yellow]pulado[/yellow] {item['tenant_id']}: {item['reason']}")
+        verb = "seria apagado" if dry_run else "OK"
+        console.print(f"  [green]{verb}[/green] {item['tenant_id']}")
+    for item in stale:
+        console.print(f"  [yellow]obsoleto[/yellow] {item['tenant_id']}: {item['reason']}")
     for item in failed:
         console.print(f"  [red]falhou[/red] {item['tenant_id']}: {item['error']}")
+    for item in errors:
+        console.print(f"  [red]erro[/red] {item['error']}")

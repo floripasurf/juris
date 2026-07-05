@@ -110,6 +110,9 @@ def test_purge_expired_leaves_id_pending_on_erasure_failure(tmp_path, monkeypatc
 
 
 def test_purge_expired_never_erases_tenant_still_active_in_tenants_json(tmp_path, monkeypatch) -> None:
+    """Hard guard + stale cleanup: an active non-expired tenant on the ledger is a
+    crash-leftover (or hand-edit) — nothing is deleted and the stale ledger entry
+    is dropped instead of failing forever."""
     home, _out, tenants_path = _purge_env(monkeypatch, tmp_path)
     tenant_id = "trial_stillactive0"
     _seed_pending_tenant(home, tmp_path, tenant_id)
@@ -122,9 +125,74 @@ def test_purge_expired_never_erases_tenant_still_active_in_tenants_json(tmp_path
 
     assert result.exit_code == 0, result.output
     body = json.loads(result.output)
-    assert [item["tenant_id"] for item in body["skipped"]] == [tenant_id]
+    assert [item["tenant_id"] for item in body["stale"]] == [tenant_id]
+    assert body["erased"] == []
+    assert body["failed"] == []
+    assert (home / "tenants" / tenant_id).exists()
+    assert not (home / "compliance-erasure.jsonl").exists()
+    ledger_path = tmp_path / "pending-erasure.json"
+    assert json.loads(ledger_path.read_text(encoding="utf-8")) == {}
+    # And the tenant is still listed (access untouched).
+    assert tenant_id in json.loads(tenants_path.read_text(encoding="utf-8"))
+
+
+def test_purge_expired_recovers_crash_leftover_expired_trial(tmp_path, monkeypatch) -> None:
+    """Ledger id whose tenant is still listed in tenants.json but EXPIRED (crash
+    between ledger-write and pop): the same run re-sweeps it and erases the data."""
+    home, _out, tenants_path = _purge_env(monkeypatch, tmp_path)
+    tenant_id = "trial_crashleft001"
+    _seed_pending_tenant(home, tmp_path, tenant_id)
+    tenants_path.write_text(
+        json.dumps({tenant_id: {"kind": "trial", "trial_expires_at": "2020-01-01T00:00:00Z", "keys": {}}}),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(app, ["tenant", "purge-expired", "--yes", "--json"])
+
+    assert result.exit_code == 0, result.output
+    body = json.loads(result.output)
+    assert body["swept"] == [tenant_id]
+    assert [item["tenant_id"] for item in body["erased"]] == [tenant_id]
+    assert not (home / "tenants" / tenant_id).exists()
+    assert tenant_id not in json.loads(tenants_path.read_text(encoding="utf-8"))
+    ledger_path = tmp_path / "pending-erasure.json"
+    assert json.loads(ledger_path.read_text(encoding="utf-8")) == {}
+
+
+def test_purge_expired_corrupt_tenants_json_fails_closed(tmp_path, monkeypatch) -> None:
+    home, _out, tenants_path = _purge_env(monkeypatch, tmp_path)
+    tenant_id = "trial_corrupt00001"
+    _seed_pending_tenant(home, tmp_path, tenant_id)
+    tenants_path.write_text("{garbled json !!!", encoding="utf-8")
+    ledger_path = tmp_path / "pending-erasure.json"
+    ledger_before = ledger_path.read_text(encoding="utf-8")
+
+    result = runner.invoke(app, ["tenant", "purge-expired", "--yes", "--json"])
+
+    assert result.exit_code != 0
+    body = json.loads(result.output)  # clean --json output, not a raw traceback
+    assert body["errors"] and "fail-closed" in body["errors"][0]["error"]
     assert body["erased"] == []
     assert (home / "tenants" / tenant_id).exists()
+    assert not (home / "compliance-erasure.jsonl").exists()
+    assert ledger_path.read_text(encoding="utf-8") == ledger_before
+
+
+def test_purge_expired_corrupt_ledger_fails_closed(tmp_path, monkeypatch) -> None:
+    home, _out, tenants_path = _purge_env(monkeypatch, tmp_path)
+    tenant_id = "trial_corrupt00002"
+    (home / "tenants" / tenant_id).mkdir(parents=True)
+    ledger_path = tmp_path / "pending-erasure.json"
+    ledger_path.write_text("not json at all", encoding="utf-8")
+
+    result = runner.invoke(app, ["tenant", "purge-expired", "--yes", "--json"])
+
+    assert result.exit_code != 0
+    body = json.loads(result.output)
+    assert body["errors"] and "fail-closed" in body["errors"][0]["error"]
+    assert body["erased"] == []
+    assert (home / "tenants" / tenant_id).exists()
+    assert ledger_path.read_text(encoding="utf-8") == "not json at all"
 
 
 def test_purge_expired_dry_run_changes_nothing_on_disk(tmp_path, monkeypatch) -> None:
@@ -144,6 +212,34 @@ def test_purge_expired_dry_run_changes_nothing_on_disk(tmp_path, monkeypatch) ->
     assert not (home / "compliance-erasure.jsonl").exists()
     assert ledger_path.read_text(encoding="utf-8") == ledger_before
     assert not tenants_path.exists()
+    assert not (tmp_path / "pending-erasure.lock").exists()  # dry-run takes no lock
+
+
+def test_purge_expired_dry_run_previews_sweep(tmp_path, monkeypatch) -> None:
+    """An expired-but-still-listed trial must show up in the dry-run report (it
+    will be swept+erased on the next real run) — with zero writes anywhere."""
+    home, _out, tenants_path = _purge_env(monkeypatch, tmp_path)
+    tenant_id = "trial_preview00001"
+    (home / "tenants" / tenant_id).mkdir(parents=True)
+    (home / "tenants" / tenant_id / "juris.db").write_text("data", encoding="utf-8")
+    tenants_path.write_text(
+        json.dumps({tenant_id: {"kind": "trial", "trial_expires_at": "2020-01-01T00:00:00Z", "keys": {}}}),
+        encoding="utf-8",
+    )
+    tenants_before = tenants_path.read_text(encoding="utf-8")
+
+    result = runner.invoke(app, ["tenant", "purge-expired", "--dry-run", "--json"])
+
+    assert result.exit_code == 0, result.output
+    body = json.loads(result.output)
+    assert body["dry_run"] is True
+    assert body["swept"] == [tenant_id]
+    assert [item["tenant_id"] for item in body["erased"]] == [tenant_id]
+    # Zero disk writes: tenants.json byte-identical, no ledger, no cert, data intact.
+    assert tenants_path.read_text(encoding="utf-8") == tenants_before
+    assert not (tmp_path / "pending-erasure.json").exists()
+    assert not (home / "compliance-erasure.jsonl").exists()
+    assert (home / "tenants" / tenant_id / "juris.db").exists()
 
 
 def test_purge_expired_exits_zero_with_nothing_pending(tmp_path, monkeypatch) -> None:
@@ -153,4 +249,4 @@ def test_purge_expired_exits_zero_with_nothing_pending(tmp_path, monkeypatch) ->
 
     assert result.exit_code == 0, result.output
     body = json.loads(result.output)
-    assert body["erased"] == body["skipped"] == body["failed"] == []
+    assert body["erased"] == body["stale"] == body["failed"] == body["errors"] == []
