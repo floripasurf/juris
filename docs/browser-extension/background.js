@@ -17,16 +17,26 @@ function connect() {
   });
 }
 
-async function findProviderTab() {
-  const tabs = await chrome.tabs.query({
-    url: ["https://claude.ai/*", "https://chatgpt.com/*"],
-  });
+const PROVIDER_URLS = {
+  claude: "https://claude.ai/*",
+  chatgpt: "https://chatgpt.com/*",
+};
+
+export async function findProviderTab(preferred) {
+  // Honor the lawyer's declared provider: route to that tab when open. Fall back
+  // to any supported tab (the content script then reports the ACTUAL provider, so
+  // the server's divergence warning fires) — spec 2026-07-05.
+  if (preferred && PROVIDER_URLS[preferred]) {
+    const preferredTabs = await chrome.tabs.query({ url: [PROVIDER_URLS[preferred]] });
+    if (preferredTabs[0]) return preferredTabs[0];
+  }
+  const tabs = await chrome.tabs.query({ url: Object.values(PROVIDER_URLS) });
   return tabs[0] ?? null;
 }
 
 async function onHostMessage(request) {
   const reply = (resp) => port?.postMessage(resp);
-  const tab = await findProviderTab();
+  const tab = await findProviderTab(request.provider);
   if (!tab) {
     reply({
       request_id: request.request_id,
@@ -48,4 +58,7 @@ async function onHostMessage(request) {
   });
 }
 
-connect();
+// Auto-connect only in the extension runtime; importing for tests has no side effect.
+if (typeof chrome !== "undefined" && chrome.runtime?.connectNative) {
+  connect();
+}

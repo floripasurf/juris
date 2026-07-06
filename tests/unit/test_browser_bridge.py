@@ -99,6 +99,24 @@ async def test_transport_tolerates_missing_provider_field() -> None:
 
 
 @pytest.mark.asyncio
+async def test_transport_sends_declared_provider_for_tab_routing() -> None:
+    channel = _echo_channel()
+    transport = NativeBridgeTransport(channel, provider="chatgpt")
+
+    await transport.send(prompt="p", system=None)
+
+    # The background worker routes to the declared provider's tab (spec 2026-07-05).
+    assert channel.request.await_args.args[0]["provider"] == "chatgpt"
+
+
+@pytest.mark.asyncio
+async def test_transport_provider_defaults_to_none() -> None:
+    channel = _echo_channel()
+    await NativeBridgeTransport(channel).send(prompt="p", system=None)
+    assert channel.request.await_args.args[0]["provider"] is None
+
+
+@pytest.mark.asyncio
 async def test_send_attests_deidentified_and_carries_bridge_token() -> None:
     channel = _echo_channel()
     transport = NativeBridgeTransport(channel, token="bridge-secret")  # noqa: S106 - test fixture

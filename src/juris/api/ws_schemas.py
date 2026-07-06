@@ -86,6 +86,10 @@ class CompletionRequest(BaseModel):
     prompt: str
     system: str | None = None
     model: str = "claude.ai (browser session)"
+    # Canonical provider the lawyer DECLARED ("claude"/"chatgpt"). The background
+    # service worker routes to that provider's tab when open, falling back to any
+    # supported tab (spec 2026-07-05). None = no preference → any tab.
+    provider: str | None = None
     # Attestation that juris de-id ran before this left the perimeter (ADR-0016). The
     # content script refuses to drive the session unless this is True — and independently
     # re-scans for raw PII (defense-in-depth).

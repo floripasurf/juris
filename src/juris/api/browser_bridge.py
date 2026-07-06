@@ -128,10 +128,14 @@ class NativeBridgeTransport:
         channel: BridgeChannel,
         model: str = "claude.ai (browser session)",
         *,
+        provider: str | None = None,
         token: str | None = None,
     ) -> None:
         self._channel = channel
         self._model = model
+        # Canonical declared provider ("claude"/"chatgpt") so the extension routes
+        # to the right tab; None = no preference.
+        self._provider = provider
         # Bridge auth secret. Falls back to $JURIS_BROWSER_BRIDGE_TOKEN so the agent
         # and native host can be paired without threading it through every caller.
         self._token = token or os.environ.get("JURIS_BROWSER_BRIDGE_TOKEN") or None
@@ -142,6 +146,7 @@ class NativeBridgeTransport:
             prompt=prompt,
             system=system,
             model=self._model,
+            provider=self._provider,
             # This transport is only ever used behind DeidentifyingLLM
             # (build_ai_of_preference), so the payload here is already de-identified.
             deidentified=True,

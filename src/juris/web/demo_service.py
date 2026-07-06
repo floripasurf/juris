@@ -380,10 +380,15 @@ def _build_ai_of_preference_llm(*, use_cloud: bool) -> AbstractLLM:
     from juris.core.fallback_llm import build_ai_of_preference
     from juris.llm.browser_session import BrowserSessionLLM, browser_model_label
 
-    requested_label = browser_model_label(get_settings().ai_browser_provider)
+    declared_provider = get_settings().ai_browser_provider
+    requested_label = browser_model_label(declared_provider)
     bridge_url = validate_bridge_url(os.environ.get("JURIS_BROWSER_BRIDGE_URL", ""))
     browser = BrowserSessionLLM(
-        NativeBridgeTransport(WebSocketBridgeChannel.to_localhost(bridge_url), model=requested_label),
+        NativeBridgeTransport(
+            WebSocketBridgeChannel.to_localhost(bridge_url),
+            model=requested_label,
+            provider=declared_provider,
+        ),
         model=requested_label,
     )
     if use_cloud:
