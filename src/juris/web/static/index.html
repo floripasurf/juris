@@ -547,10 +547,11 @@
       display: flex; align-items: center; justify-content: space-between;
       gap: 10px; margin: -4px 0 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line);
     }
-    .preview-modes { display: inline-flex; border: 1px solid var(--line-2); border-radius: 5px; overflow: hidden; }
+    .preview-modes { display: inline-flex; flex-shrink: 0; border: 1px solid var(--line-2); border-radius: 5px; overflow: hidden; }
     .preview-mode {
       width: auto; margin: 0; border: 0; border-radius: 0; background: var(--panel);
       color: var(--ink-2); font-size: 12px; font-weight: 500; padding: 5px 12px;
+      white-space: nowrap;
     }
     .preview-mode.active { background: var(--brand); color: #fff; }
     .preview-toolbar .ghost { padding: 5px 12px; font-size: 12.5px; }
@@ -564,6 +565,15 @@
     .preview-body.md p { margin: 0 0 12px; text-align: justify; }
     .preview-body.md ul, .preview-body.md ol { margin: 0 0 12px; padding-left: 22px; }
     .preview-body.md li { margin-bottom: 5px; }
+    .preview-body.md blockquote {
+      margin: 0 0 12px;
+      padding: 8px 14px;
+      border-left: 3px solid var(--warn);
+      background: var(--warn-bg);
+      border-radius: 0 4px 4px 0;
+    }
+    .preview-body.md blockquote p { margin: 0 0 6px; text-align: left; }
+    .preview-body.md blockquote p:last-child { margin-bottom: 0; }
     .onboarding-actions { display: flex; flex-wrap: wrap; gap: 12px; }
     .onboarding-actions button { width: auto; margin: 0; }
     .empty { padding: 74px 24px; text-align: center; color: var(--muted); }
@@ -578,6 +588,31 @@
     }
     .notice.error { background: var(--danger-bg); color: var(--danger); border-color: var(--danger-line); }
     .notice.warn { background: var(--warn-bg); color: var(--warn); border-color: var(--warn-line); }
+    /* Boas-vindas do teste anônimo: a ÚNICA chance de o advogado guardar a chave. */
+    .trial-welcome {
+      margin: 18px auto 0;
+      max-width: 1436px;
+      padding: 14px 16px;
+      border: 1px solid var(--warn-line);
+      border-left: 4px solid var(--warn);
+      border-radius: 6px;
+      background: var(--warn-bg);
+      color: var(--ink);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .trial-welcome .tw-key-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+    .trial-welcome button { width: auto; margin: 0; padding: 6px 14px; font-size: 13px; }
+    .trial-welcome code {
+      font-family: var(--mono);
+      font-size: 13px;
+      background: rgba(255, 255, 255, 0.7);
+      border: 1px solid var(--warn-line);
+      border-radius: 4px;
+      padding: 4px 8px;
+      word-break: break-all;
+    }
+    .trial-welcome .tw-dismiss { margin-left: auto; }
 
     /* ── Mesa de trabalho: fichas ──────────────────────────── */
     .processos-panel, .workbench-panel { grid-column: 1 / -1; padding: 24px; }
@@ -1028,7 +1063,7 @@
           <div id="trial-issued" class="trial-issued" role="status" aria-live="polite" hidden></div>
           <form id="landing-login-form" class="landing-access" hidden>
             <div>
-              <label for="landing-api-key">Chave de acesso do teste</label>
+              <label for="landing-api-key">Chave de acesso</label>
               <input id="landing-api-key" type="password" placeholder="Cole sua chave de acesso" autocomplete="off" required />
             </div>
             <button type="submit">Entrar</button>
@@ -1101,6 +1136,7 @@
   </header>
 
   <main id="app-shell" hidden>
+    <div id="trial-welcome" class="trial-welcome" role="status" aria-live="polite" hidden></div>
     <section class="workbench-panel" data-view="mesa">
       <h1>Mesa de trabalho</h1>
       <p class="lede">Filas do dia por prazo, movimentação, rascunho, bloqueio e artefatos recentes.</p>
@@ -1187,6 +1223,7 @@
     <section class="processos-panel" data-view="acessos" hidden>
       <h1>Acessos</h1>
       <p class="lede">Gere uma chave para estagiário ou colega advogado acessar o mesmo acervo durante o período do teste.</p>
+      <div id="my-key-box" class="trial-welcome" hidden></div>
       <form id="access-key-form" class="connect-bar">
         <input id="access-key-label" placeholder="Nome do acesso (ex.: estagiário)" autocomplete="off" />
         <button id="access-key-submit" type="submit">Gerar chave</button>
@@ -1659,7 +1696,10 @@
           try {
             sessionStorage.setItem("causiaTrialWelcome", JSON.stringify(data));
             sessionStorage.setItem("causiaTrialSetup", JSON.stringify(data));
-            sessionStorage.setItem("causiaStartView", "acervo");
+            // A Mesa recebe o novo trial: o card "Comece por aqui" oferece os dois
+            // caminhos (dados de exemplo, sem instalar nada, ou conectar o acervo).
+            // Cair direto no Acervo pedia CPF/PIN como primeira tela do teste anônimo.
+            sessionStorage.setItem("causiaStartView", "mesa");
           } catch (_) { /* private mode */ }
           if (trialIssued) {
             trialIssued.innerHTML = "";
@@ -1866,14 +1906,36 @@
     // then apply headings/bold/lists on the escaped text (only <strong>/<h*>/<li>
     // wrap already-escaped content — no untrusted HTML ever reaches the DOM).
     function renderMarkdownSafe(md) {
-      const inline = (t) => escHtml(t).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/__(.+?)__/g, "<strong>$1</strong>");
+      const inline = (t) => escHtml(t)
+        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+        .replace(/__(.+?)__/g, "<strong>$1</strong>")
+        .replace(/\*([^*\n]+)\*/g, "<em>$1</em>")
+        .replace(/(^|[\s(])_([^_\n]+)_(?=[\s).,;:!?]|$)/g, "$1<em>$2</em>");
       const lines = String(md || "").replace(/\r\n/g, "\n").split("\n");
       const out = [];
       let list = null;
       let para = [];
+      let quote = null; // parágrafos acumulados do blockquote corrente
       const closeList = () => { if (list) { out.push(`</${list}>`); list = null; } };
       const flushPara = () => { if (para.length) { out.push(`<p>${inline(para.join(" ").trim())}</p>`); para = []; } };
+      const flushQuote = () => {
+        if (!quote) return;
+        const paras = quote.filter((p) => p.trim()).map((p) => `<p>${inline(p.trim())}</p>`).join("");
+        if (paras) out.push(`<blockquote>${paras}</blockquote>`);
+        quote = null;
+      };
       for (const line of lines) {
+        const bq = line.match(/^\s*>\s?(.*)$/);
+        if (bq) {
+          flushPara(); closeList();
+          if (!quote) quote = [""];
+          // "> " vazio separa parágrafos dentro do bloco citado (os disclaimers usam isso).
+          const content = bq[1].replace(/^\s*>\s?/, ""); // tolera "> >" de fonte aninhada
+          if (!content.trim()) quote.push("");
+          else quote[quote.length - 1] = `${quote[quote.length - 1]} ${content}`.trim();
+          continue;
+        }
+        flushQuote();
         const h = line.match(/^(#{1,6})\s+(.*)$/);
         const ul = line.match(/^\s*[-*]\s+(.*)$/);
         const ol = line.match(/^\s*\d+[.)]\s+(.*)$/);
@@ -1883,8 +1945,55 @@
         else if (!line.trim()) { flushPara(); closeList(); }
         else para.push(line);
       }
-      flushPara(); closeList();
+      flushPara(); closeList(); flushQuote();
       return out.join("\n");
+    }
+
+    const trialWelcomeEl = document.querySelector("#trial-welcome");
+
+    async function copyToClipboard(text, button) {
+      try {
+        await navigator.clipboard.writeText(text);
+        const old = button.textContent;
+        button.textContent = "copiado ✓";
+        setTimeout(() => { button.textContent = old; }, 1600);
+      } catch (_) {
+        button.textContent = "selecione e copie manualmente";
+      }
+    }
+
+    // Boas-vindas do teste anônimo: mostra a chave com ação de copiar. Sem isso a
+    // única exibição da chave (na landing) era coberta pelo boot do console no
+    // mesmo instante — e a chave é irrecuperável depois que a aba fecha.
+    function renderTrialWelcome(data) {
+      if (!trialWelcomeEl) return;
+      const apiKey = getApiKey();
+      trialWelcomeEl.innerHTML = "";
+      const msg = document.createElement("div");
+      msg.innerHTML =
+        `<strong>Teste anônimo ativo até ${escHtml(fmtDate(data.expires_at))}.</strong> ` +
+        "Guarde a chave abaixo em um local seguro (ex.: gerenciador de senhas): " +
+        "ela é a única forma de voltar a este teste se esta aba for fechada. " +
+        "Depois, explore com dados de exemplo ou conecte seu acervo na Mesa.";
+      trialWelcomeEl.appendChild(msg);
+      if (apiKey) {
+        const row = document.createElement("div");
+        row.className = "tw-key-row";
+        const code = document.createElement("code");
+        code.textContent = apiKey;
+        const copyBtn = document.createElement("button");
+        copyBtn.type = "button";
+        copyBtn.textContent = "copiar chave";
+        copyBtn.addEventListener("click", () => copyToClipboard(apiKey, copyBtn));
+        const dismiss = document.createElement("button");
+        dismiss.type = "button";
+        dismiss.className = "ghost tw-dismiss";
+        dismiss.textContent = "já guardei";
+        dismiss.addEventListener("click", () => { trialWelcomeEl.hidden = true; });
+        row.append(code, copyBtn, dismiss);
+        trialWelcomeEl.appendChild(row);
+      }
+      trialWelcomeEl.hidden = false;
     }
 
     // Trial countdown + upgrade CTA (conversão): show days left for a trial tenant.
@@ -2340,7 +2449,22 @@
       const tabs = artifactsEl.querySelector(".tabs");
       const body = artifactsEl.querySelector(".preview-body");
       const dlStatus = artifactsEl.querySelector("#artifact-download-status");
-      let activeArtifact = data.artifacts[0];
+      // Ordena por valor para o advogado: minuta/rascunho primeiro, auditoria e
+      // manifesto por último. A ordem alfabética abria o run no audit-summary.md.
+      const artifactRank = (name) => {
+        const n = String(name || "").toLowerCase();
+        if (n.startsWith("minuta")) return 0;
+        if (n.startsWith("rascunho")) return 1;
+        if (n.startsWith("prazos")) return 2;
+        if (n.startsWith("case-summary")) return 3;
+        if (n.startsWith("audit-summary")) return 4;
+        if (n.startsWith("audit")) return 5;
+        return 6; // run-manifest e demais técnicos
+      };
+      const sortedArtifacts = [...data.artifacts].sort(
+        (a, b) => artifactRank(a.name) - artifactRank(b.name) || String(a.name).localeCompare(String(b.name))
+      );
+      let activeArtifact = sortedArtifacts[0];
       let mode = "formatado";
 
       const paint = () => {
@@ -2374,7 +2498,7 @@
         );
       });
 
-      data.artifacts.forEach((artifact, index) => {
+      sortedArtifacts.forEach((artifact, index) => {
         const tab = document.createElement("button");
         tab.type = "button";
         tab.className = `tab${index === 0 ? " active" : ""}`;
@@ -2458,15 +2582,29 @@
       return col;
     }
 
+    // Rótulos de operação em linguagem de advogado (nada de "fixture"/"grounding"/"0/0/0").
+    const SOURCE_LABELS = { fixture: "dados de exemplo", datajud: "DataJud", mni: "tribunal (MNI)" };
+    const GROUNDING_LABELS = { verified: "citações verificadas", blocked: "citações bloqueadas", unverified: "citações não verificadas" };
+
+    function sourceLabel(source) {
+      return SOURCE_LABELS[source] || source || "fonte —";
+    }
+
     function reviewSummary(review) {
-      if (!review) return "review —";
-      return `review ${review.critical || 0}/${review.important || 0}/${review.suggestion || 0}`;
+      if (!review) return "sem revisão";
+      const critical = review.critical || 0;
+      const important = review.important || 0;
+      const suggestion = review.suggestion || 0;
+      if (!critical && !important && !suggestion) return "revisão sem apontamentos";
+      return `revisão: ${critical} crítico(s), ${important} importante(s), ${suggestion} sugestão(ões)`;
+    }
+
+    function groundingLabel(status) {
+      return GROUNDING_LABELS[status] || (status ? `citações: ${status}` : "citações —");
     }
 
     function runMeta(run) {
-      const source = run.source ? `fonte ${run.source}` : "fonte —";
-      const grounding = run.grounding_status ? `grounding ${run.grounding_status}` : "grounding —";
-      return `${source} · ${grounding} · ${reviewSummary(run.review)}`;
+      return `${sourceLabel(run.source)} · ${groundingLabel(run.grounding_status)} · ${reviewSummary(run.review)}`;
     }
 
     function caseMeta(item, fallback) {
@@ -2522,11 +2660,16 @@
     }
 
     function exploreWithSampleData() {
+      // "Explorar" tem que explorar: pré-preenche E executa. Antes só abria o
+      // formulário técnico e parava — o advogado do teste anônimo não sabe o que
+      // é "modo de saída" e desistia antes de ver o produto.
       showView("caso");
       const source = document.querySelector("#source");
       if (source) { source.value = "fixture"; source.dispatchEvent(new Event("change")); }
-      const cnj = document.querySelector("#numero_cnj");
-      if (cnj) { cnj.scrollIntoView({ behavior: "smooth", block: "center" }); }
+      const demoForm = document.querySelector("#demo-form");
+      if (demoForm) demoForm.requestSubmit();
+      const results = document.querySelector("#result-title");
+      if (results) results.scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
     function renderWorkbenchOnboarding() {
@@ -2574,7 +2717,7 @@
 
       const blocked = (wb.blocked_cases || []).map((b) => queueItem(
         b.numero_cnj,
-        `${b.grounding_blocked_reason || "grounding bloqueou a minuta"} · ${runMeta(b)}`,
+        `${b.grounding_blocked_reason || "citações sem lastro bloquearam a minuta"} · ${runMeta(b)}`,
         [{ label: "abrir caso", run: () => useProcesso(b.numero_cnj, b.tribunal || "tjmg") }]
       ));
 
@@ -2589,7 +2732,7 @@
         `${a.artifact_count || 0} artefato(s) · ${runMeta(a)} · ${fmtDate(a.finished_at)}`,
         [
           { label: "auditoria", ghost: true, run: () => openAudit(a.output_dir) },
-          { label: "copiar", run: () => copyText(a.output_dir) },
+          { label: "copiar caminho", run: () => copyText(a.output_dir) },
         ]
       ));
 
@@ -2973,8 +3116,36 @@
     const accessKeyResult = document.querySelector("#access-key-result");
     const accessSubmit = document.querySelector("#access-key-submit");
 
+    // "Sua chave de acesso": a chave crua só existe neste navegador (o servidor
+    // guarda apenas o hash). Sem esta seção o titular não tinha como copiá-la —
+    // e a chave é o único caminho de volta a um teste anônimo.
+    function renderMyKey(data) {
+      const box = document.querySelector("#my-key-box");
+      if (!box) return;
+      const apiKey = getApiKey();
+      if (!apiKey) { box.hidden = true; return; }
+      box.innerHTML = "";
+      const msg = document.createElement("div");
+      msg.innerHTML =
+        "<strong>Sua chave de acesso (deste navegador).</strong> " +
+        "Guarde-a em local seguro: ela não fica salva em nossos servidores" +
+        (data && data.trial === true ? " e é a única forma de voltar a este teste se a aba for fechada." : ".");
+      const row = document.createElement("div");
+      row.className = "tw-key-row";
+      const code = document.createElement("code");
+      code.textContent = apiKey;
+      const copyBtn = document.createElement("button");
+      copyBtn.type = "button";
+      copyBtn.textContent = "copiar chave";
+      copyBtn.addEventListener("click", () => copyToClipboard(apiKey, copyBtn));
+      row.append(code, copyBtn);
+      box.append(msg, row);
+      box.hidden = false;
+    }
+
     function renderAccessSummary(data) {
       renderTrialStatus(data);
+      renderMyKey(data);
       const keys = data.keys || [];
       accessSummary.className = keys.length ? "proc-list" : "proc-empty";
       accessSummary.innerHTML = "";
@@ -3242,14 +3413,14 @@
       if (!filingArtifacts.length) {
         const opt = document.createElement("option");
         opt.value = "";
-        opt.textContent = "nenhum artefato recente";
+        opt.textContent = "nenhuma minuta disponível para protocolo (rascunhos de pesquisa não são protocoláveis)";
         filingArtifactSel.appendChild(opt);
         return;
       }
       filingArtifacts.forEach((artifact, index) => {
         const opt = document.createElement("option");
         opt.value = String(index);
-        opt.textContent = `${artifact.numero_cnj || "sem CNJ"} · ${artifact.artifact_name} · ${artifact.grounding_status || "grounding —"}`;
+        opt.textContent = `${artifact.numero_cnj || "sem CNJ"} · ${artifact.artifact_name} · ${groundingLabel(artifact.grounding_status)}`;
         filingArtifactSel.appendChild(opt);
       });
     }
@@ -3686,11 +3857,9 @@
       renderTrialSetup();
       try {
         const welcome = sessionStorage.getItem("causiaTrialWelcome");
-        if (welcome && notice) {
+        if (welcome && trialWelcomeEl) {
           const data = JSON.parse(welcome);
-          notice.textContent = `Teste anônimo ativo até ${fmtDate(data.expires_at)}. Conecte o agente local em Acervo para importar seus processos.`;
-          notice.className = "notice";
-          notice.hidden = false;
+          renderTrialWelcome(data);
           sessionStorage.removeItem("causiaTrialWelcome");
         }
       } catch (_) { /* private mode */ }
