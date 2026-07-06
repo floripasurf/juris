@@ -264,6 +264,30 @@
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 14px;
     }
+    .landing-how { padding-bottom: 8px; }
+    .landing-steps {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      counter-reset: none;
+    }
+    .landing-step {
+      position: relative;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-top: 3px solid var(--brand);
+      border-radius: 6px;
+      padding: 18px 16px 14px;
+    }
+    .landing-step .step-num {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 26px; height: 26px; border-radius: 50%;
+      background: var(--brand); color: #fff;
+      font-family: var(--serif); font-weight: 700; font-size: 14px;
+      margin-bottom: 10px;
+    }
+    .landing-step strong { display: block; font-family: var(--serif); font-size: 16px; margin-bottom: 6px; }
+    .landing-step p { margin: 0; font-size: 13.5px; color: var(--ink-2); line-height: 1.55; }
     .landing-feature {
       background: var(--panel);
       border: 1px solid var(--line);
@@ -613,6 +637,11 @@
       word-break: break-all;
     }
     .trial-welcome .tw-dismiss { margin-left: auto; }
+    .remember-row {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12.5px; font-weight: 400; margin-top: 10px; cursor: pointer;
+    }
+    .remember-row input[type="checkbox"] { width: auto; margin: 0; }
 
     /* ── Mesa de trabalho: fichas ──────────────────────────── */
     .processos-panel, .workbench-panel { grid-column: 1 / -1; padding: 24px; }
@@ -978,6 +1007,7 @@
       .landing-copy h1 { font-size: 40px; }
       .landing-copy .lede { font-size: 17px; }
       .landing-features { grid-template-columns: 1fr; }
+      .landing-steps { grid-template-columns: 1fr; }
       header { padding: 8px 12px 0; gap: 8px; height: auto; min-height: 58px; flex-wrap: wrap; }
       .header-actions {
         order: 1;
@@ -1067,9 +1097,31 @@
               <input id="landing-api-key" type="password" placeholder="Cole sua chave de acesso" autocomplete="off" required />
             </div>
             <button type="submit">Entrar</button>
+            <label class="remember-row"><input type="checkbox" id="landing-remember" /> Manter conectado neste computador <span class="muted">(use apenas em computador pessoal)</span></label>
             <p id="landing-login-error" hidden></p>
           </form>
-          <p class="landing-note">Não pedimos seus dados para liberar o teste. Seus processos ficam isolados no ambiente Causia só enquanto o teste está ativo e são apagados automaticamente ao final; a chave fica nesta aba e expira em 30 dias.</p>
+          <p class="landing-note">Não pedimos seus dados para liberar o teste. Seus processos ficam isolados no ambiente Causia só enquanto o teste está ativo e são apagados automaticamente ao final; a chave fica salva neste navegador (saia com "Sair" em computador compartilhado) e expira em 30 dias.</p>
+        </div>
+      </div>
+    </div>
+    <div class="landing-band landing-how">
+      <h2>Como funciona</h2>
+      <p>Do clique ao primeiro documento em minutos — sem instalar nada para experimentar.</p>
+      <div class="landing-steps">
+        <div class="landing-step">
+          <span class="step-num">1</span>
+          <strong>Comece anônimo</strong>
+          <p>Clique em "Começar teste anônimo": sem cadastro, sem cartão. Você recebe uma chave de acesso e a sua mesa de trabalho.</p>
+        </div>
+        <div class="landing-step">
+          <span class="step-num">2</span>
+          <strong>Veja com dados de exemplo — ou com seu acervo</strong>
+          <p>Explore um caso de demonstração em um clique. Quando quiser, instale o agente local e conecte seu token A3 para importar seus processos: credenciais nunca ficam armazenadas em nossos servidores.</p>
+        </div>
+        <div class="landing-step">
+          <span class="step-num">3</span>
+          <strong>Minuta com lastro, protocolo com controle</strong>
+          <p>Gere rascunhos e minutas com citações verificadas contra o corpus, acompanhe prazos na agenda e protocole só depois de revisão e consentimento explícitos.</p>
         </div>
       </div>
     </div>
@@ -1109,9 +1161,10 @@
     <div class="login-panel">
       <div class="brand"><div class="mark">C</div><div>Caus<span class="ia">ia</span></div></div>
       <h2>Acesso do escritório</h2>
-      <p>Informe a chave de acesso (X-API-Key) fornecida para o seu escritório. Ela fica só nesta aba e não é gravada em disco.</p>
+      <p>Informe a chave de acesso (X-API-Key) fornecida para o seu escritório. Por padrão ela vale só nesta aba; marque abaixo para mantê-la neste computador.</p>
       <form id="login-form">
         <input id="login-api-key" type="password" placeholder="Chave de acesso" autocomplete="off" required />
+        <label class="remember-row"><input type="checkbox" id="login-remember" /> Manter conectado neste computador</label>
         <p id="login-error" hidden></p>
         <button type="submit">Entrar</button>
       </form>
@@ -1568,12 +1621,33 @@
     let consoleBooted = false;
 
     function getApiKey() {
-      try { return sessionStorage.getItem(API_KEY_STORAGE) || ""; } catch (_) { return ""; }
+      // sessionStorage primeiro (sessão corrente); localStorage como retorno de
+      // quem optou por "manter conectado" — ao retomar, reidrata a sessão.
+      try {
+        const session = sessionStorage.getItem(API_KEY_STORAGE);
+        if (session) return session;
+        const persisted = localStorage.getItem(API_KEY_STORAGE);
+        if (persisted) { sessionStorage.setItem(API_KEY_STORAGE, persisted); return persisted; }
+        return "";
+      } catch (_) { return ""; }
     }
     function setApiKey(value) {
       try {
         if (value) sessionStorage.setItem(API_KEY_STORAGE, value);
-        else sessionStorage.removeItem(API_KEY_STORAGE);
+        else {
+          // Limpar limpa TUDO: logout e 401 (chave inválida/expirada) nunca
+          // deixam uma chave persistida para trás.
+          sessionStorage.removeItem(API_KEY_STORAGE);
+          localStorage.removeItem(API_KEY_STORAGE);
+        }
+      } catch (_) { /* private mode */ }
+    }
+    // Opt-in "manter conectado": grava a chave corrente no localStorage. Só é
+    // chamada após a chave ser VALIDADA (login) ou emitida (trial).
+    function persistApiKey() {
+      try {
+        const key = sessionStorage.getItem(API_KEY_STORAGE);
+        if (key) localStorage.setItem(API_KEY_STORAGE, key);
       } catch (_) { /* private mode */ }
     }
     function showLogin(message) {
@@ -1679,6 +1753,8 @@
       const ok = await verifyApiKey(candidate, showLandingError);
       setFormBusy(landingForm, false, "");
       if (!ok) return;
+      const rememberLanding = document.querySelector("#landing-remember");
+      if (rememberLanding && rememberLanding.checked) persistApiKey();
       landingInput.value = "";
       hideLogin();
       bootConsole();
@@ -1693,6 +1769,9 @@
           const data = await response.json();
           if (!response.ok) throw new Error(apiErrorMessage(data, "Não foi possível gerar o teste."));
           setApiKey(data.api_key);
+          // Trial anônimo: persistir por padrão — fechar a aba não pode custar o
+          // teste inteiro (não há e-mail para recuperar). "Sair" limpa tudo.
+          persistApiKey();
           try {
             sessionStorage.setItem("causiaTrialWelcome", JSON.stringify(data));
             sessionStorage.setItem("causiaTrialSetup", JSON.stringify(data));
@@ -1727,6 +1806,8 @@
       const ok = await verifyApiKey(candidate, (message) => showLogin(message));
       setFormBusy(loginForm, false, "");
       if (!ok) return;
+      const rememberOverlay = document.querySelector("#login-remember");
+      if (rememberOverlay && rememberOverlay.checked) persistApiKey();
       hideLogin();
       bootConsole();
     });
@@ -1973,7 +2054,7 @@
       msg.innerHTML =
         `<strong>Teste anônimo ativo até ${escHtml(fmtDate(data.expires_at))}.</strong> ` +
         "Guarde a chave abaixo em um local seguro (ex.: gerenciador de senhas): " +
-        "ela é a única forma de voltar a este teste se esta aba for fechada. " +
+        "ela é a única forma de acessar este teste em outro navegador ou se este for limpo. " +
         "Depois, explore com dados de exemplo ou conecte seu acervo na Mesa.";
       trialWelcomeEl.appendChild(msg);
       if (apiKey) {
@@ -3129,7 +3210,7 @@
       msg.innerHTML =
         "<strong>Sua chave de acesso (deste navegador).</strong> " +
         "Guarde-a em local seguro: ela não fica salva em nossos servidores" +
-        (data && data.trial === true ? " e é a única forma de voltar a este teste se a aba for fechada." : ".");
+        (data && data.trial === true ? " e é a única forma de acessar este teste em outro navegador." : ".");
       const row = document.createElement("div");
       row.className = "tw-key-row";
       const code = document.createElement("code");
