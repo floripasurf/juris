@@ -22,6 +22,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 
 from juris.demo.orchestrator import (
+    _DETERMINISTIC_FALLBACK_REASON,
     DemoOrchestrator,
     DemoRequest,
     DemoResult,
@@ -312,10 +313,13 @@ class TestOrchestratorErrorPaths:
         assert "modo determinístico sem LLM" in result.draft.research_summary
         assert result.succeeded is True
         assert result.degraded is True
-        assert "All connection attempts failed" in result.degradation_reason
+        # O reason que a UI mostra é copy para o advogado — nunca o texto cru da exceção.
+        assert result.degradation_reason == _DETERMINISTIC_FALLBACK_REASON
+        assert "All connection attempts failed" not in result.degradation_reason
         assert "/var/private/ollama" not in result.degradation_reason
         assert "token=abc" not in result.degradation_reason
         assert "pin=1234" not in result.degradation_reason
+        # O detalhe técnico continua auditável (audit + logs), sem segredo/caminho privado.
         fallback = next(e for e in audit.read_all() if e.event_type == "demo.rascunho_deterministic_fallback")
         dumped = json.dumps({"audit": fallback.details, "logs": [event[1] for event in capture.events]})
         assert "All connection attempts failed" in dumped

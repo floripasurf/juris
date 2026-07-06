@@ -202,7 +202,9 @@ class DemoOrchestrator:
                     analysis=result.analysis,
                 )
                 result.degraded = True
-                result.degradation_reason = safe_reason
+                # A UI mostra este reason ao advogado: copy legível, nunca o texto
+                # cru da exceção (esse fica no audit/log abaixo, já sanitizado).
+                result.degradation_reason = _DETERMINISTIC_FALLBACK_REASON
                 self._audit.log(
                     event_type="demo.rascunho_deterministic_fallback",
                     actor="system",
@@ -305,6 +307,14 @@ def _public_step_error(step: str) -> str:
         "prazos": "prazos: falha operacional no cálculo de prazos",
         "draft": "draft: falha operacional ao gerar a minuta",
     }[step]
+
+
+# Copy que a UI mostra quando o rascunho caiu no caminho determinístico: dirigida
+# ao advogado (o erro técnico sanitizado fica no audit e no log estruturado).
+_DETERMINISTIC_FALLBACK_REASON = (
+    "IA indisponível no momento — geramos um rascunho determinístico com os dados "
+    "públicos do processo (movimentos, classificação e prazos)."
+)
 
 
 def _can_degrade_to_deterministic_rascunho(request: DemoRequest, exc: Exception) -> bool:
