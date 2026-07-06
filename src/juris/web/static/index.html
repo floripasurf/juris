@@ -577,6 +577,7 @@
       border: 1px solid var(--ok-line);
     }
     .notice.error { background: var(--danger-bg); color: var(--danger); border-color: var(--danger-line); }
+    .notice.warn { background: var(--warn-bg); color: var(--warn); border-color: var(--warn-line); }
 
     /* ── Mesa de trabalho: fichas ──────────────────────────── */
     .processos-panel, .workbench-panel { grid-column: 1 / -1; padding: 24px; }
@@ -1465,6 +1466,7 @@
         <div id="output-dir" class="out"></div>
       </div>
       <div id="grounding"></div>
+      <div id="provider-warning" class="notice warn" hidden></div>
       <div id="estrategia"></div>
       <div id="review"></div>
       <div id="artifacts" class="empty">Os documentos gerados aparecerão aqui.</div>
@@ -1704,6 +1706,7 @@
     const form = document.querySelector("#demo-form");
     const submit = document.querySelector("#submit");
     const notice = document.querySelector("#notice");
+    const providerWarningEl = document.querySelector("#provider-warning");
     const artifactsEl = document.querySelector("#artifacts");
     const titleEl = document.querySelector("#result-title");
     const summaryEl = document.querySelector("#result-summary");
@@ -2301,6 +2304,14 @@
       notice.textContent = data.degraded ? `Execução degradada: ${data.degradation_reason}` : "Artefatos gerados.";
       notice.className = data.succeeded ? "notice" : "notice error";
       notice.hidden = false;
+
+      if (data.provider_warning) {
+        providerWarningEl.textContent = data.provider_warning;
+        providerWarningEl.hidden = false;
+      } else {
+        providerWarningEl.textContent = "";
+        providerWarningEl.hidden = true;
+      }
 
       renderGrounding(data.grounding);
       renderEstrategia(data.estrategia);
