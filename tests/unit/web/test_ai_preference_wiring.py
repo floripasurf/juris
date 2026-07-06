@@ -96,3 +96,6 @@ def test_declared_chatgpt_drives_requested_label_and_keeps_deid(monkeypatch) -> 
     browser_wrap = llm._primary
     assert browser_wrap._allow_partial is False  # PII: fail-closed intocado
     assert browser_wrap._ner is not None
+    # Cadeia completa: a preferência canônica chega ao transporte → CompletionRequest.provider
+    # → o service worker roteia p/ a aba do ChatGPT (não só reporta depois).
+    assert browser_wrap._delegate._transport._provider == "chatgpt"
