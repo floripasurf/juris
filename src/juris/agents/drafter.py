@@ -223,29 +223,60 @@ class DrafterAgent:
             except Exception:  # noqa: BLE001
                 logger.warning("estrategia_failed", numero_cnj=request.numero_cnj)
 
-        # Step 5: Style retrieval (from petition templates if available)
+        # Step 5a-bis: exemplar de estilo do PRÓPRIO escritório (Biblioteca, L4).
+        # Precede templates genéricos: a peça da própria firma ensina o estilo real.
         style_text = ""
-        try:
-            # Search for matching templates by tipo and ramo
-            templates = getattr(self._repertory, '_templates', None)
-            if templates and callable(getattr(templates, 'search', None)):
-                matched = templates.search(
-                    tipo=request.tipo_peticao,
-                    ramo_direito=context.ramo_justica,
+        find_style_exemplar = getattr(self._repertory, "find_style_exemplar", None)
+        if callable(find_style_exemplar):
+            try:
+                exemplar = find_style_exemplar(
+                    tipo_peticao=request.tipo_peticao.value,
+                    area_direito=context.ramo_justica,
+                    tenant_id=self._tenant_id,
                 )
-                if matched:
-                    best = matched[0]
-                    sections = [f"{s.ordem}. {s.titulo}: {s.proposito}" for s in best.estrutura]
-                    style_text = (
-                        f"Template: {best.titulo}\n"
-                        f"Estrutura:\n" + "\n".join(sections)
+            except Exception:  # noqa: BLE001 - estilo é enriquecimento, nunca derruba o draft
+                logger.debug("style_exemplar_skipped")
+                exemplar = None
+            if exemplar is not None:
+                style_text = (
+                    "EXEMPLO DE ESTILO DO SEU ESCRITÓRIO (não citar como fonte):\n"
+                    + exemplar.texto[:2500]
+                )
+                self._log_audit(
+                    "draft.style_retrieved",
+                    request.numero_cnj,
+                    {
+                        "origem": "escritorio",
+                        "source_id": exemplar.source_id,
+                        "tipo": exemplar.tipo,
+                        "uso": exemplar.uso,
+                    },
+                    result,
+                )
+
+        # Step 5: Style retrieval (from petition templates if available)
+        if not style_text:
+            try:
+                # Search for matching templates by tipo and ramo
+                templates = getattr(self._repertory, '_templates', None)
+                if templates and callable(getattr(templates, 'search', None)):
+                    matched = templates.search(
+                        tipo=request.tipo_peticao,
+                        ramo_direito=context.ramo_justica,
                     )
-                    self._log_audit("draft.style_retrieved", request.numero_cnj, {
-                        "template_id": best.id,
-                        "template_titulo": best.titulo,
-                    }, result)
-        except Exception:  # noqa: BLE001
-            logger.debug("style_retrieval_skipped")
+                    if matched:
+                        best = matched[0]
+                        sections = [f"{s.ordem}. {s.titulo}: {s.proposito}" for s in best.estrutura]
+                        style_text = (
+                            f"Template: {best.titulo}\n"
+                            f"Estrutura:\n" + "\n".join(sections)
+                        )
+                        self._log_audit("draft.style_retrieved", request.numero_cnj, {
+                            "template_id": best.id,
+                            "template_titulo": best.titulo,
+                        }, result)
+            except Exception:  # noqa: BLE001
+                logger.debug("style_retrieval_skipped")
 
         # Step 5b: Template scaffold from corpus (MODELO_PETICAO)
         if not style_text:
