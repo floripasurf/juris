@@ -138,7 +138,7 @@ def test_local_setup_page_is_served_only_on_loopback() -> None:
 
     assert response.status_code == 200
     assert "credentials-form" in response.text
-    assert "não são enviadas ao servidor" in response.text
+    assert "não são enviados aos servidores do Causia" in response.text
     assert "Voltar ao Causia" in response.text
     assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
 

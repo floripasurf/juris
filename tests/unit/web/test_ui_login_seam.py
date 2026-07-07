@@ -92,6 +92,8 @@ class TestSpaLoginGate:
         assert "sem informar nome, e-mail ou escritório" in _INDEX_HTML
         assert "Seus processos ficam isolados no ambiente Causia" in _INDEX_HTML
         assert "apagados automaticamente ao final" in _INDEX_HTML
+        assert "Nossa tecnologia: acesse seus processos sem compartilhar suas credenciais." in _INDEX_HTML
+        assert "Suas senhas e o PIN do token ficam neste computador" in _INDEX_HTML
 
     def test_landing_privacy_claims_stay_honest(self) -> None:
         """Pin the honest retention framing on the card + footer.
@@ -104,6 +106,7 @@ class TestSpaLoginGate:
         # "Privacidade por desenho" feature card
         assert "Credenciais nunca ficam armazenadas em nossos servidores." in _INDEX_HTML
         assert "apagados automaticamente, com certificado" in _INDEX_HTML
+        assert "não são enviados aos servidores do Causia" in _INDEX_HTML
         # footer legal line
         assert (
             "Credenciais nunca ficam armazenadas em nossos servidores; dados de processo, isolados por escritório"

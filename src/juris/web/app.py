@@ -712,7 +712,7 @@ _CONNECT_AGENT_MISSING = (
 _CONNECT_AGENT_CREDS_MISSING = (
     "O agente Causia está conectado, mas ainda não tem suas credenciais salvas. Em Acervo, "
     "clique em Atualizar credenciais e informe CPF, senha PJe e PIN do token A3; esses dados "
-    "ficam só no seu computador e não são enviados ao servidor."
+    "ficam neste computador e não são enviados aos servidores do Causia."
 )
 # Strong refs to in-flight background tasks so the event loop doesn't GC them mid-run.
 _BACKGROUND_TASKS: set[asyncio.Task[None]] = set()

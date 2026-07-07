@@ -305,6 +305,37 @@
       color: var(--muted);
       font-size: 13.5px;
     }
+    .landing-technology {
+      padding-top: 28px;
+      padding-bottom: 22px;
+    }
+    .landing-technology h2 { max-width: 780px; }
+    .landing-tech-copy {
+      max-width: 780px;
+      margin: 10px 0 20px;
+      color: var(--ink-2);
+      font-size: 15px;
+    }
+    .landing-tech-points {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .landing-tech-point {
+      border-left: 3px solid var(--brand);
+      padding: 4px 0 4px 14px;
+    }
+    .landing-tech-point strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--ink);
+      font-size: 14.5px;
+    }
+    .landing-tech-point p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13.5px;
+    }
     .landing-footer {
       border-top: 1px solid var(--line);
       max-width: 1120px;
@@ -1008,6 +1039,7 @@
       .landing-copy .lede { font-size: 17px; }
       .landing-features { grid-template-columns: 1fr; }
       .landing-steps { grid-template-columns: 1fr; }
+      .landing-tech-points { grid-template-columns: 1fr; }
       header { padding: 8px 12px 0; gap: 8px; height: auto; min-height: 58px; flex-wrap: wrap; }
       .header-actions {
         order: 1;
@@ -1116,12 +1148,30 @@
         <div class="landing-step">
           <span class="step-num">2</span>
           <strong>Veja com dados de exemplo — ou com seu acervo</strong>
-          <p>Explore um caso de demonstração em um clique. Quando quiser, instale o agente local e conecte seu token A3 para importar seus processos: credenciais nunca ficam armazenadas em nossos servidores.</p>
+          <p>Explore um caso de demonstração em um clique. Quando quiser usar seu acervo, baixe o agente local para se conectar com o PJe e o token A3: suas senhas e o PIN ficam neste computador e não são enviados aos servidores do Causia.</p>
         </div>
         <div class="landing-step">
           <span class="step-num">3</span>
           <strong>Minuta com lastro, protocolo com controle</strong>
           <p>Gere rascunhos e minutas com citações verificadas contra o corpus, acompanhe prazos na agenda e protocole só depois de revisão e consentimento explícitos.</p>
+        </div>
+      </div>
+    </div>
+    <div class="landing-band landing-technology">
+      <h2>Nossa tecnologia: acesse seus processos sem compartilhar suas credenciais.</h2>
+      <p class="landing-tech-copy">Baixe o agente local para se conectar com o PJe, seu token A3 e os serviços dos tribunais. Suas senhas e o PIN do token ficam neste computador e não são enviados aos servidores do Causia.</p>
+      <div class="landing-tech-points">
+        <div class="landing-tech-point">
+          <strong>Conexão local com o tribunal</strong>
+          <p>O agente roda no computador onde o token está conectado e faz a ponte com PJe/MNI.</p>
+        </div>
+        <div class="landing-tech-point">
+          <strong>Credenciais sob seu controle</strong>
+          <p>CPF, senha PJe e PIN são informados no agente local, não em um formulário do servidor.</p>
+        </div>
+        <div class="landing-tech-point">
+          <strong>Acervo no Causia, acesso protegido</strong>
+          <p>O Causia recebe os dados necessários para organizar processos e prazos, sem receber suas senhas.</p>
         </div>
       </div>
     </div>
@@ -1201,7 +1251,7 @@
       <p class="lede">Acervo importado pelo agente local do seu computador. Clique em conectar para importar e manter atualizado.</p>
       <section class="first-access-guide" aria-labelledby="first-access-title">
         <h2 id="first-access-title" class="first-access-title">Primeiro acesso: siga nesta ordem</h2>
-        <p>Use o computador onde o token A3 está conectado. CPF, senha PJe e PIN ficam salvos apenas no Causia Agent deste computador.</p>
+        <p>Use o computador onde o token A3 está conectado. Suas senhas e o PIN do token ficam neste computador e não são enviados aos servidores do Causia.</p>
         <ol class="first-access-steps">
           <li class="first-access-step">
             <span class="step-number" aria-hidden="true">1</span>
@@ -1214,7 +1264,7 @@
             <span class="step-number" aria-hidden="true">2</span>
             <div>
               <strong>Informe CPF, senha PJe e PIN</strong>
-              <p>Essas credenciais são gravadas só neste computador.</p>
+              <p>Essas credenciais são salvas no agente local deste computador para conectar com o PJe.</p>
               <button id="first-access-credentials" class="ghost" type="button">Atualizar credenciais</button>
             </div>
           </li>
@@ -1567,7 +1617,7 @@
     <div class="modal-card agent-credentials-card">
       <button type="button" class="modal-close" id="agent-credentials-cancel" aria-label="Fechar">×</button>
       <h2 id="agent-credentials-title">Conectar token e PJe</h2>
-      <p>Estas credenciais serão salvas no agente local em 127.0.0.1. Elas não são enviadas ao servidor da Causia.</p>
+      <p>O agente local usa estas credenciais para se conectar com o PJe. Suas senhas e o PIN do token ficam neste computador e não são enviados aos servidores do Causia.</p>
       <form id="agent-credentials-form" class="agent-credentials-form">
         <label for="agent-credential-cpf">CPF do advogado
           <input id="agent-credential-cpf" name="cpf" inputmode="numeric" autocomplete="username" required />
