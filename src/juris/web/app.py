@@ -1139,6 +1139,18 @@ async def get_corpus_coverage(tenant: Tenant = Depends(current_tenant)) -> dict[
     return await asyncio.to_thread(coverage_report, tenant_scoped_dir(tenant, _out_root()))
 
 
+@app.get("/api/library")
+async def get_library(tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
+    """Biblioteca do Escritório: fontes do tenant + cobertura (L5)."""
+    from juris.web.auth import tenant_scoped_dir
+    from juris.web.corpus_queue import coverage_report, list_library_items
+
+    root = tenant_scoped_dir(tenant, _out_root())
+    items = await asyncio.to_thread(list_library_items, root)
+    coverage = await asyncio.to_thread(coverage_report, root)
+    return {"items": items, "coverage": coverage}
+
+
 
 def _repertory_has_chunks(path: Path) -> bool:
     """Uploads do escritório contam como corpus pesquisável mesmo sem as seeds públicas."""
@@ -1155,13 +1167,19 @@ def _repertory_has_chunks(path: Path) -> bool:
 
 
 @app.get("/api/corpus/search")
-async def search_corpus(q: str, top_k: int = 8, tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
+async def search_corpus(
+    q: str,
+    top_k: int = 8,
+    include_estilo: bool = Query(False),
+    tenant: Tenant = Depends(current_tenant),
+) -> dict[str, object]:
     """Explainable jurisprudence search (Sprint 5): each hit carries WHY it ranked.
 
     Tenant-scoped (public seed + this firm's own uploads only). Every result exposes
     the ranking signals — fonte, autoridade, vigência, corroboração and the strongest
     ``motivo`` — so the console shows not just *what* was retrieved but *why* it was
-    trusted (``explain_ranking``, ADR-0017).
+    trusted (``explain_ranking``, ADR-0017). ``include_estilo`` opts into peças/modelos
+    do próprio escritório (uso="estilo") — nunca citáveis, só exemplares de forma (L5).
     """
     from juris.repertory.readiness import read_status, resolve_repertory_path
     from juris.repertory.retrieval.service import explain_ranking
@@ -1174,7 +1192,12 @@ async def search_corpus(q: str, top_k: int = 8, tenant: Tenant = Depends(current
 
     def _search() -> list[Any]:
         repertory = _corpus_search_service(resolve_repertory_path())
-        raw_results = repertory.search_jurisprudencia(query=q, top_k=max(1, min(top_k, 20)), tenant_id=tenant.tenant_id)
+        raw_results = repertory.search_jurisprudencia(
+            query=q,
+            top_k=max(1, min(top_k, 20)),
+            tenant_id=tenant.tenant_id,
+            include_estilo=include_estilo,
+        )
         return cast(list[Any], raw_results)
 
     results = await asyncio.to_thread(_search)
@@ -1188,6 +1211,8 @@ async def search_corpus(q: str, top_k: int = 8, tenant: Tenant = Depends(current
                 "hierarquia": r.hierarchy_label,
                 "texto": r.texto[:400],
                 "source_url": r.source_url,
+                "tipo": r.tipo,
+                "uso": r.uso,
                 "explain": explain_ranking(r),
             }
             for r in results

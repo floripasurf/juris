@@ -183,8 +183,22 @@ def coverage_report(root: Path) -> dict[str, object]:
             "tribunal": _counts(sources, "tribunal"),
             "source_type": _counts(sources, "source_type"),
             "status": _counts(sources, "status"),
+            "tipo_peticao": _counts(sources, "tipo_peticao"),
+            "uso": _counts(sources, "uso"),
         },
     }
+
+
+def list_library_items(root: Path) -> list[dict[str, object]]:
+    """Fontes do tenant com os campos que a aba Biblioteca exibe (L5)."""
+    fields = (
+        "id", "title", "source_type", "uso", "area", "tipo_peticao",
+        "source_date", "status", "provenance_kind", "rights_basis", "reingest_status",
+    )
+    return [
+        {k: record.get(k, "") for k in fields}
+        for record in list_accepted_sources(root)
+    ]
 
 
 def mark_reingested(root: Path, source_id: str) -> dict[str, object] | None:

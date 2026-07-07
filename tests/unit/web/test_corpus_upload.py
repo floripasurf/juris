@@ -151,7 +151,9 @@ class TestSearchAfterUpload:
         app_module = importlib.import_module("juris.web.app")
 
         class _StubRepertory:
-            def search_jurisprudencia(self, query: str, top_k: int, tenant_id: str) -> list:
+            def search_jurisprudencia(
+                self, query: str, top_k: int, tenant_id: str, include_estilo: bool = False
+            ) -> list:
                 return []
 
         monkeypatch.setattr(app_module, "_corpus_search_service", lambda path: _StubRepertory())

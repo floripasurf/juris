@@ -1716,7 +1716,7 @@ def test_corpus_search_exposes_explain_ranking(monkeypatch) -> None:
     app_module = importlib.import_module("juris.web.app")
 
     class _StubRepertory:
-        def search_jurisprudencia(self, query, top_k=8, tenant_id=None):  # noqa: ANN001, ANN201
+        def search_jurisprudencia(self, query, top_k=8, tenant_id=None, include_estilo=False):  # noqa: ANN001, ANN201
             return [
                 RetrievalResult(
                     source_id="resp_1",

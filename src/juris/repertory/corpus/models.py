@@ -190,6 +190,8 @@ class FonteJurisprudencia:
         if self.hierarquia == 7 and self.tipo in {
             TipoFonte.MODELO_PETICAO,
             TipoFonte.NOTICIA_TRIBUNAL,
+            TipoFonte.PECA_ESCRITORIO,
+            TipoFonte.NOTA_INTERNA,
         }:
             return
         if not 1 <= self.hierarquia <= 6:
