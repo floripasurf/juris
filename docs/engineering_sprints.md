@@ -269,7 +269,14 @@ referência órfã. A SPA agora tem gate de login: `apiFetch` anexa `X-API-Key`
 (sessionStorage) em toda chamada `/api/*`, 401 reabre o login e o console passa
 a funcionar em modo prod com tenants exigidos — pré-requisito do endereço de
 teste `juris.blackcube.dev` (runbook em `docs/deploy/blackcube-pilot.md`,
-launchd em `docs/deploy/com.juris.web.plist`).
+launchd em `docs/deploy/com.juris.web.plist`). Biblioteca do Escritório (Fase 1,
+2026-07-06): tier-3 com eixo uso fundamento/estilo, guarda determinística no
+retrieval+verifier, upload em lote (.pdf/.docx/.txt/.md), exemplar de estilo do
+próprio escritório no drafter e aba Biblioteca no console. Spec em
+`docs/superpowers/specs/2026-07-06-biblioteca-escritorio-design.md`. Fechamento
+(L6): `juris tenant erase-data` também revoga a entrada do tenant em
+`JURIS_TENANTS_FILE` — a chave antiga passa a ser rejeitada (401) em vez de
+autenticar num tenant já esvaziado (`access_revoked` no certificado de erasure).
 
 Bloqueado por dependência humana: **evidência de piloto** (rodar casos com A3 — ver
 `docs/pilot_runbook.md`) e **fonte real de inteiro teor** (decisão de ToS).

@@ -100,6 +100,41 @@ def test_library_sem_chave_e_401(tenant_env) -> None:
     assert resp.status_code == 401
 
 
+def test_erasure_remove_biblioteca_no_nivel_certo(tenant_env, tmp_path) -> None:
+    """LGPD erasure at the right level: the tenant's library chunks in
+    repertory.db are wiped AND the old key stops authenticating (401) —
+    a "sim, mas lista vazia" (200) result would mean data was gone but
+    access wasn't, which is erasure at the wrong level."""
+    import sqlite3
+
+    from juris.ops.erasure import build_tenant_erasure_plan, execute_tenant_erasure
+
+    client = TestClient(app)
+    _upload_peca(client, tenant_env["headers"])
+
+    plan = build_tenant_erasure_plan("escritorio-a")
+    result = execute_tenant_erasure(plan, confirmation=plan.confirmation_phrase)
+    assert result.access_revoked is True
+
+    # (b) chave antiga rejeitada — tenant apagado não autentica.
+    resp = client.get("/api/library", headers=tenant_env["headers"])
+    assert resp.status_code == 401
+
+    # (c) repertory.db sem chunks do tenant.
+    conn = sqlite3.connect(tenant_env["repertory"])
+    try:
+        n = conn.execute(
+            "SELECT count(*) FROM chunks WHERE tenant_id = 'escritorio-a'"
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    assert n == 0
+
+    # (d) certificado registrado.
+    log_path = tmp_path / "compliance-erasure.jsonl"
+    assert "escritorio-a" in log_path.read_text(encoding="utf-8")
+
+
 def test_search_agrupavel_por_uso(tenant_env) -> None:
     client = TestClient(app)
     _upload_peca(client, tenant_env["headers"])
