@@ -21,6 +21,7 @@ from juris.core.paths import ensure_private_dir, juris_home, restrict_file
 from juris.repertory.readiness import resolve_repertory_path
 from juris.web.auth import PUBLIC_TENANT_ID, Tenant, tenant_scoped_dir, validate_tenant_id
 from juris.web.connect_jobs import default_connect_jobs_path
+from juris.web.trial_access import revoke_tenant_access, tenants_file_path
 
 ERASURE_LOG_NAME = "compliance-erasure.jsonl"
 
@@ -92,6 +93,7 @@ class TenantErasureResult:
     connect_jobs_deleted: int
     corpus_chunks_deleted: int
     erasure_log_path: Path
+    access_revoked: bool
     warnings: tuple[str, ...]
 
     def to_dict(self) -> dict[str, object]:
@@ -103,6 +105,7 @@ class TenantErasureResult:
             "connect_jobs_deleted": self.connect_jobs_deleted,
             "corpus_chunks_deleted": self.corpus_chunks_deleted,
             "erasure_log_path": str(self.erasure_log_path),
+            "access_revoked": self.access_revoked,
             "warnings": list(self.warnings),
         }
 
@@ -153,8 +156,15 @@ def execute_tenant_erasure(
     out_root: Path | None = None,
     repertory_path: Path | None = None,
     connect_jobs_path: Path | None = None,
+    tenants_path: Path | None = None,
 ) -> TenantErasureResult:
-    """Execute an erasure plan after exact confirmation."""
+    """Execute an erasure plan after exact confirmation.
+
+    Also revokes the tenant's access (removes it from tenants.json) so its old
+    API key is rejected (401) afterwards, instead of authenticating into an
+    empty, freshly-wiped account — data erasure without access revocation is
+    erasure at the wrong level.
+    """
     if confirmation != plan.confirmation_phrase:
         msg = f"confirmação inválida; use {plan.confirmation_phrase!r}"
         raise ValueError(msg)
@@ -163,6 +173,7 @@ def execute_tenant_erasure(
     out = (out_root or _default_out_root()).expanduser()
     corpus = resolve_repertory_path(repertory_path).expanduser()
     jobs = (connect_jobs_path or default_connect_jobs_path()).expanduser()
+    tenants = (tenants_path or tenants_file_path()).expanduser()
 
     allowed_roots = _allowed_roots(plan.tenant_id, home=home, out_root=out)
     warnings = list(plan.warnings)
@@ -176,6 +187,7 @@ def execute_tenant_erasure(
 
     connect_deleted = _delete_connect_jobs(jobs, plan.tenant_id)
     corpus_deleted = _delete_tenant_corpus_chunks(corpus, plan.tenant_id)
+    access_revoked = revoke_tenant_access(tenants, plan.tenant_id)
 
     result = TenantErasureResult(
         tenant_id=plan.tenant_id,
@@ -185,6 +197,7 @@ def execute_tenant_erasure(
         connect_jobs_deleted=connect_deleted,
         corpus_chunks_deleted=corpus_deleted,
         erasure_log_path=plan.erasure_log_path,
+        access_revoked=access_revoked,
         warnings=tuple(warnings),
     )
     _append_erasure_certificate(result)

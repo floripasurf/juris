@@ -214,6 +214,29 @@ def is_tenant_active(tenants_path: Path, tenant_id: str, *, now: datetime) -> bo
     return True  # legacy string-hash entries are always active accounts
 
 
+def revoke_tenant_access(tenants_path: Path, tenant_id: str) -> bool:
+    """Remove ``tenant_id`` from tenants.json so its API key(s) stop authenticating.
+
+    Called as part of erasure (:func:`juris.ops.erasure.execute_tenant_erasure`) so
+    an erased tenant's old key is rejected outright (401) instead of authenticating
+    into an empty, freshly-wiped account. A no-op (returns ``False``) when the file
+    doesn't exist — matching an open deployment with no tenants configured — or
+    when the id is already absent (e.g. a trial already popped by
+    :func:`sweep_expired_trials`); never creates the file.
+    """
+    tenant_id = validate_tenant_id(tenant_id)
+    if not tenants_path.exists():
+        return False
+    removed = False
+    with _locked_json(tenants_path) as tenants:
+        if tenant_id in tenants:
+            del tenants[tenant_id]
+            removed = True
+    if removed:
+        _clear_auth_caches()
+    return removed
+
+
 def preview_expired_trials(tenants_path: Path, *, now: datetime | None = None) -> dict[str, object]:
     """Read-only: which trials in tenants.json a sweep would prune+enqueue right now.
 

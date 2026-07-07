@@ -39,12 +39,14 @@ juris tenant erase-data escritorio-alfa --json
 juris tenant erase-data escritorio-alfa --execute --confirm ERASE-escritorio-alfa
 ```
 
-O comando remove apenas dados escopados ao tenant:
+O comando remove os dados escopados ao tenant e revoga o acesso:
 
 - `<JURIS_HOME>/tenants/<tenant>`;
 - `<JURIS_OUT_ROOT>/tenants/<tenant>`;
 - rows do tenant em `connect_jobs.db`;
-- chunks privados do tenant no `repertory.db`.
+- chunks privados do tenant no `repertory.db` (inclui a Biblioteca do Escritório);
+- entrada do tenant em `JURIS_TENANTS_FILE` — a(s) chave(s) antiga(s) passam a ser
+  rejeitadas (401) imediatamente, em vez de autenticar num tenant vazio.
 
 O seed público do corpus (`tenant_id IS NULL`) não é removido.
 

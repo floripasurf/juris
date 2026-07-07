@@ -101,6 +101,8 @@ def erase_data(
     console.print(f"  Arquivos: {result.files_deleted} ({result.bytes_deleted} bytes)")
     console.print(f"  Connect jobs: {result.connect_jobs_deleted}")
     console.print(f"  Chunks privados do corpus: {result.corpus_chunks_deleted}")
+    revoked = "sim" if result.access_revoked else "não (tenants.json ausente ou já sem entrada)"
+    console.print(f"  Acesso (chave) revogado: {revoked}")
     console.print(f"  Certificado: {result.erasure_log_path}")
     for warning in result.warnings:
         console.print(f"[yellow]Aviso:[/yellow] {warning}")
