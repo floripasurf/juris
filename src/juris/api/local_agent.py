@@ -288,7 +288,8 @@ def _local_setup_html() -> str:
 <body>
   <main>
     <h1>Causia Agent</h1>
-    <p>Use o agente local para se conectar com o PJe. Suas senhas e o PIN do token ficam neste computador e não são enviados aos servidores do Causia.</p>
+    <p>Use o agente local para se conectar com o PJe. Suas senhas e o PIN do token
+    ficam neste computador e não são enviados aos servidores do Causia.</p>
     <form id="credentials-form">
       <label>CPF do advogado
         <input name="cpf" inputmode="numeric" autocomplete="username" required />
