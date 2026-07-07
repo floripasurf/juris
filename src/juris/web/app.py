@@ -386,6 +386,10 @@ class CorpusUploadPayload(BaseModel):
     tema: str = Field(default="", max_length=256)
     area: str = Field(default="", max_length=128)
     numero_cnj: str = Field(default="", max_length=64)
+    provenance_kind: str = Field(default="publica", max_length=32)
+    uso: str = Field(default="", max_length=16)
+    tipo_peticao: str = Field(default="", max_length=64)
+    rights_basis: str = Field(default="", max_length=32)
 
 
 class CorpusSourcePayload(BaseModel):

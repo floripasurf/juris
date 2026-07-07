@@ -21,6 +21,7 @@ from typing import Any, cast
 from urllib.parse import urlparse, urlunparse
 
 from juris.core.paths import ensure_private_dir, restrict_file
+from juris.repertory.corpus.models import RIGHTS_BASIS_VALUES, TipoFonte, resolve_uso
 from juris.web.pilot_feedback import list_feedback
 
 _FILENAME = "corpus-sources.jsonl"
@@ -82,6 +83,22 @@ def _require_provenance(payload: dict[str, object]) -> None:
     if not (str(payload.get("tribunal") or "").strip() or str(payload.get("source_publisher") or "").strip()):
         msg = "fonte é obrigatória (tribunal ou source_publisher) para proveniência."
         raise ValueError(msg)
+    kind = str(payload.get("provenance_kind") or "publica")
+    if kind not in {"publica", "acervo_do_escritorio"}:
+        msg = "provenance_kind deve ser 'publica' ou 'acervo_do_escritorio'."
+        raise ValueError(msg)
+    tipo_raw = str(payload.get("source_type") or "")
+    if tipo_raw in {TipoFonte.DOUTRINA_PD.value, TipoFonte.DOUTRINA_PRIVADA.value}:
+        rights = str(payload.get("rights_basis") or "")
+        if rights not in RIGHTS_BASIS_VALUES:
+            msg = (
+                "rights_basis é obrigatório para doutrina "
+                f"({', '.join(sorted(RIGHTS_BASIS_VALUES))}) — sem base de direitos não ingere."
+            )
+            raise ValueError(msg)
+    override = str(payload.get("uso") or "")
+    if override:
+        resolve_uso(tipo_raw or None, override)  # ValueError se inválido
 
 
 def append_accepted_source(root: Path, payload: dict[str, object]) -> dict[str, object]:
@@ -89,7 +106,12 @@ def append_accepted_source(root: Path, payload: dict[str, object]) -> dict[str, 
     ensure_private_dir(root)
     _require_provenance(payload)
     content_hash = _resolve_content_hash(payload)
-    source_url = _public_source_url(payload.get("source_url"))
+    kind = str(payload.get("provenance_kind") or "publica")
+    if kind == "acervo_do_escritorio":
+        raw_url = str(payload.get("source_url") or "").strip()
+        source_url = _public_source_url(raw_url) if raw_url else ""
+    else:
+        source_url = _public_source_url(payload.get("source_url"))
     if any(str(record.get("content_sha256") or "") == content_hash for record in list_accepted_sources(root)):
         msg = "fonte já aceita no corpus com o mesmo content_sha256."
         raise ValueError(msg)
@@ -116,6 +138,12 @@ def append_accepted_source(root: Path, payload: dict[str, object]) -> dict[str, 
         "reingest_status": "pending",
         "source_text_path": text_path,
         "source_url": source_url,
+        "provenance_kind": kind,
+        "uso": resolve_uso(
+            str(payload.get("source_type") or "") or None, str(payload.get("uso") or "") or None
+        ).value,
+        "tipo_peticao": str(payload.get("tipo_peticao") or ""),
+        "rights_basis": str(payload.get("rights_basis") or ""),
     }
     with sources_path(root).open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
@@ -319,6 +347,10 @@ def upload_source_document(
             "tema",
             "area",
             "numero_cnj",
+            "provenance_kind",
+            "uso",
+            "tipo_peticao",
+            "rights_basis",
         )
         if str(payload.get(key) or "").strip()
     }
