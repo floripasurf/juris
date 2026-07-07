@@ -107,6 +107,23 @@ class TestQdrantVectorStore:
         mock_client.upsert.assert_called_once()
         points = mock_client.upsert.call_args.kwargs["points"]
         assert points[0].payload["tenant_id"] == _QDRANT_PUBLIC_TENANT
+        assert points[0].payload["source_type"] == "sumula_vinculante"
+        assert points[0].payload["uso"] == "fundamento"  # derivado do source_type (sem uso explícito)
+
+    @patch("juris.repertory.vector_store.QdrantVectorStore._get_client")
+    def test_upsert_uso_explicito_tem_prioridade_sobre_derivado(self, mock_get_client: MagicMock) -> None:
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+
+        store = QdrantVectorStore()
+        chunk = DocumentChunk(
+            chunk_id="c1", source_id="s1", source_type=TipoFonte.SUMULA_VINCULANTE, text="Test", uso="estilo"
+        )
+
+        store.upsert([chunk], [[0.1, 0.2, 0.3]])
+
+        points = mock_client.upsert.call_args.kwargs["points"]
+        assert points[0].payload["uso"] == "estilo"
 
     @patch("juris.repertory.vector_store.QdrantVectorStore._get_client")
     def test_upsert_tags_private_tenant(self, mock_get_client: MagicMock) -> None:
@@ -146,8 +163,58 @@ class TestQdrantVectorStore:
         assert kwargs["query"] == [0.1, 0.2, 0.3]
         assert kwargs["limit"] == 5
         assert _filter_dump(kwargs["query_filter"]) == {
+            "must": [{"key": "tenant_id", "match": {"value": _QDRANT_PUBLIC_TENANT}}],
+            "must_not": [{"key": "uso", "match": {"value": "estilo"}}],
+        }
+
+    @patch("juris.repertory.vector_store.QdrantVectorStore._get_client")
+    def test_search_populates_uso_e_source_type_do_payload(self, mock_get_client: MagicMock) -> None:
+        mock_client = MagicMock()
+        mock_hit = MagicMock()
+        mock_hit.payload = {
+            "chunk_id": "c1",
+            "source_id": "s1",
+            "tenant_id": _QDRANT_PUBLIC_TENANT,
+            "text": "Found",
+            "source_type": "acordao_publicado",
+            "uso": "fundamento",
+        }
+        mock_hit.score = 0.95
+        mock_client.query_points.return_value = SimpleNamespace(points=[mock_hit])
+        mock_get_client.return_value = mock_client
+
+        store = QdrantVectorStore()
+        results = store.search([0.1, 0.2, 0.3], top_k=5)
+        assert results[0].source_type == "acordao_publicado"
+        assert results[0].uso == "fundamento"
+        assert "source_type" not in results[0].metadata
+        assert "uso" not in results[0].metadata
+
+    @patch("juris.repertory.vector_store.QdrantVectorStore._get_client")
+    def test_search_include_estilo_omite_must_not(self, mock_get_client: MagicMock) -> None:
+        mock_client = MagicMock()
+        mock_client.query_points.return_value = SimpleNamespace(points=[])
+        mock_get_client.return_value = mock_client
+
+        store = QdrantVectorStore()
+        store.search([0.1, 0.2, 0.3], top_k=5, include_estilo=True)
+
+        query_filter = mock_client.query_points.call_args.kwargs["query_filter"]
+        assert _filter_dump(query_filter) == {
             "must": [{"key": "tenant_id", "match": {"value": _QDRANT_PUBLIC_TENANT}}]
         }
+
+    @patch("juris.repertory.vector_store.QdrantVectorStore._get_client")
+    def test_search_tenant_only_exclui_seed_publico(self, mock_get_client: MagicMock) -> None:
+        mock_client = MagicMock()
+        mock_client.query_points.return_value = SimpleNamespace(points=[])
+        mock_get_client.return_value = mock_client
+
+        store = QdrantVectorStore()
+        store.search([0.1, 0.2, 0.3], top_k=5, tenant_id="escritorio-a", tenant_only=True, include_estilo=True)
+
+        query_filter = mock_client.query_points.call_args.kwargs["query_filter"]
+        assert _filter_dump(query_filter) == {"must": [{"key": "tenant_id", "match": {"value": "escritorio-a"}}]}
 
     @patch("juris.repertory.vector_store.QdrantVectorStore._get_client")
     def test_search_tenant_filter_includes_public_and_private_only(self, mock_get_client: MagicMock) -> None:
@@ -163,7 +230,8 @@ class TestQdrantVectorStore:
             "should": [
                 {"key": "tenant_id", "match": {"value": _QDRANT_PUBLIC_TENANT}},
                 {"key": "tenant_id", "match": {"value": "escritorio-a"}},
-            ]
+            ],
+            "must_not": [{"key": "uso", "match": {"value": "estilo"}}],
         }
 
     @patch("juris.repertory.vector_store.QdrantVectorStore._get_client")

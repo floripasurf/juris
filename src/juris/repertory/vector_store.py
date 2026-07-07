@@ -229,6 +229,47 @@ class QdrantVectorStore(VectorStore):
         return Filter(should=[public_match, cls._tenant_match(tenant_id)])
 
     @classmethod
+    def _search_filter(cls, tenant_id: str | None, *, include_estilo: bool, tenant_only: bool) -> Any:
+        """Build the ``Filter`` for ``search()``, combining tenant scope and the uso axis.
+
+        Starts from the existing tenant visibility filter (or, when ``tenant_only``
+        is set, a filter restricted to just this tenant's own points, excluding the
+        shared public seed) and, unless ``include_estilo`` is ``True``, adds a
+        ``must_not`` on ``uso == "estilo"`` so estilo-only sources (modelos de
+        petição etc.) never leak into grounding results — mirroring
+        ``LocalFTSStore.search_text``'s ``include_estilo`` behavior (L2).
+
+        Operational note on legacy points: Qdrant's ``must_not`` on a field match
+        only excludes points where that field is present and equals the given
+        value — it does NOT exclude points where the field is simply absent from
+        the payload. Points upserted before this task's payload change have no
+        ``uso`` key at all and are therefore NOT excluded by this filter. This is
+        acceptable because those legacy points are still scoped by ``tenant_id``
+        (fail-closed) and will start being excluded once reingested through the
+        updated ``upsert()``, which always writes ``uso``.
+
+        Args:
+            tenant_id: Tenant to scope to; ``None`` means public-seed only.
+            include_estilo: If ``False`` (default), exclude ``uso="estilo"`` points.
+            tenant_only: If ``True``, restrict to this tenant's own points only,
+                excluding the shared public seed. Meaningful only with a
+                non-``None`` ``tenant_id``.
+
+        Returns:
+            A ``qdrant_client.models.Filter`` ready to pass as ``query_filter``.
+        """
+        from qdrant_client.models import FieldCondition, Filter, MatchValue
+
+        base = Filter(must=[cls._tenant_match(tenant_id)]) if tenant_only else cls._visibility_filter(tenant_id)
+        if include_estilo:
+            return base
+        return Filter(
+            must=base.must,
+            should=base.should,
+            must_not=[FieldCondition(key="uso", match=MatchValue(value="estilo"))],
+        )
+
+    @classmethod
     def _delete_filter(cls, source_id: str, tenant_id: str | None) -> Any:
         from qdrant_client.models import FieldCondition, Filter, MatchValue
 
@@ -247,13 +288,19 @@ class QdrantVectorStore(VectorStore):
         return list(response or [])
 
     def upsert(self, chunks: list[DocumentChunk], embeddings: list[list[float]], tenant_id: str | None = None) -> int:
-        """Upsert chunks into Qdrant."""
+        """Upsert chunks into Qdrant.
+
+        Payload gets ``uso`` (explicit ``chunk.uso``, else derived from
+        ``source_type`` via ``resolve_uso`` — same fallback as ``LocalFTSStore``)
+        and ``source_type`` so ``search()`` can filter on the uso axis (L2).
+        """
         from qdrant_client.models import PointStruct
 
         client = self._get_client()
         points = []
         tenant_payload = self._tenant_payload_value(tenant_id)
         for chunk, embedding in zip(chunks, embeddings, strict=True):
+            uso_val = chunk.uso or resolve_uso(chunk.source_type).value
             points.append(
                 PointStruct(
                     id=str(uuid.uuid5(uuid.NAMESPACE_DNS, chunk.chunk_id)),
@@ -263,6 +310,7 @@ class QdrantVectorStore(VectorStore):
                         "chunk_id": chunk.chunk_id,
                         "source_id": chunk.source_id,
                         "source_type": chunk.source_type.value,
+                        "uso": uso_val,
                         "text": chunk.text,
                         "position": chunk.position,
                         "tenant_id": tenant_payload,
@@ -272,10 +320,32 @@ class QdrantVectorStore(VectorStore):
         client.upsert(collection_name=self._collection, points=points)
         return len(points)
 
-    def search(self, query_embedding: list[float], top_k: int = 10, tenant_id: str | None = None) -> list[SearchResult]:
-        """Search Qdrant for similar chunks."""
+    def search(
+        self,
+        query_embedding: list[float],
+        top_k: int = 10,
+        tenant_id: str | None = None,
+        *,
+        include_estilo: bool = False,
+        tenant_only: bool = False,
+    ) -> list[SearchResult]:
+        """Search Qdrant for similar chunks.
+
+        Args:
+            query_embedding: Query vector.
+            top_k: Maximum number of results.
+            tenant_id: Restrict results to public seed plus this tenant's own
+                private corpus. ``None`` returns public seed only.
+            include_estilo: If ``False`` (default), points with ``uso="estilo"``
+                are excluded — see ``_search_filter`` for the legacy-points caveat.
+            tenant_only: If ``True``, exclude the shared public seed and return
+                only this tenant's own points.
+
+        Returns:
+            Ranked list of search results.
+        """
         client = self._get_client()
-        query_filter = self._visibility_filter(tenant_id)
+        query_filter = self._search_filter(tenant_id, include_estilo=include_estilo, tenant_only=tenant_only)
         if hasattr(client, "query_points"):
             response = client.query_points(
                 collection_name=self._collection,
@@ -301,8 +371,12 @@ class QdrantVectorStore(VectorStore):
                     score=hit.score,
                     text=payload.get("text", ""),
                     metadata={
-                        k: v for k, v in payload.items() if k not in ("chunk_id", "source_id", "tenant_id", "text")
+                        k: v
+                        for k, v in payload.items()
+                        if k not in ("chunk_id", "source_id", "tenant_id", "text", "source_type", "uso")
                     },
+                    source_type=payload.get("source_type", ""),
+                    uso=payload.get("uso", ""),
                 )
             )
         return results

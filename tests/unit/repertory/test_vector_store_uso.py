@@ -1,8 +1,10 @@
-"""Filtro determinístico de uso na store FTS — L2 (aplicado ANTES do corte)."""
+"""Filtro determinístico de uso nas stores FTS e Qdrant — L2 (aplicado ANTES do corte)."""
 
 from __future__ import annotations
 
 from pathlib import Path
+
+import pytest
 
 from juris.repertory.chunking import DocumentChunk
 from juris.repertory.corpus.models import TipoFonte
@@ -86,3 +88,27 @@ def test_chunk_legado_sem_coluna_uso_migra(tmp_path: Path) -> None:
     store = LocalFTSStore(db)  # _init_tables deve adicionar a coluna sem quebrar
     results = store.search_text("honorarios", top_k=10)
     assert all(r.source_id != "src-l1" for r in results)  # legado estilo continua excluído
+
+
+def test_qdrant_filter_exclui_estilo_por_default() -> None:
+    pytest.importorskip("qdrant_client")
+    from juris.repertory.vector_store import QdrantVectorStore
+
+    flt = QdrantVectorStore._search_filter("escritorio-a", include_estilo=False, tenant_only=False)
+    rendered = str(flt)
+    assert "uso" in rendered and "estilo" in rendered  # must_not uso=estilo presente
+    flt_all = QdrantVectorStore._search_filter("escritorio-a", include_estilo=True, tenant_only=False)
+    assert "estilo" not in str(flt_all)
+
+
+def test_qdrant_filter_tenant_only_nao_inclui_seed_publico() -> None:
+    pytest.importorskip("qdrant_client")
+    from juris.repertory.vector_store import _QDRANT_PUBLIC_TENANT, QdrantVectorStore
+
+    flt = QdrantVectorStore._search_filter("escritorio-a", include_estilo=True, tenant_only=True)
+    rendered = str(flt)
+    assert _QDRANT_PUBLIC_TENANT not in rendered
+    assert "escritorio-a" in rendered
+
+    flt_visible = QdrantVectorStore._search_filter("escritorio-a", include_estilo=True, tenant_only=False)
+    assert _QDRANT_PUBLIC_TENANT in str(flt_visible)
