@@ -1225,6 +1225,7 @@
     <nav id="nav">
       <button type="button" data-nav="mesa" class="active">Mesa</button>
       <button type="button" data-nav="acervo">Acervo</button>
+      <button type="button" data-nav="biblioteca">Biblioteca</button>
       <button type="button" data-nav="agenda">Agenda</button>
       <button type="button" data-nav="caso">Novo caso</button>
       <button type="button" data-nav="protocolo">Protocolo</button>
@@ -1321,6 +1322,44 @@
         </select>
       </div>
       <div id="prazos" class="proc-empty">Carregando…</div>
+    </section>
+
+    <section class="processos-panel" data-view="biblioteca" hidden>
+      <h1>Biblioteca do Escritório</h1>
+      <p class="lede">Peças, modelos e doutrina do seu escritório. Documentos de estilo ensinam a forma das minutas e nunca são citados como fonte. Seus arquivos ficam isolados por escritório e são apagáveis com certificado.</p>
+      <form id="library-upload-form" class="connect-bar">
+        <input id="library-files" type="file" multiple accept=".pdf,.docx,.txt,.md" />
+        <select id="library-tipo">
+          <option value="peca_escritorio">Peça do escritório (estilo)</option>
+          <option value="modelo_peticao">Modelo de petição (estilo)</option>
+          <option value="nota_interna">Tese/nota interna (estilo)</option>
+          <option value="acordao_publicado">Decisão/acórdão (fonte citável)</option>
+          <option value="doutrina_privada">Doutrina licenciada (fonte citável)</option>
+        </select>
+        <select id="library-tipo-peticao">
+          <option value="">tipo de peça (opcional)</option>
+          <option value="contestacao">contestação</option>
+          <option value="inicial">inicial</option>
+          <option value="agravo">agravo</option>
+          <option value="recurso">recurso</option>
+          <option value="parecer">parecer</option>
+        </select>
+        <input id="library-area" placeholder="área (ex.: cível)" />
+        <button type="submit">Enviar para a biblioteca</button>
+      </form>
+      <p id="library-upload-status" class="field-note" hidden></p>
+      <div id="library-coverage" class="proc-empty">Carregando…</div>
+      <div id="library-list" class="proc-empty">Carregando…</div>
+      <form id="library-search-form" class="connect-bar">
+        <input id="library-search-q" placeholder="Buscar na biblioteca e no corpus" />
+        <button type="submit">Buscar</button>
+      </form>
+      <div id="library-search-results" hidden>
+        <h2>Fontes jurídicas para citar</h2>
+        <div id="library-results-fundamento" class="proc-empty"></div>
+        <h2>Modelos e peças do escritório (estilo)</h2>
+        <div id="library-results-estilo" class="proc-empty"></div>
+      </div>
     </section>
 
     <section class="processos-panel" data-view="acessos" hidden>
@@ -3309,6 +3348,125 @@
       }
     }
 
+    async function loadLibrary() {
+      const box = document.querySelector("#library-list");
+      const cov = document.querySelector("#library-coverage");
+      try {
+        const resp = await apiFetch("/api/library");
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(apiErrorMessage(data, "Falha ao carregar a biblioteca"));
+        const items = data.items || [];
+        box.className = items.length ? "proc-list" : "proc-empty";
+        box.innerHTML = "";
+        if (!items.length) box.textContent = "Nenhum documento na biblioteca ainda. Envie peças e modelos acima.";
+        items.forEach((item) => {
+          const row = document.createElement("div");
+          row.className = "proc-row";
+          const usoLabel = item.uso === "estilo" ? "estilo (não citável)" : "fonte citável";
+          row.innerHTML = `<div><div class="proc-cnj">${escHtml(item.title || item.id)}</div>` +
+            `<div class="proc-meta">${escHtml(item.source_type)} · ${escHtml(usoLabel)}` +
+            `${item.tipo_peticao ? " · " + escHtml(item.tipo_peticao) : ""}` +
+            `${item.area ? " · " + escHtml(item.area) : ""}</div></div>` +
+            `<div class="proc-meta">${escHtml(item.source_date || "")}</div>`;
+          box.appendChild(row);
+        });
+        // /api/library aninha o retorno de coverage_report() sob "coverage", que já
+        // devolve os contadores sob sua própria chave "coverage" (dupla aninhagem).
+        const byTipoPeticao = (data.coverage && data.coverage.coverage && data.coverage.coverage.tipo_peticao) || {};
+        const parts = Object.entries(byTipoPeticao).map(([k, v]) => `${k}: ${v}`);
+        cov.className = "proc-meta";
+        cov.textContent = parts.length
+          ? `Cobertura por tipo de peça — ${parts.join(" · ")}`
+          : "Cobertura: nenhuma peça classificada por tipo ainda (defina o tipo de peça no envio).";
+      } catch (error) {
+        box.className = "proc-empty";
+        box.textContent = error.message;
+      }
+    }
+
+    async function uploadLibraryBatch(event) {
+      event.preventDefault();
+      const filesInput = document.querySelector("#library-files");
+      const status = document.querySelector("#library-upload-status");
+      const files = Array.from(filesInput.files || []);
+      if (!files.length) return;
+      const tipo = document.querySelector("#library-tipo").value;
+      const tipoPeticao = document.querySelector("#library-tipo-peticao").value;
+      const area = document.querySelector("#library-area").value.trim();
+      status.hidden = false;
+      let ok = 0;
+      const errors = [];
+      for (let i = 0; i < files.length; i += 1) {           // sequencial: endpoint é rate-limited
+        const file = files[i];
+        status.textContent = `Enviando ${i + 1}/${files.length}: ${file.name}…`;
+        const payload = {
+          filename: file.name,
+          content_base64: await fileToBase64(file),
+          title: file.name.replace(/\.[^.]+$/, ""),
+          source_type: tipo,
+          tipo_peticao: tipoPeticao,
+          area,
+          provenance_kind: "acervo_do_escritorio",
+          source_publisher: "acervo do escritório",
+          source_date: new Date().toISOString().slice(0, 10),
+        };
+        let attempt = 0;
+        while (attempt < 3) {
+          const resp = await apiFetch("/api/corpus/upload", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          if (resp.status === 429) {                         // backoff: prefixo caro (12/min)
+            attempt += 1;
+            status.textContent = `Limite de envio atingido — aguardando para continuar (${file.name})…`;
+            await new Promise((r) => setTimeout(r, 6000 * attempt));
+            continue;
+          }
+          if (resp.ok) ok += 1;
+          else {
+            const data = await resp.json().catch(() => ({}));
+            errors.push(`${file.name}: ${apiErrorMessage(data, "falha no envio")}`);
+          }
+          break;
+        }
+      }
+      status.textContent = `Concluído: ${ok}/${files.length} enviados.` +
+        (errors.length ? ` Erros: ${errors.join(" · ")}` : "");
+      filesInput.value = "";
+      loadLibrary();
+    }
+
+    async function searchLibrary(event) {
+      event.preventDefault();
+      const q = document.querySelector("#library-search-q").value.trim();
+      if (!q) return;
+      const wrap = document.querySelector("#library-search-results");
+      const fundEl = document.querySelector("#library-results-fundamento");
+      const estEl = document.querySelector("#library-results-estilo");
+      const resp = await apiFetch(`/api/corpus/search?q=${encodeURIComponent(q)}&include_estilo=1&top_k=12`);
+      const data = await resp.json();
+      const results = (data.results || []);
+      const render = (el, rows, vazio) => {
+        el.innerHTML = "";
+        el.className = rows.length ? "proc-list" : "proc-empty";
+        if (!rows.length) { el.textContent = vazio; return; }
+        rows.forEach((r) => {
+          const row = document.createElement("div");
+          row.className = "proc-row";
+          row.innerHTML = `<div><div class="proc-meta">${escHtml(r.fonte || r.tipo || "")}</div>` +
+            `<div>${escHtml(String(r.texto || "").slice(0, 220))}…</div></div>`;
+          el.appendChild(row);
+        });
+      };
+      render(fundEl, results.filter((r) => r.uso !== "estilo"), "Nenhuma fonte citável encontrada.");
+      render(estEl, results.filter((r) => r.uso === "estilo"), "Nenhum modelo/peça do escritório encontrado.");
+      wrap.hidden = false;
+    }
+
+    document.querySelector("#library-upload-form").addEventListener("submit", uploadLibraryBatch);
+    document.querySelector("#library-search-form").addEventListener("submit", searchLibrary);
+
     accessForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       accessKeyResult.hidden = true;
@@ -4000,6 +4158,7 @@
         loadProcessos();
         loadPrazos();
         loadAccessSummary();
+        loadLibrary();
         loadFilingStatus();
         return;
       }
@@ -4011,6 +4170,7 @@
       loadProcessos();
       loadPrazos();
       loadAccessSummary();
+      loadLibrary();
       loadPilotFeedback();
       loadPilotSummary();
       loadCorpusQueue();
