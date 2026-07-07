@@ -105,6 +105,43 @@ class TestUploadPdf:
         assert response.json()["reingest"]["chunks"] >= 1
 
 
+class TestUploadDocx:
+    def test_docx_base64_is_extracted_and_ingested(self, tenant_env) -> None:
+        import io
+
+        from docx import Document
+
+        doc = Document()
+        doc.add_paragraph("CONTESTAÇÃO. " + TEXTO)
+        table = doc.add_table(rows=1, cols=1)
+        table.rows[0].cells[0].text = "Cláusula de tabela relevante."
+        buf = io.BytesIO()
+        doc.save(buf)
+
+        client = TestClient(app)
+        response = _upload(
+            client,
+            tenant_env["headers"],
+            source_text="",
+            filename="contestacao.docx",
+            content_base64=base64.b64encode(buf.getvalue()).decode("ascii"),
+        )
+        assert response.status_code == 201, response.text
+        assert response.json()["reingest"]["chunks"] >= 1
+
+    def test_docx_corrompido_e_400_legivel(self, tenant_env) -> None:
+        client = TestClient(app)
+        response = _upload(
+            client,
+            tenant_env["headers"],
+            source_text="",
+            filename="quebrado.docx",
+            content_base64=base64.b64encode(b"nao sou um docx").decode("ascii"),
+        )
+        assert response.status_code == 400
+        assert "DOCX" in response.json()["detail"]["message"] or "docx" in response.json()["detail"]["message"]
+
+
 class TestSearchAfterUpload:
     def test_uploaded_corpus_is_searchable_without_seed_readiness(self, tenant_env, monkeypatch) -> None:
         """Num deploy fresco (sem seeds públicas ingeridas), o acervo enviado

@@ -279,7 +279,7 @@ _UPLOAD_MAX_CHARS = 2_000_000
 
 
 def extract_upload_text(filename: str, data: bytes) -> str:
-    """Extract plain text from an uploaded office document (.pdf, .txt or .md).
+    """Extract plain text from an uploaded office document (.pdf, .docx, .txt or .md).
 
     The office-archive upload is the ToS-approved inteiro-teor path
     (``data/tos_compliance_log.md``): documents the firm already owns.
@@ -298,6 +298,23 @@ def extract_upload_text(filename: str, data: bytes) -> str:
         except (RuntimeError, ValueError) as exc:
             msg = "não foi possível ler o PDF — exporte novamente ou cole o texto."
             raise ValueError(msg) from exc
+    elif name.endswith(".docx"):
+        import io
+        from zipfile import BadZipFile
+
+        from docx import Document
+        from docx.opc.exceptions import PackageNotFoundError
+
+        try:
+            document = Document(io.BytesIO(data))
+        except (PackageNotFoundError, KeyError, ValueError, BadZipFile) as exc:
+            msg = "não foi possível ler o DOCX — exporte novamente ou cole o texto."
+            raise ValueError(msg) from exc
+        parts = [p.text for p in document.paragraphs if p.text.strip()]
+        for table in document.tables:
+            for row in table.rows:
+                parts.extend(cell.text for cell in row.cells if cell.text.strip())
+        text = "\n".join(parts)
     elif name.endswith((".txt", ".md")):
         try:
             text = data.decode("utf-8")
@@ -305,7 +322,7 @@ def extract_upload_text(filename: str, data: bytes) -> str:
             # Exportações jurídicas brasileiras são frequentemente cp1252.
             text = data.decode("cp1252", errors="replace")
     else:
-        msg = "formato não suportado — envie PDF, TXT ou MD, ou cole o texto."
+        msg = "formato não suportado — envie PDF, DOCX, TXT ou MD, ou cole o texto."
         raise ValueError(msg)
     text = text.strip()
     if not text:
