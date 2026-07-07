@@ -132,6 +132,8 @@ class CrossEncoderReranker:
                     score=sc.score,
                     text=orig.text,
                     metadata=orig.metadata,
+                    source_type=orig.source_type,
+                    uso=orig.uso,
                 )
             )
         return reranked

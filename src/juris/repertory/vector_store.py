@@ -136,7 +136,15 @@ class VectorStore(ABC):
         """
 
     @abstractmethod
-    def search(self, query_embedding: list[float], top_k: int = 10, tenant_id: str | None = None) -> list[SearchResult]:
+    def search(
+        self,
+        query_embedding: list[float],
+        top_k: int = 10,
+        tenant_id: str | None = None,
+        *,
+        include_estilo: bool = False,
+        tenant_only: bool = False,
+    ) -> list[SearchResult]:
         """Search for similar chunks.
 
         Args:
@@ -144,6 +152,10 @@ class VectorStore(ABC):
             top_k: Maximum number of results.
             tenant_id: Restrict results to public seed plus this tenant's own
                 private corpus. ``None`` returns public seed only.
+            include_estilo: If ``False`` (default), exclude ``uso="estilo"``
+                chunks (e.g. modelos de petição) from grounding results.
+            tenant_only: If ``True``, exclude the shared public seed and
+                return only this tenant's own points.
 
         Returns:
             Ranked list of search results.
@@ -475,11 +487,21 @@ class LocalFTSStore(VectorStore):
         self._conn.commit()
         return count
 
-    def search(self, query_embedding: list[float], top_k: int = 10, tenant_id: str | None = None) -> list[SearchResult]:
+    def search(
+        self,
+        query_embedding: list[float],
+        top_k: int = 10,
+        tenant_id: str | None = None,
+        *,
+        include_estilo: bool = False,
+        tenant_only: bool = False,
+    ) -> list[SearchResult]:
         """Search using FTS5 (query_embedding is ignored; uses metadata for text query).
 
         For FTS-based search, use search_text() instead.
         This method returns an empty list since FTS cannot use embeddings.
+        ``include_estilo``/``tenant_only`` accepted for interface parity with
+        ``VectorStore`` but unused (no results are ever returned here).
         """
         return []
 

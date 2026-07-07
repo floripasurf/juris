@@ -34,7 +34,15 @@ class _RecordingDenseStore:
     def upsert(self, chunks: list[DocumentChunk], embeddings: list[list[float]], tenant_id: str | None = None) -> int:
         return 0
 
-    def search(self, query_embedding: list[float], top_k: int = 10, tenant_id: str | None = None) -> list[SearchResult]:
+    def search(
+        self,
+        query_embedding: list[float],
+        top_k: int = 10,
+        tenant_id: str | None = None,
+        *,
+        include_estilo: bool = False,
+        tenant_only: bool = False,
+    ) -> list[SearchResult]:
         self.seen_tenant_ids.append(tenant_id)
         return []
 

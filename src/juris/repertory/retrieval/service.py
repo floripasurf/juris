@@ -13,7 +13,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, cast
 
-from juris.repertory.corpus.models import _HIERARCHY_LABELS
+from juris.repertory.corpus.models import _HIERARCHY_LABELS, TipoFonte, UsoFonte
 from juris.repertory.retrieval.hybrid import HybridRetriever
 from juris.repertory.vector_store import SearchResult
 
@@ -60,6 +60,12 @@ class RetrievalResult:
         tribunal: Court identifier.
         texto: Matched text.
         base_legal: Referenced legal provisions.
+        tipo: Source type of the parent document (e.g. ``"acordao_publicado"``,
+            ``"modelo_peticao"``); empty when the underlying store didn't
+            populate it.
+        uso: Effective uso — ``"fundamento"`` or ``"estilo"``.
+        metadata_tipo_peticao: ``tipo_peticao`` from the chunk metadata, when
+            present (used to match style exemplars against a requested type).
     """
 
     source_id: str
@@ -76,6 +82,9 @@ class RetrievalResult:
     # {relevancia, autoridade, vigencia, corroboracao, recencia, pacificacao, total}.
     # None when the composite ranker isn't active (relevance-only fallback).
     score_components: dict[str, float] | None = None
+    tipo: str = ""
+    uso: str = ""
+    metadata_tipo_peticao: str = ""
 
 
 _MOTIVO_LABEL = {
@@ -138,6 +147,8 @@ class RepertoryService:
         llm: AbstractLLM | None = None,
         audit: AuditLog | None = None,
         tenant_id: str | None = None,
+        include_estilo: bool = False,
+        tenant_only: bool = False,
     ) -> list[RetrievalResult]:
         """Search the jurisprudence corpus with optional filters.
 
@@ -153,6 +164,10 @@ class RepertoryService:
             use_hyde: Enable HyDE expansion for better recall.
             llm: LLM backend for HyDE generation.
             audit: Audit log for recording HyDE events.
+            include_estilo: If ``False`` (default), exclude ``uso="estilo"``
+                sources (e.g. modelos de petição) from grounding results.
+            tenant_only: If ``True``, exclude the shared public seed and
+                return only this tenant's own sources.
 
         Returns:
             Ranked list of retrieval results.
@@ -169,13 +184,23 @@ class RepertoryService:
         # hierarchy boost so authority isn't counted twice.
         boost = rank_with_scores is None
         raw_results = self._retriever.search(
-            query, top_k=fetch_k, apply_hierarchy_boost=boost, tenant_id=tenant_id
+            query,
+            top_k=fetch_k,
+            apply_hierarchy_boost=boost,
+            tenant_id=tenant_id,
+            include_estilo=include_estilo,
+            tenant_only=tenant_only,
         )
 
         # Merge HyDE results if available
         if hyde_query:
             hyde_results = self._retriever.search(
-                hyde_query, top_k=fetch_k, apply_hierarchy_boost=boost, tenant_id=tenant_id
+                hyde_query,
+                top_k=fetch_k,
+                apply_hierarchy_boost=boost,
+                tenant_id=tenant_id,
+                include_estilo=include_estilo,
+                tenant_only=tenant_only,
             )
             seen: dict[str, SearchResult] = {}
             for r in raw_results + hyde_results:
@@ -214,6 +239,9 @@ class RepertoryService:
                     texto=result.text,
                     base_legal=result.metadata.get("base_legal", []),
                     source_url=str(result.metadata.get("source_url") or ""),
+                    tipo=result.source_type,
+                    uso=result.uso,
+                    metadata_tipo_peticao=str(result.metadata.get("tipo_peticao") or ""),
                 )
             )
         return output
@@ -314,11 +342,36 @@ class RepertoryService:
             query=query,
             top_k=5,
             tenant_id=tenant_id,
+            include_estilo=True,
         )
 
         # Filter to MODELO_PETICAO only
-        templates = [r for r in results if r.source_id.startswith("modelo_peticao_")]
+        templates = [r for r in results if r.tipo == TipoFonte.MODELO_PETICAO.value]
         return templates[0] if templates else None
+
+    def find_style_exemplar(
+        self,
+        tipo_peticao: str,
+        area_direito: str | None = None,
+        tenant_id: str | None = None,
+    ) -> RetrievalResult | None:
+        """Peça/modelo do PRÓPRIO escritório para exemplar de estilo (L4).
+
+        Busca só o tier privado do tenant (tenant_only) incluindo documentos de
+        estilo; prioriza match exato de tipo_peticao nos metadados. Nunca devolve
+        conteúdo de outro tenant nem do seed público.
+        """
+        if not tenant_id:
+            return None
+        query = f"{tipo_peticao} {area_direito or ''}".strip()
+        results = self.search_jurisprudencia(
+            query=query, top_k=5, tenant_id=tenant_id, include_estilo=True, tenant_only=True
+        )
+        style = [r for r in results if r.uso == UsoFonte.ESTILO.value]
+        if not style:
+            return None
+        exact = [r for r in style if (r.metadata_tipo_peticao or "") == tipo_peticao]
+        return (exact or style)[0]
 
     @staticmethod
     def _apply_filters(
