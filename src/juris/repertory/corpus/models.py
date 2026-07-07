@@ -25,6 +25,9 @@ class TipoFonte(StrEnum):
     NOTICIA_TRIBUNAL = "noticia_tribunal"  # hierarquia=7
     ACORDAO_LANDMARK = "acordao_landmark"  # hierarquia=3
     ACORDAO_PUBLICADO = "acordao_publicado"  # hierarquia=5
+    PECA_ESCRITORIO = "peca_escritorio"  # hierarquia=7 — peça protocolada do próprio escritório
+    NOTA_INTERNA = "nota_interna"  # hierarquia=7 — tese/playbook interno
+    DOUTRINA_PRIVADA = "doutrina_privada"  # hierarquia=6 — obra licenciada/própria (rights_basis obrigatório)
 
 
 TIPO_HIERARQUIA: dict[TipoFonte, int] = {
@@ -39,7 +42,74 @@ TIPO_HIERARQUIA: dict[TipoFonte, int] = {
     TipoFonte.NOTICIA_TRIBUNAL: 7,
     TipoFonte.ACORDAO_LANDMARK: 3,
     TipoFonte.ACORDAO_PUBLICADO: 5,
+    TipoFonte.PECA_ESCRITORIO: 7,
+    TipoFonte.NOTA_INTERNA: 7,
+    TipoFonte.DOUTRINA_PRIVADA: 6,
 }
+
+
+class UsoFonte(StrEnum):
+    """Como uma fonte pode ser usada pelo pipeline (spec Biblioteca L1).
+
+    FUNDAMENTO: citável como autoridade jurídica (entra em allowed_source_ids).
+    ESTILO: ensina estrutura/forma; NUNCA é citada — o verifier bloqueia.
+    """
+
+    FUNDAMENTO = "fundamento"
+    ESTILO = "estilo"
+
+
+TIPO_USO_DEFAULT: dict[TipoFonte, UsoFonte] = {
+    TipoFonte.SUMULA_VINCULANTE: UsoFonte.FUNDAMENTO,
+    TipoFonte.RE_STF: UsoFonte.FUNDAMENTO,
+    TipoFonte.RESP_REPETITIVO: UsoFonte.FUNDAMENTO,
+    TipoFonte.SUMULA: UsoFonte.FUNDAMENTO,
+    TipoFonte.JURISPRUDENCIA_UNIFORME: UsoFonte.FUNDAMENTO,
+    TipoFonte.PRECEDENTE_LOCAL: UsoFonte.FUNDAMENTO,
+    TipoFonte.MODELO_PETICAO: UsoFonte.ESTILO,
+    TipoFonte.DOUTRINA_PD: UsoFonte.FUNDAMENTO,
+    TipoFonte.NOTICIA_TRIBUNAL: UsoFonte.ESTILO,
+    TipoFonte.ACORDAO_LANDMARK: UsoFonte.FUNDAMENTO,
+    TipoFonte.ACORDAO_PUBLICADO: UsoFonte.FUNDAMENTO,
+    TipoFonte.PECA_ESCRITORIO: UsoFonte.ESTILO,
+    TipoFonte.NOTA_INTERNA: UsoFonte.ESTILO,
+    TipoFonte.DOUTRINA_PRIVADA: UsoFonte.FUNDAMENTO,
+}
+
+# Valores string dos tipos estilo-only, para os SQLs/payloads das stores.
+ESTILO_SOURCE_TYPES: frozenset[str] = frozenset(
+    t.value for t, uso in TIPO_USO_DEFAULT.items() if uso is UsoFonte.ESTILO
+)
+
+# Base de direitos exigida para doutrina (spec L1): sem base válida, não ingere.
+RIGHTS_BASIS_VALUES: frozenset[str] = frozenset(
+    {"dominio_publico", "obra_do_escritorio", "licenca_do_escritorio", "ato_oficial"}
+)
+
+
+def resolve_uso(tipo: TipoFonte | str | None, override: str | None = None) -> UsoFonte:
+    """Resolve o uso efetivo: override explícito > default do tipo > fundamento.
+
+    Args:
+        tipo: TipoFonte (ou seu valor string) do documento; None quando desconhecido.
+        override: valor explícito de uso vindo do upload/registro ("" = ausente).
+
+    Returns:
+        UsoFonte efetivo.
+
+    Raises:
+        ValueError: override não-vazio que não é um UsoFonte válido.
+    """
+    if override:
+        return UsoFonte(override)  # ValueError natural para valor inválido
+    if tipo is None:
+        return UsoFonte.FUNDAMENTO
+    try:
+        tipo_enum = tipo if isinstance(tipo, TipoFonte) else TipoFonte(str(tipo))
+    except ValueError:
+        return UsoFonte.FUNDAMENTO
+    return TIPO_USO_DEFAULT.get(tipo_enum, UsoFonte.FUNDAMENTO)
+
 
 HIERARCHY_WEIGHTS: dict[int, float] = {
     1: 3.0,
