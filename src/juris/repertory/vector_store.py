@@ -6,6 +6,7 @@ document chunks with their embeddings.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import sqlite3
@@ -16,30 +17,77 @@ from pathlib import Path
 from typing import Any
 
 from juris.repertory.chunking import DocumentChunk
+from juris.repertory.corpus.models import ESTILO_SOURCE_TYPES, resolve_uso
 
 logger = logging.getLogger(__name__)
 
+# Deterministic derivation for chunks stored before the `uso` column existed (or with
+# no explicit uso): explicit chunk.uso wins; otherwise fall back to the tipo's default
+# via source_type. Built from the internal enum's values at import time — safe, never
+# user input — so it can be embedded directly in the module-constant SQL below.
+_ESTILO_IN = ", ".join(f"'{t}'" for t in sorted(ESTILO_SOURCE_TYPES))
+_USO_EFETIVO = (
+    "COALESCE(NULLIF(c.uso, ''), CASE WHEN c.source_type IN (" + _ESTILO_IN + ") "
+    "THEN 'estilo' ELSE 'fundamento' END)"
+)
+_ESTILO_FILTER = f"AND {_USO_EFETIVO} = 'fundamento'"
+_SELECT_COLUMNS = f"""
+            SELECT c.chunk_id, c.source_id, c.text, c.metadata,
+                   c.source_type, {_USO_EFETIVO} AS uso_efetivo,
+                   rank * -1 AS score"""
+
 # Fixed FTS5 search statements. Kept as module constants (not built at call time) so
 # the tenant filter can never be confused with an interpolation point: the tenant value
-# is always a bound parameter (?), never string-formatted into the SQL.
+# is always a bound parameter (?), never string-formatted into the SQL. Three combinable
+# axes — tenant scope (public / public+tenant / tenant-only) × uso filter (fundamento-only
+# default / include_estilo) — give the six variants below.
 # tenant_id=None is FAIL-SAFE: it returns only the shared public seed (tenant_id IS NULL),
 # never another tenant's private uploads — so a caller that forgets to pass a tenant can
 # never leak across firms (adversarial finding). Pass an explicit tenant_id for that firm.
-_SEARCH_SQL = """
-            SELECT c.chunk_id, c.source_id, c.text, c.metadata,
-                   rank * -1 AS score
+# The uso filter is applied in the WHERE clause, before the top_k cut (L2 requirement) —
+# never as a post-filter on already-truncated results.
+_SEARCH_SQL = f"""{_SELECT_COLUMNS}
+            FROM chunks_fts f
+            JOIN chunks c ON c.rowid = f.rowid
+            WHERE chunks_fts MATCH ? AND c.tenant_id IS NULL
+                {_ESTILO_FILTER}
+            ORDER BY rank
+            LIMIT ?
+            """
+_SEARCH_SQL_ESTILO = f"""{_SELECT_COLUMNS}
             FROM chunks_fts f
             JOIN chunks c ON c.rowid = f.rowid
             WHERE chunks_fts MATCH ? AND c.tenant_id IS NULL
             ORDER BY rank
             LIMIT ?
             """
-_SEARCH_SQL_TENANT = """
-            SELECT c.chunk_id, c.source_id, c.text, c.metadata,
-                   rank * -1 AS score
+_SEARCH_SQL_TENANT = f"""{_SELECT_COLUMNS}
             FROM chunks_fts f
             JOIN chunks c ON c.rowid = f.rowid
             WHERE chunks_fts MATCH ? AND (c.tenant_id IS NULL OR c.tenant_id = ?)
+                {_ESTILO_FILTER}
+            ORDER BY rank
+            LIMIT ?
+            """
+_SEARCH_SQL_TENANT_ESTILO = f"""{_SELECT_COLUMNS}
+            FROM chunks_fts f
+            JOIN chunks c ON c.rowid = f.rowid
+            WHERE chunks_fts MATCH ? AND (c.tenant_id IS NULL OR c.tenant_id = ?)
+            ORDER BY rank
+            LIMIT ?
+            """
+_SEARCH_SQL_TENANT_ONLY = f"""{_SELECT_COLUMNS}
+            FROM chunks_fts f
+            JOIN chunks c ON c.rowid = f.rowid
+            WHERE chunks_fts MATCH ? AND c.tenant_id = ?
+                {_ESTILO_FILTER}
+            ORDER BY rank
+            LIMIT ?
+            """
+_SEARCH_SQL_TENANT_ONLY_ESTILO = f"""{_SELECT_COLUMNS}
+            FROM chunks_fts f
+            JOIN chunks c ON c.rowid = f.rowid
+            WHERE chunks_fts MATCH ? AND c.tenant_id = ?
             ORDER BY rank
             LIMIT ?
             """
@@ -57,6 +105,8 @@ class SearchResult:
         score: Relevance score (higher is better).
         text: Text content of the matched chunk.
         metadata: Additional metadata from the chunk.
+        source_type: Type of the parent source (e.g. ``"acordao_publicado"``).
+        uso: Effective uso — ``"fundamento"`` or ``"estilo"`` — explicit or derived.
     """
 
     chunk_id: str
@@ -64,6 +114,8 @@ class SearchResult:
     score: float
     text: str
     metadata: dict[str, Any] = field(default_factory=dict)
+    source_type: str = ""
+    uso: str = ""
 
 
 class VectorStore(ABC):
@@ -307,6 +359,8 @@ class LocalFTSStore(VectorStore):
         cols = {row[1] for row in self._conn.execute("PRAGMA table_info(chunks)")}
         if "tenant_id" not in cols:
             self._conn.execute("ALTER TABLE chunks ADD COLUMN tenant_id TEXT")
+        with contextlib.suppress(sqlite3.OperationalError):  # coluna já existe
+            self._conn.execute("ALTER TABLE chunks ADD COLUMN uso TEXT")
         self._conn.commit()
 
     def upsert(self, chunks: list[DocumentChunk], embeddings: list[list[float]], tenant_id: str | None = None) -> int:
@@ -323,9 +377,10 @@ class LocalFTSStore(VectorStore):
                 self._conn.execute("DELETE FROM chunks_fts WHERE rowid = ?", (existing[0],))
                 self._conn.execute("DELETE FROM chunks WHERE chunk_id = ?", (chunk.chunk_id,))
 
+            uso_val = chunk.uso or resolve_uso(chunk.source_type).value
             self._conn.execute(
-                "INSERT INTO chunks (chunk_id, source_id, source_type, text, metadata, position, tenant_id) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO chunks (chunk_id, source_id, source_type, text, metadata, position, tenant_id, uso) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     chunk.chunk_id,
                     chunk.source_id,
@@ -334,6 +389,7 @@ class LocalFTSStore(VectorStore):
                     json.dumps(chunk.metadata, ensure_ascii=False),
                     chunk.position,
                     tenant_id,
+                    uso_val,
                 ),
             )
             rowid = self._conn.execute("SELECT rowid FROM chunks WHERE chunk_id = ?", (chunk.chunk_id,)).fetchone()[0]
@@ -353,7 +409,15 @@ class LocalFTSStore(VectorStore):
         """
         return []
 
-    def search_text(self, query: str, top_k: int = 10, tenant_id: str | None = None) -> list[SearchResult]:
+    def search_text(
+        self,
+        query: str,
+        top_k: int = 10,
+        tenant_id: str | None = None,
+        *,
+        include_estilo: bool = False,
+        tenant_only: bool = False,
+    ) -> list[SearchResult]:
         """Full-text search using FTS5.
 
         Args:
@@ -361,6 +425,11 @@ class LocalFTSStore(VectorStore):
             top_k: Maximum number of results.
             tenant_id: If given, restrict to the shared public seed (tenant_id IS NULL)
                 plus THIS tenant's own uploads — never another firm's private corpus.
+            include_estilo: If ``False`` (default), only ``uso="fundamento"`` chunks are
+                returned — estilo-only sources (e.g. modelos de petição) never leak into
+                grounding results. The filter runs in the WHERE clause, before top_k.
+            tenant_only: If ``True`` (requires a ``tenant_id``), exclude the shared public
+                seed and return only this tenant's own uploads.
 
         Returns:
             Ranked list of search results.
@@ -381,14 +450,17 @@ class LocalFTSStore(VectorStore):
         # Double-quote each token to avoid FTS5 syntax errors
         safe_query = " OR ".join(f'"{w}"' for w in words)
 
-        # Tenant scope: public seed (NULL) + this tenant's own uploads only. Both SQL
-        # statements are fixed literals (no interpolation) — the tenant value travels as
-        # a bound parameter, so there is no injection surface despite the branch.
+        # Tenant scope × uso filter: all SQL statements are fixed module-level literals
+        # (no interpolation) — the tenant value travels as a bound parameter, so there is
+        # no injection surface despite the branching.
         if tenant_id is None:
-            sql = _SEARCH_SQL
+            sql = _SEARCH_SQL_ESTILO if include_estilo else _SEARCH_SQL
             params: tuple[object, ...] = (safe_query, top_k)
+        elif tenant_only:
+            sql = _SEARCH_SQL_TENANT_ONLY_ESTILO if include_estilo else _SEARCH_SQL_TENANT_ONLY
+            params = (safe_query, tenant_id, top_k)
         else:
-            sql = _SEARCH_SQL_TENANT
+            sql = _SEARCH_SQL_TENANT_ESTILO if include_estilo else _SEARCH_SQL_TENANT
             params = (safe_query, tenant_id, top_k)
         rows = self._conn.execute(sql, params).fetchall()
 
@@ -399,9 +471,11 @@ class LocalFTSStore(VectorStore):
                 SearchResult(
                     chunk_id=row[0],
                     source_id=row[1],
-                    score=row[4],
+                    score=row[6],
                     text=row[2],
                     metadata=meta,
+                    source_type=row[4] or "",
+                    uso=row[5] or "",
                 )
             )
         return results

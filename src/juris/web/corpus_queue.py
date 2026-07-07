@@ -14,7 +14,7 @@ import hashlib
 import json
 import re
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -244,7 +244,12 @@ def reingest_pending_sources(
                 source_url=str(record.get("source_url") or ""),
             )
             chunks = chunk_fonte(fonte)
+            uso_val = str(record.get("uso") or "") or resolve_uso(tipo).value
+            resolved_chunks = []
             for chunk in chunks:
+                # DocumentChunk is frozen/slots — dataclasses.replace to set uso;
+                # metadata stays the same dict reference, so updating it in place is fine.
+                chunk = replace(chunk, uso=uso_val)
                 chunk.metadata.update(
                     {
                         "pilot_source_id": source_id,
@@ -254,8 +259,11 @@ def reingest_pending_sources(
                         "content_sha256": record.get("content_sha256"),
                         "area": record.get("area"),
                         "tema": record.get("tema"),
+                        "tipo_peticao": record.get("tipo_peticao"),
                     }
                 )
+                resolved_chunks.append(chunk)
+            chunks = resolved_chunks
             stored = store.upsert(chunks, [[] for _ in chunks], tenant_id=tenant_id)
             mark_reingested(root, source_id)
             processed += 1

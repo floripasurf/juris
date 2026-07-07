@@ -29,6 +29,7 @@ class DocumentChunk:
         text: Chunk text content.
         metadata: Additional metadata.
         position: Position index within the parent document.
+        uso: uso resolvido — fundamento/estilo; vazio = derivar do source_type.
     """
 
     chunk_id: str
@@ -37,6 +38,7 @@ class DocumentChunk:
     text: str
     metadata: dict[str, Any] = field(default_factory=dict)
     position: int = 0
+    uso: str = ""
 
 
 def _make_chunk_id(source_id: str, position: int) -> str:
