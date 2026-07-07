@@ -172,6 +172,21 @@ class TestProvenanciaPrivada:
         assert source["tipo_peticao"] == "contestacao"
         assert not source.get("source_url")
 
+    def test_acervo_do_escritorio_com_url_invalida_e_400(self, tenant_env) -> None:
+        client = TestClient(app)
+        payload = {
+            "title": "Contestação modelo — cobrança",
+            "source_type": "peca_escritorio",
+            "source_date": "2025-11-10",
+            "source_publisher": "Escritório A",
+            "provenance_kind": "acervo_do_escritorio",
+            "source_url": "javascript:alert(1)",  # URL fornecida → ainda valida
+            "source_text": TEXTO,
+        }
+        resp = client.post("/api/corpus/upload", json=payload, headers=tenant_env["headers"])
+        assert resp.status_code == 400
+        assert "http(s)" in resp.json()["detail"]["message"]
+
     def test_provenance_publica_continua_exigindo_url(self, tenant_env) -> None:
         client = TestClient(app)
         payload = {**PROVENANCE, "source_text": TEXTO}
