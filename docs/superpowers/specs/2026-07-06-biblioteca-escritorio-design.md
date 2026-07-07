@@ -18,8 +18,8 @@ Formalizar o tier-3 do corpus (acervo do próprio escritório) como produto: o a
 ## Invariantes
 
 - **Isolamento por tenant**: todo chunk/fonte da biblioteca carrega `tenant_id`; peça de um escritório jamais aparece para outro (fail-safe já existente em `vector_store.py`).
-- **PII**: conteúdo de peça é dado de cliente. Fase 1 não envia nada disso para nuvem (o few-shot entra no prompt do LLM roteado pelo caminho normal do drafter, que já respeita ADR-0016: local para PII, de-id para nuvem). Extração de perfil (Fase 2) = LLM local.
-- **Copyright (livros/doutrina)**: entra como `doutrina_pd` no tier privado do tenant, nunca cross-tenant; proveniência obrigatória (quem subiu, quando, hash) — trilha já existente.
+- **PII**: conteúdo de peça é dado de cliente. A Fase 1 **não envia conteúdo bruto para nuvem**: o few-shot entra no prompt pelo caminho normal do drafter e, quando o backend é cloud/browser, passa pelo `DeidentifyingLLM` **fail-closed** (ADR-0016, `core/deid_llm.py`) — exatamente como o restante do prompt. Extração de perfil (Fase 2) = LLM local.
+- **Copyright (livros/doutrina)**: obra licenciada/própria entra como `doutrina_privada` com `rights_basis` obrigatório; `doutrina_pd` fica restrito a domínio público. Sempre tier privado do tenant, nunca cross-tenant; proveniência obrigatória (hash, data, fonte) — trilha existente + L1b.
 - **Nenhuma citação a documento `uso=estilo`** pode sobreviver ao verifier. Este é o critério de aceitação central da Fase 1.
 
 ## Estado atual verificado (2026-07-06, `main`)
@@ -29,14 +29,15 @@ Formalizar o tier-3 do corpus (acervo do próprio escritório) como produto: o a
 - `TipoFonte` (`repertory/corpus/models.py:14`): já tem `MODELO_PETICAO` (hier. 7) e `DOUTRINA_PD` (hier. 6); `TIPO_HIERARQUIA` mapeia autoridade. O chunk ingerido carrega `tipo` (`corpus_queue.py` reingest: `DocumentChunk(tipo=tipo, hierarquia=TIPO_HIERARQUIA[...])`).
 - **Gap confirmado**: `agents/researcher.py` não filtra por tipo; `drafter.py:282` monta `allowed_ids = {r.source_id for r in research.supporting + research.opposing}` direto da busca. Peça interna ingerida hoje pode ser recuperada e citada como fundamento.
 - Seam de estilo no drafter: Step 5 (`drafter.py:226-248`, templates via `_templates.search`) e Step 5b (`drafter.py:250-276`, `find_template(tipo_peticao, area, tenant_id)` → scaffold de seções). `find_template` (`retrieval/service.py:292`) já é tenant-scoped.
-- Console: aba de busca explicável (`/api/search`, tenant-scoped), fila/cobertura de corpus (`/api/corpus/coverage`), upload single-file na UI do Acervo/Piloto.
+- Console: aba de busca explicável (`/api/corpus/search`, tenant-scoped e em `_EXPENSIVE_API_PREFIXES`), fila/cobertura de corpus (`/api/corpus/coverage`), upload single-file na UI do Acervo/Piloto.
 - `RetrievalResult` (`retrieval/service.py:52`) carrega `source_id/score/hierarchy/tribunal/texto` — **não carrega `tipo`** (precisará expor para agrupar resultados e filtrar).
 
 ## Componentes da Fase 1
 
 ### L1 — Tipos e eixo `uso`
 
-- Novos membros de `TipoFonte`: `PECA_ESCRITORIO = "peca_escritorio"` (peça protocolada do próprio escritório; hierarquia 7) e `NOTA_INTERNA = "nota_interna"` (tese/playbook interno; hierarquia 7).
+- Novos membros de `TipoFonte`: `PECA_ESCRITORIO = "peca_escritorio"` (peça protocolada do próprio escritório; hierarquia 7), `NOTA_INTERNA = "nota_interna"` (tese/playbook interno; hierarquia 7) e `DOUTRINA_PRIVADA = "doutrina_privada"` (livro/artigo licenciado ou do próprio escritório; hierarquia 6, uso=fundamento). `DOUTRINA_PD` mantém o sentido estrito de domínio público — não usar para obra licenciada.
+- **Base de direitos (`rights_basis`)**: campo obrigatório para `doutrina_pd`/`doutrina_privada` — `dominio_publico | obra_do_escritorio | licenca_do_escritorio | ato_oficial`. Ausente ou `desconhecido` → **não ingere** (400). Demais tipos: opcional.
 - Novo mapa canônico no mesmo módulo:
   ```python
   class UsoFonte(StrEnum):
@@ -60,13 +61,23 @@ Formalizar o tier-3 do corpus (acervo do próprio escritório) como produto: o a
   }
   ```
   (Teste exaustivo garante que todo membro novo de `TipoFonte` exija entrada aqui.)
-- Fonte no registry ganha campo opcional `uso` (override); ausente → `TIPO_USO_DEFAULT[tipo]`. O chunk ingerido carrega `uso` resolvido (novo campo em `DocumentChunk`, default `fundamento` para compatibilidade com chunks legados — **fail-safe na direção certa**: legado era só jurisprudência citável).
-- `CorpusUploadPayload` ganha `uso: str = ""` (opcional, valida contra `UsoFonte`).
+- Fonte no registry ganha campo opcional `uso` (override); ausente → `TIPO_USO_DEFAULT[tipo]`. O chunk ingerido carrega `uso` resolvido (novo campo em `DocumentChunk`).
+- **Chunks legados (regra de resolução, correção da revisão externa):** `uso = metadata.uso ?? TIPO_USO_DEFAULT[chunk.tipo] ?? FUNDAMENTO`. Derivar do `tipo` primeiro é essencial: o corpus atual JÁ contém `MODELO_PETICAO` e `NOTICIA_TRIBUNAL` — um default cego para `fundamento` tornaria modelos/notícias antigos citáveis por acidente. Só cai em `fundamento` quando nem `uso` nem `tipo` existem no chunk.
+- `CorpusUploadPayload` ganha `uso: str = ""` (opcional, valida contra `UsoFonte`), `tipo_peticao: str = ""` (opcional: contestacao/inicial/agravo/recurso/parecer — alimenta cobertura e o matching de estilo) e `rights_basis: str = ""` (ver acima). `fase`/`polo` ficam explicitamente fora da Fase 1 (YAGNI; revisitar com dados do piloto).
+
+### L1b — Proveniência privada de primeira classe (correção da revisão externa)
+
+Hoje `append_accepted_source` **exige `source_url` http(s)** (`corpus_queue.py:350 _public_source_url`; teste `test_corpus_upload.py` espera 400 sem URL). Petição interna, modelo próprio e livro licenciado não têm URL pública — forçar URL produz proveniência falsa.
+
+- Novo campo `provenance_kind: "publica" | "acervo_do_escritorio"` no payload/registro. Default `publica` (comportamento atual intacto, testes existentes verdes).
+- Com `acervo_do_escritorio`: `source_url` passa a ser **opcional**; a proveniência auditável vira `filename + content_sha256 + source_date + tenant_id` (todos já capturados) + `source_publisher` = nome do escritório (obrigatório via a regra existente tribunal-ou-publisher).
+- `_require_provenance` continua exigindo `source_type`, `source_date` e fonte (tribunal/publisher) para AMBOS os kinds.
 
 ### L2 — Guarda determinística (o coração da fase)
 
-- `search_jurisprudencia` (caminho do researcher) passa a **excluir chunks `uso=estilo` por default** (parâmetro `include_estilo: bool = False`). Assim, `supporting/opposing` → `allowed_ids` nunca contêm documento de estilo, e o `MarkerCitationVerifier` (inalterado) bloqueia qualquer `[CITE:]` para eles — segunda camada de graça.
+- `search_jurisprudencia` (caminho do researcher) passa a **excluir chunks `uso=estilo` por default** (parâmetro `include_estilo: bool = False`). **O filtro desce ao nível das stores** (WHERE no FTS + filtro de payload no denso), não pós-`top_k` — filtrar depois do corte deixaria peças de estilo expulsarem fundamentos bons do resultado (`vector_store.py:37` hoje só filtra tenant). Assim, `supporting/opposing` → `allowed_ids` nunca contêm documento de estilo, e o `MarkerCitationVerifier` (inalterado) bloqueia qualquer `[CITE:]` para eles — segunda camada de graça.
 - **Consistência com o seam existente**: `find_template` (Step 5b) busca `MODELO_PETICAO` — que é `uso=estilo`. Ele e o novo `find_style_exemplar` chamam a busca com `include_estilo=True` explícito (são consumidores de estilo por definição). Os testes existentes do scaffold continuam verdes.
+- **Fix incluído**: `find_template` hoje filtra por `source_id.startswith("modelo_peticao_")` (`retrieval/service.py:319`) — um modelo enviado pelo escritório recebe `source_id` uuid e **nunca seria encontrado**. Passa a filtrar por `RetrievalResult.tipo == "modelo_peticao"` (o campo novo).
 - `RetrievalResult` ganha `tipo: str` e `uso: str` (para o agrupamento da UI e auditoria).
 - Audit: o evento existente `draft.style_retrieved` passa a registrar `source_id/tipo/uso` do exemplar usado — trilha de "o que alimentou estilo vs. fundamento".
 - **Teste de aceitação central**: ingere peça do escritório como `peca_escritorio`, roda draft cujo LLM (fake) tenta citá-la → verifier bloqueia (grounding `blocked`); mesma peça aparece na busca da Biblioteca como "modelo/estilo".
@@ -74,7 +85,7 @@ Formalizar o tier-3 do corpus (acervo do próprio escritório) como produto: o a
 ### L3 — Upload em lote + DOCX
 
 - `extract_upload_text` ganha `.docx` via `python-docx` (parágrafos + tabelas em texto; erro legível se corrompido).
-- Lote no **front**: a UI itera N arquivos chamando o endpoint existente (progresso por arquivo, erros individuais não abortam o lote). Sem endpoint batch novo (YAGNI; 20MB/arquivo já limita).
+- Lote no **front**: a UI itera N arquivos chamando o endpoint existente — **sequencialmente** (concorrência 1) com tratamento de 429/backoff, porque `/api/corpus/upload` está em `_EXPENSIVE_API_PREFIXES` (12/min default). Progresso por arquivo; erros individuais não abortam o lote. Sem endpoint batch novo (YAGNI; 20MB/arquivo já limita).
 - Metadados no lote: o usuário define `tipo/área/uso` uma vez para o lote, com ajuste por arquivo depois (edição fica para a lista da L5; MVP: valores do lote aplicam a todos).
 
 ### L4 — Few-shot de estilo no drafter
@@ -88,7 +99,7 @@ Formalizar o tier-3 do corpus (acervo do próprio escritório) como produto: o a
 - Nova view `biblioteca` (padrão das views existentes; nav ganha o item — o nav já tem overflow-x para telas estreitas):
   - **Upload em lote**: input multi-file (pdf/docx/txt/md) + selects tipo/área/uso + barra de progresso por arquivo.
   - **Lista do acervo do tenant**: fontes do registry com tipo/uso/área/data/status (dados já existem em `/api/corpus/coverage` + sources; novo `GET /api/library` lista fontes do tenant com esses campos — leitura do registry existente, sem storage novo).
-  - **Busca com resultados separados** (UX Codex): reusa `/api/search` (que passará a devolver `tipo/uso`) e agrupa no cliente: "Fontes jurídicas para citar" (uso=fundamento) e "Modelos e peças do escritório" (uso=estilo, com `include_estilo=1` no endpoint da Biblioteca).
+  - **Busca com resultados separados** (UX Codex): reusa `/api/corpus/search` (rota real — `app.py`; passará a devolver `tipo/uso`) e agrupa no cliente: "Fontes jurídicas para citar" (uso=fundamento) e "Modelos e peças do escritório" (uso=estilo, com `include_estilo=1` no endpoint da Biblioteca).
   - **Cobertura**: contadores por tipo/área (reuso do coverage) com dica de lacuna ("nenhuma peça de contestação trabalhista ainda").
 - Copy honesta na aba: "Seus documentos ficam isolados por escritório e são apagáveis com certificado" (sem promessa de criptografia em repouso).
 
@@ -116,7 +127,11 @@ console: aba Biblioteca lista/busca agrupado + cobertura          (L5)
 - **L3**: `.docx` real (fixture pequena) extrai texto; corrompido → `ValueError` legível; >20MB → erro existente.
 - **L4**: com exemplar do tenant → `style_text` contém a moldura e o audit registra `uso=estilo`; sem exemplar → fallback ao comportamento atual (testes existentes de template seguem verdes); exemplar de outro tenant jamais retorna.
 - **L5**: `GET /api/library` só devolve fontes do tenant; agrupamento fundamento/estilo no payload de busca.
-- **L6**: após `erase-data`, `GET /api/library` vazio e chunks do tenant ausentes.
+- **L6** (nível certo, correção da revisão externa): após `erase-data`, (a) a chave antiga do tenant é **rejeitada** (401 em `GET /api/library`), (b) `repertory.db` não contém chunks daquele `tenant_id`, (c) o registry/diretório do tenant foi removido, (d) certificado registrado em `compliance-erasure.jsonl`. Lista vazia NÃO é o critério — tenant apagado não autentica.
+
+## Incorporações da revisão externa (Codex, 2026-07-06) — todas aceitas
+
+1. Resolução de `uso` legado deriva do `tipo` do chunk antes do fallback (senão modelos/notícias antigos virariam citáveis). 2. `provenance_kind=acervo_do_escritorio` dispensa URL http(s) — proveniência privada real em vez de URL falsa (L1b). 3. `DOUTRINA_PRIVADA` + `rights_basis` gate; `doutrina_pd` restrito a domínio público. 4. `tipo_peticao` no upload/cobertura/matching (aceito; `fase`/`polo` deferidos — YAGNI). 5. Rota corrigida para `/api/corpus/search`. 6. Filtro de `uso` no nível das stores, não pós-`top_k`. 7. Fix do `find_template` (prefixo de `source_id` → filtro por `tipo`). 8. Frase de PII reescrita: "não envia conteúdo bruto; caminho cloud/browser passa por de-id fail-closed". 9. Aceitação de erasure no nível certo (401 + chunks ausentes + certificado, não "lista vazia"). 10. Lote sequencial com backoff de 429 (endpoint está nos prefixos caros).
 
 ## Fora de escopo (Fase 2/3 — specs próprios)
 
