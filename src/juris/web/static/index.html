@@ -3396,40 +3396,47 @@
       status.hidden = false;
       let ok = 0;
       const errors = [];
-      for (let i = 0; i < files.length; i += 1) {           // sequencial: endpoint é rate-limited
-        const file = files[i];
-        status.textContent = `Enviando ${i + 1}/${files.length}: ${file.name}…`;
-        const payload = {
-          filename: file.name,
-          content_base64: await fileToBase64(file),
-          title: file.name.replace(/\.[^.]+$/, ""),
-          source_type: tipo,
-          tipo_peticao: tipoPeticao,
-          area,
-          provenance_kind: "acervo_do_escritorio",
-          source_publisher: "acervo do escritório",
-          source_date: new Date().toISOString().slice(0, 10),
-        };
-        let attempt = 0;
-        while (attempt < 3) {
-          const resp = await apiFetch("/api/corpus/upload", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-          if (resp.status === 429) {                         // backoff: prefixo caro (12/min)
-            attempt += 1;
-            status.textContent = `Limite de envio atingido — aguardando para continuar (${file.name})…`;
-            await new Promise((r) => setTimeout(r, 6000 * attempt));
-            continue;
+      try {
+        for (let i = 0; i < files.length; i += 1) {           // sequencial: endpoint é rate-limited
+          const file = files[i];
+          status.textContent = `Enviando ${i + 1}/${files.length}: ${file.name}…`;
+          const payload = {
+            filename: file.name,
+            content_base64: await fileToBase64(file),
+            title: file.name.replace(/\.[^.]+$/, ""),
+            source_type: tipo,
+            tipo_peticao: tipoPeticao,
+            area,
+            provenance_kind: "acervo_do_escritorio",
+            source_publisher: "acervo do escritório",
+            source_date: new Date().toISOString().slice(0, 10),
+          };
+          let attempt = 0;
+          let settled = false;                                // conta como sucesso OU erro; 429 persistente não some
+          while (attempt < 3) {
+            const resp = await apiFetch("/api/corpus/upload", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            });
+            if (resp.status === 429) {                         // backoff: prefixo caro (12/min)
+              attempt += 1;
+              status.textContent = `Limite de envio atingido — aguardando para continuar (${file.name})…`;
+              await new Promise((r) => setTimeout(r, 6000 * attempt));
+              continue;
+            }
+            if (resp.ok) ok += 1;
+            else {
+              const data = await resp.json().catch(() => ({}));
+              errors.push(`${file.name}: ${apiErrorMessage(data, "falha no envio")}`);
+            }
+            settled = true;
+            break;
           }
-          if (resp.ok) ok += 1;
-          else {
-            const data = await resp.json().catch(() => ({}));
-            errors.push(`${file.name}: ${apiErrorMessage(data, "falha no envio")}`);
-          }
-          break;
+          if (!settled) errors.push(`${file.name}: limite de envio persistente — tente novamente em alguns minutos`);
         }
+      } catch (error) {
+        errors.push(`falha de rede: ${error.message}`);       // fetch rejeitado no meio do lote não trava o status
       }
       status.textContent = `Concluído: ${ok}/${files.length} enviados.` +
         (errors.length ? ` Erros: ${errors.join(" · ")}` : "");
@@ -3444,9 +3451,19 @@
       const wrap = document.querySelector("#library-search-results");
       const fundEl = document.querySelector("#library-results-fundamento");
       const estEl = document.querySelector("#library-results-estilo");
-      const resp = await apiFetch(`/api/corpus/search?q=${encodeURIComponent(q)}&include_estilo=1&top_k=12`);
-      const data = await resp.json();
-      const results = (data.results || []);
+      let results = [];
+      try {
+        const resp = await apiFetch(`/api/corpus/search?q=${encodeURIComponent(q)}&include_estilo=1&top_k=12`);
+        const data = await resp.json();
+        results = data.results || [];
+      } catch (error) {
+        fundEl.className = "proc-empty";
+        fundEl.textContent = `Falha na busca: ${error.message}`;
+        estEl.className = "proc-empty";
+        estEl.textContent = "";
+        wrap.hidden = false;
+        return;
+      }
       const render = (el, rows, vazio) => {
         el.innerHTML = "";
         el.className = rows.length ? "proc-list" : "proc-empty";
@@ -3454,7 +3471,7 @@
         rows.forEach((r) => {
           const row = document.createElement("div");
           row.className = "proc-row";
-          row.innerHTML = `<div><div class="proc-meta">${escHtml(r.fonte || r.tipo || "")}</div>` +
+          row.innerHTML = `<div><div class="proc-meta">${escHtml(r.tribunal || r.tipo || "")}</div>` +
             `<div>${escHtml(String(r.texto || "").slice(0, 220))}…</div></div>`;
           el.appendChild(row);
         });
