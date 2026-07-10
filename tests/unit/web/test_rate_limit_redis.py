@@ -53,6 +53,18 @@ def test_redis_limiter_fails_open_on_outage() -> None:
     assert limiter.check("k", now=100).allowed is True
 
 
+def test_redis_limiter_can_fail_closed_on_outage() -> None:
+    class _BrokenRedis:
+        def incr(self, key: str) -> int:
+            raise ConnectionError("redis down")
+
+    limiter = RedisFixedWindowRateLimiter(_BrokenRedis(), limit=1, window_seconds=60, fail_closed=True)
+    decision = limiter.check("k", now=100)
+
+    assert decision.allowed is False
+    assert decision.retry_after_seconds == 60
+
+
 def test_build_rate_limiter_picks_backend() -> None:
     from juris.web.rate_limit import FixedWindowRateLimiter
 

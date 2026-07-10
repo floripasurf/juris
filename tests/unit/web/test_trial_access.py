@@ -363,3 +363,31 @@ def test_start_trial_enforces_active_trial_cap(trial_env, monkeypatch) -> None:
     assert "Limite de testes" in response.json()["detail"]
     assert set(json.loads(tenants.read_text(encoding="utf-8"))) == {"trial_active"}
     assert set(json.loads(agents.read_text(encoding="utf-8"))) == {"trial_active"}
+
+
+def test_start_trial_enforces_daily_creation_cap(trial_env, monkeypatch) -> None:
+    tenants, agents = trial_env
+    monkeypatch.setenv("JURIS_TRIAL_MAX_ACTIVE", "500")
+    monkeypatch.setenv("JURIS_TRIAL_MAX_NEW_PER_DAY", "1")
+    tenants.write_text(
+        json.dumps(
+            {
+                "trial_today": {
+                    "kind": "trial",
+                    "created_at": "2026-01-01T08:00:00Z",
+                    "trial_expires_at": "2026-01-31T00:00:00Z",
+                    "keys": {"owner": {"hash": "sha256:" + "b" * 64}},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    agents.write_text(json.dumps({"trial_today": {"token": "active"}}), encoding="utf-8")
+
+    from juris.web.trial_access import TrialCapacityError, create_trial_access
+
+    with pytest.raises(TrialCapacityError, match="limite de testes"):
+        create_trial_access(tenants_path=tenants, agents_path=agents, now=datetime(2026, 1, 1, 12, tzinfo=UTC))
+
+    assert set(json.loads(tenants.read_text(encoding="utf-8"))) == {"trial_today"}
+    assert set(json.loads(agents.read_text(encoding="utf-8"))) == {"trial_today"}

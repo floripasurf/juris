@@ -85,6 +85,15 @@ def trial_max_active() -> int:
     return max(1, min(limit, 10_000))
 
 
+def trial_max_new_per_day() -> int:
+    raw = os.environ.get("JURIS_TRIAL_MAX_NEW_PER_DAY", "100").strip()
+    try:
+        limit = int(raw)
+    except ValueError:
+        limit = 100
+    return max(0, min(limit, 10_000))
+
+
 def trial_relay_url() -> str:
     return os.environ.get("JURIS_TRIAL_RELAY_URL", "wss://causia.com.br/ws/agent-relay").strip()
 
@@ -135,6 +144,18 @@ def _active_trial_count(tenants: Mapping[str, object], *, now: datetime) -> int:
         for raw in tenants.values()
         if isinstance(raw, Mapping) and raw.get("kind") == "trial" and not _is_expired_trial(raw, now=now)
     )
+
+
+def _created_trial_count_for_day(tenants: Mapping[str, object], *, now: datetime) -> int:
+    day = now.astimezone(UTC).date()
+    count = 0
+    for raw in tenants.values():
+        if not isinstance(raw, Mapping) or raw.get("kind") != "trial":
+            continue
+        created_at = _parse_iso_datetime(raw.get("created_at"))
+        if created_at is not None and created_at.date() == day:
+            count += 1
+    return count
 
 
 def _prune_agent_bindings(agents_path: Path | None, tenant_ids: set[str]) -> None:
@@ -372,6 +393,7 @@ def create_trial_access(
     expires_at = now + timedelta(days=trial_days())
     relay_url = trial_relay_url()
     max_active = trial_max_active()
+    max_new_per_day = trial_max_new_per_day()
     # Opportunistic prune, ledger-first (see _sweep_ledger_first): enqueue expired
     # trials for erasure BEFORE their tenants.json entries are popped.
     pruned_trials: dict[str, object] = _sweep_ledger_first(tenants_path, now=now)
@@ -382,6 +404,9 @@ def create_trial_access(
         api_key = f"causia_{secrets.token_urlsafe(32)}"
         agent_token = secrets.token_urlsafe(32)
         with _locked_json(tenants_path) as tenants:
+            if max_new_per_day and _created_trial_count_for_day(tenants, now=now) >= max_new_per_day:
+                capacity_exceeded = True
+                break
             if _active_trial_count(tenants, now=now) >= max_active:
                 capacity_exceeded = True
                 break
@@ -408,7 +433,7 @@ def create_trial_access(
     _prune_agent_bindings(agents_path, set(pruned_trials))
     if capacity_exceeded:
         _clear_auth_caches()
-        msg = "limite de testes anônimos ativos atingido."
+        msg = "limite de testes anônimos atingido."
         raise TrialCapacityError(msg)
 
     if agents_path is not None:

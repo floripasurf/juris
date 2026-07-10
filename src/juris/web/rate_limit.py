@@ -64,17 +64,25 @@ class RedisFixedWindowRateLimiter:
 
     Uses an atomic INCR + EXPIRE on a per-(key, window) counter, so N workers enforce ONE
     global quota (unlike the process-local limiter). ``client`` is any object exposing
-    redis-py's ``incr``/``expire``. If Redis is unreachable it fails OPEN (does not block
-    the API on a limiter outage) — the proxy/WAF remains the hard backstop.
+    redis-py's ``incr``/``expire``. If Redis is unreachable the default is fail-open
+    (keeps the API available when a proxy/WAF is the hard backstop); deployments can
+    set ``fail_closed=True`` to block instead.
     """
 
     def __init__(
-        self, client: Any, *, limit: int, window_seconds: int = 60, prefix: str = "juris:rl:"
+        self,
+        client: Any,
+        *,
+        limit: int,
+        window_seconds: int = 60,
+        prefix: str = "juris:rl:",
+        fail_closed: bool = False,
     ) -> None:
         self._client = client
         self._limit = limit
         self._window_seconds = window_seconds
         self._prefix = prefix
+        self._fail_closed = fail_closed
 
     @property
     def enabled(self) -> bool:
@@ -94,7 +102,7 @@ class RedisFixedWindowRateLimiter:
             from juris.core.observability import get_logger
 
             get_logger(__name__).warning("rate_limit_redis_unavailable")
-            return RateLimitDecision(True)  # fail open
+            return RateLimitDecision(not self._fail_closed, retry_after_seconds=60 if self._fail_closed else 0)
         if count > self._limit:
             retry_after = max(1, window_start + self._window_seconds - current)
             return RateLimitDecision(False, retry_after)
@@ -107,6 +115,7 @@ def build_rate_limiter(
     window_seconds: int = 60,
     redis_url: str | None = None,
     prefix: str = "juris:rl:",
+    fail_closed: bool = False,
 ) -> RateLimiter:
     """Pick the shared Redis limiter when ``redis_url`` is set, else the process-local one."""
     if redis_url:
@@ -118,5 +127,6 @@ def build_rate_limiter(
             limit=limit,
             window_seconds=window_seconds,
             prefix=prefix,
+            fail_closed=fail_closed,
         )
     return FixedWindowRateLimiter(limit=limit, window_seconds=window_seconds)
