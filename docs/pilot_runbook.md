@@ -48,11 +48,14 @@ For each real case (repeat 5–10×):
    - `perceived_utility` (1–5).
 4. **Generate the report** once the cases are in:
    ```bash
+   uv run juris pilot gate                          # fails until at least 5 real CNJs
    uv run juris pilot summary                       # headline metrics
    uv run juris pilot report -o piloto.md           # evidence + prioritized backlog
    ```
    `piloto.md` **is** the Sprint 4 deliverable: time saved, citation acceptance rate,
    average utility, and the prioritized corpus-gap backlog → informs the price/scope call.
+   Do not treat the landing or the product as commercially validated while
+   `juris pilot gate` is failing; green tests and demos are not evidence of paid value.
 
 ## Sprint 5 — prove the moat (second run improves)
 

@@ -234,13 +234,26 @@ chave do escritório → Mesa de trabalho. Chave errada reabre o login com erro.
   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.causia.watchdog.plist
   ```
 - **Monitor externo de uptime (detecta tunnel/DNS caído — o watchdog não vê isso,
-  é interno ao Mini):** registrar `https://causia.com.br/` e
-  `https://causia.com.br/api/health` num monitor FORA da rede (ex.: UptimeRobot
-  free, intervalo 5 min, alerta para `lages.raphael@gmail.com`). Critério de UP:
-  qualquer HTTP < 500 — a raiz responde 200 (landing) e `/api/health` sem chave
-  responde 401 estruturado; ambos provam web + tunnel vivos. É o único sinal de
-  que o caminho público inteiro está no ar; sem ele, uma queda do `cloudflared`
-  passa despercebida até o advogado reclamar.
+  é interno ao Mini):** o repo tem um probe stdlib em
+  `scripts/check_external_uptime.py` e um workflow agendado em
+  `.github/workflows/uptime.yml` (5 min). Ele roda FORA do Mac Mini e valida
+  `https://causia.com.br/` (esperado 200) e `https://causia.com.br/api/health`
+  (esperado 200 ou 401 estruturado). Rodar manualmente:
+  ```bash
+  python scripts/check_external_uptime.py --url https://causia.com.br/ --json
+  ```
+  Configure o alerta do GitHub Actions para email e, se quiser redundância de
+  notificação, replique os mesmos dois endpoints no UptimeRobot/Better Stack
+  (intervalo 5 min, alerta para `lages.raphael@gmail.com`). Sem um monitor fora
+  da rede, uma queda do `cloudflared`/DNS só aparece quando o advogado reclamar.
+- **Gatilho de migração para infraestrutura redundante:** trate como incidente
+  de produto, não como melhoria opcional, se qualquer condição ocorrer: (a) 2
+  alertas externos em 7 dias por tunnel/DNS/web pública; (b) RTO real acima de
+  30 minutos; (c) primeiro escritório pagante fora do piloto controlado; (d) mais
+  de 2 tenants ativos com dados reais; (e) necessidade de SLA contratual. A saída
+  é migrar o orquestrador para host redundante (mínimo: VPS/cloud com deploy
+  reproduzível, backup offsite testado, health externo obrigatório e rollback),
+  mantendo o agente local/split-trust na máquina do advogado.
 - Logs: `<path>/logs/web.log` (dir **chmod 700**, nunca `/tmp` — pode conter
   contexto operacional). O access log do uvicorn fica **desligado** (registraria
   CNJ/termos de busca em texto puro); só habilite com `JURIS_WEB_ACCESS_LOG=1` se

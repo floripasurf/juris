@@ -19,6 +19,18 @@ export JURIS_TENANTS_FILE=/etc/juris/tenants.json
 export JURIS_AGENT_MODE=remote
 export JURIS_AGENTS_FILE=/etc/juris/agents.json
 
+# Retrieval semântico: em ENVIRONMENT=prod o BGE-M3 é obrigatório por padrão.
+# Definir explicitamente deixa o deploy auditável; o preflight falha se o cache
+# do modelo não estiver aquecido.
+export JURIS_REQUIRE_EMBEDDINGS=1
+
+# Proteções de abuso. Redis compartilhado evita quota N_workers x limite; se não
+# houver WAF/proxy cobrindo a borda, prefira fail-closed em queda do Redis.
+export JURIS_RATE_LIMIT_REDIS_URL=redis://127.0.0.1:6379/0
+export JURIS_RATE_LIMIT_FAIL_CLOSED=1
+export JURIS_TRIAL_MAX_ACTIVE=500
+export JURIS_TRIAL_MAX_NEW_PER_DAY=100
+
 # Storage/saída controlados pelo servidor (isolados por tenant automaticamente).
 export JURIS_HOME=/var/lib/juris
 export JURIS_OUT_ROOT=/var/lib/juris/out
@@ -164,6 +176,17 @@ Manualmente: com a chave do escritório B, `GET /api/processos`, `/api/filing/st
 
 Para visão administrativa consolidada, configure `JURIS_ADMIN_TOKEN` e use
 `GET /api/admin/health?deep=1` com header `x-admin-token`.
+
+O watchdog local não valida o caminho público. Para produção em
+`causia.com.br`, mantenha também um monitor externo fora do Mac Mini:
+
+```bash
+python scripts/check_external_uptime.py --url https://causia.com.br/ --json
+```
+
+O workflow `.github/workflows/uptime.yml` executa esse probe a cada 5 minutos.
+Falha em duas janelas consecutivas deve abrir incidente; os gatilhos formais de
+migração para infraestrutura redundante estão em `docs/deploy/blackcube-pilot.md` §5.
 
 ## 6. Rotina noturna e entrega de alertas
 
