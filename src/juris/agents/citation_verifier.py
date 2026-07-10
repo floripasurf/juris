@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from enum import StrEnum
 
@@ -13,6 +14,36 @@ logger = get_logger(__name__)
 
 # Pattern for [CITE:source_id] markers
 _CITE_PATTERN = re.compile(r"\[CITE:([\w\-]+)\]")
+_CLAIM_WINDOW_CHARS = 220
+_CLAIM_MIN_TOKENS = 3
+_CLAIM_MIN_OVERLAP = 0.2
+_TOKEN_RE = re.compile(r"[a-z0-9]{4,}")
+_STOPWORDS = {
+    "acordao",
+    "caso",
+    "cita",
+    "cite",
+    "com",
+    "como",
+    "conforme",
+    "decidiu",
+    "direito",
+    "ementa",
+    "entendeu",
+    "firmou",
+    "jurisprudencia",
+    "para",
+    "pela",
+    "pelo",
+    "precedente",
+    "processo",
+    "recurso",
+    "sobre",
+    "stf",
+    "stj",
+    "tema",
+    "tribunal",
+}
 
 # Academic citation pattern for DOUTRINA_PD sources
 _ACADEMIC_CITE_PATTERN = re.compile(
@@ -27,7 +58,7 @@ _ACADEMIC_CITE_PATTERN = re.compile(
 # * STRONG siglas (REsp/AREsp/AgInt/AgRg/RHC/RMS/EDcl/ADI/ADC/ADPF/IRDR/IAC/AIRR) are
 #   distinctive, so a bare number is a safe signal (case-insensitive).
 # * AMBIGUOUS short siglas (RE/ARE/HC/MS/RR/AI/ADO) collide with common text — "MS 365",
-#   "HC 12", "are 123". They match ONLY uppercase (case-sensitive) AND with a *qualified*
+#   "HC 12", "are 123". They match case-insensitively, but ONLY with a *qualified*
 #   number: dotted (1.234.567), "/UF", an "n./nº" lead-in, or >= 5 digits.
 _STRONG_SIGLAS = r"E?A?REsp|AgInt|AgRg|EDcl|EDv|RHC|RMS|ADI|ADC|ADPF|IRDR|IAC|AIRR"
 _NUM_TAIL = r"(?:n[º°.]?\s*)?\d[\d.]*(?:\s*/\s*[A-Z]{2})?"
@@ -71,7 +102,7 @@ _RAW_CASE_PATTERNS = [
     # OJ (Orientação Jurisprudencial, labor) — uppercase abbrev + number
     re.compile(r"\bOJ\s+(?:SDI-?[I\d]+\s+)?(?:n[º°.]?\s*)?\d+"),
     # ambiguous siglas: case-sensitive + a qualified number only (avoids "MS 365" etc.)
-    re.compile(rf"\b(?:{_AMBIGUOUS_SIGLAS})\b\.?\s*{_QUALIFIED_NUM}"),
+    re.compile(rf"\b(?:{_AMBIGUOUS_SIGLAS})\b\.?\s*{_QUALIFIED_NUM}", re.IGNORECASE),
     # TST/labor siglas anchored on a CNJ number (RR-1000-12.2020.5.03.0001)
     re.compile(rf"\b(?:{_LABOR_SIGLAS})\b\s*-?\s*{_CNJ_NUM}"),
     # a CNJ number introduced as a precedent by a recurso/court indicator
@@ -85,6 +116,44 @@ _RAW_CASE_PATTERNS = [
 ]
 
 
+def _normalize_text(value: str) -> str:
+    text = unicodedata.normalize("NFKD", value.lower()).encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9]+", " ", text)
+
+
+def _tokens(value: str) -> set[str]:
+    return {token for token in _TOKEN_RE.findall(_normalize_text(value)) if token not in _STOPWORDS}
+
+
+def _claim_before_marker(draft: str, marker_start: int) -> str:
+    start = max(0, marker_start - _CLAIM_WINDOW_CHARS)
+    window = draft[start:marker_start]
+    boundaries = [window.rfind(sep) for sep in ("\n\n", ".", ";", "?", "!")]
+    boundary = max(boundaries)
+    if boundary >= 0:
+        window = window[boundary + 1 :]
+    return window.strip()
+
+
+def _claim_matches_source(draft: str, marker_start: int, source_text: str) -> tuple[bool, float | None]:
+    """Conservatively reject a marker whose nearby attributed claim is unrelated.
+
+    This is not semantic legal reasoning. It is a deterministic backstop against the
+    worst failure mode: citing a real source id while attributing an unrelated holding
+    to it. Short boilerplate claims are ignored to avoid false positives.
+    """
+    if not source_text:
+        return True, None
+    claim_tokens = _tokens(_claim_before_marker(draft, marker_start))
+    if len(claim_tokens) < _CLAIM_MIN_TOKENS:
+        return True, None
+    source_tokens = _tokens(source_text)
+    if not source_tokens:
+        return True, None
+    score = len(claim_tokens & source_tokens) / len(claim_tokens)
+    return score >= _CLAIM_MIN_OVERLAP, round(score, 3)
+
+
 @dataclass(frozen=True, slots=True)
 class CitationCheck:
     """Result of checking a single [CITE:] marker."""
@@ -94,6 +163,9 @@ class CitationCheck:
     resolved: bool
     available_excerpt: str | None
     span_in_draft: tuple[int, int]
+    claim_consistent: bool = True
+    consistency_score: float | None = None
+    failure_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,7 +223,10 @@ def build_grounding_report(
 
     reasons: list[str] = []
     if verification.failed:
-        reasons.append("citacoes_invalidas")
+        if any(c.failure_reason == "citation_claim_mismatch" for c in verification.failed):
+            reasons.append("citacoes_distorcidas")
+        if any(c.failure_reason != "citation_claim_mismatch" for c in verification.failed):
+            reasons.append("citacoes_invalidas")
     if verification.spurious_citations:
         reasons.append("citacoes_sem_marcador")
 
@@ -178,6 +253,7 @@ class MarkerCitationVerifier:
         self,
         draft: str,
         allowed_source_ids: set[str] | None = None,
+        allowed_source_texts: dict[str, str] | None = None,
     ) -> VerificationResult:
         """Verify all [CITE:] markers and detect spurious prose citations.
 
@@ -201,19 +277,33 @@ class MarkerCitationVerifier:
             span = match.span()
 
             if allowed_source_ids is not None:
-                resolved = source_id in allowed_source_ids
-                excerpt = None
+                id_resolved = source_id in allowed_source_ids
+                excerpt = (allowed_source_texts or {}).get(source_id)
             else:
-                resolved, excerpt = resolve_source_id(
+                id_resolved, excerpt = resolve_source_id(
                     source_id, self._repertory, tenant_id=self._tenant_id
                 )
+            claim_consistent, consistency_score = _claim_matches_source(
+                draft=draft,
+                marker_start=span[0],
+                source_text=excerpt or "",
+            )
+            resolved = id_resolved and claim_consistent
+            failure_reason = None
+            if not id_resolved:
+                failure_reason = "source_id_not_allowed"
+            elif not claim_consistent:
+                failure_reason = "citation_claim_mismatch"
 
             check = CitationCheck(
                 raw_marker=raw_marker,
                 source_id=source_id,
                 resolved=resolved,
-                available_excerpt=excerpt,
+                available_excerpt=excerpt[:200] if excerpt else None,
                 span_in_draft=span,
+                claim_consistent=claim_consistent,
+                consistency_score=consistency_score,
+                failure_reason=failure_reason,
             )
             checks.append(check)
             if not resolved:

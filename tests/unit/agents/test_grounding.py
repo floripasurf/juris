@@ -6,16 +6,14 @@ from typing import Any, cast
 
 import pytest
 
-from juris.agents.citation_verifier import (
-    MarkerCitationVerifier,
-    build_grounding_report,
-)
+from juris.agents.citation_verifier import MarkerCitationVerifier, build_grounding_report
 from juris.agents.drafter import DrafterAgent, DraftRequest
 from juris.agents.researcher import Researcher, ResearchQuery, ResearchResult
 from juris.defesas.context import ProcessoContext
 from juris.llm.base import AbstractLLM, LLMResponse
 from juris.repertory.peticoes.models import TipoPeticao
 from juris.repertory.retrieval.service import RepertoryService, RetrievalResult
+from juris.review.models import IssueSeverity, ReviewDimension, ReviewIssue, ReviewReport, ReviewRequest
 
 
 class FakeLLM(AbstractLLM):
@@ -35,6 +33,28 @@ class FakeLLM(AbstractLLM):
         temperature: float = 0.0,
     ) -> LLMResponse:
         return LLMResponse(content=self._content, model=self.model_name)
+
+
+class SequenceLLM(AbstractLLM):
+    def __init__(self, contents: list[str]) -> None:
+        self._contents = contents
+        self.prompts: list[str] = []
+
+    @property
+    def model_name(self) -> str:
+        return "fake-sequence-llm"
+
+    async def complete(
+        self,
+        prompt: str,
+        system: str | None = None,
+        schema: dict[str, Any] | None = None,
+        max_tokens: int = 1024,
+        temperature: float = 0.0,
+    ) -> LLMResponse:
+        self.prompts.append(prompt)
+        content = self._contents[min(len(self.prompts) - 1, len(self._contents) - 1)]
+        return LLMResponse(content=content, model=self.model_name)
 
 
 class FakeResearcher:
@@ -76,12 +96,38 @@ def _request() -> DraftRequest:
     )
 
 
+def _request_with_revisions(rounds: int) -> DraftRequest:
+    return DraftRequest(
+        numero_cnj="0001234-56.2026.8.13.0001",
+        tribunal="tjmg",
+        tipo_peticao=TipoPeticao.CONTESTACAO,
+        thesis="Inexistência de inadimplemento.",
+        max_revision_rounds=rounds,
+    )
+
+
 def _context() -> ProcessoContext:
     return ProcessoContext(
         numero_cnj="0001234-56.2026.8.13.0001",
         tribunal="tjmg",
         classe="Ação de cobrança",
     )
+
+
+class _CriticalReviewer:
+    async def review(self, request: ReviewRequest) -> ReviewReport:
+        return ReviewReport(
+            request=request,
+            issues=[
+                ReviewIssue(
+                    dimension=ReviewDimension.COMPLIANCE,
+                    severity=IssueSeverity.CRITICAL,
+                    title="Risco de tese excessiva",
+                    description="Afirma êxito garantido.",
+                )
+            ],
+            model_used="deterministic",
+        )
 
 
 def test_marker_verifier_blocks_unknown_source_id() -> None:
@@ -108,6 +154,31 @@ def test_marker_verifier_blocks_raw_jurisprudence_without_marker() -> None:
     assert report.reason == "citacoes_sem_marcador"
 
 
+def test_marker_verifier_blocks_lowercase_qualified_ambiguous_case_ref() -> None:
+    verifier = MarkerCitationVerifier(cast(RepertoryService, object()))
+
+    result = verifier.verify("Conforme ms 987.654.321/sp, a tese procede.", {"src-1"})
+
+    assert "ms 987.654.321/sp" in result.spurious_citations
+
+
+def test_marker_verifier_blocks_claim_that_distorts_allowed_source_text() -> None:
+    verifier = MarkerCitationVerifier(cast(RepertoryService, object()))
+
+    result = verifier.verify(
+        "O STJ decidiu que a multa moratória é válida [CITE:src-1].",
+        allowed_source_ids={"src-1"},
+        allowed_source_texts={
+            "src-1": "O acórdão trata de honorários sucumbenciais e prescrição intercorrente."
+        },
+    )
+
+    assert result.all_passed is False
+    assert result.failed[0].source_id == "src-1"
+    assert result.failed[0].failure_reason == "citation_claim_mismatch"
+    assert build_grounding_report(result).reason == "citacoes_distorcidas"
+
+
 @pytest.mark.asyncio
 async def test_drafter_blocks_ungrounded_llm_prose() -> None:
     agent = _agent(
@@ -121,6 +192,62 @@ async def test_drafter_blocks_ungrounded_llm_prose() -> None:
     assert result.grounding_report.spurious_citations == ["REsp 123456"]
     assert "Minuta bloqueada" in result.draft_markdown
     assert "pedido deve ser julgado improcedente" not in result.draft_markdown
+
+
+@pytest.mark.asyncio
+async def test_drafter_blocks_reviewer_critical_when_no_revision_remains() -> None:
+    repertory = cast(RepertoryService, object())
+    agent = DrafterAgent(
+        llm=FakeLLM("Minuta com [CITE:src-1]."),
+        repertory=repertory,
+        researcher=cast(Researcher, FakeResearcher()),
+        verifier=MarkerCitationVerifier(repertory),
+        reviewer=_CriticalReviewer(),
+    )
+
+    result = await agent.draft(_request(), _context())
+
+    assert result.is_grounded is False
+    assert result.blocked_reason == "reviewer_critical_issues"
+    assert "Minuta bloqueada pelo revisor" in result.draft_markdown
+
+
+@pytest.mark.asyncio
+async def test_drafter_reprompts_on_reviewer_critical_issue() -> None:
+    llm = SequenceLLM([
+        "A procedência é certa. Minuta com [CITE:src-1].",
+        "Minuta corrigida com [CITE:src-1].",
+    ])
+
+    class _Reviewer:
+        async def review(self, request: ReviewRequest) -> ReviewReport:
+            issues = []
+            if "procedência é certa" in request.petition_text:
+                issues.append(
+                    ReviewIssue(
+                        dimension=ReviewDimension.COMPLIANCE,
+                        severity=IssueSeverity.CRITICAL,
+                        title="Risco de tese excessiva",
+                        description="Afirma resultado certo.",
+                    )
+                )
+            return ReviewReport(request=request, issues=issues, model_used="deterministic")
+
+    repertory = cast(RepertoryService, object())
+    agent = DrafterAgent(
+        llm=llm,
+        repertory=repertory,
+        researcher=cast(Researcher, FakeResearcher()),
+        verifier=MarkerCitationVerifier(repertory),
+        reviewer=_Reviewer(),
+    )
+
+    result = await agent.draft(_request_with_revisions(1), _context())
+
+    assert result.is_grounded is True
+    assert result.revisions == 1
+    assert "PROBLEMAS CRITICOS DO REVISOR" in llm.prompts[-1]
+    assert "Minuta corrigida" in result.draft_markdown
 
 
 @pytest.mark.asyncio

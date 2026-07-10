@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-from juris.review.models import CitationRef, ReviewRequest
+from juris.review.models import CitationRef, IssueSeverity, ReviewIssue, ReviewRequest
 from juris.review.reviewer import deterministic_legal_issues
 
 
-def _titles(text: str, citations: list[CitationRef] | None = None) -> set[str]:
+def _issues(text: str, citations: list[CitationRef] | None = None) -> list[ReviewIssue]:
     request = ReviewRequest(petition_text=text, petition_type="contestacao")
-    return {issue.title for issue in deterministic_legal_issues(request, citations or [])}
+    return deterministic_legal_issues(request, citations or [])
+
+
+def _titles(text: str, citations: list[CitationRef] | None = None) -> set[str]:
+    return {issue.title for issue in _issues(text, citations)}
 
 
 def test_flags_claim_without_evidence() -> None:
@@ -51,3 +55,14 @@ def test_flags_excessive_thesis_language() -> None:
     titles = _titles("A procedência certa do pedido decorre dos fatos.")
 
     assert "Risco de tese excessiva" in titles
+
+
+def test_deterministic_guardrails_are_critical_blockers() -> None:
+    issues = _issues(
+        "A parte autora alega que houve dano material relevante.\n\n"
+        "Dos pedidos\n\nRequer a condenação integral.\n\n"
+        "Conforme a jurisprudência pacífica, a procedência certa do pedido é inevitável."
+    )
+
+    assert issues
+    assert {issue.severity for issue in issues} == {IssueSeverity.CRITICAL}

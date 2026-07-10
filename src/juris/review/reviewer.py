@@ -298,7 +298,7 @@ def deterministic_legal_issues(
         issues.append(
             ReviewIssue(
                 dimension=ReviewDimension.COMPLETENESS,
-                severity=IssueSeverity.IMPORTANT,
+                severity=IssueSeverity.CRITICAL,
                 title="Alegação sem prova indicada",
                 description=(
                     "Há alegação factual relevante sem referência próxima a documento, "
@@ -314,7 +314,7 @@ def deterministic_legal_issues(
         issues.append(
             ReviewIssue(
                 dimension=ReviewDimension.COMPLETENESS,
-                severity=IssueSeverity.IMPORTANT,
+                severity=IssueSeverity.CRITICAL,
                 title="Pedido sem fundamento explícito",
                 description=(
                     "A seção de pedidos contém requerimento sem base legal, contratual "
@@ -330,7 +330,7 @@ def deterministic_legal_issues(
         issues.append(
             ReviewIssue(
                 dimension=ReviewDimension.AUTHORITY,
-                severity=IssueSeverity.IMPORTANT,
+                severity=IssueSeverity.CRITICAL,
                 title="Jurisprudência fraca ou genérica",
                 description=(
                     "O texto usa autoridade jurisprudencial sem fonte verificável ou "
@@ -346,7 +346,7 @@ def deterministic_legal_issues(
         issues.append(
             ReviewIssue(
                 dimension=ReviewDimension.COUNTERARGUMENTS,
-                severity=IssueSeverity.IMPORTANT,
+                severity=IssueSeverity.CRITICAL,
                 title="Risco de tese excessiva",
                 description=(
                     "A redação usa linguagem absoluta ou garante resultado, o que aumenta "

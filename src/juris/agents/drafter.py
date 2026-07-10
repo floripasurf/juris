@@ -9,6 +9,7 @@ from typing import Any
 from juris.agents.citation_verifier import (
     CitationCheck,
     GroundingReport,
+    GroundingStatus,
     MarkerCitationVerifier,
     VerificationResult,
     build_grounding_report,
@@ -29,7 +30,7 @@ from juris.prompts.drafter_v1 import (
 )
 from juris.repertory.peticoes.models import TipoPeticao
 from juris.repertory.retrieval.service import RepertoryService
-from juris.review.models import ReviewReport
+from juris.review.models import IssueSeverity, ReviewIssue, ReviewReport, ReviewRequest
 
 logger = get_logger(__name__)
 
@@ -311,6 +312,7 @@ class DrafterAgent:
 
         # Step 6+7: Generate and verify (with revision loop)
         allowed_ids = {r.source_id for r in research.supporting + research.opposing}
+        allowed_source_texts = self._allowed_source_texts(research)
         draft_text = ""
         verification: VerificationResult | None = None
         revision_feedback = ""
@@ -342,7 +344,9 @@ class DrafterAgent:
 
             # Verify citations
             verification = self._verifier.verify(
-                draft_text, allowed_source_ids=allowed_ids
+                draft_text,
+                allowed_source_ids=allowed_ids,
+                allowed_source_texts=allowed_source_texts,
             )
             self._log_audit(
                 "draft.citations_verified",
@@ -365,7 +369,7 @@ class DrafterAgent:
                 result.revisions += 1
                 feedback_parts: list[str] = []
                 if verification.failed:
-                    ids = [c.source_id for c in verification.failed]
+                    ids = [f"{c.source_id} ({c.failure_reason or 'invalid'})" for c in verification.failed]
                     feedback_parts.append(
                         f"CITACOES INVALIDAS (remova ou substitua): {', '.join(ids)}"
                     )
@@ -396,8 +400,6 @@ class DrafterAgent:
         # Step 8: Pre-show review (optional)
         if self._reviewer and verification and verification.all_passed:
             try:
-                from juris.review.models import ReviewRequest
-
                 review_req = ReviewRequest(
                     petition_text=draft_text,
                     petition_type=request.tipo_peticao.value,
@@ -416,21 +418,10 @@ class DrafterAgent:
                     result,
                 )
 
-                # Re-prompt on critical issues (if revisions remain)
-                if (
-                    report.critical_count > 0
-                    and result.revisions < request.max_revision_rounds
-                ):
+                critical_issues = self._critical_reviewer_issues(report)
+                if critical_issues and result.revisions < request.max_revision_rounds:
                     result.revisions += 1
-                    critical_issues = [
-                        i
-                        for i in report.issues
-                        if i.severity.value == "critical"
-                    ]
-                    feedback_parts = [
-                        f"- {issue.title}: {issue.description}"
-                        for issue in critical_issues[:3]
-                    ]
+                    feedback_parts = self._review_feedback_lines(critical_issues)
                     revision_feedback = (
                         "## PROBLEMAS CRITICOS DO REVISOR\n"
                         + "\n".join(feedback_parts)
@@ -448,7 +439,9 @@ class DrafterAgent:
                     )
                     result.ai_model = generation_model
                     verification = self._verifier.verify(
-                        draft_text, allowed_source_ids=allowed_ids
+                        draft_text,
+                        allowed_source_ids=allowed_ids,
+                        allowed_source_texts=allowed_source_texts,
                     )
                     result.grounding_report = build_grounding_report(verification)
                     result.citations_used = verification.checks
@@ -464,6 +457,34 @@ class DrafterAgent:
                             "after_reviewer": True,
                         },
                         result,
+                    )
+                    if verification.all_passed:
+                        review_req = ReviewRequest(
+                            petition_text=draft_text,
+                            petition_type=request.tipo_peticao.value,
+                            numero_cnj=request.numero_cnj,
+                            tribunal=request.tribunal,
+                        )
+                        report = await self._reviewer.review(review_req)
+                        result.reviewer_report = report
+                        self._log_audit(
+                            "draft.reviewed",
+                            request.numero_cnj,
+                            {
+                                "critical_count": report.critical_count,
+                                "important_count": report.important_count,
+                                "after_reviewer_revision": True,
+                            },
+                            result,
+                        )
+                        critical_issues = self._critical_reviewer_issues(report)
+                if critical_issues:
+                    return self._block_reviewer_result(
+                        result=result,
+                        request=request,
+                        research=research,
+                        issues=critical_issues,
+                        start=start,
                     )
             except Exception:  # noqa: BLE001
                 logger.warning(
@@ -503,6 +524,18 @@ class DrafterAgent:
 
         return result
 
+    @staticmethod
+    def _allowed_source_texts(research: ResearchResult) -> dict[str, str]:
+        return {r.source_id: r.texto for r in research.supporting + research.opposing if r.texto}
+
+    @staticmethod
+    def _critical_reviewer_issues(report: ReviewReport) -> list[ReviewIssue]:
+        return [issue for issue in report.issues if issue.severity == IssueSeverity.CRITICAL]
+
+    @staticmethod
+    def _review_feedback_lines(issues: list[ReviewIssue]) -> list[str]:
+        return [f"- {issue.title}: {issue.description}" for issue in issues[:5]]
+
     def _block_ungrounded_result(
         self,
         *,
@@ -530,6 +563,37 @@ class DrafterAgent:
             "draft.blocked_ungrounded",
             request.numero_cnj,
             details,
+            result,
+        )
+        return result
+
+    def _block_reviewer_result(
+        self,
+        *,
+        result: DraftResult,
+        request: DraftRequest,
+        research: ResearchResult,
+        issues: list[ReviewIssue],
+        start: float,
+    ) -> DraftResult:
+        result.grounding_report = GroundingReport(
+            status=GroundingStatus.BLOCKED,
+            reason="reviewer_critical_issues",
+        )
+        result.draft_markdown = self._blocked_reviewer_notice(issues)
+        result.contraponto_section = self._build_contraponto(research)
+        result.blocked_reason = "reviewer_critical_issues"
+        result.total_duration_seconds = time.monotonic() - start
+        self._log_audit(
+            "draft.blocked",
+            request.numero_cnj,
+            {
+                "reason": "reviewer_critical_issues",
+                "critical_count": len(issues),
+                "critical_titles": [issue.title for issue in issues[:5]],
+                "duration_seconds": result.total_duration_seconds,
+                "prompt_version": PROMPT_VERSION,
+            },
             result,
         )
         return result
@@ -566,6 +630,20 @@ class DrafterAgent:
                 "corpus ou remova a citação antes de liberar a peça.",
             ]
         )
+        return "\n".join(lines)
+
+    @staticmethod
+    def _blocked_reviewer_notice(issues: list[ReviewIssue]) -> str:
+        lines = [
+            "# Minuta bloqueada pelo revisor",
+            "",
+            "A minuta contém problema jurídico crítico identificado antes da liberação.",
+            "Corrija os itens abaixo e gere uma nova versão antes de usar a peça.",
+            "",
+            "## Problemas críticos",
+        ]
+        for issue in issues[:5]:
+            lines.append(f"- {issue.title}: {issue.description}")
         return "\n".join(lines)
 
     async def _generate(
