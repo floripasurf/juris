@@ -29,7 +29,7 @@ Entregue:
 
 ## Sprint 3 — Hardening Multi-Tenant de Produção
 
-**Status:** em andamento.
+**Status:** instrumentação concluída; validação comercial bloqueada pelo gate de casos reais.
 
 Fatia entregue agora:
 - `/api/agent-health` expõe readiness por tenant: binding configurado,
@@ -102,6 +102,9 @@ Fatia entregue agora:
   comercial e priorização de corpus.
 - CLI `juris pilot summary` / `juris pilot report -o piloto.md` gera as métricas e o
   relatório (evidência + backlog priorizado) sem a web.
+- CLI `juris pilot gate` falha até existirem pelo menos 5 CNJs reais distintos no
+  feedback do piloto (meta recomendada: 10). Esse é o gate operacional para
+  afirmar valor pago; sem ele, o produto segue como piloto não validado.
 
 Próxima entrega (HUMANA, não código — a instrumentação acima está pronta e testada):
 - Rodar 5-10 casos reais com o advogado (exige e-CPF A3 + backend LLM) e alimentar o
@@ -278,8 +281,9 @@ próprio escritório no drafter e aba Biblioteca no console. Spec em
 `JURIS_TENANTS_FILE` — a chave antiga passa a ser rejeitada (401) em vez de
 autenticar num tenant já esvaziado (`access_revoked` no certificado de erasure).
 
-Bloqueado por dependência humana: **evidência de piloto** (rodar casos com A3 — ver
-`docs/pilot_runbook.md`) e **fonte real de inteiro teor** (decisão de ToS).
+Bloqueado por dependência humana: **evidência de piloto** (rodar casos com A3 e
+passar `juris pilot gate` — ver `docs/pilot_runbook.md`) e **fonte real de inteiro
+teor** (decisão de ToS).
 
 **Consolidação de Git (2026-07-05):** criado o branch `main` a partir de
 `feat/mni-mtls-token` e tornado o default do repositório (o antigo default

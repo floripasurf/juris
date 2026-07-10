@@ -30,11 +30,11 @@ The full architecture is in `docs/mni_integration_reference.md` — read it befo
 | XML signing | `signxml` | For tribunals requiring WS-Security |
 | API framework | `FastAPI` | Both the orchestrator and local agent |
 | Async | `asyncio` + `httpx` for non-SOAP calls | |
-| Database | PostgreSQL 16 via `psycopg` (v3) + `asyncpg` for async paths | |
-| Migrations | `alembic` | |
-| ORM | `SQLAlchemy 2.x` (async) | |
-| Vector DB | `qdrant` self-hosted via Docker | |
-| Sparse search | PostgreSQL `tsvector` + GIN index | Per-tenant via tenant_id column |
+| Database | SQLite (`juris.db` per tenant + `repertory.db`) for the production pilot | See ADR-0020; Postgres remains a deferred scale-out target |
+| Migrations | Local schema migration code in `local_db.py` / FTS tables | Alembic/SQLAlchemy are legacy/deferred surfaces, not the active pilot path |
+| ORM | Dataclasses + explicit SQLite repositories/services | SQLAlchemy models are not the runtime source of truth today |
+| Vector DB | SQLite FTS5 + optional dense retrieval | Qdrant code is kept as a future adapter, but the Mac Mini pilot uses `LocalFTSStore` |
+| Sparse search | SQLite FTS5 | Per-tenant via `tenant_id` column in `chunks` |
 | Embeddings | `sentence-transformers` with BGE-M3 | Run locally; reserve cloud for non-PII |
 | Reranker | `BGE-reranker-v2-m3` locally; Cohere as optional | |
 | LLM (cloud) | `anthropic` Python SDK with Claude | For non-PII tasks |
@@ -77,7 +77,7 @@ juris/
 │       ├── repertory/               # three-tier corpus + retrieval
 │       ├── agents/                  # AI agents (analyzer, reviewer, researcher, drafter)
 │       ├── signing/                 # PAdES + WS-Security
-│       ├── persistence/             # SQLAlchemy models + repositories
+│       ├── persistence/             # active local SQLite stores + legacy SQLAlchemy surface
 │       ├── api/                     # FastAPI (orchestrator + local agent)
 │       ├── llm/                     # LLM abstraction (Claude + Ollama)
 │       ├── prompts/                 # versioned prompt templates
@@ -139,9 +139,11 @@ If a feature isn't in the current sprint scope, do not start it.
 ## Common commands
 
 ```bash
-# Setup
+# Setup for the current pilot runtime
 uv sync
-docker compose -f docker/docker-compose.yml up -d
+# docker compose is optional: it starts deferred Postgres/Qdrant/Redis services,
+# not the default Mac Mini pilot runtime.
+# docker compose -f docker/docker-compose.yml up -d
 
 # Develop
 uv run pytest
@@ -160,9 +162,13 @@ uv run juris search --cnj "0001234-56.2024.8.26.0001"   # auto-detects court
 uv run juris search doctor                               # adapter health checks
 # Portal automation status: see docs/usage/search.md (most portals WAF/captcha-gated)
 
-# Database
-uv run alembic upgrade head
-uv run alembic revision --autogenerate -m "msg"
+# Active local persistence/corpus
+uv run juris repertory status
+uv run juris repertory ingest
+
+# Deferred Postgres/Alembic path (not used by the current pilot runtime)
+# uv run alembic upgrade head
+# uv run alembic revision --autogenerate -m "msg"
 
 # Or use Makefile
 make setup
