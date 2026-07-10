@@ -1804,7 +1804,8 @@ def repertory_search(
         raise typer.Exit(code=1)
 
     # Prefer the composite-ranked service (ADR-0017) so results carry the
-    # auditable score breakdown; fall back to plain FTS if embeddings are absent.
+    # auditable score breakdown; in dev it can fall back to FTS, while production
+    # fails closed if the embedding model is unavailable.
     store = LocalFTSStore(db_path=fts_path)
     try:
         from juris.repertory.embeddings import LegalEmbedder
@@ -2110,7 +2111,7 @@ def review(
         console.print("[dim]Proceeding without retrieval context...[/dim]")
 
     store = LocalFTSStore(db_path=fts_path)
-    embedder = LegalEmbedder()  # lazy-loads model; returns None if unavailable
+    embedder = LegalEmbedder()  # lazy-loads model; prod fails closed if unavailable
 
     retriever = HybridRetriever(
         dense_store=store,
@@ -3375,6 +3376,45 @@ def pilot_summary() -> None:
     )
     console.print(f"Citações aceitas/rejeitadas: {citations['accepted']}/{citations['rejected']}")
     console.print(f"Lacunas priorizadas: {len(gaps) if isinstance(gaps, list) else 0}")
+
+
+@pilot_app.command("gate")
+def pilot_gate(
+    min_cases: int = typer.Option(
+        5,
+        "--min-cases",
+        min=1,
+        help="Mínimo de casos reais distintos para permitir decisão de valor.",
+    ),
+    target_cases: int = typer.Option(
+        10,
+        "--target-cases",
+        min=1,
+        help="Meta recomendada de casos reais distintos antes de vender o piloto como validado.",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Saída em JSON, sem texto formatado."),
+) -> None:
+    """Falha enquanto o piloto não tiver evidência mínima em casos reais."""
+    import json as _json
+
+    from juris.web.pilot_feedback import evaluate_value_gate
+
+    gate = evaluate_value_gate(_pilot_feedback_root(), min_cases=min_cases, target_cases=target_cases)
+    if json_output:
+        console.print_json(_json.dumps(gate, ensure_ascii=False))
+    else:
+        summary = cast("dict[str, object]", gate["summary"])
+        console.print(gate["message"])
+        console.print(
+            f"Casos reais: {gate['real_cases']}/{gate['required_cases']} "
+            f"(meta recomendada: {gate['target_cases']}) · feedbacks: {gate['total_feedback_records']}"
+        )
+        console.print(
+            f"Tempo economizado: {summary['total_time_saved_minutes']} min · "
+            f"utilidade média: {summary['average_utility']}"
+        )
+    if not gate["decision_ready"]:
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":

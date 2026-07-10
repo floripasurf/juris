@@ -37,6 +37,10 @@ from juris.repertory.readiness import (
     resolve_repertory_path,
 )
 
+FULL_TEXT_SOURCE_TYPES = frozenset({"acordao_publicado", "acordao_landmark", "precedente_local"})
+DEFAULT_MIN_FULL_TEXT_CHUNKS = 25
+ENV_MIN_FULL_TEXT_CHUNKS = "JURIS_MIN_FULL_TEXT_CHUNKS"
+
 
 class CheckStatus(StrEnum):
     """Per-check verdict."""
@@ -96,6 +100,17 @@ class PreflightReport:
 # ---------------------------------------------------------------------------
 # individual checks
 # ---------------------------------------------------------------------------
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value >= 0 else default
 
 
 def check_repertory(*, real_source_required: bool = True) -> CheckResult:
@@ -168,6 +183,59 @@ def check_repertory(*, real_source_required: bool = True) -> CheckResult:
     )
 
 
+def check_corpus_depth(*, min_full_text_chunks: int | None = None) -> CheckResult:
+    """Warn when the public corpus is ready but still shallow.
+
+    The regular repertory check proves the DB has enough chunks/source types to
+    avoid empty retrieval. It does not prove the corpus contains full-text
+    acórdãos. This separate check keeps that product limitation visible.
+    """
+    threshold = (
+        min_full_text_chunks
+        if min_full_text_chunks is not None
+        else _env_int(ENV_MIN_FULL_TEXT_CHUNKS, DEFAULT_MIN_FULL_TEXT_CHUNKS)
+    )
+    status = read_status(resolve_repertory_path())
+    breakdown = dict(status.source_type_breakdown)
+    full_text_chunks = sum(count for source_type, count in breakdown.items() if source_type in FULL_TEXT_SOURCE_TYPES)
+    details: dict[str, object] = {
+        "db_path": str(status.db_path),
+        "full_text_source_types": sorted(FULL_TEXT_SOURCE_TYPES),
+        "full_text_chunks": full_text_chunks,
+        "min_full_text_chunks": threshold,
+        "source_type_count": status.source_type_count,
+        "source_type_breakdown": breakdown,
+    }
+    if not status.exists or status.chunk_count == 0:
+        return CheckResult(
+            name="corpus_depth",
+            status=CheckStatus.SKIP,
+            message="corpus ausente ou vazio; profundidade não avaliada",
+            details=details,
+        )
+    if full_text_chunks < threshold:
+        return CheckResult(
+            name="corpus_depth",
+            status=CheckStatus.WARN,
+            message=(
+                f"corpus público raso: {full_text_chunks} chunk(s) de inteiro teor "
+                f"(< {threshold})"
+            ),
+            remediation=(
+                "não prometa RAG profundo de acórdãos completos; ingerir mais "
+                "acórdãos publicados/landmark ou limitar a copy para súmulas, "
+                "temas e teses até a escavação cobrir o domínio"
+            ),
+            details=details,
+        )
+    return CheckResult(
+        name="corpus_depth",
+        status=CheckStatus.PASS,
+        message=f"corpus com {full_text_chunks} chunk(s) de inteiro teor",
+        details=details,
+    )
+
+
 def _huggingface_cache_root() -> Path:
     """Resolve the active HuggingFace cache root, honoring HF env overrides."""
     explicit = os.environ.get("HF_HOME") or os.environ.get("HUGGINGFACE_HUB_CACHE")
@@ -181,14 +249,21 @@ def _huggingface_cache_root() -> Path:
 
 def check_embeddings_cache(
     model_name: str = "BAAI/bge-m3",
+    *,
+    required: bool | None = None,
 ) -> CheckResult:
     """Verify the embedding model is already cached locally.
 
     Without a warm cache, the first `juris demo` invocation triggers a silent
-    ~400MB download — bad UX in a 1h pilot session. This check is a ``WARN``,
-    not a ``FAIL``: the run will succeed eventually, but the operator should
-    pre-warm the cache before the lawyer arrives.
+    ~400MB download — bad UX in a 1h pilot session. In production, embeddings
+    are a hard requirement; locally this remains a warning so development can
+    exercise FTS-only paths deliberately.
     """
+    if required is None:
+        from juris.repertory.embeddings import embeddings_required_by_environment
+
+        required = embeddings_required_by_environment()
+    missing_status = CheckStatus.FAIL if required else CheckStatus.WARN
     cache_root = _huggingface_cache_root()
     model_dir_name = "models--" + model_name.replace("/", "--")
     model_dir = cache_root / model_dir_name
@@ -203,13 +278,13 @@ def check_embeddings_cache(
     if not model_dir.exists():
         return CheckResult(
             name="embeddings_cache",
-            status=CheckStatus.WARN,
+            status=missing_status,
             message=f"modelo {model_name} não está em cache",
             remediation=(
                 f'pré-aquecer com `python -c "from sentence_transformers '
                 f"import SentenceTransformer; SentenceTransformer('{model_name}')\"` "
-                "antes da sessão (~400MB); senão o primeiro `juris demo` baixa "
-                "o modelo silenciosamente"
+                "antes da sessão (~400MB); em produção o retrieval semântico "
+                "falha fechado para não operar só com palavras-chave"
             ),
             details=details,
         )
@@ -221,7 +296,7 @@ def check_embeddings_cache(
         if not revs:
             return CheckResult(
                 name="embeddings_cache",
-                status=CheckStatus.WARN,
+                status=missing_status,
                 message=f"diretório do modelo {model_name} existe mas sem snapshot",
                 remediation="re-executar o pré-aquecimento (cache parcial)",
                 details=details,
@@ -551,6 +626,7 @@ def run_preflight(
     probe_ollama: bool = True,
     probe_token: bool = False,
     probe_ner: bool = False,
+    embeddings_required: bool | None = None,
 ) -> PreflightReport:
     """Run all preflight checks and aggregate into a report.
 
@@ -560,10 +636,13 @@ def run_preflight(
             Set False for fixture-only sessions.
         embedding_model: HuggingFace model name to look up in the cache.
         probe_ollama: Set False to skip the network probe (e.g. in tests).
+        embeddings_required: Override whether missing embedding cache is a
+            failure. ``None`` follows ENVIRONMENT/JURIS_REQUIRE_EMBEDDINGS.
     """
     checks = (
         check_repertory(real_source_required=real_source_required),
-        check_embeddings_cache(model_name=embedding_model),
+        check_corpus_depth(),
+        check_embeddings_cache(model_name=embedding_model, required=embeddings_required),
         check_llm_availability(probe_ollama=probe_ollama),
         check_token(probe=probe_token),
         check_ner_model(probe=probe_ner),

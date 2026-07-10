@@ -119,6 +119,37 @@ def summarize_feedback(root: Path) -> dict[str, object]:
     }
 
 
+def evaluate_value_gate(root: Path, *, min_cases: int = 5, target_cases: int = 10) -> dict[str, object]:
+    """Return whether the pilot has enough real-case evidence for a value decision."""
+    records = list_feedback(root)
+    real_case_ids = sorted(
+        {
+            str(record.get("numero_cnj") or "").strip()
+            for record in records
+            if _looks_like_cnj(str(record.get("numero_cnj") or ""))
+        }
+    )
+    summary = summarize_feedback(root)
+    missing_cases = max(0, min_cases - len(real_case_ids))
+    decision_ready = missing_cases == 0
+    return {
+        "decision_ready": decision_ready,
+        "status": "pass" if decision_ready else "fail",
+        "real_cases": len(real_case_ids),
+        "required_cases": min_cases,
+        "target_cases": target_cases,
+        "missing_cases": missing_cases,
+        "total_feedback_records": len(records),
+        "case_ids": real_case_ids,
+        "summary": summary,
+        "message": (
+            f"Gate de valor pronto: {len(real_case_ids)} casos reais avaliados."
+            if decision_ready
+            else f"Gate de valor bloqueado: faltam {missing_cases} caso(s) real(is) para chegar a {min_cases}."
+        ),
+    }
+
+
 def compare_feedback_runs(root: Path) -> dict[str, object]:
     """Compare first vs latest feedback for cases run more than once."""
     grouped: dict[str, list[dict[str, object]]] = {}
@@ -264,6 +295,13 @@ def _public_output_dir(value: object) -> str | None:
 
 def _safe_path_segment(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("._")
+
+
+_CNJ_RE = re.compile(r"^\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}$")
+
+
+def _looks_like_cnj(value: str) -> bool:
+    return bool(_CNJ_RE.match(value.strip()))
 
 
 def _counts(records: list[dict[str, object]], key: str) -> dict[str, int]:

@@ -16,6 +16,7 @@ import pytest
 
 from juris.pilot.preflight import (
     CheckStatus,
+    check_corpus_depth,
     check_disk_space,
     check_embeddings_cache,
     check_llm_availability,
@@ -129,6 +130,40 @@ def test_check_repertory_warn_when_legacy_present_alongside_canonical(tmp_path, 
 
 
 # ---------------------------------------------------------------------------
+# check_corpus_depth
+# ---------------------------------------------------------------------------
+
+
+def test_check_corpus_depth_skips_when_corpus_missing():
+    result = check_corpus_depth()
+    assert result.status is CheckStatus.SKIP
+
+
+def test_check_corpus_depth_warns_when_only_shallow_sources(tmp_path, monkeypatch):
+    db = tmp_path / "rep.db"
+    monkeypatch.setenv(ENV_REPERTORY_PATH, str(db))
+    rows = [(f"c{i}", f"s{i % 5}", "sumula", "x") for i in range(120)]
+    _seed_chunks(db, rows)
+
+    result = check_corpus_depth(min_full_text_chunks=1)
+
+    assert result.status is CheckStatus.WARN
+    assert "corpus público raso" in result.message
+
+
+def test_check_corpus_depth_passes_with_full_text_sources(tmp_path, monkeypatch):
+    db = tmp_path / "rep.db"
+    monkeypatch.setenv(ENV_REPERTORY_PATH, str(db))
+    rows = [(f"c{i}", f"s{i % 5}", "acordao_publicado", "x") for i in range(30)]
+    _seed_chunks(db, rows)
+
+    result = check_corpus_depth(min_full_text_chunks=25)
+
+    assert result.status is CheckStatus.PASS
+    assert result.details["full_text_chunks"] == 30
+
+
+# ---------------------------------------------------------------------------
 # check_embeddings_cache
 # ---------------------------------------------------------------------------
 
@@ -139,6 +174,27 @@ def test_check_embeddings_cache_warn_when_model_missing(tmp_path, monkeypatch):
     assert result.status is CheckStatus.WARN
     assert "BAAI/bge-m3" in result.message
     assert "pré-aquecer" in (result.remediation or "")
+
+
+def test_check_embeddings_cache_fails_when_required_in_prod(tmp_path, monkeypatch):
+    monkeypatch.setenv("HF_HOME", str(tmp_path / "hf"))
+    monkeypatch.setenv("ENVIRONMENT", "prod")
+    monkeypatch.delenv("JURIS_REQUIRE_EMBEDDINGS", raising=False)
+
+    result = check_embeddings_cache(model_name="BAAI/bge-m3")
+
+    assert result.status is CheckStatus.FAIL
+    assert "falha fechado" in (result.remediation or "")
+
+
+def test_check_embeddings_cache_explicit_override_can_relax_prod(tmp_path, monkeypatch):
+    monkeypatch.setenv("HF_HOME", str(tmp_path / "hf"))
+    monkeypatch.setenv("ENVIRONMENT", "prod")
+    monkeypatch.setenv("JURIS_REQUIRE_EMBEDDINGS", "0")
+
+    result = check_embeddings_cache(model_name="BAAI/bge-m3")
+
+    assert result.status is CheckStatus.WARN
 
 
 def test_check_embeddings_cache_pass_when_snapshot_exists(tmp_path, monkeypatch):
