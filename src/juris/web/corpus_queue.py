@@ -21,13 +21,24 @@ from typing import Any, cast
 from urllib.parse import urlparse, urlunparse
 
 from juris.core.paths import ensure_private_dir, restrict_file
-from juris.repertory.corpus.models import RIGHTS_BASIS_VALUES, TipoFonte, resolve_uso
+from juris.repertory.corpus.models import TipoFonte, normalize_area, resolve_uso
 from juris.web.pilot_feedback import list_feedback
 
 _FILENAME = "corpus-sources.jsonl"
 _TEXT_DIR = "corpus-source-text"
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _REINGEST_SOURCE_ERROR = "Falha ao reingerir esta fonte. Verifique texto, tipo e corpus local."
+_PRIVATE_PROVENANCE_KIND = "acervo_do_escritorio"
+_PRIVATE_AREA_TYPES = {
+    TipoFonte.PECA_ESCRITORIO.value,
+    TipoFonte.MODELO_PETICAO.value,
+    TipoFonte.NOTA_INTERNA.value,
+    TipoFonte.DOUTRINA_ESCRITORIO.value,
+}
+_LEGACY_PRIVATE_DOCTRINE_TYPES = {TipoFonte.DOUTRINA_PRIVADA.value}
+_COPYRIGHT_ACK_NOTICE = (
+    "Advogado declarou responsabilidade pelo direito de uso do material doutrinário enviado."
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,18 +95,28 @@ def _require_provenance(payload: dict[str, object]) -> None:
         msg = "fonte é obrigatória (tribunal ou source_publisher) para proveniência."
         raise ValueError(msg)
     kind = str(payload.get("provenance_kind") or "publica")
-    if kind not in {"publica", "acervo_do_escritorio"}:
+    if kind not in {"publica", _PRIVATE_PROVENANCE_KIND}:
         msg = "provenance_kind deve ser 'publica' ou 'acervo_do_escritorio'."
         raise ValueError(msg)
     tipo_raw = str(payload.get("source_type") or "")
-    if tipo_raw in {TipoFonte.DOUTRINA_PD.value, TipoFonte.DOUTRINA_PRIVADA.value}:
-        rights = str(payload.get("rights_basis") or "")
-        if rights not in RIGHTS_BASIS_VALUES:
+    if kind == _PRIVATE_PROVENANCE_KIND and tipo_raw in _LEGACY_PRIVATE_DOCTRINE_TYPES:
+        payload["source_type"] = TipoFonte.DOUTRINA_ESCRITORIO.value
+        tipo_raw = TipoFonte.DOUTRINA_ESCRITORIO.value
+    if kind == _PRIVATE_PROVENANCE_KIND or tipo_raw in _PRIVATE_AREA_TYPES:
+        area = normalize_area(str(payload.get("area") or ""))
+        if not area:
+            msg = "area é obrigatória para documentos do acervo privado do escritório."
+            raise ValueError(msg)
+        payload["area"] = area
+    if tipo_raw == TipoFonte.DOUTRINA_ESCRITORIO.value:
+        if payload.get("copyright_ack") is not True:
             msg = (
-                "rights_basis é obrigatório para doutrina "
-                f"({', '.join(sorted(RIGHTS_BASIS_VALUES))}) — sem base de direitos não ingere."
+                "copyright_ack é obrigatório para doutrina do escritório: o advogado "
+                "declara responsabilidade pelo direito de uso do material enviado."
             )
             raise ValueError(msg)
+        payload["copyright_ack"] = True
+        payload["copyright_ack_notice"] = _COPYRIGHT_ACK_NOTICE
     override = str(payload.get("uso") or "")
     if override:
         resolve_uso(tipo_raw or None, override)  # ValueError se inválido
@@ -107,7 +128,7 @@ def append_accepted_source(root: Path, payload: dict[str, object]) -> dict[str, 
     _require_provenance(payload)
     content_hash = _resolve_content_hash(payload)
     kind = str(payload.get("provenance_kind") or "publica")
-    if kind == "acervo_do_escritorio":
+    if kind == _PRIVATE_PROVENANCE_KIND:
         raw_url = str(payload.get("source_url") or "").strip()
         source_url = _public_source_url(raw_url) if raw_url else ""
     else:
@@ -143,7 +164,6 @@ def append_accepted_source(root: Path, payload: dict[str, object]) -> dict[str, 
             str(payload.get("source_type") or "") or None, str(payload.get("uso") or "") or None
         ).value,
         "tipo_peticao": str(payload.get("tipo_peticao") or ""),
-        "rights_basis": str(payload.get("rights_basis") or ""),
     }
     with sources_path(root).open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
@@ -193,7 +213,7 @@ def list_library_items(root: Path) -> list[dict[str, object]]:
     """Fontes do tenant com os campos que a aba Biblioteca exibe (L5)."""
     fields = (
         "id", "title", "source_type", "uso", "area", "tipo_peticao",
-        "source_date", "status", "provenance_kind", "rights_basis", "reingest_status",
+        "source_date", "status", "provenance_kind", "copyright_ack", "reingest_status",
     )
     return [
         {k: record.get(k, "") for k in fields}
@@ -389,9 +409,11 @@ def upload_source_document(
             "provenance_kind",
             "uso",
             "tipo_peticao",
-            "rights_basis",
+            "copyright_ack",
+            "copyright_ack_notice",
         )
-        if str(payload.get(key) or "").strip()
+        if (isinstance(payload.get(key), bool) and payload.get(key) is True)
+        or str(payload.get(key) or "").strip()
     }
     record_payload["source_text"] = text
     source = append_accepted_source(root, record_payload)

@@ -6,11 +6,11 @@ import pytest
 
 from juris.repertory.corpus.models import (
     ESTILO_SOURCE_TYPES,
-    RIGHTS_BASIS_VALUES,
     TIPO_HIERARQUIA,
     TIPO_USO_DEFAULT,
     TipoFonte,
     UsoFonte,
+    normalize_area,
     resolve_uso,
 )
 
@@ -34,7 +34,7 @@ def test_tipos_de_estilo_sao_os_esperados() -> None:
 def test_novos_tipos_tem_hierarquia() -> None:
     assert TIPO_HIERARQUIA[TipoFonte.PECA_ESCRITORIO] == 7
     assert TIPO_HIERARQUIA[TipoFonte.NOTA_INTERNA] == 7
-    assert TIPO_HIERARQUIA[TipoFonte.DOUTRINA_PRIVADA] == 6
+    assert TIPO_HIERARQUIA[TipoFonte.DOUTRINA_ESCRITORIO] == 6
 
 
 def test_resolve_uso_deriva_do_tipo_e_respeita_override() -> None:
@@ -48,7 +48,7 @@ def test_resolve_uso_deriva_do_tipo_e_respeita_override() -> None:
         resolve_uso(TipoFonte.SUMULA, "citavel")                      # override inválido
 
 
-def test_rights_basis_values() -> None:
-    assert RIGHTS_BASIS_VALUES == frozenset(  # noqa: SIM300
-        {"dominio_publico", "obra_do_escritorio", "licenca_do_escritorio", "ato_oficial"}
-    )
+def test_area_normalizada_para_escopo_da_biblioteca() -> None:
+    assert normalize_area("Cível") == "civel"
+    assert normalize_area("Direito Empresarial") == "empresarial"
+    assert normalize_area("Trabalho") == "trabalhista"

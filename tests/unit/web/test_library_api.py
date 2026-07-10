@@ -40,16 +40,23 @@ def tenant_env(monkeypatch, tmp_path):
     default_registry.cache_clear()
 
 
-def _upload_peca(client: TestClient, headers: dict[str, str]) -> None:
+def _upload_peca(
+    client: TestClient,
+    headers: dict[str, str],
+    *,
+    area: str = "civel",
+    title: str = "Contestação modelo — cobrança",
+    text: str = TEXTO_PECA,
+) -> None:
     payload = {
-        "title": "Contestação modelo — cobrança",
+        "title": title,
         "source_type": "peca_escritorio",
         "source_date": "2025-11-10",
         "source_publisher": "Escritório A",
         "provenance_kind": "acervo_do_escritorio",
         "tipo_peticao": "contestacao",
-        "area": "civel",
-        "source_text": TEXTO_PECA,
+        "area": area,
+        "source_text": text,
     }
     resp = client.post("/api/corpus/upload", json=payload, headers=headers)
     assert resp.status_code == 201, resp.text
@@ -80,6 +87,7 @@ def test_library_lista_fontes_do_tenant(tenant_env) -> None:
     by_type = {i["source_type"]: i for i in items}
     assert by_type["peca_escritorio"]["uso"] == "estilo"
     assert by_type["peca_escritorio"]["tipo_peticao"] == "contestacao"
+    assert by_type["peca_escritorio"]["area"] == "civel"
     assert by_type["acordao_publicado"]["uso"] == "fundamento"
 
 
@@ -149,3 +157,31 @@ def test_search_agrupavel_por_uso(tenant_env) -> None:
         "/api/corpus/search?q=honorarios&include_estilo=1", headers=tenant_env["headers"]
     ).json()
     assert any(r.get("uso") == "estilo" for r in com["results"])
+    assert any(r.get("area") == "civel" for r in com["results"])
+
+
+def test_search_filtra_biblioteca_privada_por_area(tenant_env) -> None:
+    client = TestClient(app)
+    _upload_peca(
+        client,
+        tenant_env["headers"],
+        area="trabalhista",
+        title="Contestação trabalhista",
+        text="contestacao honorarios trabalhista audiencia verbas rescisorias " * 20,
+    )
+    _upload_peca(
+        client,
+        tenant_env["headers"],
+        area="empresarial",
+        title="Contestação empresarial",
+        text="contestacao honorarios empresarial contrato quotas sociedade " * 20,
+    )
+
+    resp = client.get(
+        "/api/corpus/search?q=contestacao&include_estilo=1&area=empresarial",
+        headers=tenant_env["headers"],
+    )
+
+    assert resp.status_code == 200
+    assert any(r["area"] == "empresarial" for r in resp.json()["results"])
+    assert "trabalhista" not in {r["area"] for r in resp.json()["results"]}

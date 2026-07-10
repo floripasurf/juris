@@ -1334,7 +1334,7 @@
           <option value="modelo_peticao">Modelo de petição (estilo)</option>
           <option value="nota_interna">Tese/nota interna (estilo)</option>
           <option value="acordao_publicado">Decisão/acórdão (fonte citável)</option>
-          <option value="doutrina_privada">Doutrina licenciada (fonte citável)</option>
+          <option value="doutrina_escritorio">Doutrina do escritório (fonte citável)</option>
         </select>
         <select id="library-tipo-peticao">
           <option value="">tipo de peça (opcional)</option>
@@ -1344,7 +1344,8 @@
           <option value="recurso">recurso</option>
           <option value="parecer">parecer</option>
         </select>
-        <input id="library-area" placeholder="área (ex.: cível)" />
+        <input id="library-area" placeholder="área (ex.: cível)" required />
+        <label class="check"><input id="library-copyright-ack" type="checkbox" /> Declaro responsabilidade pelo direito de uso da doutrina enviada</label>
         <button type="submit">Enviar para a biblioteca</button>
       </form>
       <p id="library-upload-status" class="field-note" hidden></p>
@@ -1352,6 +1353,7 @@
       <div id="library-list" class="proc-empty">Carregando…</div>
       <form id="library-search-form" class="connect-bar">
         <input id="library-search-q" placeholder="Buscar na biblioteca e no corpus" />
+        <input id="library-search-area" placeholder="área da busca (ex.: cível)" />
         <button type="submit">Buscar</button>
       </form>
       <div id="library-search-results" hidden>
@@ -1465,7 +1467,6 @@
               <option value="acordao_publicado">acórdão publicado</option>
               <option value="precedente_local">precedente local</option>
               <option value="modelo_peticao">modelo de petição</option>
-              <option value="doutrina_pd">doutrina (domínio público)</option>
             </select>
           </div>
           <div>
@@ -3372,12 +3373,16 @@
         });
         // /api/library aninha o retorno de coverage_report() sob "coverage", que já
         // devolve os contadores sob sua própria chave "coverage" (dupla aninhagem).
-        const byTipoPeticao = (data.coverage && data.coverage.coverage && data.coverage.coverage.tipo_peticao) || {};
+        const coverage = (data.coverage && data.coverage.coverage) || {};
+        const byTipoPeticao = coverage.tipo_peticao || {};
+        const byArea = coverage.area || {};
         const parts = Object.entries(byTipoPeticao).map(([k, v]) => `${k}: ${v}`);
+        const areaParts = Object.entries(byArea).map(([k, v]) => `${k}: ${v}`);
         cov.className = "proc-meta";
-        cov.textContent = parts.length
-          ? `Cobertura por tipo de peça — ${parts.join(" · ")}`
-          : "Cobertura: nenhuma peça classificada por tipo ainda (defina o tipo de peça no envio).";
+        cov.textContent = [
+          parts.length ? `Tipo de peça — ${parts.join(" · ")}` : "Tipo de peça: sem classificação ainda",
+          areaParts.length ? `Áreas — ${areaParts.join(" · ")}` : "Áreas: nenhuma área enviada ainda",
+        ].join(" | ");
       } catch (error) {
         box.className = "proc-empty";
         box.textContent = error.message;
@@ -3393,6 +3398,17 @@
       const tipo = document.querySelector("#library-tipo").value;
       const tipoPeticao = document.querySelector("#library-tipo-peticao").value;
       const area = document.querySelector("#library-area").value.trim();
+      const copyrightAck = document.querySelector("#library-copyright-ack");
+      if (!area) {
+        status.hidden = false;
+        status.textContent = "Informe a área de atuação antes de enviar para a biblioteca.";
+        return;
+      }
+      if (tipo === "doutrina_escritorio" && !copyrightAck.checked) {
+        status.hidden = false;
+        status.textContent = "Para enviar doutrina, confirme a responsabilidade pelo direito de uso do material.";
+        return;
+      }
       status.hidden = false;
       let ok = 0;
       const errors = [];
@@ -3410,6 +3426,7 @@
             provenance_kind: "acervo_do_escritorio",
             source_publisher: "acervo do escritório",
             source_date: new Date().toISOString().slice(0, 10),
+            copyright_ack: tipo === "doutrina_escritorio",
           };
           let attempt = 0;
           let settled = false;                                // conta como sucesso OU erro; 429 persistente não some
@@ -3448,12 +3465,15 @@
       event.preventDefault();
       const q = document.querySelector("#library-search-q").value.trim();
       if (!q) return;
+      const area = document.querySelector("#library-search-area").value.trim();
       const wrap = document.querySelector("#library-search-results");
       const fundEl = document.querySelector("#library-results-fundamento");
       const estEl = document.querySelector("#library-results-estilo");
       let results = [];
       try {
-        const resp = await apiFetch(`/api/corpus/search?q=${encodeURIComponent(q)}&include_estilo=1&top_k=12`);
+        const params = new URLSearchParams({ q, include_estilo: "1", top_k: "12" });
+        if (area) params.set("area", area);
+        const resp = await apiFetch(`/api/corpus/search?${params.toString()}`);
         const data = await resp.json();
         results = data.results || [];
       } catch (error) {
@@ -3471,7 +3491,8 @@
         rows.forEach((r) => {
           const row = document.createElement("div");
           row.className = "proc-row";
-          row.innerHTML = `<div><div class="proc-meta">${escHtml(r.tribunal || r.tipo || "")}</div>` +
+          const meta = [r.tribunal || r.tipo || "", r.area ? `área: ${r.area}` : ""].filter(Boolean).join(" · ");
+          row.innerHTML = `<div><div class="proc-meta">${escHtml(meta)}</div>` +
             `<div>${escHtml(String(r.texto || "").slice(0, 220))}…</div></div>`;
           el.appendChild(row);
         });
@@ -4113,8 +4134,15 @@
         tribunal: document.querySelector("#cu_tribunal").value.trim(),
         source_date: document.querySelector("#cu_data").value,
         tema: document.querySelector("#cu_tema").value.trim(),
+        area: document.querySelector("#cu_tema").value.trim(),
         source_url: document.querySelector("#cu_url").value.trim(),
+        provenance_kind: "acervo_do_escritorio",
+        source_publisher: "acervo do escritório",
       };
+      if (!payload.area) {
+        showCuNotice("Informe o tema/área antes de adicionar ao corpus.", true);
+        return;
+      }
       if (!file && !payload.source_text) {
         showCuNotice("Envie um arquivo ou cole o texto da decisão.", true);
         return;

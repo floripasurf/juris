@@ -369,7 +369,7 @@ def chunk_fonte(fonte: FonteJurisprudencia) -> list[DocumentChunk]:
         return chunk_acordao(fonte)
     if fonte.tipo in (TipoFonte.MODELO_PETICAO, TipoFonte.PECA_ESCRITORIO, TipoFonte.NOTA_INTERNA):
         return chunk_template(fonte)
-    if fonte.tipo in (TipoFonte.DOUTRINA_PD, TipoFonte.DOUTRINA_PRIVADA):
+    if fonte.tipo in (TipoFonte.DOUTRINA_PD, TipoFonte.DOUTRINA_PRIVADA, TipoFonte.DOUTRINA_ESCRITORIO):
         return chunk_doutrina(fonte)
     if fonte.tipo == TipoFonte.NOTICIA_TRIBUNAL:
         return chunk_noticia(fonte)

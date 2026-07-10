@@ -6,6 +6,8 @@ from binding precedents (Súmula Vinculante) to templates and news.
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from dataclasses import dataclass, field
 from datetime import date
 from enum import StrEnum
@@ -27,7 +29,9 @@ class TipoFonte(StrEnum):
     ACORDAO_PUBLICADO = "acordao_publicado"  # hierarquia=5
     PECA_ESCRITORIO = "peca_escritorio"  # hierarquia=7 — peça protocolada do próprio escritório
     NOTA_INTERNA = "nota_interna"  # hierarquia=7 — tese/playbook interno
-    DOUTRINA_PRIVADA = "doutrina_privada"  # hierarquia=6 — obra licenciada/própria (rights_basis obrigatório)
+    # Legado: uploads antigos usavam este nome. Novos uploads do escritório usam DOUTRINA_ESCRITORIO.
+    DOUTRINA_PRIVADA = "doutrina_privada"  # hierarquia=6
+    DOUTRINA_ESCRITORIO = "doutrina_escritorio"  # hierarquia=6 — doutrina fornecida pelo escritório
 
 
 TIPO_HIERARQUIA: dict[TipoFonte, int] = {
@@ -45,6 +49,7 @@ TIPO_HIERARQUIA: dict[TipoFonte, int] = {
     TipoFonte.PECA_ESCRITORIO: 7,
     TipoFonte.NOTA_INTERNA: 7,
     TipoFonte.DOUTRINA_PRIVADA: 6,
+    TipoFonte.DOUTRINA_ESCRITORIO: 6,
 }
 
 
@@ -74,18 +79,13 @@ TIPO_USO_DEFAULT: dict[TipoFonte, UsoFonte] = {
     TipoFonte.PECA_ESCRITORIO: UsoFonte.ESTILO,
     TipoFonte.NOTA_INTERNA: UsoFonte.ESTILO,
     TipoFonte.DOUTRINA_PRIVADA: UsoFonte.FUNDAMENTO,
+    TipoFonte.DOUTRINA_ESCRITORIO: UsoFonte.FUNDAMENTO,
 }
 
 # Valores string dos tipos estilo-only, para os SQLs/payloads das stores.
 ESTILO_SOURCE_TYPES: frozenset[str] = frozenset(
     t.value for t, uso in TIPO_USO_DEFAULT.items() if uso is UsoFonte.ESTILO
 )
-
-# Base de direitos exigida para doutrina (spec L1): sem base válida, não ingere.
-RIGHTS_BASIS_VALUES: frozenset[str] = frozenset(
-    {"dominio_publico", "obra_do_escritorio", "licenca_do_escritorio", "ato_oficial"}
-)
-
 
 def resolve_uso(tipo: TipoFonte | str | None, override: str | None = None) -> UsoFonte:
     """Resolve o uso efetivo: override explícito > default do tipo > fundamento.
@@ -111,6 +111,29 @@ def resolve_uso(tipo: TipoFonte | str | None, override: str | None = None) -> Us
     return TIPO_USO_DEFAULT.get(tipo_enum, UsoFonte.FUNDAMENTO)
 
 
+def normalize_area(area: str | None) -> str:
+    """Canonicalize a practice-area label for storage and retrieval filters."""
+    raw = (area or "").strip().lower()
+    if not raw:
+        return ""
+    text = unicodedata.normalize("NFKD", raw).encode("ascii", "ignore").decode("ascii")
+    text = re.sub(r"[^a-z0-9]+", "_", text).strip("_")
+    aliases = {
+        "civil": "civel",
+        "civeis": "civel",
+        "direito_civel": "civel",
+        "empresas": "empresarial",
+        "empresa": "empresarial",
+        "direito_empresarial": "empresarial",
+        "trabalho": "trabalhista",
+        "direito_trabalhista": "trabalhista",
+        "tributario": "tributario",
+        "tributaria": "tributario",
+        "direito_tributario": "tributario",
+    }
+    return aliases.get(text, text)
+
+
 HIERARCHY_WEIGHTS: dict[int, float] = {
     1: 3.0,
     2: 2.5,
@@ -132,6 +155,7 @@ _HIERARCHY_LABELS: dict[int, str] = {
 _HIERARCHY_LABELS_DETAILED: dict[TipoFonte, str] = {
     TipoFonte.MODELO_PETICAO: "Modelo de Petição",
     TipoFonte.DOUTRINA_PD: "Doutrina (Domínio Público)",
+    TipoFonte.DOUTRINA_ESCRITORIO: "Doutrina do Escritório",
     TipoFonte.NOTICIA_TRIBUNAL: "Notícia de Tribunal",
     TipoFonte.ACORDAO_LANDMARK: "Acórdão Landmark",
     TipoFonte.ACORDAO_PUBLICADO: "Acórdão Publicado",

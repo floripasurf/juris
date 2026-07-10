@@ -54,6 +54,53 @@ def test_find_style_exemplar_tenant_only(tmp_path: Path) -> None:
     assert service.find_style_exemplar("contestacao", tenant_id=None) is None
 
 
+def test_find_style_exemplar_respeita_area_do_escritorio(tmp_path: Path) -> None:
+    store = LocalFTSStore(tmp_path / "repertory.db")
+    store.upsert(
+        [
+            DocumentChunk(
+                chunk_id="trab",
+                source_id="src-trabalhista",
+                source_type=TipoFonte.PECA_ESCRITORIO,
+                text="contestacao trabalhista verbas rescisorias audiencia",
+                metadata={"hierarquia": 7, "tipo_peticao": "contestacao", "area": "trabalhista"},
+                uso="estilo",
+            ),
+            DocumentChunk(
+                chunk_id="emp",
+                source_id="src-empresarial",
+                source_type=TipoFonte.PECA_ESCRITORIO,
+                text="contestacao empresarial contrato quotas sociedade",
+                metadata={"hierarquia": 7, "tipo_peticao": "contestacao", "area": "Direito Empresarial"},
+                uso="estilo",
+            ),
+            DocumentChunk(
+                chunk_id="geral",
+                source_id="src-geral",
+                source_type=TipoFonte.PECA_ESCRITORIO,
+                text="contestacao padrao geral do escritorio",
+                metadata={"hierarquia": 7, "tipo_peticao": "contestacao", "area": "geral"},
+                uso="estilo",
+            ),
+        ],
+        [[], [], []],
+        tenant_id="escritorio-a",
+    )
+    retriever = HybridRetriever(dense_store=store, sparse_store=store, embedder=_NoopEmbedder())
+    service = RepertoryService(retriever=retriever)
+
+    empresarial = service.find_style_exemplar("contestacao", area_direito="empresarial", tenant_id="escritorio-a")
+    assert empresarial is not None
+    assert empresarial.source_id == "src-empresarial"
+
+    results = service.search_jurisprudencia(
+        "contestacao", tenant_id="escritorio-a", include_estilo=True, tenant_only=True, area="empresarial"
+    )
+    ids = {r.source_id for r in results}
+    assert "src-trabalhista" not in ids
+    assert {"src-empresarial", "src-geral"} <= ids
+
+
 def test_find_template_encontra_modelo_peticao_apos_fix_include_estilo(tmp_path: Path) -> None:
     """Regressão [C da T4]: find_template ficava sempre None (include_estilo nunca chegava
     à store e o filtro por tipo usava um prefixo de source_id que não corresponde a nada)."""

@@ -44,6 +44,7 @@ class HybridRetriever:
         tenant_id: str | None = None,
         include_estilo: bool = False,
         tenant_only: bool = False,
+        area: str | None = None,
     ) -> list[SearchResult]:
         """Hybrid search combining dense and sparse results.
 
@@ -73,6 +74,7 @@ class HybridRetriever:
                 tenant_id=tenant_id,
                 include_estilo=include_estilo,
                 tenant_only=tenant_only,
+                area=area,
             )
 
         # Sparse retrieval
@@ -84,6 +86,7 @@ class HybridRetriever:
                 tenant_id=tenant_id,
                 include_estilo=include_estilo,
                 tenant_only=tenant_only,
+                area=area,
             )
         else:
             # For non-FTS stores, try embedding search as fallback
@@ -94,6 +97,7 @@ class HybridRetriever:
                     tenant_id=tenant_id,
                     include_estilo=include_estilo,
                     tenant_only=tenant_only,
+                    area=area,
                 )
 
         # Merge via RRF

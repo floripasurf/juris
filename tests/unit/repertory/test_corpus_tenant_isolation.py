@@ -30,6 +30,7 @@ class _VectorEmbedder:
 class _RecordingDenseStore:
     def __init__(self) -> None:
         self.seen_tenant_ids: list[str | None] = []
+        self.seen_areas: list[str | None] = []
 
     def upsert(self, chunks: list[DocumentChunk], embeddings: list[list[float]], tenant_id: str | None = None) -> int:
         return 0
@@ -42,8 +43,10 @@ class _RecordingDenseStore:
         *,
         include_estilo: bool = False,
         tenant_only: bool = False,
+        area: str | None = None,
     ) -> list[SearchResult]:
         self.seen_tenant_ids.append(tenant_id)
+        self.seen_areas.append(area)
         return []
 
     def delete(self, source_id: str, tenant_id: str | None = None) -> int:
@@ -99,8 +102,9 @@ def test_hybrid_retriever_scopes_dense_path_by_tenant(tmp_path) -> None:
     try:
         retriever = HybridRetriever(dense_store=dense, sparse_store=sparse, embedder=_VectorEmbedder())
 
-        retriever.search("honorários", tenant_id="escritorio-a")
+        retriever.search("honorários", tenant_id="escritorio-a", area="trabalhista")
 
         assert dense.seen_tenant_ids == ["escritorio-a"]
+        assert dense.seen_areas == ["trabalhista"]
     finally:
         sparse.close()

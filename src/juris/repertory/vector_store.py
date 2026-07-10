@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from juris.repertory.chunking import DocumentChunk
-from juris.repertory.corpus.models import ESTILO_SOURCE_TYPES, resolve_uso
+from juris.repertory.corpus.models import ESTILO_SOURCE_TYPES, normalize_area, resolve_uso
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,8 @@ _USO_EFETIVO = (
     "THEN 'estilo' ELSE 'fundamento' END)"
 )
 _ESTILO_FILTER = f"AND {_USO_EFETIVO} = 'fundamento'"
+_AREA_EFETIVA = "LOWER(COALESCE(json_extract(c.metadata, '$.area'), ''))"
+_AREA_MATCH = f"({_AREA_EFETIVA} = ? OR {_AREA_EFETIVA} = 'geral')"
 _SELECT_COLUMNS = f"""
             SELECT c.chunk_id, c.source_id, c.text, c.metadata,
                    c.source_type, {_USO_EFETIVO} AS uso_efetivo,
@@ -76,6 +78,21 @@ _SEARCH_SQL_TENANT_ESTILO = f"""{_SELECT_COLUMNS}
             ORDER BY rank
             LIMIT ?
             """
+_SEARCH_SQL_TENANT_AREA = f"""{_SELECT_COLUMNS}
+            FROM chunks_fts f
+            JOIN chunks c ON c.rowid = f.rowid
+            WHERE chunks_fts MATCH ? AND (c.tenant_id IS NULL OR (c.tenant_id = ? AND {_AREA_MATCH}))
+                {_ESTILO_FILTER}
+            ORDER BY rank
+            LIMIT ?
+            """
+_SEARCH_SQL_TENANT_AREA_ESTILO = f"""{_SELECT_COLUMNS}
+            FROM chunks_fts f
+            JOIN chunks c ON c.rowid = f.rowid
+            WHERE chunks_fts MATCH ? AND (c.tenant_id IS NULL OR (c.tenant_id = ? AND {_AREA_MATCH}))
+            ORDER BY rank
+            LIMIT ?
+            """
 _SEARCH_SQL_TENANT_ONLY = f"""{_SELECT_COLUMNS}
             FROM chunks_fts f
             JOIN chunks c ON c.rowid = f.rowid
@@ -91,8 +108,32 @@ _SEARCH_SQL_TENANT_ONLY_ESTILO = f"""{_SELECT_COLUMNS}
             ORDER BY rank
             LIMIT ?
             """
+_SEARCH_SQL_TENANT_ONLY_AREA = f"""{_SELECT_COLUMNS}
+            FROM chunks_fts f
+            JOIN chunks c ON c.rowid = f.rowid
+            WHERE chunks_fts MATCH ? AND c.tenant_id = ? AND {_AREA_MATCH}
+                {_ESTILO_FILTER}
+            ORDER BY rank
+            LIMIT ?
+            """
+_SEARCH_SQL_TENANT_ONLY_AREA_ESTILO = f"""{_SELECT_COLUMNS}
+            FROM chunks_fts f
+            JOIN chunks c ON c.rowid = f.rowid
+            WHERE chunks_fts MATCH ? AND c.tenant_id = ? AND {_AREA_MATCH}
+            ORDER BY rank
+            LIMIT ?
+            """
 
 _QDRANT_PUBLIC_TENANT = "__juris_public__"
+
+
+def _metadata_for_storage(metadata: dict[str, Any]) -> dict[str, Any]:
+    """Return persisted metadata with canonical practice-area labels."""
+    stored = dict(metadata)
+    area = normalize_area(str(stored.get("area") or ""))
+    if area:
+        stored["area"] = area
+    return stored
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,6 +185,7 @@ class VectorStore(ABC):
         *,
         include_estilo: bool = False,
         tenant_only: bool = False,
+        area: str | None = None,
     ) -> list[SearchResult]:
         """Search for similar chunks.
 
@@ -176,7 +218,7 @@ class VectorStore(ABC):
 
 
 class QdrantVectorStore(VectorStore):
-    """Qdrant-based vector store for production use.
+    """Qdrant-based vector store adapter for the deferred scale-out path.
 
     Args:
         url: Qdrant server URL.
@@ -241,7 +283,25 @@ class QdrantVectorStore(VectorStore):
         return Filter(should=[public_match, cls._tenant_match(tenant_id)])
 
     @classmethod
-    def _search_filter(cls, tenant_id: str | None, *, include_estilo: bool, tenant_only: bool) -> Any:
+    def _area_match(cls, area: str) -> Any:
+        from qdrant_client.models import FieldCondition, Filter, MatchValue
+
+        return Filter(
+            should=[
+                FieldCondition(key="area", match=MatchValue(value=area)),
+                FieldCondition(key="area", match=MatchValue(value="geral")),
+            ]
+        )
+
+    @classmethod
+    def _search_filter(
+        cls,
+        tenant_id: str | None,
+        *,
+        include_estilo: bool,
+        tenant_only: bool,
+        area: str | None = None,
+    ) -> Any:
         """Build the ``Filter`` for ``search()``, combining tenant scope and the uso axis.
 
         Starts from the existing tenant visibility filter (or, when ``tenant_only``
@@ -272,7 +332,12 @@ class QdrantVectorStore(VectorStore):
         """
         from qdrant_client.models import FieldCondition, Filter, MatchValue
 
-        base = Filter(must=[cls._tenant_match(tenant_id)]) if tenant_only else cls._visibility_filter(tenant_id)
+        normalized_area = normalize_area(area)
+        if normalized_area and tenant_id is not None:
+            private_area = Filter(must=[cls._tenant_match(tenant_id), cls._area_match(normalized_area)])
+            base = private_area if tenant_only else Filter(should=[cls._tenant_match(None), private_area])
+        else:
+            base = Filter(must=[cls._tenant_match(tenant_id)]) if tenant_only else cls._visibility_filter(tenant_id)
         if include_estilo:
             return base
         return Filter(
@@ -313,12 +378,13 @@ class QdrantVectorStore(VectorStore):
         tenant_payload = self._tenant_payload_value(tenant_id)
         for chunk, embedding in zip(chunks, embeddings, strict=True):
             uso_val = chunk.uso or resolve_uso(chunk.source_type).value
+            metadata = _metadata_for_storage(chunk.metadata)
             points.append(
                 PointStruct(
                     id=str(uuid.uuid5(uuid.NAMESPACE_DNS, chunk.chunk_id)),
                     vector=embedding,
                     payload={
-                        **chunk.metadata,
+                        **metadata,
                         "chunk_id": chunk.chunk_id,
                         "source_id": chunk.source_id,
                         "source_type": chunk.source_type.value,
@@ -340,6 +406,7 @@ class QdrantVectorStore(VectorStore):
         *,
         include_estilo: bool = False,
         tenant_only: bool = False,
+        area: str | None = None,
     ) -> list[SearchResult]:
         """Search Qdrant for similar chunks.
 
@@ -357,7 +424,9 @@ class QdrantVectorStore(VectorStore):
             Ranked list of search results.
         """
         client = self._get_client()
-        query_filter = self._search_filter(tenant_id, include_estilo=include_estilo, tenant_only=tenant_only)
+        query_filter = self._search_filter(
+            tenant_id, include_estilo=include_estilo, tenant_only=tenant_only, area=area
+        )
         if hasattr(client, "query_points"):
             response = client.query_points(
                 collection_name=self._collection,
@@ -405,7 +474,7 @@ class QdrantVectorStore(VectorStore):
 
 
 class LocalFTSStore(VectorStore):
-    """SQLite FTS5 fallback for offline/dev mode.
+    """SQLite FTS5 store used by the current pilot runtime.
 
     Args:
         db_path: Path to SQLite database file. Uses in-memory if None.
@@ -464,6 +533,7 @@ class LocalFTSStore(VectorStore):
                 self._conn.execute("DELETE FROM chunks WHERE chunk_id = ?", (chunk.chunk_id,))
 
             uso_val = chunk.uso or resolve_uso(chunk.source_type).value
+            metadata = _metadata_for_storage(chunk.metadata)
             self._conn.execute(
                 "INSERT INTO chunks (chunk_id, source_id, source_type, text, metadata, position, tenant_id, uso) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -472,7 +542,7 @@ class LocalFTSStore(VectorStore):
                     chunk.source_id,
                     chunk.source_type.value,
                     chunk.text,
-                    json.dumps(chunk.metadata, ensure_ascii=False),
+                    json.dumps(metadata, ensure_ascii=False),
                     chunk.position,
                     tenant_id,
                     uso_val,
@@ -495,6 +565,7 @@ class LocalFTSStore(VectorStore):
         *,
         include_estilo: bool = False,
         tenant_only: bool = False,
+        area: str | None = None,
     ) -> list[SearchResult]:
         """Search using FTS5 (query_embedding is ignored; uses metadata for text query).
 
@@ -513,6 +584,7 @@ class LocalFTSStore(VectorStore):
         *,
         include_estilo: bool = False,
         tenant_only: bool = False,
+        area: str | None = None,
     ) -> list[SearchResult]:
         """Full-text search using FTS5.
 
@@ -549,12 +621,19 @@ class LocalFTSStore(VectorStore):
         # Tenant scope × uso filter: all SQL statements are fixed module-level literals
         # (no interpolation) — the tenant value travels as a bound parameter, so there is
         # no injection surface despite the branching.
+        normalized_area = normalize_area(area)
         if tenant_id is None:
             sql = _SEARCH_SQL_ESTILO if include_estilo else _SEARCH_SQL
             params: tuple[object, ...] = (safe_query, top_k)
+        elif tenant_only and normalized_area:
+            sql = _SEARCH_SQL_TENANT_ONLY_AREA_ESTILO if include_estilo else _SEARCH_SQL_TENANT_ONLY_AREA
+            params = (safe_query, tenant_id, normalized_area, top_k)
         elif tenant_only:
             sql = _SEARCH_SQL_TENANT_ONLY_ESTILO if include_estilo else _SEARCH_SQL_TENANT_ONLY
             params = (safe_query, tenant_id, top_k)
+        elif normalized_area:
+            sql = _SEARCH_SQL_TENANT_AREA_ESTILO if include_estilo else _SEARCH_SQL_TENANT_AREA
+            params = (safe_query, tenant_id, normalized_area, top_k)
         else:
             sql = _SEARCH_SQL_TENANT_ESTILO if include_estilo else _SEARCH_SQL_TENANT
             params = (safe_query, tenant_id, top_k)

@@ -13,7 +13,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, cast
 
-from juris.repertory.corpus.models import _HIERARCHY_LABELS, TipoFonte, UsoFonte
+from juris.repertory.corpus.models import _HIERARCHY_LABELS, TipoFonte, UsoFonte, normalize_area
 from juris.repertory.retrieval.hybrid import HybridRetriever
 from juris.repertory.vector_store import SearchResult
 
@@ -64,6 +64,7 @@ class RetrievalResult:
             ``"modelo_peticao"``); empty when the underlying store didn't
             populate it.
         uso: Effective uso — ``"fundamento"`` or ``"estilo"``.
+        area: Practice-area metadata for tenant private corpus chunks.
         metadata_tipo_peticao: ``tipo_peticao`` from the chunk metadata, when
             present (used to match style exemplars against a requested type).
     """
@@ -84,6 +85,7 @@ class RetrievalResult:
     score_components: dict[str, float] | None = None
     tipo: str = ""
     uso: str = ""
+    area: str = ""
     metadata_tipo_peticao: str = ""
 
 
@@ -149,6 +151,7 @@ class RepertoryService:
         tenant_id: str | None = None,
         include_estilo: bool = False,
         tenant_only: bool = False,
+        area: str | None = None,
     ) -> list[RetrievalResult]:
         """Search the jurisprudence corpus with optional filters.
 
@@ -168,6 +171,8 @@ class RepertoryService:
                 sources (e.g. modelos de petição) from grounding results.
             tenant_only: If ``True``, exclude the shared public seed and
                 return only this tenant's own sources.
+            area: If provided, private tenant chunks must match this area or
+                ``geral``. Public seed results remain available.
 
         Returns:
             Ranked list of retrieval results.
@@ -190,6 +195,7 @@ class RepertoryService:
             tenant_id=tenant_id,
             include_estilo=include_estilo,
             tenant_only=tenant_only,
+            area=area,
         )
 
         # Merge HyDE results if available
@@ -201,6 +207,7 @@ class RepertoryService:
                 tenant_id=tenant_id,
                 include_estilo=include_estilo,
                 tenant_only=tenant_only,
+                area=area,
             )
             seen: dict[str, SearchResult] = {}
             for r in raw_results + hyde_results:
@@ -241,6 +248,7 @@ class RepertoryService:
                     source_url=str(result.metadata.get("source_url") or ""),
                     tipo=result.source_type,
                     uso=result.uso,
+                    area=str(result.metadata.get("area") or ""),
                     metadata_tipo_peticao=str(result.metadata.get("tipo_peticao") or ""),
                 )
             )
@@ -343,6 +351,7 @@ class RepertoryService:
             top_k=5,
             tenant_id=tenant_id,
             include_estilo=True,
+            area=area_direito,
         )
 
         # Filter to MODELO_PETICAO only
@@ -363,9 +372,15 @@ class RepertoryService:
         """
         if not tenant_id:
             return None
-        query = f"{tipo_peticao} {area_direito or ''}".strip()
+        area = normalize_area(area_direito)
+        query = f"{tipo_peticao} {area or ''}".strip()
         results = self.search_jurisprudencia(
-            query=query, top_k=5, tenant_id=tenant_id, include_estilo=True, tenant_only=True
+            query=query,
+            top_k=5,
+            tenant_id=tenant_id,
+            include_estilo=True,
+            tenant_only=True,
+            area=area,
         )
         style = [r for r in results if r.uso == UsoFonte.ESTILO.value]
         if not style:

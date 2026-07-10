@@ -152,7 +152,7 @@ class TestSearchAfterUpload:
 
         class _StubRepertory:
             def search_jurisprudencia(
-                self, query: str, top_k: int, tenant_id: str, include_estilo: bool = False
+                self, query: str, top_k: int, tenant_id: str, include_estilo: bool = False, area: str | None = None
             ) -> list:
                 return []
 
@@ -219,6 +219,7 @@ class TestProvenanciaPrivada:
             "source_date": "2025-11-10",
             "source_publisher": "Escritório A",
             "provenance_kind": "acervo_do_escritorio",
+            "area": "civel",
             "source_url": "javascript:alert(1)",  # URL fornecida → ainda valida
             "source_text": TEXTO,
         }
@@ -233,21 +234,56 @@ class TestProvenanciaPrivada:
         resp = client.post("/api/corpus/upload", json=payload, headers=tenant_env["headers"])
         assert resp.status_code == 400  # comportamento atual preservado
 
-    def test_doutrina_sem_rights_basis_nao_ingere(self, tenant_env) -> None:
+    def test_acervo_do_escritorio_sem_area_nao_ingere(self, tenant_env) -> None:
         client = TestClient(app)
         payload = {
-            "title": "Manual de Processo Civil",
-            "source_type": "doutrina_privada",
-            "source_date": "2024-01-01",
-            "source_publisher": "Editora X",
+            "title": "Contestação modelo — cobrança",
+            "source_type": "peca_escritorio",
+            "source_date": "2025-11-10",
+            "source_publisher": "Escritório A",
             "provenance_kind": "acervo_do_escritorio",
             "source_text": TEXTO,
         }
         resp = client.post("/api/corpus/upload", json=payload, headers=tenant_env["headers"])
         assert resp.status_code == 400
-        assert "rights_basis" in resp.json()["detail"]["message"]
+        assert "area" in resp.json()["detail"]["message"]
 
-    def test_doutrina_com_rights_basis_ingere(self, tenant_env) -> None:
+    def test_doutrina_do_escritorio_sem_aceite_nao_ingere(self, tenant_env) -> None:
+        client = TestClient(app)
+        payload = {
+            "title": "Manual de Processo Civil",
+            "source_type": "doutrina_escritorio",
+            "source_date": "2024-01-01",
+            "source_publisher": "Editora X",
+            "provenance_kind": "acervo_do_escritorio",
+            "area": "cível",
+            "source_text": TEXTO,
+        }
+        resp = client.post("/api/corpus/upload", json=payload, headers=tenant_env["headers"])
+        assert resp.status_code == 400
+        assert "copyright_ack" in resp.json()["detail"]["message"]
+
+    def test_doutrina_do_escritorio_com_aceite_ingere(self, tenant_env) -> None:
+        client = TestClient(app)
+        payload = {
+            "title": "Manual de Processo Civil",
+            "source_type": "doutrina_escritorio",
+            "source_date": "2024-01-01",
+            "source_publisher": "Editora X",
+            "provenance_kind": "acervo_do_escritorio",
+            "area": "cível",
+            "copyright_ack": True,
+            "source_text": TEXTO,
+        }
+        resp = client.post("/api/corpus/upload", json=payload, headers=tenant_env["headers"])
+        assert resp.status_code == 201, resp.text
+        source = resp.json()["source"]
+        assert source["source_type"] == "doutrina_escritorio"
+        assert source["area"] == "civel"
+        assert source["copyright_ack"] is True
+        assert "rights_basis" not in source
+
+    def test_doutrina_privada_legada_vira_doutrina_escritorio(self, tenant_env) -> None:
         client = TestClient(app)
         payload = {
             "title": "Manual de Processo Civil",
@@ -255,12 +291,13 @@ class TestProvenanciaPrivada:
             "source_date": "2024-01-01",
             "source_publisher": "Editora X",
             "provenance_kind": "acervo_do_escritorio",
-            "rights_basis": "licenca_do_escritorio",
+            "area": "civel",
+            "copyright_ack": True,
             "source_text": TEXTO,
         }
         resp = client.post("/api/corpus/upload", json=payload, headers=tenant_env["headers"])
         assert resp.status_code == 201, resp.text
-        assert resp.json()["source"]["rights_basis"] == "licenca_do_escritorio"
+        assert resp.json()["source"]["source_type"] == "doutrina_escritorio"
 
     def test_uso_override_invalido_e_400(self, tenant_env) -> None:
         client = TestClient(app)

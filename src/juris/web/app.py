@@ -123,6 +123,7 @@ def _api_rate_limiter() -> RateLimiter:
         window_seconds=60,
         redis_url=settings.rate_limit_redis_url or None,
         prefix="juris:rl:api:",
+        fail_closed=settings.rate_limit_fail_closed,
     )
 
 
@@ -134,6 +135,7 @@ def _api_expensive_rate_limiter() -> RateLimiter:
         window_seconds=60,
         redis_url=settings.rate_limit_redis_url or None,
         prefix="juris:rl:api-expensive:",
+        fail_closed=settings.rate_limit_fail_closed,
     )
 
 
@@ -145,6 +147,7 @@ def _ws_agent_relay_rate_limiter() -> RateLimiter:
         window_seconds=60,
         redis_url=settings.rate_limit_redis_url or None,
         prefix="juris:rl:ws-agent-relay:",
+        fail_closed=settings.rate_limit_fail_closed,
     )
 
 
@@ -389,7 +392,7 @@ class CorpusUploadPayload(BaseModel):
     provenance_kind: str = Field(default="publica", max_length=32)
     uso: str = Field(default="", max_length=16)
     tipo_peticao: str = Field(default="", max_length=64)
-    rights_basis: str = Field(default="", max_length=32)
+    copyright_ack: bool = False
 
 
 class CorpusSourcePayload(BaseModel):
@@ -1171,6 +1174,7 @@ async def search_corpus(
     q: str,
     top_k: int = 8,
     include_estilo: bool = Query(False),
+    area: str = Query(default="", max_length=128),
     tenant: Tenant = Depends(current_tenant),
 ) -> dict[str, object]:
     """Explainable jurisprudence search (Sprint 5): each hit carries WHY it ranked.
@@ -1197,6 +1201,7 @@ async def search_corpus(
             top_k=max(1, min(top_k, 20)),
             tenant_id=tenant.tenant_id,
             include_estilo=include_estilo,
+            area=area or None,
         )
         return cast(list[Any], raw_results)
 
@@ -1213,6 +1218,7 @@ async def search_corpus(
                 "source_url": r.source_url,
                 "tipo": r.tipo,
                 "uso": r.uso,
+                "area": r.area,
                 "explain": explain_ranking(r),
             }
             for r in results
