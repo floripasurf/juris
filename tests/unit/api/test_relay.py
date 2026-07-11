@@ -282,6 +282,75 @@ def test_run_relay_agent_rejects_unsafe_tenant_before_connect(monkeypatch) -> No
     assert called is False
 
 
+def test_run_relay_agent_forever_reconnects_with_backoff(monkeypatch) -> None:
+    from juris.api import local_agent
+
+    calls: list[tuple[str, str, str]] = []
+    sleeps: list[float] = []
+
+    def fake_run_relay_agent(url, token, tenant_id, *, dispatch=None, on_connected=None):  # noqa: ANN001, ANN202
+        calls.append((url, token, tenant_id))
+        if len(calls) < 3:
+            raise OSError("relay indisponível")
+        if on_connected is not None:
+            on_connected()
+
+    monkeypatch.setattr(local_agent, "run_relay_agent", fake_run_relay_agent)
+
+    local_agent.run_relay_agent_forever(
+        "wss://juris.example/ws/agent-relay",
+        "tok",
+        "escritorio-a",
+        sleep=sleeps.append,
+        jitter=lambda d: d,  # identidade: isola a progressão do backoff do jitter
+        initial_backoff_seconds=1,
+        max_backoff_seconds=5,
+        max_attempts=3,
+    )
+
+    assert calls == [
+        ("wss://juris.example/ws/agent-relay", "tok", "escritorio-a"),
+        ("wss://juris.example/ws/agent-relay", "tok", "escritorio-a"),
+        ("wss://juris.example/ws/agent-relay", "tok", "escritorio-a"),
+    ]
+    assert sleeps == [1, 2]
+    assert local_agent._RELAY_STATES["escritorio-a"] == "stopped"
+
+
+def test_run_relay_agent_forever_aplica_jitter_no_backoff(monkeypatch) -> None:
+    from juris.api import local_agent
+
+    sleeps: list[float] = []
+
+    def always_down(url, token, tenant_id, *, dispatch=None, on_connected=None):  # noqa: ANN001, ANN202
+        raise OSError("relay indisponível")
+
+    monkeypatch.setattr(local_agent, "run_relay_agent", always_down)
+
+    local_agent.run_relay_agent_forever(
+        "wss://juris.example/ws/agent-relay",
+        "tok",
+        "escritorio-a",
+        sleep=sleeps.append,
+        jitter=lambda d: d * 0.5,  # jitter determinístico: metade do backoff base
+        initial_backoff_seconds=2,
+        max_backoff_seconds=100,
+        max_attempts=3,
+    )
+
+    # backoff base 2 → 4; jitter aplicado antes de dormir → 1.0, 2.0
+    assert sleeps == [1.0, 2.0]
+
+
+def test_default_relay_jitter_fica_entre_metade_e_o_delay() -> None:
+    from juris.api import local_agent
+
+    for delay in (1.0, 4.0, 30.0):
+        wait = local_agent._default_relay_jitter(delay)
+        assert delay / 2 <= wait <= delay
+    assert local_agent._default_relay_jitter(0.0) == 0.0
+
+
 @pytest.mark.asyncio
 async def test_dispatch_routes_mni_operation(monkeypatch) -> None:
     """A relayed mni request is routed to the local MNI handler (agent side)."""

@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import base64
 import os
+import random
 import secrets
 import threading
+import time
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from datetime import date
@@ -40,6 +42,7 @@ logger = get_logger(__name__)
 _LOCAL_AGENT_HOST = "127.0.0.1"
 _BROWSER_PAIRING_ORIGINS = {
     "https://causia.com.br",
+    "https://www.causia.com.br",
     "https://app.causia.com.br",
     "http://127.0.0.1:8000",
     "http://localhost:8000",
@@ -74,6 +77,8 @@ app = FastAPI(
     description="Lawyer-side local agent — signing + token management",
 )
 _RELAY_THREADS: dict[str, threading.Thread] = {}
+_RELAY_STOP_EVENTS: dict[str, threading.Event] = {}
+_RELAY_STATES: dict[str, str] = {}
 
 
 class RelayPairingPayload(BaseModel):
@@ -178,10 +183,20 @@ def _start_relay_pairing(payload: RelayPairingPayload) -> None:
     from juris.web.auth import validate_tenant_id
 
     tenant_id = validate_tenant_id(payload.tenant_id)
+    previous_stop = _RELAY_STOP_EVENTS.get(tenant_id)
+    if previous_stop is not None:
+        previous_stop.set()
+    stop_event = threading.Event()
+    _RELAY_STOP_EVENTS[tenant_id] = stop_event
 
     def _run() -> None:
         try:
-            run_relay_agent(payload.relay_url, payload.agent_token, tenant_id)
+            run_relay_agent_forever(
+                payload.relay_url,
+                payload.agent_token,
+                tenant_id,
+                stop_event=stop_event,
+            )
         except Exception as exc:  # noqa: BLE001 - local background task logs only sanitized detail
             logger.warning(
                 "agent_relay_pairing_stopped",
@@ -602,10 +617,13 @@ def agent_health(*, token_probe: Callable[[], TokenStatus] | None = None) -> Hea
     from juris import __version__
 
     status = (token_probe or _default_token_probe)()
+    relay_tenant_id, relay_status = _current_relay_state()
     return HealthResponse(
         status="ok",
         token_connected=status.connected,
         cert_valid_until=status.cert_valid_until,
+        relay_status=relay_status,
+        relay_tenant_id=relay_tenant_id,
         version=__version__,
     )
 
@@ -824,12 +842,13 @@ def run_relay_agent(
     tenant_id: str,
     *,
     dispatch: Callable[[AgentRequest], Coroutine[object, object, AgentResponse]] | None = None,
+    on_connected: Callable[[], None] | None = None,
 ) -> None:
     """Agent-side dialer: connect OUT to the orchestrator's relay and serve requests.
 
     Blocking. The agent dials the cloud (so no inbound port / NAT hole is needed), then
     for each forwarded ``AgentRequest`` runs it locally and sends back the
-    ``AgentResponse``. Reconnection/backoff is the caller's concern.
+    ``AgentResponse``. Reconnection/backoff is handled by ``run_relay_agent_forever``.
     """
     import asyncio
     from urllib.parse import urlencode
@@ -843,6 +862,8 @@ def run_relay_agent(
     sep = "&" if "?" in url else "?"
     full_url = f"{url}{sep}{urlencode({'tenant': tenant_id})}"
     with connect(full_url, additional_headers={"x-agent-token": token}) as ws:
+        if on_connected is not None:
+            on_connected()
         for raw in ws:  # each message is a forwarded AgentRequest
             text = raw if isinstance(raw, str) else raw.decode()
             response: AgentResponse
@@ -852,3 +873,91 @@ def run_relay_agent(
             except Exception:  # noqa: BLE001 — typed error back to the orchestrator
                 response = AgentResponse(request_id="unknown", success=False, error=_AGENT_PROCESSING_ERROR)
             ws.send(response.model_dump_json())
+
+
+def _current_relay_state() -> tuple[str | None, str | None]:
+    for tenant_id, status in sorted(_RELAY_STATES.items()):
+        if status in {"connected", "connecting", "reconnecting"}:
+            return tenant_id, status
+    if _RELAY_STATES:
+        tenant_id = sorted(_RELAY_STATES)[0]
+        return tenant_id, _RELAY_STATES[tenant_id]
+    return None, None
+
+
+def _default_relay_jitter(delay: float) -> float:
+    """Equal jitter: mantém metade do backoff e randomiza a outra metade.
+
+    Evita reconexões sincronizadas (thundering herd) sem permitir espera ~0.
+    """
+    if delay <= 0:
+        return 0.0
+    half = delay / 2
+    return half + random.uniform(0.0, half)  # noqa: S311 - jitter de reconexão, não é uso criptográfico
+
+
+def run_relay_agent_forever(
+    url: str,
+    token: str,
+    tenant_id: str,
+    *,
+    dispatch: Callable[[AgentRequest], Coroutine[object, object, AgentResponse]] | None = None,
+    stop_event: threading.Event | None = None,
+    sleep: Callable[[float], None] = time.sleep,
+    jitter: Callable[[float], float] | None = None,
+    initial_backoff_seconds: float = 1.0,
+    max_backoff_seconds: float = 30.0,
+    max_attempts: int | None = None,
+) -> None:
+    """Run the reverse relay with reconnect/backoff until stopped.
+
+    Backoff cresce exponencialmente (reset ao conectar) e é aplicado com jitter
+    para não sincronizar reconexões; ``jitter`` é injetável para testes.
+    """
+    from websockets.exceptions import WebSocketException
+
+    from juris.web.auth import validate_tenant_id
+
+    jitter_fn = jitter if jitter is not None else _default_relay_jitter
+    tenant_id = validate_tenant_id(tenant_id)
+    delay = max(0.0, initial_backoff_seconds)
+    max_delay = max(delay, max_backoff_seconds)
+    attempts = 0
+    while stop_event is None or not stop_event.is_set():
+        attempts += 1
+        connected = False
+        _RELAY_STATES[tenant_id] = "connecting" if attempts == 1 else "reconnecting"
+
+        def _mark_connected() -> None:
+            nonlocal connected, delay
+            connected = True
+            delay = max(0.0, initial_backoff_seconds)
+            _RELAY_STATES[tenant_id] = "connected"
+            logger.info("agent_relay_connected", tenant_id=tenant_id)
+
+        try:
+            run_relay_agent(url, token, tenant_id, dispatch=dispatch, on_connected=_mark_connected)
+            logger.warning(
+                "agent_relay_disconnected",
+                tenant_id=tenant_id,
+                state="closed" if connected else "closed_before_ready",
+            )
+        except (OSError, TimeoutError, WebSocketException) as exc:
+            logger.warning(
+                "agent_relay_connect_failed",
+                tenant_id=tenant_id,
+                error=safe_error_text(exc),
+                exception_type=exc.__class__.__name__,
+            )
+
+        if max_attempts is not None and attempts >= max_attempts:
+            _RELAY_STATES[tenant_id] = "stopped"
+            return
+        if stop_event is not None and stop_event.is_set():
+            break
+        _RELAY_STATES[tenant_id] = "reconnecting"
+        wait = jitter_fn(delay)
+        logger.info("agent_relay_reconnecting", tenant_id=tenant_id, delay_seconds=wait)
+        sleep(wait)
+        delay = min(max_delay, delay * 2 if delay else initial_backoff_seconds)
+    _RELAY_STATES[tenant_id] = "stopped"

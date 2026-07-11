@@ -73,6 +73,8 @@ class HealthResponse(BaseModel):
     status: str
     token_connected: bool
     cert_valid_until: date | None = None
+    relay_status: str | None = None
+    relay_tenant_id: str | None = None
     version: str = "0.1.0"
 
 

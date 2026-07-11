@@ -60,11 +60,11 @@ def test_browser_pairing_starts_relay_agent_from_allowed_origin(monkeypatch) -> 
     seen: dict[str, str] = {}
     called = threading.Event()
 
-    def fake_run_relay_agent(url: str, token: str, tenant_id: str) -> None:
+    def fake_run_relay_agent_forever(url: str, token: str, tenant_id: str, **_kwargs) -> None:  # noqa: ANN003
         seen.update({"url": url, "token": token, "tenant_id": tenant_id})
         called.set()
 
-    monkeypatch.setattr(local_agent, "run_relay_agent", fake_run_relay_agent)
+    monkeypatch.setattr(local_agent, "run_relay_agent_forever", fake_run_relay_agent_forever)
     client = TestClient(app, client=("127.0.0.1", 50000))
 
     response = client.post(
@@ -85,6 +85,30 @@ def test_browser_pairing_starts_relay_agent_from_allowed_origin(monkeypatch) -> 
         "token": "relay-token",
         "tenant_id": "trial_abc123",
     }
+
+
+def test_browser_pairing_accepts_www_causia_origin(monkeypatch) -> None:
+    called = threading.Event()
+
+    def fake_run_relay_agent_forever(*_args, **_kwargs) -> None:  # noqa: ANN002, ANN003
+        called.set()
+
+    monkeypatch.setattr(local_agent, "run_relay_agent_forever", fake_run_relay_agent_forever)
+    client = TestClient(app, client=("127.0.0.1", 50000))
+
+    response = client.post(
+        "/pair-relay",
+        headers={"origin": "https://www.causia.com.br", "host": "127.0.0.1:8765"},
+        json={
+            "relay_url": "wss://causia.com.br/ws/agent-relay",
+            "tenant_id": "trial_abc123",
+            "agent_token": "relay-token",
+        },
+    )
+
+    assert response.status_code == 202
+    assert response.headers["access-control-allow-origin"] == "https://www.causia.com.br"
+    assert called.wait(timeout=1)
 
 
 def test_browser_pairing_preflight_allows_private_network_request() -> None:
@@ -110,11 +134,11 @@ def test_browser_pairing_rejects_foreign_origin(monkeypatch) -> None:
     """A random page open in the browser cannot pair itself with the local agent."""
     called = False
 
-    def fake_run_relay_agent(url: str, token: str, tenant_id: str) -> None:  # noqa: ARG001
+    def fake_run_relay_agent_forever(*_args, **_kwargs) -> None:  # noqa: ANN002, ANN003
         nonlocal called
         called = True
 
-    monkeypatch.setattr(local_agent, "run_relay_agent", fake_run_relay_agent)
+    monkeypatch.setattr(local_agent, "run_relay_agent_forever", fake_run_relay_agent_forever)
     client = TestClient(app, client=("127.0.0.1", 50000))
 
     response = client.post(

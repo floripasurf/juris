@@ -105,11 +105,11 @@ def agent_connect_relay(
     For non-co-located deploys: the agent (behind NAT) connects to the cloud instead of
     the cloud reaching the agent. Requires ``JURIS_AGENT_TOKEN`` (+ CPF/SENHA/PIN).
     Use ``wss://`` so the channel is TLS-encrypted (mTLS if the relay requires a client
-    cert). Reconnects are the operator's concern (run under a supervisor).
+    cert). Reconnects use local exponential backoff until Ctrl-C.
     """
     import os
 
-    from juris.api.local_agent import run_relay_agent
+    from juris.api.local_agent import run_relay_agent_forever
 
     token = os.environ.get("JURIS_AGENT_TOKEN")
     if not token:
@@ -117,7 +117,7 @@ def agent_connect_relay(
         raise typer.Exit(code=2)
     console.print(f"[bold]Agente[/bold] discando o relay {url} (tenant={tenant})… Ctrl-C para sair.")
     try:
-        run_relay_agent(url, token, tenant)
+        run_relay_agent_forever(url, token, tenant)
     except ValueError as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=2) from None
