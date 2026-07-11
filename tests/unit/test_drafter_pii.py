@@ -144,13 +144,12 @@ async def test_thesis_inference_marks_case_context_prompt_as_pii() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    reason="Reconciliacao sprint-15<->main: o pilot espera o reviewer rodando mesmo com "
-    "citacao falha; o main (guardrails legais C1) gateia o reviewer atras do grounding e "
-    "bloqueia draft nao-fundamentado. Decisao de produto pendente.",
-    strict=False,
-)
-async def test_draft_runs_reviewer_even_when_citation_verification_fails() -> None:
+async def test_citation_verification_failure_blocks_draft_and_skips_reviewer() -> None:
+    # DECISÃO DE PRODUTO (reconciliação sprint-15↔main, 11/07/2026): grounding é HARD GATE.
+    # Quando a verificação de citação falha, a minuta é BLOQUEADA (is_grounded=False) e o
+    # reviewer NÃO roda como se a minuta fosse utilizável. Um "reviewer diagnóstico" sobre
+    # minuta bloqueada (claramente marcado, sem alterar is_grounded/protocolo/verifier) é
+    # follow-up documentado, não implementado aqui.
     llm = RecordingLLM()
     reviewer = RecordingReviewer()
     agent = DrafterAgent(
@@ -177,5 +176,7 @@ async def test_draft_runs_reviewer_even_when_citation_verification_fails() -> No
         ),
     )
 
-    assert result.reviewer_report is not None
-    assert len(reviewer.requests) == 1
+    assert result.is_grounded is False
+    assert result.blocked_reason is not None
+    assert result.reviewer_report is None
+    assert len(reviewer.requests) == 0
