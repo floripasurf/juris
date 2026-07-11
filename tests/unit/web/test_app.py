@@ -103,3 +103,19 @@ def test_create_demo_run_executes_real_service_path(monkeypatch, tmp_path: Path)
     assert body["succeeded"] is True
     assert body["artifacts"][0]["name"] == "rascunho-pesquisa.md"
     assert body["artifacts"][0]["preview"].startswith("# Rascunho real")
+
+
+def test_create_demo_run_rejects_non_local_host() -> None:
+    response = client.post(
+        "/api/demo-runs",
+        headers={"host": "public.example.com"},
+        json={
+            "numero_cnj": "0001234-56.2026.8.13.0001",
+            "tipo": "contestacao",
+            "source": "fixture",
+            "modo": "rascunho-pesquisa",
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Juris web local só aceita requests locais"
