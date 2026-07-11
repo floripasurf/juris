@@ -1,0 +1,141 @@
+# .github/workflows/agent-release.yml — release do Agente Causia (PyInstaller
+# macOS + Windows) com manifesto de auto-update assinado (Ed25519).
+#
+# ---------------------------------------------------------------------------
+# PASSO HUMANO (fazer UMA VEZ, fora deste workflow, ANTES do primeiro release):
+# gerar o par de chaves Ed25519 offline e registrar os secrets do repo. NÃO
+# automatizar isto — a privada nunca deve tocar um log de CI.
+#
+#   uv run python -c "
+#   from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+#   from cryptography.hazmat.primitives import serialization as s
+#   k = Ed25519PrivateKey.generate()
+#   open('agent_update_priv.pem', 'wb').write(
+#       k.private_bytes(s.Encoding.PEM, s.PrivateFormat.PKCS8, s.NoEncryption())
+#   )
+#   print(k.public_key().public_bytes(s.Encoding.PEM, s.PublicFormat.SubjectPublicKeyInfo).decode())
+#   "
+#   gh secret set AGENT_UPDATE_PRIVKEY < agent_update_priv.pem
+#   gh secret set AGENT_UPDATE_PUBKEY   # colar a PEM pública impressa acima
+#   # apagar agent_update_priv.pem da máquina local após guardar num cofre.
+# ---------------------------------------------------------------------------
+name: agent-release
+
+on:
+  push:
+    tags: ["agent-v*"]
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - run: uv sync --extra agent
+      - run: uv pip install pyinstaller
+
+      - name: Extrair versão da tag (agent-vAAAA.M.D.seq)
+        run: echo "VER=${GITHUB_REF_NAME#agent-v}" >> "$GITHUB_ENV"
+
+      # Metadados embutidos ANTES do PyInstaller: a versão embutida em
+      # _release_meta.AGENT_VERSION é a MESMA string usada no manifesto
+      # (ver job sign-and-release) — a igualdade delas é o que impede o
+      # agente de entrar em loop de re-update contra a própria versão.
+      - name: Gerar juris/agent/_release_meta.py (embutido no binário)
+        env:
+          AGENT_UPDATE_PUBKEY: ${{ secrets.AGENT_UPDATE_PUBKEY }}
+        run: uv run python scripts/write_release_meta.py "$VER"
+
+      # Falha alta e explícita se os metadados vierem ausentes/malformados —
+      # nunca shippar silenciosamente com auto-update desligado.
+      - name: Assert _release_meta válido
+        run: |
+          uv run python -c "from juris.agent._release_meta import AGENT_VERSION, PUBLIC_KEY_PEM; assert AGENT_VERSION and PUBLIC_KEY_PEM.strip().startswith('-----BEGIN PUBLIC KEY-----')"
+
+      - name: PyInstaller (onedir)
+        run: uv run pyinstaller packaging/agent/causia-agent.spec --distpath dist --workpath build/pyi --noconfirm
+
+      - name: Empacotar .dmg
+        run: bash packaging/agent/macos/build_dmg.sh "$VER"
+
+      - uses: actions/upload-artifact@v4
+        with: { name: CausiaAgente.dmg, path: dist/CausiaAgente.dmg }
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - run: uv sync --extra agent
+      - run: uv pip install pyinstaller
+
+      # shell: bash nos passos de versão/metadados — mesmo script e mesma
+      # sintaxe de extração de versão do job macOS, sem divergência de
+      # comportamento entre plataformas (Python + bash resolvem igual nos
+      # dois runners; Compress-Archive abaixo usa pwsh, que é nativo do SO).
+      - name: Extrair versão da tag (agent-vAAAA.M.D.seq)
+        shell: bash
+        run: echo "VER=${GITHUB_REF_NAME#agent-v}" >> "$GITHUB_ENV"
+
+      - name: Gerar juris/agent/_release_meta.py (embutido no binário)
+        shell: bash
+        env:
+          AGENT_UPDATE_PUBKEY: ${{ secrets.AGENT_UPDATE_PUBKEY }}
+        run: uv run python scripts/write_release_meta.py "$VER"
+
+      - name: Assert _release_meta válido
+        shell: bash
+        run: |
+          uv run python -c "from juris.agent._release_meta import AGENT_VERSION, PUBLIC_KEY_PEM; assert AGENT_VERSION and PUBLIC_KEY_PEM.strip().startswith('-----BEGIN PUBLIC KEY-----')"
+
+      - name: PyInstaller (onedir)
+        run: uv run pyinstaller packaging/agent/causia-agent.spec --distpath dist --workpath build/pyi --noconfirm
+
+      # Compress-Archive com um caminho de PASTA (dist/causia-agent, sem /*)
+      # preserva o nome do topo dentro do zip: o zip extraído terá
+      # causia-agent/ na raiz, ao lado de install.bat/uninstall.bat/LEIA-ME.txt
+      # — exatamente o layout que install.bat espera de `%~dp0causia-agent`.
+      - name: Empacotar .zip
+        shell: pwsh
+        run: Compress-Archive -Path dist/causia-agent,packaging/agent/windows/install.bat,packaging/agent/windows/uninstall.bat,packaging/agent/LEIA-ME.txt -DestinationPath dist/CausiaAgente-win.zip
+
+      - uses: actions/upload-artifact@v4
+        with: { name: CausiaAgente-win.zip, path: dist/CausiaAgente-win.zip }
+
+  sign-and-release:
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with: { path: dist }
+
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --extra agent  # o signer importa juris.agent.update._signed_payload
+
+      - name: Assinar manifesto (agent-latest.json)
+        env:
+          AGENT_UPDATE_PRIVKEY: ${{ secrets.AGENT_UPDATE_PRIVKEY }}
+        run: |
+          VER="${GITHUB_REF_NAME#agent-v}"
+          # v1: a URL do manifesto aponta para o instalador (.dmg) do Release,
+          # não para o binário cru. O cliente (_is_raw_binary_url) valida a
+          # assinatura mas NUNCA troca o executável por um instalador — é um
+          # no-op seguro. O swap real de binário cru é um follow-up planejado
+          # (troca a URL para o asset causia-agent/causia-agent.exe cru).
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/CausiaAgente.dmg"
+          uv run python scripts/sign_agent_manifest.py "$VER" "$URL" dist/CausiaAgente.dmg/CausiaAgente.dmg > agent-latest.json
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/**/CausiaAgente.dmg
+            dist/**/CausiaAgente-win.zip
+            agent-latest.json

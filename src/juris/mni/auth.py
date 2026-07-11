@@ -7,7 +7,6 @@ import tempfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 from requests import Session
 from requests_pkcs12 import Pkcs12Adapter
@@ -120,7 +119,7 @@ class PKCS11Auth(AuthStrategy):
         pem += base64.encodebytes(cert_der)
         pem += b"-----END CERTIFICATE-----\n"
 
-        tmp = tempfile.NamedTemporaryFile(suffix=".pem", delete=False)
+        tmp = tempfile.NamedTemporaryFile(suffix=".pem", delete=False)  # noqa: SIM115 — file must outlive this fn (returned as cert path)
         tmp.write(pem)
         tmp.close()
         self._cert_pem_path = tmp.name

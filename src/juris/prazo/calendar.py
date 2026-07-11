@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from enum import Enum
+from enum import StrEnum
 
 
-class TipoFeriado(str, Enum):
+class TipoFeriado(StrEnum):
     """Type of holiday."""
 
     NACIONAL = "nacional"
@@ -47,7 +47,7 @@ def feriados_nacionais(year: int) -> list[Feriado]:
     sexta_santa = pascoa - timedelta(days=2)
     corpus_christi = pascoa + timedelta(days=60)
 
-    return [
+    feriados = [
         Feriado(date(year, 1, 1), "Confraternização Universal", TipoFeriado.NACIONAL),
         Feriado(carnaval - timedelta(days=1), "Carnaval (segunda)", TipoFeriado.NACIONAL),
         Feriado(carnaval, "Carnaval (terça)", TipoFeriado.NACIONAL),
@@ -61,6 +61,10 @@ def feriados_nacionais(year: int) -> list[Feriado]:
         Feriado(date(year, 11, 15), "Proclamação da República", TipoFeriado.NACIONAL),
         Feriado(date(year, 12, 25), "Natal", TipoFeriado.NACIONAL),
     ]
+    if year >= 2024:
+        # Lei 14.759/2023: 20 de novembro passou a ser feriado nacional.
+        feriados.append(Feriado(date(year, 11, 20), "Dia da Consciência Negra", TipoFeriado.NACIONAL))
+    return feriados
 
 
 def recesso_forense(year: int) -> list[Feriado]:
@@ -71,40 +75,77 @@ def recesso_forense(year: int) -> list[Feriado]:
     dates = []
     # Dec 20 to Dec 31 of current year
     for day in range(20, 32):
-        dates.append(Feriado(
-            date(year, 12, day),
-            "Recesso forense",
-            TipoFeriado.FORENSE,
-        ))
+        dates.append(
+            Feriado(
+                date(year, 12, day),
+                "Recesso forense",
+                TipoFeriado.FORENSE,
+            )
+        )
     # Jan 1 to Jan 20 of next year
     for day in range(1, 21):
-        dates.append(Feriado(
-            date(year + 1, 1, day),
-            "Recesso forense",
-            TipoFeriado.FORENSE,
-        ))
+        dates.append(
+            Feriado(
+                date(year + 1, 1, day),
+                "Recesso forense",
+                TipoFeriado.FORENSE,
+            )
+        )
     return dates
 
 
-# State-level holidays (most common — MG, SP, RJ)
+# Feriados estaduais estatutários (data magna / criação do estado).
+#
+# Cobertura deliberadamente conservadora: só entram feriados estaduais com base
+# legal firme. A direção do erro é assimétrica — um feriado indevido ESTENDE o
+# prazo e pode causar perda de prazo; omitir um feriado real apenas encurta o
+# prazo (falso alarme de urgência). Por isso:
+#   * feriados MUNICIPAIS/de comarca NÃO entram aqui (variam por localidade);
+#   * "ponto facultativo" (ex.: N. Sra. da Penha no ES) NÃO é feriado e fica de fora;
+#   * estados sem data magna estadual estatutária clara (ES, GO, MT, RN, SC)
+#     usam o baseline federal — o motor os trata como dia útil (direção segura).
+# 20/11 (Consciência Negra) é feriado NACIONAL desde 2024 (Lei 14.759/2023) e é
+# deduplicado abaixo para não contar em dobro com a entrada estadual histórica.
 _FERIADOS_ESTADUAIS: dict[str, list[tuple[int, int, str]]] = {
-    "mg": [(4, 21, "Data Magna de Minas Gerais")],
-    "sp": [(7, 9, "Revolução Constitucionalista")],
-    "rj": [(4, 23, "São Jorge"), (11, 20, "Dia da Consciência Negra")],
+    "ac": [(6, 15, "Aniversário do Acre")],
+    "al": [(9, 16, "Emancipação Política de Alagoas")],
+    "am": [(9, 5, "Elevação do Amazonas à categoria de província")],
+    "ap": [(9, 13, "Criação do Território Federal do Amapá")],
     "ba": [(7, 2, "Independência da Bahia")],
-    "rs": [(9, 20, "Revolução Farroupilha")],
-    "pr": [(12, 19, "Emancipação do Paraná")],
+    "ce": [(3, 25, "Data Magna do Ceará")],
+    "df": [(11, 30, "Dia do Evangélico")],
+    "ma": [(7, 28, "Adesão do Maranhão à Independência")],
+    "mg": [(4, 21, "Data Magna de Minas Gerais")],
+    "ms": [(10, 11, "Criação do Estado de Mato Grosso do Sul")],
+    "pa": [(8, 15, "Adesão do Grão-Pará à Independência")],
+    "pb": [(8, 5, "Fundação do Estado da Paraíba")],
     "pe": [(3, 6, "Revolução Pernambucana")],
+    "pi": [(10, 19, "Dia do Piauí")],
+    "pr": [(12, 19, "Emancipação do Paraná")],
+    "rj": [(4, 23, "São Jorge"), (11, 20, "Dia da Consciência Negra")],
+    "ro": [(1, 4, "Criação do Estado de Rondônia")],
+    "rr": [(10, 5, "Criação do Estado de Roraima")],
+    "rs": [(9, 20, "Revolução Farroupilha")],
+    "se": [(7, 8, "Emancipação Política de Sergipe")],
+    "sp": [(7, 9, "Revolução Constitucionalista")],
+    "to": [(10, 5, "Criação do Estado do Tocantins")],
 }
 
 
 def feriados_estaduais(year: int, uf: str) -> list[Feriado]:
-    """Return state-level holidays for a given UF."""
+    """Return state-level holidays for a given UF.
+
+    Municipal/comarca holidays are out of scope. Entries são estatutárias; ver o
+    comentário de ``_FERIADOS_ESTADUAIS`` para a política de cobertura e a nota
+    sobre estados sem data magna clara.
+    """
     uf_lower = uf.lower()
     entries = _FERIADOS_ESTADUAIS.get(uf_lower, [])
     return [
         Feriado(date(year, month, day), nome, TipoFeriado.ESTADUAL)
         for month, day, nome in entries
+        # 20/11 virou feriado nacional em 2024; não contar em dobro no plano estadual.
+        if not (year >= 2024 and (month, day) == (11, 20))
     ]
 
 

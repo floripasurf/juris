@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass, field
+from enum import StrEnum
 
 from juris.core.observability import get_logger
 from juris.repertory.citation_lookup import resolve_source_id
@@ -12,6 +14,36 @@ logger = get_logger(__name__)
 
 # Pattern for [CITE:source_id] markers
 _CITE_PATTERN = re.compile(r"\[CITE:([\w\-]+)\]")
+_CLAIM_WINDOW_CHARS = 220
+_CLAIM_MIN_TOKENS = 3
+_CLAIM_MIN_OVERLAP = 0.2
+_TOKEN_RE = re.compile(r"[a-z0-9]{4,}")
+_STOPWORDS = {
+    "acordao",
+    "caso",
+    "cita",
+    "cite",
+    "com",
+    "como",
+    "conforme",
+    "decidiu",
+    "direito",
+    "ementa",
+    "entendeu",
+    "firmou",
+    "jurisprudencia",
+    "para",
+    "pela",
+    "pelo",
+    "precedente",
+    "processo",
+    "recurso",
+    "sobre",
+    "stf",
+    "stj",
+    "tema",
+    "tribunal",
+}
 
 # Academic citation pattern for DOUTRINA_PD sources
 _ACADEMIC_CITE_PATTERN = re.compile(
@@ -20,15 +52,106 @@ _ACADEMIC_CITE_PATTERN = re.compile(
 )
 
 # Patterns for raw case references in prose (not anchored to [CITE:])
+# Raw jurisprudence references not anchored to a [CITE:] marker. Two tiers to catch
+# real Brazilian formats WITHOUT false-positiving on plain prose / product names:
+#
+# * STRONG siglas (REsp/AREsp/AgInt/AgRg/RHC/RMS/EDcl/ADI/ADC/ADPF/IRDR/IAC/AIRR) are
+#   distinctive, so a bare number is a safe signal (case-insensitive).
+# * AMBIGUOUS short siglas (RE/ARE/HC/MS/RR/AI/ADO) collide with common text — "MS 365",
+#   "HC 12", "are 123". They match case-insensitively, but ONLY with a *qualified*
+#   number: dotted (1.234.567), "/UF", an "n./nº" lead-in, or >= 5 digits.
+_STRONG_SIGLAS = r"E?A?REsp|AgInt|AgRg|EDcl|EDv|RHC|RMS|ADI|ADC|ADPF|IRDR|IAC|AIRR"
+_NUM_TAIL = r"(?:n[º°.]?\s*)?\d[\d.]*(?:\s*/\s*[A-Z]{2})?"
+_AMBIGUOUS_SIGLAS = r"ARE|RE|HC|MS|RR|AI|ADO"
+_QUALIFIED_NUM = (
+    r"(?:n[º°.]\s*\d[\d.]*"  # n. 123 / nº 1.234
+    r"|\d{1,3}(?:\.\d{3})+"  # dotted: 1.234.567
+    r"|\d+\s*/\s*[A-Z]{2}"  # 12345/SP
+    r"|\d{5,})"  # long bare number
+    r"(?:\s*/\s*[A-Z]{2})?"  # optional trailing /UF
+)
+# CNJ unified process number (7-2.4.1.2.4; the first group is 1–7 digits in labor).
+# Distinctive enough to anchor a citation WHEN prefixed by a recurso/court indicator —
+# a *bare* CNJ (the petition's own process number) is deliberately NOT matched.
+_CNJ_NUM = r"\d{1,7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}"
+# TST/labor siglas — RR/RO/AIRR collide with prose, so they anchor ONLY on a CNJ tail.
+_LABOR_SIGLAS = r"RRAg|RR|ROT|RO|AIRO|AIRR|AIRE|ED-RR|Ag-AIRR|ARR"
+# Court/recurso indicators that turn a following CNJ number into a precedent citation.
+# Only *appellate* types are here — Mandado de Segurança / Reclamação / Habeas Corpus /
+# Conflito are just as often the petition's OWN action (its caption), so matching them
+# on a bare CNJ over-blocked valid drafts. Cited precedents of those types carry a
+# [CITE:] marker and are handled by the anchoring logic instead.
+_RECURSO_PREFIX = (
+    r"Apela[çc][ãa]o(?:\s+C[íi]vel)?|Agravo(?:\s+de\s+Instrumento|\s+Interno|\s+Regimental)?"
+    r"|Recurso\s+\w+|Embargos(?:\s+\w+)?"
+)
+_FULL_RECURSO_PREFIX = (
+    r"Recurso\s+(?:Especial|Extraordin[áa]rio|Ordin[áa]rio|em\s+Habeas\s+Corpus"
+    r"|em\s+Mandado\s+de\s+Seguran[çc]a)"
+    r"|Agravo\s+em\s+Recurso\s+(?:Especial|Extraordin[áa]rio)"
+    r"|Habeas\s+Corpus|Mandado\s+de\s+Seguran[çc]a"
+)
 _RAW_CASE_PATTERNS = [
-    re.compile(r"\bREsp\s+[\d\.]+", re.IGNORECASE),
-    re.compile(r"\bRE\s+[\d\.]+", re.IGNORECASE),
-    re.compile(r"\bHC\s+[\d\.]+", re.IGNORECASE),
-    re.compile(r"\bMS\s+[\d\.]+", re.IGNORECASE),
-    re.compile(r"\bRHC\s+[\d\.]+", re.IGNORECASE),
-    re.compile(r"\bS[uú]mula\s+\d+", re.IGNORECASE),
-    re.compile(r"\bTema\s+\d+", re.IGNORECASE),
+    # strong siglas, with an optional "AgInt/AgRg/AgR no/na" compound prefix.
+    # No \b after the sigla — the number may abut it ("REsp123456", an LLM typo).
+    re.compile(
+        rf"\b(?:Ag(?:Int|Rg|R)\s+n[oa]\s+)?(?:{_STRONG_SIGLAS})\.?\s*{_NUM_TAIL}", re.IGNORECASE
+    ),
+    # Acórdão / Ac. + number (a core way to cite BR case law)
+    re.compile(r"\b(?:Ac[óo]rd[ãa]o|Ac\.)\s*(?:n[º°.]?\s*)?\d[\d.]*", re.IGNORECASE),
+    # OJ (Orientação Jurisprudencial, labor) — uppercase abbrev + number
+    re.compile(r"\bOJ\s+(?:SDI-?[I\d]+\s+)?(?:n[º°.]?\s*)?\d+"),
+    # ambiguous siglas: case-sensitive + a qualified number only (avoids "MS 365" etc.)
+    re.compile(rf"\b(?:{_AMBIGUOUS_SIGLAS})\b\.?\s*{_QUALIFIED_NUM}", re.IGNORECASE),
+    # TST/labor siglas anchored on a CNJ number (RR-1000-12.2020.5.03.0001)
+    re.compile(rf"\b(?:{_LABOR_SIGLAS})\b\s*-?\s*{_CNJ_NUM}"),
+    # a CNJ number introduced as a precedent by a recurso/court indicator
+    re.compile(rf"\b(?:{_RECURSO_PREFIX})\s+(?:n[º°.]?\s*)?{_CNJ_NUM}", re.IGNORECASE),
+    # full recurso names with ordinary precedent numbers (e.g. "Recurso Especial nº 1.234.567/SP")
+    re.compile(rf"\b(?:{_FULL_RECURSO_PREFIX})\s+{_QUALIFIED_NUM}", re.IGNORECASE),
+    re.compile(r"\bS[uú]mula(?:\s+Vinculante)?\s+(?:n[º°.]?\s*)?\d+", re.IGNORECASE),
+    re.compile(r"\bTema(?:\s+Repetitivo)?\s+(?:n[º°.]?\s*)?\d+", re.IGNORECASE),
+    re.compile(r"\b(?:Tese|Precedente|Enunciado)\s+(?:n[º°.]?\s*)?\d+", re.IGNORECASE),
+    re.compile(r"\bOrienta[çc][ãa]o\s+Jurisprudencial\s+(?:n[º°.]?\s*)?\d+", re.IGNORECASE),
 ]
+
+
+def _normalize_text(value: str) -> str:
+    text = unicodedata.normalize("NFKD", value.lower()).encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9]+", " ", text)
+
+
+def _tokens(value: str) -> set[str]:
+    return {token for token in _TOKEN_RE.findall(_normalize_text(value)) if token not in _STOPWORDS}
+
+
+def _claim_before_marker(draft: str, marker_start: int) -> str:
+    start = max(0, marker_start - _CLAIM_WINDOW_CHARS)
+    window = draft[start:marker_start]
+    boundaries = [window.rfind(sep) for sep in ("\n\n", ".", ";", "?", "!")]
+    boundary = max(boundaries)
+    if boundary >= 0:
+        window = window[boundary + 1 :]
+    return window.strip()
+
+
+def _claim_matches_source(draft: str, marker_start: int, source_text: str) -> tuple[bool, float | None]:
+    """Conservatively reject a marker whose nearby attributed claim is unrelated.
+
+    This is not semantic legal reasoning. It is a deterministic backstop against the
+    worst failure mode: citing a real source id while attributing an unrelated holding
+    to it. Short boilerplate claims are ignored to avoid false positives.
+    """
+    if not source_text:
+        return True, None
+    claim_tokens = _tokens(_claim_before_marker(draft, marker_start))
+    if len(claim_tokens) < _CLAIM_MIN_TOKENS:
+        return True, None
+    source_tokens = _tokens(source_text)
+    if not source_tokens:
+        return True, None
+    score = len(claim_tokens & source_tokens) / len(claim_tokens)
+    return score >= _CLAIM_MIN_OVERLAP, round(score, 3)
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +163,9 @@ class CitationCheck:
     resolved: bool
     available_excerpt: str | None
     span_in_draft: tuple[int, int]
+    claim_consistent: bool = True
+    consistency_score: float | None = None
+    failure_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,19 +178,82 @@ class VerificationResult:
     spurious_citations: list[str] = field(default_factory=list)
 
 
+class GroundingStatus(StrEnum):
+    """Publication status for LLM text after deterministic citation checks."""
+
+    VERIFIED = "verified"
+    BLOCKED = "blocked"
+
+
+@dataclass(frozen=True, slots=True)
+class GroundingReport:
+    """Deterministic grounding summary used by product surfaces."""
+
+    status: GroundingStatus
+    verified_citation_ids: list[str] = field(default_factory=list)
+    failed_citation_ids: list[str] = field(default_factory=list)
+    spurious_citations: list[str] = field(default_factory=list)
+    reason: str | None = None
+
+    @classmethod
+    def verified(cls, checks: list[CitationCheck] | None = None) -> GroundingReport:
+        return cls(
+            status=GroundingStatus.VERIFIED,
+            verified_citation_ids=[c.source_id for c in checks or [] if c.resolved],
+        )
+
+    @property
+    def is_verified(self) -> bool:
+        return self.status == GroundingStatus.VERIFIED
+
+
+def build_grounding_report(
+    verification: VerificationResult | None,
+) -> GroundingReport:
+    """Convert low-level citation checks into a product-level safety status."""
+
+    if verification is None:
+        return GroundingReport(
+            status=GroundingStatus.BLOCKED,
+            reason="verificacao_nao_executada",
+        )
+
+    if verification.all_passed:
+        return GroundingReport.verified(verification.checks)
+
+    reasons: list[str] = []
+    if verification.failed:
+        if any(c.failure_reason == "citation_claim_mismatch" for c in verification.failed):
+            reasons.append("citacoes_distorcidas")
+        if any(c.failure_reason != "citation_claim_mismatch" for c in verification.failed):
+            reasons.append("citacoes_invalidas")
+    if verification.spurious_citations:
+        reasons.append("citacoes_sem_marcador")
+
+    return GroundingReport(
+        status=GroundingStatus.BLOCKED,
+        verified_citation_ids=[c.source_id for c in verification.checks if c.resolved],
+        failed_citation_ids=[c.source_id for c in verification.failed],
+        spurious_citations=list(verification.spurious_citations),
+        reason="+".join(reasons) or "grounding_falhou",
+    )
+
+
 class MarkerCitationVerifier:
     """Verifies [CITE:source_id] markers in draft petitions.
 
     Deterministic, no LLM required. Sub-100ms for typical drafts.
     """
 
-    def __init__(self, repertory: RepertoryService) -> None:
+    def __init__(self, repertory: RepertoryService, tenant_id: str | None = None) -> None:
         self._repertory = repertory
+        self._tenant_id = tenant_id  # scope citation resolution to this firm (+ public seed)
 
     def verify(
         self,
         draft: str,
         allowed_source_ids: set[str] | None = None,
+        allowed_source_texts: dict[str, str] | None = None,
     ) -> VerificationResult:
         """Verify all [CITE:] markers and detect spurious prose citations.
 
@@ -88,17 +277,33 @@ class MarkerCitationVerifier:
             span = match.span()
 
             if allowed_source_ids is not None:
-                resolved = source_id in allowed_source_ids
-                excerpt = None
+                id_resolved = source_id in allowed_source_ids
+                excerpt = (allowed_source_texts or {}).get(source_id)
             else:
-                resolved, excerpt = resolve_source_id(source_id, self._repertory)
+                id_resolved, excerpt = resolve_source_id(
+                    source_id, self._repertory, tenant_id=self._tenant_id
+                )
+            claim_consistent, consistency_score = _claim_matches_source(
+                draft=draft,
+                marker_start=span[0],
+                source_text=excerpt or "",
+            )
+            resolved = id_resolved and claim_consistent
+            failure_reason = None
+            if not id_resolved:
+                failure_reason = "source_id_not_allowed"
+            elif not claim_consistent:
+                failure_reason = "citation_claim_mismatch"
 
             check = CitationCheck(
                 raw_marker=raw_marker,
                 source_id=source_id,
                 resolved=resolved,
-                available_excerpt=excerpt,
+                available_excerpt=excerpt[:200] if excerpt else None,
                 span_in_draft=span,
+                claim_consistent=claim_consistent,
+                consistency_score=consistency_score,
+                failure_reason=failure_reason,
             )
             checks.append(check)
             if not resolved:
@@ -117,22 +322,40 @@ class MarkerCitationVerifier:
         )
 
     def _find_spurious_citations(self, draft: str) -> list[str]:
-        """Find raw case references in prose not anchored to [CITE:] markers."""
+        """Find raw case references in prose that are NOT inside a ``[CITE:]`` marker.
+
+        A raw jurisprudence reference is anchored only when its span is *contained*
+        within an actual ``[CITE:...]`` bracket pair — proximity to a marker is not
+        enough (a fabricated ``REsp`` next to a real marker for a different source was
+        the evasion). No doctrine lead-in ("conforme leciona") exempts a case
+        reference — that exception is only for academic citations, handled elsewhere.
+        """
         spurious: list[str] = []
+        cite_spans = [(m.start(), m.end()) for m in _CITE_PATTERN.finditer(draft)]
+
+        def _inside_marker(start: int, end: int) -> bool:
+            return any(s <= start and end <= e for s, e in cite_spans)
+
+        def _followed_by_marker(end: int) -> bool:
+            # The readable name of a grounded source is cited THEN marked, e.g.
+            # "Súmula 297 do STJ [CITE:src-1]". A [CITE:] marker within the same sentence
+            # AFTER the reference anchors it. (The evasion is the opposite order — a fake
+            # AFTER a marker — so a *preceding* marker never anchors here.)
+            for s, _e in cite_spans:
+                if s < end:
+                    continue
+                between = draft[end:s]
+                if len(between) > 60:
+                    break
+                return re.search(r"[.!?;]\s", between) is None
+            return False
 
         for pattern in _RAW_CASE_PATTERNS:
             for match in pattern.finditer(draft):
-                # Check if this match is inside a [CITE:] marker
-                start = match.start()
-                # Look backward for "[CITE:" within 50 chars
-                context_before = draft[max(0, start - 50) : start]
-                if "[CITE:" not in context_before:
-                    # Skip academic-style citations (from doutrina sources)
-                    context_around = draft[max(0, start - 100) : start]
-                    if re.search(r"[Cc]onforme (?:leciona|ensina|destaca)", context_around):
-                        continue
-                    raw_text = match.group(0).strip()
-                    if raw_text not in spurious:
-                        spurious.append(raw_text)
+                if _inside_marker(match.start(), match.end()) or _followed_by_marker(match.end()):
+                    continue
+                raw_text = match.group(0).strip()
+                if raw_text not in spurious:
+                    spurious.append(raw_text)
 
         return spurious

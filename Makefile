@@ -21,7 +21,7 @@ migration:
 
 # === Development ===
 dev:
-	uv run uvicorn juris.api.orchestrator:app --reload --port 8000
+	uv run juris web --port 8000
 
 # === Quality ===
 test:
@@ -41,6 +41,21 @@ fmt:
 	uv run ruff check --fix .
 
 check: lint types test
+
+# Mypy-clean + fully-tracked packages (no engine-local files ⇒ local == CI) — a
+# hard gate (must not regress). Grow this list as tracks are cleaned, until it
+# covers src/juris and the `|| true` below can be dropped.
+MYPY_CLEAN := src/juris/alerts src/juris/api src/juris/busca \
+	src/juris/demo src/juris/escavacao src/juris/mni \
+	src/juris/signing src/juris/web
+
+# CI gate (mirrors .github/workflows/ci.yml): ruff + tests + mypy-on-clean-packages
+# are hard gates; the full mypy run is informational until the debt is zeroed.
+gate:
+	uv run ruff check src/juris tests
+	uv run pytest tests/unit -q
+	uv run mypy $(MYPY_CLEAN)
+	uv run mypy src/juris || true
 
 # === Cleanup ===
 clean:

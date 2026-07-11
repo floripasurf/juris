@@ -10,8 +10,9 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
+from juris.core.sanitize import safe_error_text
 from juris.repertory.chunking import DocumentChunk, chunk_fonte
 from juris.repertory.corpus.models import FonteJurisprudencia, TipoFonte
 from juris.repertory.ingestion.base import CorpusIngester
@@ -60,14 +61,17 @@ def _extract_pdf_text(filepath: Path) -> str:
         Concatenated text from all pages.
     """
     try:
-        import pymupdf  # type: ignore[import-untyped]
+        import pymupdf
     except ImportError:
         import fitz as pymupdf  # type: ignore[import-untyped,no-redef]
 
     pages: list[str] = []
-    with pymupdf.open(str(filepath)) as doc:
+    doc = cast(Any, pymupdf.open(str(filepath)))  # type: ignore[no-untyped-call]
+    try:
         for page in doc:
             pages.append(page.get_text())
+    finally:
+        doc.close()
     return "\n".join(pages)
 
 
@@ -149,8 +153,8 @@ class STFLandmarkIngester(CorpusIngester):
                     continue
                 fonte = self._file_to_fonte(filepath, text)
                 fontes.append(fonte)
-            except Exception:
-                logger.warning("Failed to read PDF: %s", filepath.name, exc_info=True)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Failed to read PDF %s: %s", filepath.name, safe_error_text(exc))
 
         logger.info(
             "Loaded %d STF landmark cases from %s", len(fontes), self._source_dir

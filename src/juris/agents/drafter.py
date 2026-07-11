@@ -8,9 +8,13 @@ from typing import Any
 
 from juris.agents.citation_verifier import (
     CitationCheck,
+    GroundingReport,
+    GroundingStatus,
     MarkerCitationVerifier,
     VerificationResult,
+    build_grounding_report,
 )
+from juris.agents.estrategia import EstrategiaAgent, EstrategiaResult, tom_minuta
 from juris.agents.researcher import Researcher, ResearchQuery, ResearchResult
 from juris.core.observability import get_logger
 from juris.defesas.context import ProcessoContext
@@ -26,9 +30,32 @@ from juris.prompts.drafter_v1 import (
 )
 from juris.repertory.peticoes.models import TipoPeticao
 from juris.repertory.retrieval.service import RepertoryService
-from juris.review.models import ReviewReport
+from juris.review.models import IssueSeverity, ReviewIssue, ReviewReport, ReviewRequest
 
 logger = get_logger(__name__)
+
+# How firmly to write the minuta, keyed by the strategy's tom_minuta() output. The tone
+# must never overstate: even "forte" argues with conviction, never guarantees an outcome
+# (deontologia CED/EOAB). "não protocolar" produces a review-only draft.
+_TONE_INSTRUCTIONS: dict[str, str] = {
+    "forte": (
+        "A tese é sólida: redija com firmeza e convicção, afirmando as conclusões "
+        "com base nos precedentes verificados. Nunca prometa êxito garantido."
+    ),
+    "cauteloso": (
+        "A tese tem solidez média: module o tom, prefira 'há elementos que indicam' "
+        "a afirmações categóricas, e sinalize onde a fundamentação depende de prova."
+    ),
+    "rascunho": (
+        "A tese é frágil: trate como rascunho preliminar, evite afirmações categóricas "
+        "e aponte explicitamente as lacunas de fundamentação e prova a resolver."
+    ),
+    "não protocolar": (
+        "NÃO PROTOCOLAR: esta minuta exige revisão humana obrigatória. Redija como "
+        "rascunho de trabalho, marque de forma visível os pontos que precisam ser "
+        "verificados por um advogado antes de qualquer uso, e não conclua com firmeza."
+    ),
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +84,20 @@ class DraftResult:
     revisions: int = 0
     total_duration_seconds: float = 0.0
     audit_entry_ids: list[str] = field(default_factory=list)
+    estrategia: EstrategiaResult | None = None
+    grounding_report: GroundingReport = field(
+        default_factory=GroundingReport.verified
+    )
+    blocked_reason: str | None = None
+    # Modelo efetivo da geração da minuta FINAL (última geração vence) e da
+    # inferência de tese — a resposta a "qual IA escreveu isto?" (spec 2026-07-05).
+    ai_model: str | None = None
+    ai_model_thesis: str | None = None
+
+    @property
+    def is_grounded(self) -> bool:
+        """True when the draft text is safe to surface as LLM-authored prose."""
+        return self.grounding_report.is_verified
 
 
 class DrafterAgent:
@@ -83,6 +124,8 @@ class DrafterAgent:
         reviewer: Any | None = None,
         audit: AuditLog | None = None,
         defesa_analyzer: Any | None = None,
+        estrategia: EstrategiaAgent | None = None,
+        tenant_id: str | None = None,
     ) -> None:
         self._llm = llm
         self._repertory = repertory
@@ -91,6 +134,8 @@ class DrafterAgent:
         self._reviewer = reviewer
         self._audit = audit
         self._defesa_analyzer = defesa_analyzer
+        self._estrategia = estrategia
+        self._tenant_id = tenant_id  # scope template lookup to this firm (+ public seed)
 
     async def draft(
         self,
@@ -112,6 +157,7 @@ class DrafterAgent:
 
         # Step 2: Defense analysis (contestacao/contrarrazoes)
         defesa_text = ""
+        analise_adversario: str | None = None
         if self._defesa_analyzer and request.tipo_peticao in (
             TipoPeticao.CONTESTACAO,
             TipoPeticao.CONTRARRAZOES,
@@ -119,13 +165,17 @@ class DrafterAgent:
             try:
                 defesa_report = await self._defesa_analyzer.analyze(context)
                 defesa_text = f"## ANALISE DE DEFESAS\n{defesa_report.summary}\n\n"
-            except Exception:
+                analise_adversario = defesa_report.summary  # Módulo D — feed the strategy
+            except Exception:  # noqa: BLE001
                 logger.warning(
                     "defesa_analysis_failed", numero_cnj=request.numero_cnj
                 )
 
         # Step 3: Determine thesis
-        thesis = request.thesis or await self._infer_thesis(request, context)
+        if request.thesis:
+            thesis = request.thesis
+        else:
+            thesis, result.ai_model_thesis = await self._infer_thesis(request, context)
         self._log_audit(
             "draft.thesis_chosen",
             request.numero_cnj,
@@ -139,29 +189,96 @@ class DrafterAgent:
         )
         result.research_summary = research.coverage_note
 
-        # Step 5: Style retrieval (from petition templates if available)
-        style_text = ""
-        try:
-            # Search for matching templates by tipo and ramo
-            templates = getattr(self._repertory, '_templates', None)
-            if templates and callable(getattr(templates, 'search', None)):
-                matched = templates.search(
-                    tipo=request.tipo_peticao,
-                    ramo_direito=context.ramo_justica,
+        # Step 4.5: Strategy (ADR-0017 Stage 2) — pick the best-grounded
+        # argumentative line from the retrieved precedents and let it drive the
+        # draft. Only refines the thesis when one wasn't explicitly given.
+        if self._estrategia and research.supporting:
+            try:
+                estrategia = await self._estrategia.propor(
+                    contexto=f"{thesis}\n{case_ctx}",
+                    precedentes=research.supporting,
+                    analise_adversario=analise_adversario,
                 )
-                if matched:
-                    best = matched[0]
-                    sections = [f"{s.ordem}. {s.titulo}: {s.proposito}" for s in best.estrutura]
-                    style_text = (
-                        f"Template: {best.titulo}\n"
-                        f"Estrutura:\n" + "\n".join(sections)
+                result.estrategia = estrategia
+                if not request.thesis and estrategia.escolhida.tese:
+                    thesis = estrategia.escolhida.tese
+                self._log_audit(
+                    "draft.estrategia_selected",
+                    request.numero_cnj,
+                    {
+                        "tese": estrategia.escolhida.tese,
+                        "score": estrategia.escolhida.score,
+                        "ordem": estrategia.escolhida.ordem,
+                        "confianca": estrategia.escolhida.confianca,
+                        "alternativas": len(estrategia.alternativas),
+                        "avisos_deontologicos": estrategia.avisos_deontologicos,
+                        "revisao_humana_obrigatoria": estrategia.revisao_humana_obrigatoria,
+                    },
+                    result,
+                )
+                if estrategia.avisos_deontologicos:
+                    logger.warning(
+                        "estrategia_deontologia",
+                        numero_cnj=request.numero_cnj,
+                        avisos=estrategia.avisos_deontologicos,
                     )
-                    self._log_audit("draft.style_retrieved", request.numero_cnj, {
-                        "template_id": best.id,
-                        "template_titulo": best.titulo,
-                    }, result)
-        except Exception:
-            logger.debug("style_retrieval_skipped")
+            except Exception:  # noqa: BLE001
+                logger.warning("estrategia_failed", numero_cnj=request.numero_cnj)
+
+        # Step 5a-bis: exemplar de estilo do PRÓPRIO escritório (Biblioteca, L4).
+        # Precede templates genéricos: a peça da própria firma ensina o estilo real.
+        style_text = ""
+        find_style_exemplar = getattr(self._repertory, "find_style_exemplar", None)
+        if callable(find_style_exemplar):
+            try:
+                exemplar = find_style_exemplar(
+                    tipo_peticao=request.tipo_peticao.value,
+                    area_direito=context.ramo_justica,
+                    tenant_id=self._tenant_id,
+                )
+            except Exception:  # noqa: BLE001 - estilo é enriquecimento, nunca derruba o draft
+                logger.debug("style_exemplar_skipped")
+                exemplar = None
+            if exemplar is not None:
+                style_text = (
+                    "EXEMPLO DE ESTILO DO SEU ESCRITÓRIO (não citar como fonte):\n"
+                    + exemplar.texto[:2500]
+                )
+                self._log_audit(
+                    "draft.style_retrieved",
+                    request.numero_cnj,
+                    {
+                        "origem": "escritorio",
+                        "source_id": exemplar.source_id,
+                        "tipo": exemplar.tipo,
+                        "uso": exemplar.uso,
+                    },
+                    result,
+                )
+
+        # Step 5: Style retrieval (from petition templates if available)
+        if not style_text:
+            try:
+                # Search for matching templates by tipo and ramo
+                templates = getattr(self._repertory, '_templates', None)
+                if templates and callable(getattr(templates, 'search', None)):
+                    matched = templates.search(
+                        tipo=request.tipo_peticao,
+                        ramo_direito=context.ramo_justica,
+                    )
+                    if matched:
+                        best = matched[0]
+                        sections = [f"{s.ordem}. {s.titulo}: {s.proposito}" for s in best.estrutura]
+                        style_text = (
+                            f"Template: {best.titulo}\n"
+                            f"Estrutura:\n" + "\n".join(sections)
+                        )
+                        self._log_audit("draft.style_retrieved", request.numero_cnj, {
+                            "template_id": best.id,
+                            "template_titulo": best.titulo,
+                        }, result)
+            except Exception:  # noqa: BLE001
+                logger.debug("style_retrieval_skipped")
 
         # Step 5b: Template scaffold from corpus (MODELO_PETICAO)
         if not style_text:
@@ -169,6 +286,7 @@ class DrafterAgent:
                 template_result = self._repertory.find_template(
                     tipo_peticao=request.tipo_peticao.value,
                     area_direito=context.ramo_justica,
+                    tenant_id=self._tenant_id,
                 )
                 if template_result:
                     from juris.prompts.drafter_v1 import format_template_scaffold
@@ -190,18 +308,30 @@ class DrafterAgent:
                         self._log_audit("draft.template_scaffold", request.numero_cnj, {
                             "template_source_id": template_result.source_id,
                         }, result)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 logger.debug("template_scaffold_skipped")
 
         # Step 6+7: Generate and verify (with revision loop)
         allowed_ids = {r.source_id for r in research.supporting + research.opposing}
+        allowed_source_texts = self._allowed_source_texts(research)
         draft_text = ""
         verification: VerificationResult | None = None
         revision_feedback = ""
+        # Firmness the minuta should adopt, from the chosen strategy line — so the
+        # drafted text matches the tone the console announces (forte/cauteloso/
+        # rascunho/não protocolar), instead of the tone being a label-only afterthought.
+        tone = (
+            tom_minuta(
+                result.estrategia.escolhida.confianca,
+                revisao_obrigatoria=result.estrategia.revisao_humana_obrigatoria,
+            )
+            if result.estrategia
+            else ""
+        )
 
         for revision in range(request.max_revision_rounds + 1):
             # Generate
-            draft_text = await self._generate(
+            draft_text, generation_model = await self._generate(
                 request=request,
                 case_context=case_ctx,
                 thesis=thesis,
@@ -209,11 +339,15 @@ class DrafterAgent:
                 defesa_text=defesa_text,
                 style_text=style_text,
                 revision_feedback=revision_feedback,
+                tone=tone,
             )
+            result.ai_model = generation_model
 
             # Verify citations
             verification = self._verifier.verify(
-                draft_text, allowed_source_ids=allowed_ids
+                draft_text,
+                allowed_source_ids=allowed_ids,
+                allowed_source_texts=allowed_source_texts,
             )
             self._log_audit(
                 "draft.citations_verified",
@@ -236,7 +370,7 @@ class DrafterAgent:
                 result.revisions += 1
                 feedback_parts: list[str] = []
                 if verification.failed:
-                    ids = [c.source_id for c in verification.failed]
+                    ids = [f"{c.source_id} ({c.failure_reason or 'invalid'})" for c in verification.failed]
                     feedback_parts.append(
                         f"CITACOES INVALIDAS (remova ou substitua): {', '.join(ids)}"
                     )
@@ -251,11 +385,22 @@ class DrafterAgent:
                     + "\n\n"
                 )
 
+        grounding_report = build_grounding_report(verification)
+        result.grounding_report = grounding_report
+        result.citations_used = verification.checks if verification else []
+
+        if not grounding_report.is_verified:
+            return self._block_ungrounded_result(
+                result=result,
+                request=request,
+                research=research,
+                report=grounding_report,
+                start=start,
+            )
+
         # Step 8: Pre-show review (optional)
         if self._reviewer and draft_text:
             try:
-                from juris.review.models import ReviewRequest
-
                 review_req = ReviewRequest(
                     petition_text=draft_text,
                     petition_type=request.tipo_peticao.value,
@@ -274,27 +419,16 @@ class DrafterAgent:
                     result,
                 )
 
-                # Re-prompt on critical issues (if revisions remain)
-                if (
-                    report.critical_count > 0
-                    and result.revisions < request.max_revision_rounds
-                ):
+                critical_issues = self._critical_reviewer_issues(report)
+                if critical_issues and result.revisions < request.max_revision_rounds:
                     result.revisions += 1
-                    critical_issues = [
-                        i
-                        for i in report.issues
-                        if i.severity.value == "critical"
-                    ]
-                    feedback_parts = [
-                        f"- {issue.title}: {issue.description}"
-                        for issue in critical_issues[:3]
-                    ]
+                    feedback_parts = self._review_feedback_lines(critical_issues)
                     revision_feedback = (
                         "## PROBLEMAS CRITICOS DO REVISOR\n"
                         + "\n".join(feedback_parts)
                         + "\n\n"
                     )
-                    draft_text = await self._generate(
+                    draft_text, generation_model = await self._generate(
                         request=request,
                         case_context=case_ctx,
                         thesis=thesis,
@@ -302,16 +436,78 @@ class DrafterAgent:
                         defesa_text=defesa_text,
                         style_text=style_text,
                         revision_feedback=revision_feedback,
+                        tone=tone,
                     )
-            except Exception:
+                    result.ai_model = generation_model
+                    verification = self._verifier.verify(
+                        draft_text,
+                        allowed_source_ids=allowed_ids,
+                        allowed_source_texts=allowed_source_texts,
+                    )
+                    result.grounding_report = build_grounding_report(verification)
+                    result.citations_used = verification.checks
+                    self._log_audit(
+                        "draft.citations_verified",
+                        request.numero_cnj,
+                        {
+                            "all_passed": verification.all_passed,
+                            "total_checks": len(verification.checks),
+                            "failed_count": len(verification.failed),
+                            "spurious_count": len(verification.spurious_citations),
+                            "revision": result.revisions,
+                            "after_reviewer": True,
+                        },
+                        result,
+                    )
+                    if verification.all_passed:
+                        review_req = ReviewRequest(
+                            petition_text=draft_text,
+                            petition_type=request.tipo_peticao.value,
+                            numero_cnj=request.numero_cnj,
+                            tribunal=request.tribunal,
+                        )
+                        report = await self._reviewer.review(review_req)
+                        result.reviewer_report = report
+                        self._log_audit(
+                            "draft.reviewed",
+                            request.numero_cnj,
+                            {
+                                "critical_count": report.critical_count,
+                                "important_count": report.important_count,
+                                "after_reviewer_revision": True,
+                            },
+                            result,
+                        )
+                        critical_issues = self._critical_reviewer_issues(report)
+                if critical_issues:
+                    return self._block_reviewer_result(
+                        result=result,
+                        request=request,
+                        research=research,
+                        issues=critical_issues,
+                        start=start,
+                    )
+            except Exception:  # noqa: BLE001
                 logger.warning(
                     "review_after_draft_failed", numero_cnj=request.numero_cnj
                 )
 
+        grounding_report = build_grounding_report(verification)
+        result.grounding_report = grounding_report
+        result.citations_used = verification.checks if verification else []
+        if not grounding_report.is_verified:
+            return self._block_ungrounded_result(
+                result=result,
+                request=request,
+                research=research,
+                report=grounding_report,
+                start=start,
+                after_reviewer=True,
+            )
+
         # Step 9: Compose result
         result.draft_markdown = self._resolve_cite_markers(draft_text, research)
         result.contraponto_section = self._build_contraponto(research)
-        result.citations_used = verification.checks if verification else []
         result.total_duration_seconds = time.monotonic() - start
 
         self._log_audit(
@@ -320,6 +516,7 @@ class DrafterAgent:
             {
                 "revisions": result.revisions,
                 "citations_count": len(result.citations_used),
+                "grounding_status": result.grounding_report.status.value,
                 "duration_seconds": result.total_duration_seconds,
                 "prompt_version": PROMPT_VERSION,
             },
@@ -327,6 +524,128 @@ class DrafterAgent:
         )
 
         return result
+
+    @staticmethod
+    def _allowed_source_texts(research: ResearchResult) -> dict[str, str]:
+        return {r.source_id: r.texto for r in research.supporting + research.opposing if r.texto}
+
+    @staticmethod
+    def _critical_reviewer_issues(report: ReviewReport) -> list[ReviewIssue]:
+        return [issue for issue in report.issues if issue.severity == IssueSeverity.CRITICAL]
+
+    @staticmethod
+    def _review_feedback_lines(issues: list[ReviewIssue]) -> list[str]:
+        return [f"- {issue.title}: {issue.description}" for issue in issues[:5]]
+
+    def _block_ungrounded_result(
+        self,
+        *,
+        result: DraftResult,
+        request: DraftRequest,
+        research: ResearchResult,
+        report: GroundingReport,
+        start: float,
+        after_reviewer: bool = False,
+    ) -> DraftResult:
+        result.draft_markdown = self._blocked_grounding_notice(report)
+        result.contraponto_section = self._build_contraponto(research)
+        result.blocked_reason = report.reason
+        result.total_duration_seconds = time.monotonic() - start
+        details: dict[str, Any] = {
+            "reason": report.reason,
+            "failed_citation_ids": report.failed_citation_ids,
+            "spurious_citations": report.spurious_citations,
+            "duration_seconds": result.total_duration_seconds,
+            "prompt_version": PROMPT_VERSION,
+        }
+        if after_reviewer:
+            details["after_reviewer"] = True
+        self._log_audit(
+            "draft.blocked_ungrounded",
+            request.numero_cnj,
+            details,
+            result,
+        )
+        return result
+
+    def _block_reviewer_result(
+        self,
+        *,
+        result: DraftResult,
+        request: DraftRequest,
+        research: ResearchResult,
+        issues: list[ReviewIssue],
+        start: float,
+    ) -> DraftResult:
+        result.grounding_report = GroundingReport(
+            status=GroundingStatus.BLOCKED,
+            reason="reviewer_critical_issues",
+        )
+        result.draft_markdown = self._blocked_reviewer_notice(issues)
+        result.contraponto_section = self._build_contraponto(research)
+        result.blocked_reason = "reviewer_critical_issues"
+        result.total_duration_seconds = time.monotonic() - start
+        self._log_audit(
+            "draft.blocked",
+            request.numero_cnj,
+            {
+                "reason": "reviewer_critical_issues",
+                "critical_count": len(issues),
+                "critical_titles": [issue.title for issue in issues[:5]],
+                "duration_seconds": result.total_duration_seconds,
+                "prompt_version": PROMPT_VERSION,
+            },
+            result,
+        )
+        return result
+
+    @staticmethod
+    def _blocked_grounding_notice(report: GroundingReport) -> str:
+        """Return a deterministic replacement when generated prose is unsafe."""
+
+        lines = [
+            "# Minuta bloqueada por falta de lastro verificável",
+            "",
+            "A saída da IA não foi liberada como minuta porque citou fonte ou "
+            "jurisprudência sem verificação no corpus autorizado.",
+            "",
+            "## Pendências de verificação",
+        ]
+        if report.failed_citation_ids:
+            lines.append("")
+            lines.append("**Marcadores [CITE:] inválidos:**")
+            lines.extend(f"- `{source_id}`" for source_id in report.failed_citation_ids)
+        if report.spurious_citations:
+            lines.append("")
+            lines.append("**Referências jurisprudenciais sem marcador verificável:**")
+            lines.extend(f"- {citation}" for citation in report.spurious_citations)
+        if not report.failed_citation_ids and not report.spurious_citations:
+            lines.append("")
+            lines.append("- Verificação determinística não concluída.")
+        lines.extend(
+            [
+                "",
+                "## Próxima ação",
+                "",
+                "Refaça a pesquisa, substitua as referências por fontes presentes no "
+                "corpus ou remova a citação antes de liberar a peça.",
+            ]
+        )
+        return "\n".join(lines)
+
+    @staticmethod
+    def _blocked_reviewer_notice(issues: list[ReviewIssue]) -> str:
+        lines = [
+            "# Minuta bloqueada pelo revisor",
+            "",
+            "A minuta contém problema jurídico crítico identificado antes da liberação.",
+            "Corrija os itens abaixo e gere uma nova versão antes de usar a peça.",
+            "",
+            "## Problemas críticos",
+        ]
+        for issue in issues[:5]:
+            lines.append(f"- {issue.title}: {issue.description}")
+        return "\n".join(lines)
 
     async def _generate(
         self,
@@ -337,8 +656,11 @@ class DrafterAgent:
         defesa_text: str,
         style_text: str,
         revision_feedback: str,
-    ) -> str:
-        """Generate a draft via LLM call."""
+        tone: str = "",
+    ) -> tuple[str, str]:
+        """Generate a draft via LLM call; returns (markdown, effective model label)."""
+        instruction = _TONE_INSTRUCTIONS.get(tone)
+        tone_section = f"## TOM DA MINUTA ({tone})\n{instruction}\n\n" if instruction else ""
         prompt = DRAFT_PROMPT.format(
             case_context=format_case_context(case_context),
             defesa_section=defesa_text,
@@ -352,6 +674,7 @@ class DrafterAgent:
                 else ""
             ),
             revision_feedback=revision_feedback,
+            tone_section=tone_section,
             tipo_peticao=request.tipo_peticao.value,
         )
 
@@ -362,14 +685,14 @@ class DrafterAgent:
             temperature=0.15,
             contains_pii=request.contains_pii,
         )
-        return response.content
+        return response.content, response.model
 
     async def _infer_thesis(
         self,
         request: DraftRequest,
         context: ProcessoContext,
-    ) -> str:
-        """Infer thesis via small LLM call when not explicitly provided."""
+    ) -> tuple[str, str | None]:
+        """Infer thesis via small LLM call; returns (thesis, effective model or None)."""
         prompt = THESIS_INFERENCE_PROMPT.format(
             classe=context.classe,
             assuntos=", ".join(context.assuntos),
@@ -383,10 +706,10 @@ class DrafterAgent:
                 max_tokens=256,
                 contains_pii=request.contains_pii,
             )
-            return response.content.strip()
-        except Exception:
+            return response.content.strip(), response.model
+        except Exception:  # noqa: BLE001
             logger.warning("thesis_inference_failed")
-            return f"Defesa em {request.tipo_peticao.value}"
+            return f"Defesa em {request.tipo_peticao.value}", None
 
     @staticmethod
     def _build_case_context(context: ProcessoContext) -> dict[str, Any]:

@@ -5,11 +5,9 @@ from __future__ import annotations
 from datetime import datetime
 
 from juris.mni.parsers.processo import parse_processo
-
 from tests.fixtures.mni_consulta_response import (
     make_consulta_response_5080938,
     make_consulta_response_5082351,
-    make_consulta_response_empty,
 )
 
 
@@ -80,3 +78,18 @@ class TestParseProcesso:
 
         reu = next(p for p in processo.partes if p.tipo == "RE")
         assert "MUNICIPIO" in reu.nome
+
+
+def test_movimento_without_datahora_is_none_not_datetime_min() -> None:
+    """A movement whose dataHora is missing/invalid must parse to None, never
+    datetime.min (which fabricated a catastrophic 0001-01-08 VENCIDO prazo)."""
+    from types import SimpleNamespace
+
+    from juris.mni.parsers.processo import _parse_movimento
+
+    raw = SimpleNamespace(
+        movimentoNacional=SimpleNamespace(codigoNacional=246, descricao="Publicação"),
+        # no dataHora attribute at all
+    )
+    mov = _parse_movimento(raw)
+    assert mov.data_hora is None

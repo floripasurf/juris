@@ -9,6 +9,7 @@ from typing import Any
 from zeep import Client
 
 from juris.core.observability import get_logger
+from juris.core.sanitize import safe_error_text
 from juris.mni.retry import mni_retry
 
 logger = get_logger(__name__)
@@ -216,9 +217,10 @@ def consultar_avisos_pendentes_pkcs11(
 
     try:
         response = pkcs11_soap_call(host=host, path=path, soap_xml=soap_xml, config=pkcs11_config, timeout=60)
-    except Exception as e:
-        logger.warning("avisos_pkcs11_transport_error", error=str(e))
-        return AvisosResult(sucesso=False, mensagem=f"{type(e).__name__}: {e}")
+    except Exception as e:  # noqa: BLE001
+        safe_error = safe_error_text(e)
+        logger.warning("avisos_pkcs11_transport_error", error=safe_error)
+        return AvisosResult(sucesso=False, mensagem=f"{type(e).__name__}: {safe_error}")
 
     if not response.ok:
         return AvisosResult(sucesso=False, mensagem=f"HTTP {response.status_code}")

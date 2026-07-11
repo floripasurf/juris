@@ -45,7 +45,7 @@ def make_avisos_response_error() -> SimpleNamespace:
     return SimpleNamespace(sucesso=False, mensagem="Falha de autenticação", aviso=None)
 
 
-def make_teor_response(conteudo: str = "Fica V.Sa. intimado(a) para manifestação no prazo de 15 dias.") -> SimpleNamespace:
+def make_teor_response(conteudo: str = "Fica V.Sa. intimado(a) para manifestação no prazo de 15 dias.") -> SimpleNamespace:  # noqa: E501
     return SimpleNamespace(
         sucesso=True,
         mensagem="",

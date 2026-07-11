@@ -1,16 +1,22 @@
 from __future__ import annotations
 
 import json
+import stat
 import time
 from pathlib import Path
 
 import pytest
 
-from juris.search.rate_limiter import CourtRateLimiter
+from juris.search.rate_limiter import CourtRateLimiter, default_state_file
 
 
 @pytest.mark.asyncio
 class TestCourtRateLimiter:
+    async def test_default_state_file_honors_juris_home(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("JURIS_HOME", str(tmp_path))
+
+        assert default_state_file() == tmp_path / "rate_limits.json"
+
     async def test_first_request_immediate(self, tmp_path: Path) -> None:
         limiter = CourtRateLimiter(default_interval=2.0, state_file=tmp_path / "rates.json")
         start = time.monotonic()
@@ -41,6 +47,7 @@ class TestCourtRateLimiter:
         assert state_file.exists()
         data = json.loads(state_file.read_text())
         assert "stf" in data
+        assert stat.S_IMODE(state_file.stat().st_mode) == 0o600
 
     async def test_loads_existing_state(self, tmp_path: Path) -> None:
         state_file = tmp_path / "rates.json"
@@ -51,6 +58,16 @@ class TestCourtRateLimiter:
         await limiter.acquire("stf")
         elapsed = time.monotonic() - start
         assert elapsed >= 1.5
+
+    async def test_ignores_invalid_state_values(self, tmp_path: Path) -> None:
+        state_file = tmp_path / "rates.json"
+        state_file.write_text(json.dumps({"stf": "bad", "stj": -1, "tst": time.time()}))
+        limiter = CourtRateLimiter(default_interval=2.0, state_file=state_file)
+
+        start = time.monotonic()
+        await limiter.acquire("stf")
+
+        assert time.monotonic() - start < 0.1
 
     async def test_custom_interval_per_court(self, tmp_path: Path) -> None:
         limiter = CourtRateLimiter(

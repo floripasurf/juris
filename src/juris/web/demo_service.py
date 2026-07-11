@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
+from juris.agents.estrategia import tom_minuta
 from juris.core.types import NumeroCNJ
 from juris.demo import DemoRequest, OutputMode, SourceMode, run_demo
 from juris.demo.artifacts import write_artifacts
 from juris.demo.disclaimer import output_dir_name
 from juris.demo.orchestrator import derive_demo_mode, load_processo
 from juris.repertory.peticoes.models import TipoPeticao
+from juris.web.jsonutil import ensure_list
 
 if TYPE_CHECKING:
     from juris.llm.base import AbstractLLM
@@ -19,7 +22,22 @@ if TYPE_CHECKING:
 
 
 class DemoRunError(Exception):
-    """Raised when a local web demo run cannot be completed."""
+    """Raised when a local web demo run cannot be completed.
+
+    ``message`` is safe to serialize to the browser. ``internal_detail`` is for
+    logs only and may include local paths, dependency errors, or transport text.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "demo_run_failed",
+        internal_detail: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.internal_detail = internal_detail or message
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +55,8 @@ class WebDemoRunRequest:
     cloud: bool = False
     skip_review: bool = False
     use_cache: bool = True
+    tenant_id: str = "public"  # routes source=mni to this firm's agent (multi-tenant)
+    cpf: str | None = None  # co-located MNI; in remote mode the agent resolves it
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +80,136 @@ class WebDemoRun:
     duration_seconds: float
     output_dir: str
     artifacts: tuple[WebDemoArtifact, ...]
+    estrategia: dict[str, object] | None = None  # the selected argumentative line (Relatório)
+    review: dict[str, object] | None = None  # structured reviewer report
+    grounding: dict[str, object] | None = None  # anti-hallucination state (verified/blocked)
+    # IA do run (spec 2026-07-05): modelo efetivo da minuta final, preferência
+    # declarada e aviso de divergência declarado×real (por-run, sem store).
+    ai_model: str | None = None
+    ai_browser_provider_declared: str | None = None
+    provider_warning: str | None = None
+
+
+def estrategia_payload(draft: object) -> dict[str, object] | None:
+    """Extract the UI-facing strategy from a DraftResult (or None).
+
+    Surfaces the chosen argumentative line, the runners-up, the deontological
+    flags and the mandatory-review flag — the structured intelligence the
+    operator console renders instead of burying it in markdown.
+    """
+    est = getattr(draft, "estrategia", None)
+    if est is None:
+        return None
+
+    def _linha(linha: object) -> dict[str, object]:
+        return {
+            "tese": getattr(linha, "tese", ""),
+            "ordem": getattr(linha, "ordem", ""),
+            "confianca": getattr(linha, "confianca", ""),
+            "score": getattr(linha, "score", 0.0),
+            "fundamentos": list(getattr(linha, "fundamentos", [])),
+            "citacoes": list(getattr(linha, "citacoes", [])),
+            "riscos": list(getattr(linha, "riscos", [])),
+            "fundamento_consequencialista": getattr(linha, "fundamento_consequencialista", None),
+        }
+
+
+    def _matriz(item: object) -> dict[str, object]:
+        return {
+            "alegacao": getattr(item, "alegacao", ""),
+            "provas": list(getattr(item, "provas", [])),
+            "lacunas": list(getattr(item, "lacunas", [])),
+        }
+
+    matriz = [_matriz(i) for i in getattr(est, "matriz_probatoria", [])]
+    lacunas_prova = [
+        {
+            "alegacao": str(item.get("alegacao") or ""),
+            "lacunas": ensure_list(item.get("lacunas")) or ["sem prova indicada"],
+        }
+        for item in matriz
+        if not item.get("provas") or item.get("lacunas")
+    ]
+    escolhida = _linha(est.escolhida)
+    return {
+        "escolhida": escolhida,
+        "alternativas": [_linha(a) for a in getattr(est, "alternativas", [])],
+        "avisos_deontologicos": list(getattr(est, "avisos_deontologicos", [])),
+        "revisao_humana_obrigatoria": bool(getattr(est, "revisao_humana_obrigatoria", False)),
+        "tom_minuta": tom_minuta(
+            str(escolhida.get("confianca") or ""),
+            revisao_obrigatoria=bool(getattr(est, "revisao_humana_obrigatoria", False)),
+        ),
+        "classificacao": [
+            {
+                "texto": getattr(item, "texto", ""),
+                "tipo": getattr(item, "tipo", ""),
+            }
+            for item in getattr(est, "classificacao", [])
+        ],
+        "matriz_probatoria": matriz,
+        "lacunas_prova": lacunas_prova,
+    }
+
+
+def _enum_value(value: object) -> str:
+    return value.value if hasattr(value, "value") else str(value)
+
+
+def grounding_payload(draft: object) -> dict[str, object] | None:
+    """Extract the anti-hallucination state from a DraftResult (or None).
+
+    Surfaces the grounding status, whether the draft was blocked, and the offending
+    references — so the console renders the block as a first-class chip instead of
+    leaving the operator to discover it in the markdown/manifest.
+    """
+    report = getattr(draft, "grounding_report", None)
+    if report is None:
+        return None
+    return {
+        "status": report.status.value,
+        "blocked": not report.is_verified,
+        "blocked_reason": getattr(draft, "blocked_reason", None),
+        "failed_citation_ids": list(report.failed_citation_ids),
+        "spurious_citations": list(report.spurious_citations),
+    }
+
+
+def review_payload(draft: object) -> dict[str, object] | None:
+    """Extract the structured reviewer report from a DraftResult (or None).
+
+    Surfaces the issues (by dimension/severity), the per-severity counts, and the
+    verified citations — so the console shows the review as UI, not markdown.
+    """
+    rep = getattr(draft, "reviewer_report", None)
+    if rep is None:
+        return None
+
+    issues = [
+        {
+            "dimension": _enum_value(getattr(i, "dimension", "")),
+            "severity": _enum_value(getattr(i, "severity", "")),
+            "title": getattr(i, "title", ""),
+            "description": getattr(i, "description", ""),
+            "suggestion": getattr(i, "suggestion", None),
+            "line_anchor": getattr(i, "line_anchor", None),
+            "citations": list(getattr(i, "citations", [])),
+        }
+        for i in getattr(rep, "issues", [])
+    ]
+    counts = {
+        sev: sum(1 for i in issues if i["severity"] == sev)
+        for sev in ("critical", "important", "suggestion")
+    }
+    citations = [
+        {
+            "raw": getattr(c, "raw_text", ""),
+            "normalized": getattr(c, "normalized", ""),
+            "found": bool(getattr(c, "found_in_repertory", False)),
+        }
+        for c in getattr(rep, "citations_found", [])
+    ]
+    return {"issues": issues, "counts": counts, "citations": citations}
 
 
 async def execute_demo_run(request: WebDemoRunRequest) -> WebDemoRun:
@@ -82,9 +232,23 @@ async def execute_demo_run(request: WebDemoRunRequest) -> WebDemoRun:
             source_mode,
             use_cache=request.use_cache,
             audit_path=audit_path,
+            cpf=request.cpf,
+            tenant_id=request.tenant_id,  # source=mni routes to the tenant's agent
         )
     except (LookupError, NotImplementedError, ValueError) as exc:
-        raise DemoRunError(str(exc)) from exc
+        raise DemoRunError(
+            "Falha ao carregar o processo. Verifique CNJ, tribunal e origem selecionada.",
+            code="process_load_failed",
+            internal_detail=str(exc),
+        ) from exc
+    except (RuntimeError, ConnectionError, TimeoutError, OSError) as exc:
+        # Missing tenant binding, agent unavailable, or remote transport failure —
+        # an operational problem, not a 500. Surface it as a controlled message.
+        raise DemoRunError(
+            "Falha ao consultar o agente/MNI. Verifique se o agente local está configurado e conectado.",
+            code="agent_mni_failed",
+            internal_detail=str(exc),
+        ) from exc
 
     demo_request = DemoRequest(
         numero_cnj=numero_cnj,
@@ -108,20 +272,38 @@ async def execute_demo_run(request: WebDemoRunRequest) -> WebDemoRun:
             audit_path=audit_path,
             is_demo_mode=is_demo_mode,
             processo=processo,
+            tenant_id=request.tenant_id,  # scope corpus to this firm (+ public seed)
         )
     except Exception as exc:  # noqa: BLE001
-        raise DemoRunError(f"Falha no pipeline demo: {exc}") from exc
+        raise DemoRunError(
+            "Falha no pipeline demo. Verifique logs do servidor para diagnóstico.",
+            code="demo_pipeline_failed",
+            internal_detail=str(exc),
+        ) from exc
 
     artifact_hashes = write_artifacts(result)
     artifacts = tuple(_artifact_preview(case_dir, name, sha256) for name, sha256 in sorted(artifact_hashes.items()))
+
+    from juris.config import get_settings
+    from juris.llm.browser_session import label_to_browser_provider, provider_divergence
+
+    draft = getattr(result, "draft", None)
+    ai_model = getattr(draft, "ai_model", None)
+    declared = get_settings().ai_browser_provider
     return WebDemoRun(
         succeeded=result.succeeded,
         degraded=result.degraded,
         degradation_reason=result.degradation_reason,
         errors=tuple(result.errors),
         duration_seconds=result.duration_seconds,
-        output_dir=str(case_dir),
+        output_dir=_relative_key(case_dir, request.out_root),
         artifacts=artifacts,
+        estrategia=estrategia_payload(draft),
+        review=review_payload(draft),
+        grounding=grounding_payload(draft),
+        ai_model=ai_model,
+        ai_browser_provider_declared=declared,
+        provider_warning=provider_divergence(declared, label_to_browser_provider(ai_model)),
     )
 
 
@@ -168,15 +350,79 @@ def _resolve_repertory_for_source(is_demo_mode: bool) -> Path:
     return repertory_path
 
 
-def _build_llm(*, use_cloud: bool) -> AbstractLLM:
+def _ai_preference_enabled() -> bool:
+    """ADR-0018: drive the lawyer's own browser LLM session as the primary."""
+    return os.environ.get("JURIS_AI_PREFERENCE", "").strip().lower() in {"1", "true", "yes"}
+
+
+def _build_cloud_llm() -> AbstractLLM:
+    """A de-identified cloud LLM (ADR-0016: names removed via LeNER-Br, gate fails closed)."""
+    from juris.config import get_settings
+    from juris.core.deid_llm import cloud_safe_llm
+    from juris.llm.claude import ClaudeLLM
+
+    settings = get_settings()
+    if not settings.anthropic_api_key:
+        raise DemoRunError("ANTHROPIC_API_KEY não configurada.")
+    return cast("AbstractLLM", cloud_safe_llm(ClaudeLLM(api_key=settings.anthropic_api_key.get_secret_value())))
+
+
+def _build_ai_of_preference_llm(*, use_cloud: bool) -> AbstractLLM:
+    """ADR-0018 AI-of-preference: the lawyer's browser session first, a de-identified
+    backend as the fallback when the session breaks (both PII-safe on egress)."""
+    from juris.api.browser_bridge import (
+        NativeBridgeTransport,
+        WebSocketBridgeChannel,
+        validate_bridge_url,
+    )
+    from juris.config import get_settings
+    from juris.core.deid_llm import default_ner_redactor
+    from juris.core.fallback_llm import build_ai_of_preference
+    from juris.llm.browser_session import BrowserSessionLLM, browser_model_label
+
+    declared_provider = get_settings().ai_browser_provider
+    requested_label = browser_model_label(declared_provider)
+    bridge_url = validate_bridge_url(os.environ.get("JURIS_BROWSER_BRIDGE_URL", ""))
+    browser = BrowserSessionLLM(
+        NativeBridgeTransport(
+            WebSocketBridgeChannel.to_localhost(bridge_url),
+            model=requested_label,
+            provider=declared_provider,
+        ),
+        model=requested_label,
+    )
     if use_cloud:
-        from juris.config import get_settings
         from juris.llm.claude import ClaudeLLM
 
         settings = get_settings()
         if not settings.anthropic_api_key:
             raise DemoRunError("ANTHROPIC_API_KEY não configurada.")
-        return ClaudeLLM(api_key=settings.anthropic_api_key.get_secret_value())
+        # Both browser + cloud fallback fail closed with NER (names never leave raw).
+        return build_ai_of_preference(
+            browser,
+            ClaudeLLM(api_key=settings.anthropic_api_key.get_secret_value()),
+            ner_redactor=default_ner_redactor(),
+            allow_partial=False,
+        )
+    from juris.llm.ollama import OllamaLLM
+
+    # The browser session is a CLOUD service (claude.ai/ChatGPT), so it ALWAYS needs full
+    # NER de-id, fail-closed (names never leave raw) — even when the FALLBACK is the local
+    # Ollama (which stays on-device via fallback_is_local, so its redaction is skipped).
+    return build_ai_of_preference(
+        browser,
+        OllamaLLM(),
+        ner_redactor=default_ner_redactor(),
+        allow_partial=False,
+        fallback_is_local=True,
+    )
+
+
+def _build_llm(*, use_cloud: bool) -> AbstractLLM:
+    if _ai_preference_enabled():
+        return _build_ai_of_preference_llm(use_cloud=use_cloud)
+    if use_cloud:
+        return _build_cloud_llm()
 
     from juris.llm.ollama import OllamaLLM
 
@@ -200,7 +446,11 @@ def _build_repertory(repertory_path: Path) -> RepertoryService:
         )
         return RepertoryService(retriever)
     except Exception as exc:  # noqa: BLE001
-        raise DemoRunError(f"Falha ao inicializar repertório: {exc}") from exc
+        raise DemoRunError(
+            "Falha ao inicializar repertório. Verifique a configuração do corpus local.",
+            code="repertory_init_failed",
+            internal_detail=str(exc),
+        ) from exc
 
 
 def _artifact_preview(case_dir: Path, name: str, sha256: str) -> WebDemoArtifact:
@@ -208,4 +458,12 @@ def _artifact_preview(case_dir: Path, name: str, sha256: str) -> WebDemoArtifact
     preview = ""
     if path.exists() and path.is_file():
         preview = path.read_text(encoding="utf-8", errors="replace")[:12000]
-    return WebDemoArtifact(name=name, path=str(path), sha256=sha256, preview=preview)
+    return WebDemoArtifact(name=name, path=name, sha256=sha256, preview=preview)
+
+
+def _relative_key(path: Path, root: Path) -> str:
+    """Stable public key for a path under the tenant output root."""
+    try:
+        return path.relative_to(root).as_posix()
+    except ValueError:
+        return path.resolve().relative_to(root.resolve()).as_posix()

@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from datetime import UTC
 from pathlib import Path
-
-import pytest
 
 from juris.core.storage import LocalFileStorage
 from juris.mni.parsers.documentos import (
@@ -76,7 +75,7 @@ class TestOvernightSync:
 
     def test_datajud_sync(self) -> None:
         """Test that DataJud sync returns a DiffResult."""
-        from juris.mni.operations.differential import DiffResult, diff_processo
+        from juris.mni.operations.differential import diff_processo
         from juris.mni.parsers.processo import Movimento, ProcessoDomain
 
         # Simulate a DataJud-parsed processo
@@ -106,10 +105,10 @@ class TestOvernightSync:
         assert len(result.new_movimentos) == 2
 
         # Second sync with same data: no new movements
-        from datetime import datetime, timezone
+        from datetime import datetime
         result2 = diff_processo(
             processo,
-            last_sync_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+            last_sync_at=datetime(2025, 1, 1, tzinfo=UTC),
             known_movimento_keys={
                 (m.data_hora, m.codigo_nacional, m.id_movimento)
                 for m in processo.movimentos

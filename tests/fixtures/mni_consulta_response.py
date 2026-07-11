@@ -181,9 +181,9 @@ def make_consulta_response_5080938() -> SimpleNamespace:
     movimentos = [
         make_movimento(datetime(2017, 9, 28, 8, 0), 26, "Distribuído por sorteio", id_movimento="MOV101"),
         make_movimento(datetime(2017, 10, 5, 9, 0), 12, "Citação", id_movimento="MOV102"),
-        make_movimento(datetime(2017, 12, 1, 14, 30), 85, "Juntada de Petição", complemento="Contestação", id_movimento="MOV103"),
+        make_movimento(datetime(2017, 12, 1, 14, 30), 85, "Juntada de Petição", complemento="Contestação", id_movimento="MOV103"),  # noqa: E501
         make_movimento(datetime(2018, 4, 10, 11, 0), 60, "Despacho", complemento="Saneador", id_movimento="MOV104"),
-        make_movimento(datetime(2019, 2, 20, 15, 0), 132, "Sentença", complemento="Julgado improcedente", id_movimento="MOV105"),
+        make_movimento(datetime(2019, 2, 20, 15, 0), 132, "Sentença", complemento="Julgado improcedente", id_movimento="MOV105"),  # noqa: E501, S105
         make_movimento(datetime(2019, 3, 5, 10, 0), 60, "Apelação", id_movimento="MOV106"),
     ]
 

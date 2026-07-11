@@ -14,6 +14,7 @@ from juris.busca.abc import SearchChannel
 from juris.busca.models import FonteOrigem, ResultadoBusca
 from juris.busca.retry import busca_circuit_breaker
 from juris.core.observability import get_logger
+from juris.core.sanitize import safe_error_text
 from juris.datajud.client import _TRIBUNAL_INDEX, buscar_parte_tribunal
 
 logger = get_logger(__name__)
@@ -118,9 +119,9 @@ class DataJudChannel(SearchChannel):
                 cpf=cpf,
                 max_results=max_results,
             )
-        except Exception:
+        except Exception as exc:  # noqa: BLE001
             busca_circuit_breaker.record_failure(tid)
-            logger.exception("datajud_search_error", tribunal=tid)
+            logger.warning("datajud_search_error", tribunal=tid, error=safe_error_text(exc))
             return []
 
         busca_circuit_breaker.record_success(tid)

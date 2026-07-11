@@ -210,8 +210,9 @@ class TestRealSourceGate:
     def test_mni_source_also_gated(
         self, tmp_path: Path, _isolate_repertory: Path
     ) -> None:
-        # MNI raises NotImplementedError downstream, but the gate fires
-        # FIRST when the corpus is missing — and that's the correct order.
+        # MNI now performs a real read downstream, but the corpus gate must
+        # still fire FIRST when the corpus is missing — that's the correct
+        # order (no --cpf is needed to reach the gate).
         result = runner.invoke(
             app,
             [

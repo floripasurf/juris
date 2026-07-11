@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd template for the juris web console (orchestrator) on the Mac Mini.
+  Binds loopback only; Cloudflare Tunnel publishes it (docs/deploy/blackcube-pilot.md).
+  Port 8000 on purpose: 8765 is the local agent's port (com.juris.agent.plist).
+  Copy to ~/Library/LaunchAgents/com.juris.web.plist, fill in the REPLACE_*
+  values, then: launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.juris.web.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.juris.web</string>
+
+  <!-- Chame o entrypoint do venv DIRETO: `uv run` trava (deadlock silencioso)
+       quando invocado pelo launchd. E o checkout NÃO pode morar em ~/Desktop,
+       ~/Documents ou ~/Downloads: o TCC do macOS bloqueia leitura dessas pastas
+       para processos launchd e o open() do Python pendura para sempre. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>REPLACE_WITH_PATH_TO/juris/.venv/bin/juris</string>
+    <string>web</string>
+    <string>--host</string>
+    <string>127.0.0.1</string>
+    <string>--port</string>
+    <string>8000</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>REPLACE_WITH_PATH_TO/juris</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <!-- fail-closed posture for the online pilot (docs/deploy/production.md §1) -->
+    <key>ENVIRONMENT</key>
+    <string>prod</string>
+    <key>JURIS_REQUIRE_TENANTS</key>
+    <string>1</string>
+    <!-- Access logs record path+query (CNJ/search terms). Off by default; do NOT
+         set JURIS_WEB_ACCESS_LOG. Keep logs at INFO, in an owner-only dir below. -->
+    <key>JURIS_LOG_LEVEL</key>
+    <string>INFO</string>
+    <key>JURIS_TENANTS_FILE</key>
+    <string>REPLACE_WITH_PATH_TO/tenants.json</string>
+    <key>JURIS_HOME</key>
+    <string>REPLACE_WITH_PATH_TO/juris-home</string>
+    <key>JURIS_OUT_ROOT</key>
+    <string>REPLACE_WITH_PATH_TO/juris-home/out</string>
+    <!-- python3 -c 'import secrets; print(secrets.token_urlsafe(48))' -->
+    <key>JURIS_AUDIT_HMAC_KEY</key>
+    <string>REPLACE_WITH_LONG_SECRET</string>
+    <!-- Hosted pilot split-trust: one explicit binding per tenant. With
+         JURIS_REQUIRE_TENANTS=1 the global JURIS_LOCAL_AGENT_* fallback is refused
+         by design, so use an owner-only agents.json:
+         {"escritorio-piloto":{"url":"ws://127.0.0.1:8765","token":"..."}}
+         chmod 600 REPLACE_WITH_PATH_TO/agents.json -->
+    <key>JURIS_AGENT_MODE</key>
+    <string>remote</string>
+    <key>JURIS_AGENTS_FILE</key>
+    <string>REPLACE_WITH_PATH_TO/agents.json</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <!-- Owner-only log dir (chmod 700); NOT /tmp (world-readable) — logs may carry
+       operational context. `mkdir -p <path>/logs && chmod 700 <path>/logs` first. -->
+  <key>StandardOutPath</key>
+  <string>REPLACE_WITH_PATH_TO/logs/web.log</string>
+  <key>StandardErrorPath</key>
+  <string>REPLACE_WITH_PATH_TO/logs/web.err</string>
+</dict>
+</plist>

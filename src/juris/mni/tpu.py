@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 
-class CategoriaSemantica(str, Enum):
+class CategoriaSemantica(StrEnum):
     """Semantic categories for court movements."""
 
     PRAZO_ABERTO = "prazo_aberto"
@@ -27,7 +27,7 @@ class CategoriaSemantica(str, Enum):
     UNCLASSIFIED = "unclassified"
 
 
-class Urgencia(str, Enum):
+class Urgencia(StrEnum):
     """Urgency level for a classified movement."""
 
     CRITICA = "critica"    # Prazo fatal, sentenca, tutela
@@ -277,10 +277,10 @@ def is_high_confidence(tpu_code: int) -> bool:
     return entry.categoria in HIGH_CONFIDENCE_CATEGORIES
 
 
-def tpu_coverage_stats() -> dict[str, int]:
+def tpu_coverage_stats() -> dict[str, object]:
     """Return stats about TPU mapping coverage."""
     total = len(_TPU_ENTRIES)
-    by_category = {}
+    by_category: dict[str, int] = {}
     for e in _TPU_ENTRIES:
         by_category[e.categoria.value] = by_category.get(e.categoria.value, 0) + 1
     return {"total_codes": total, "by_category": by_category}

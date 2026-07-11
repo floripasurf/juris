@@ -6,25 +6,32 @@ from binding precedents (Súmula Vinculante) to templates and news.
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from dataclasses import dataclass, field
 from datetime import date
-from enum import Enum
+from enum import StrEnum
 
 
-class TipoFonte(str, Enum):
+class TipoFonte(StrEnum):
     """Type of jurisprudence source, ordered by binding authority."""
 
-    SUMULA_VINCULANTE = "sumula_vinculante"      # hierarquia=1
-    RE_STF = "re_stf"                            # hierarquia=2
-    RESP_REPETITIVO = "resp_repetitivo"          # hierarquia=3
-    SUMULA = "sumula"                            # hierarquia=4
+    SUMULA_VINCULANTE = "sumula_vinculante"  # hierarquia=1
+    RE_STF = "re_stf"  # hierarquia=2
+    RESP_REPETITIVO = "resp_repetitivo"  # hierarquia=3
+    SUMULA = "sumula"  # hierarquia=4
     JURISPRUDENCIA_UNIFORME = "jurisprudencia_uniforme"  # hierarquia=5
-    PRECEDENTE_LOCAL = "precedente_local"        # hierarquia=6
-    MODELO_PETICAO = "modelo_peticao"            # hierarquia=7
-    DOUTRINA_PD = "doutrina_pd"                  # hierarquia=6
-    NOTICIA_TRIBUNAL = "noticia_tribunal"        # hierarquia=7
-    ACORDAO_LANDMARK = "acordao_landmark"        # hierarquia=3
-    ACORDAO_PUBLICADO = "acordao_publicado"      # hierarquia=5
+    PRECEDENTE_LOCAL = "precedente_local"  # hierarquia=6
+    MODELO_PETICAO = "modelo_peticao"  # hierarquia=7
+    DOUTRINA_PD = "doutrina_pd"  # hierarquia=6
+    NOTICIA_TRIBUNAL = "noticia_tribunal"  # hierarquia=7
+    ACORDAO_LANDMARK = "acordao_landmark"  # hierarquia=3
+    ACORDAO_PUBLICADO = "acordao_publicado"  # hierarquia=5
+    PECA_ESCRITORIO = "peca_escritorio"  # hierarquia=7 — peça protocolada do próprio escritório
+    NOTA_INTERNA = "nota_interna"  # hierarquia=7 — tese/playbook interno
+    # Legado: uploads antigos usavam este nome. Novos uploads do escritório usam DOUTRINA_ESCRITORIO.
+    DOUTRINA_PRIVADA = "doutrina_privada"  # hierarquia=6
+    DOUTRINA_ESCRITORIO = "doutrina_escritorio"  # hierarquia=6 — doutrina fornecida pelo escritório
 
 
 TIPO_HIERARQUIA: dict[TipoFonte, int] = {
@@ -39,7 +46,93 @@ TIPO_HIERARQUIA: dict[TipoFonte, int] = {
     TipoFonte.NOTICIA_TRIBUNAL: 7,
     TipoFonte.ACORDAO_LANDMARK: 3,
     TipoFonte.ACORDAO_PUBLICADO: 5,
+    TipoFonte.PECA_ESCRITORIO: 7,
+    TipoFonte.NOTA_INTERNA: 7,
+    TipoFonte.DOUTRINA_PRIVADA: 6,
+    TipoFonte.DOUTRINA_ESCRITORIO: 6,
 }
+
+
+class UsoFonte(StrEnum):
+    """Como uma fonte pode ser usada pelo pipeline (spec Biblioteca L1).
+
+    FUNDAMENTO: citável como autoridade jurídica (entra em allowed_source_ids).
+    ESTILO: ensina estrutura/forma; NUNCA é citada — o verifier bloqueia.
+    """
+
+    FUNDAMENTO = "fundamento"
+    ESTILO = "estilo"
+
+
+TIPO_USO_DEFAULT: dict[TipoFonte, UsoFonte] = {
+    TipoFonte.SUMULA_VINCULANTE: UsoFonte.FUNDAMENTO,
+    TipoFonte.RE_STF: UsoFonte.FUNDAMENTO,
+    TipoFonte.RESP_REPETITIVO: UsoFonte.FUNDAMENTO,
+    TipoFonte.SUMULA: UsoFonte.FUNDAMENTO,
+    TipoFonte.JURISPRUDENCIA_UNIFORME: UsoFonte.FUNDAMENTO,
+    TipoFonte.PRECEDENTE_LOCAL: UsoFonte.FUNDAMENTO,
+    TipoFonte.MODELO_PETICAO: UsoFonte.ESTILO,
+    TipoFonte.DOUTRINA_PD: UsoFonte.FUNDAMENTO,
+    TipoFonte.NOTICIA_TRIBUNAL: UsoFonte.ESTILO,
+    TipoFonte.ACORDAO_LANDMARK: UsoFonte.FUNDAMENTO,
+    TipoFonte.ACORDAO_PUBLICADO: UsoFonte.FUNDAMENTO,
+    TipoFonte.PECA_ESCRITORIO: UsoFonte.ESTILO,
+    TipoFonte.NOTA_INTERNA: UsoFonte.ESTILO,
+    TipoFonte.DOUTRINA_PRIVADA: UsoFonte.FUNDAMENTO,
+    TipoFonte.DOUTRINA_ESCRITORIO: UsoFonte.FUNDAMENTO,
+}
+
+# Valores string dos tipos estilo-only, para os SQLs/payloads das stores.
+ESTILO_SOURCE_TYPES: frozenset[str] = frozenset(
+    t.value for t, uso in TIPO_USO_DEFAULT.items() if uso is UsoFonte.ESTILO
+)
+
+def resolve_uso(tipo: TipoFonte | str | None, override: str | None = None) -> UsoFonte:
+    """Resolve o uso efetivo: override explícito > default do tipo > fundamento.
+
+    Args:
+        tipo: TipoFonte (ou seu valor string) do documento; None quando desconhecido.
+        override: valor explícito de uso vindo do upload/registro ("" = ausente).
+
+    Returns:
+        UsoFonte efetivo.
+
+    Raises:
+        ValueError: override não-vazio que não é um UsoFonte válido.
+    """
+    if override:
+        return UsoFonte(override)  # ValueError natural para valor inválido
+    if tipo is None:
+        return UsoFonte.FUNDAMENTO
+    try:
+        tipo_enum = tipo if isinstance(tipo, TipoFonte) else TipoFonte(str(tipo))
+    except ValueError:
+        return UsoFonte.FUNDAMENTO
+    return TIPO_USO_DEFAULT.get(tipo_enum, UsoFonte.FUNDAMENTO)
+
+
+def normalize_area(area: str | None) -> str:
+    """Canonicalize a practice-area label for storage and retrieval filters."""
+    raw = (area or "").strip().lower()
+    if not raw:
+        return ""
+    text = unicodedata.normalize("NFKD", raw).encode("ascii", "ignore").decode("ascii")
+    text = re.sub(r"[^a-z0-9]+", "_", text).strip("_")
+    aliases = {
+        "civil": "civel",
+        "civeis": "civel",
+        "direito_civel": "civel",
+        "empresas": "empresarial",
+        "empresa": "empresarial",
+        "direito_empresarial": "empresarial",
+        "trabalho": "trabalhista",
+        "direito_trabalhista": "trabalhista",
+        "tributario": "tributario",
+        "tributaria": "tributario",
+        "direito_tributario": "tributario",
+    }
+    return aliases.get(text, text)
+
 
 HIERARCHY_WEIGHTS: dict[int, float] = {
     1: 3.0,
@@ -62,6 +155,7 @@ _HIERARCHY_LABELS: dict[int, str] = {
 _HIERARCHY_LABELS_DETAILED: dict[TipoFonte, str] = {
     TipoFonte.MODELO_PETICAO: "Modelo de Petição",
     TipoFonte.DOUTRINA_PD: "Doutrina (Domínio Público)",
+    TipoFonte.DOUTRINA_ESCRITORIO: "Doutrina do Escritório",
     TipoFonte.NOTICIA_TRIBUNAL: "Notícia de Tribunal",
     TipoFonte.ACORDAO_LANDMARK: "Acórdão Landmark",
     TipoFonte.ACORDAO_PUBLICADO: "Acórdão Publicado",
@@ -120,6 +214,8 @@ class FonteJurisprudencia:
         if self.hierarquia == 7 and self.tipo in {
             TipoFonte.MODELO_PETICAO,
             TipoFonte.NOTICIA_TRIBUNAL,
+            TipoFonte.PECA_ESCRITORIO,
+            TipoFonte.NOTA_INTERNA,
         }:
             return
         if not 1 <= self.hierarquia <= 6:

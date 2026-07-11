@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import date, datetime
-from enum import Enum
-from typing import Any
+import re
+from dataclasses import dataclass, field, replace
+from datetime import date, datetime, timedelta
+from enum import StrEnum
 
 from juris.agents.analyzer import AnalysisResult
 from juris.mni.tpu import CategoriaSemantica, Urgencia
@@ -13,14 +13,53 @@ from juris.prazo.calendar import JudicialCalendar
 from juris.prazo.rules import PrazoRule, TipoAcao, find_applicable_rules
 
 
-class StatusPrazo(str, Enum):
+class StatusPrazo(StrEnum):
     """Status of a deadline."""
 
-    ABERTO = "aberto"        # Deadline not yet reached
-    PROXIMO = "proximo"      # Within 3 dias úteis of deadline
-    URGENTE = "urgente"      # Within 1 dia útil or today
-    VENCIDO = "vencido"      # Past the deadline
-    CUMPRIDO = "cumprido"    # Marked as fulfilled
+    ABERTO = "aberto"  # Deadline not yet reached
+    PROXIMO = "proximo"  # Within 3 dias úteis of deadline
+    URGENTE = "urgente"  # Within 1 dia útil or today
+    VENCIDO = "vencido"  # Past the deadline
+    CUMPRIDO = "cumprido"  # Marked as fulfilled
+
+
+_EMBARGOS_DECLARACAO_RE = re.compile(r"\bembargos?\s+de\s+declara[cç][aã]o\b", re.IGNORECASE)
+_EMBARGOS_RESOLUTION_RE = re.compile(
+    r"\b(julgad|acolhid|rejeitad|provido|n[aã]o\s+provido|nao\s+provido|decidid|publicad)\w*",
+    re.IGNORECASE,
+)
+_DATE_RE = re.compile(
+    r"\b(?:(?P<br_day>\d{1,2})[/-](?P<br_month>\d{1,2})[/-](?P<br_year>\d{2,4})"
+    r"|(?P<iso_year>\d{4})-(?P<iso_month>\d{2})-(?P<iso_day>\d{2}))\b"
+)
+_DJE_AVAILABILITY_RE = re.compile(
+    r"\b(disponibilizad\w*|disponibiliza[cç][aã]o)\b.{0,60}\b(dje|di[aá]rio\s+de\s+justi[cç]a)\b",
+    re.IGNORECASE,
+)
+_PUBLICATION_RE = re.compile(r"\b(publicad\w*|publica[cç][aã]o)\b", re.IGNORECASE)
+_JOINED_SERVICE_RE = re.compile(
+    r"\b(juntad\w*|juntada)\b.{0,80}\b(mandado|aviso\s+de\s+recebimento|a\.?r\.?|ar|carta)\b"
+    r"|\b(mandado|aviso\s+de\s+recebimento|a\.?r\.?|ar|carta)\b.{0,80}\b(juntad\w*|juntada)\b",
+    re.IGNORECASE,
+)
+_ELECTRONIC_NOTICE_RE = re.compile(
+    r"\b(ci[eê]ncia|confirmad\w*|lida|abert\w*)\b.{0,80}\b(intima[cç][aã]o\s+eletr[oô]nica|pje|portal)\b"
+    r"|\b(intima[cç][aã]o\s+eletr[oô]nica|pje|portal)\b.{0,80}\b(ci[eê]ncia|confirmad\w*|lida|abert\w*)\b",
+    re.IGNORECASE,
+)
+_COMPLETED_CITATION_RE = re.compile(
+    r"\b(cita[cç][aã]o|citad[oa])\b.{0,80}\b(realizad\w*|cumprid\w*|positiv\w*)\b"
+    r"|\b(realizad\w*|cumprid\w*|positiv\w*)\b.{0,80}\b(cita[cç][aã]o|citad[oa])\b",
+    re.IGNORECASE,
+)
+_REOPENED_APPEAL_AFTER_ED_RULE = PrazoRule(
+    nome="Apelação (reaberta após embargos de declaração)",
+    categoria_trigger=CategoriaSemantica.SENTENCA,
+    codigo_tpu=None,
+    dias_uteis=15,
+    tipo_acao=TipoAcao.RECORRER,
+    base_legal="Art. 1.026 CPC c/c Art. 1.003 §5º CPC",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,8 +69,8 @@ class Prazo:
     movimento_id: str
     numero_cnj: str
     rule: PrazoRule
-    data_inicio: date       # Date the clock starts (dia da intimação/publicação)
-    data_limite: date       # Final date for the action
+    data_inicio: date  # Date the clock starts (dia da intimação/publicação)
+    data_limite: date  # Final date for the action
     dias_uteis_total: int
     dias_uteis_restantes: int
     status: StatusPrazo
@@ -57,6 +96,21 @@ class Prazo:
 
 
 @dataclass(frozen=True, slots=True)
+class RevisaoManual:
+    """An actionable movement whose deadline could NOT be computed deterministically.
+
+    Surfaced instead of silently dropped (no rule) or fabricated (missing date), so a
+    human reviews it. Common ``motivo`` values include ``data_ausente``,
+    ``marco_legal_ausente`` and ``sem_regra_de_prazo``.
+    """
+
+    movimento_id: str
+    categoria: CategoriaSemantica
+    motivo: str
+    descricao: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class PrazoReport:
     """Full deadline report for a processo."""
 
@@ -64,6 +118,7 @@ class PrazoReport:
     tribunal: str
     computed_at: date
     prazos: list[Prazo] = field(default_factory=list)
+    revisao_manual: list[RevisaoManual] = field(default_factory=list)
 
     @property
     def vencidos(self) -> list[Prazo]:
@@ -98,6 +153,12 @@ class PrazoReport:
         return f"{self.numero_cnj}: {', '.join(parts)}"
 
 
+@dataclass(frozen=True, slots=True)
+class _EmbargosInterruption:
+    filing: AnalysisResult
+    resolution: AnalysisResult | None
+
+
 def _compute_status(dias_uteis_restantes: int) -> StatusPrazo:
     """Determine deadline status based on remaining dias úteis."""
     if dias_uteis_restantes < 0:
@@ -115,6 +176,7 @@ def compute_prazo(
     calendar: JudicialCalendar,
     today: date | None = None,
     numero_cnj: str = "",
+    data_inicio: date | None = None,
 ) -> Prazo:
     """Compute a single deadline from an analyzed movement + rule.
 
@@ -124,28 +186,43 @@ def compute_prazo(
         calendar: Judicial calendar for dias úteis computation.
         today: Override for current date (for testing).
         numero_cnj: Case number.
+        data_inicio: Legal triggering date for the deadline, when it differs
+            from the raw MNI movement timestamp.
 
     Returns:
         Computed Prazo with status.
     """
     today = today or date.today()
 
-    # Start date: the date of the movement (converted from datetime)
-    data_inicio = analysis.data_hora.date() if isinstance(analysis.data_hora, datetime) else analysis.data_hora
+    # Invariant: undated movements are routed to revisao_manual upstream, never here.
+    if analysis.data_hora is None:
+        msg = "compute_prazo requires a dated movement; route undated to revisao_manual"
+        raise ValueError(msg)
+
+    # Start date: the legal triggering date. For simple publication/juntada
+    # movements this is the movement date; for citation/intimation flows it may
+    # be a later art. 231 CPC milestone. If the milestone cannot be identified,
+    # do not silently use the raw MNI timestamp for a fatal prazo.
+    data_inicio = data_inicio or _legal_start_date(analysis, calendar)
+    if data_inicio is None:
+        msg = "compute_prazo requires a legal start milestone; route ambiguous movement to revisao_manual"
+        raise ValueError(msg)
 
     # CPC Art. 224 §1º: prazo starts on the first dia útil after the event
     data_limite = calendar.add_dias_uteis(data_inicio, rule.dias_uteis)
 
     dias_restantes = calendar.dias_uteis_between(today, data_limite)
     if today > data_limite:
+        # Lapsed by the calendar — VENCIDO regardless of the business-day delta.
+        # (A deadline expiring Friday is lapsed on Saturday even though there are 0
+        # dias úteis between them; the old `-0 == 0` misread it as URGENTE.)
         dias_restantes = -calendar.dias_uteis_between(data_limite, today)
-
-    status = _compute_status(dias_restantes)
+        status = StatusPrazo.VENCIDO
+    else:
+        status = _compute_status(dias_restantes)
 
     # Override urgency based on deadline status
-    if status == StatusPrazo.VENCIDO:
-        urgencia = Urgencia.CRITICA
-    elif status == StatusPrazo.URGENTE:
+    if status == StatusPrazo.VENCIDO or status == StatusPrazo.URGENTE:
         urgencia = Urgencia.CRITICA
     elif status == StatusPrazo.PROXIMO:
         urgencia = Urgencia.ALTA
@@ -191,9 +268,71 @@ def compute_prazos(
     calendar = calendar or JudicialCalendar(uf=_tribunal_to_uf(tribunal))
 
     prazos: list[Prazo] = []
+    revisao_manual: list[RevisaoManual] = []
+    dated_analyses = [a for a in analyses if a.data_hora is not None]
 
     for analysis in analyses:
         if not analysis.requer_acao:
+            continue
+
+        # Missing/unparseable movement date: never fabricate a deadline from it.
+        if analysis.data_hora is None:
+            revisao_manual.append(
+                RevisaoManual(analysis.movimento_id, analysis.categoria, "data_ausente", analysis.descricao)
+            )
+            continue
+
+        # CPC art. 1.026: embargos de declaração interrupt the appeal period.
+        # Do not keep showing the original sentence appeal as VENCIDO after EDs
+        # were filed; calculate the full reopened appeal period from the ED
+        # judgment/publication when present, or surface manual review while pending.
+        if analysis.categoria == CategoriaSemantica.SENTENCA:
+            interruption = _embargos_interruption_for_sentence(analysis, dated_analyses)
+            if interruption is not None:
+                if interruption.resolution is None:
+                    revisao_manual.append(
+                        RevisaoManual(
+                            analysis.movimento_id,
+                            analysis.categoria,
+                            "prazo_interrompido_embargos_pendentes",
+                            (
+                                "Prazo recursal interrompido por embargos de declaração; "
+                                "aguarde/registre a publicação do julgamento dos embargos."
+                            ),
+                        )
+                    )
+                    continue
+                resolution = interruption.resolution
+                # CPC art. 1.003 §5º c/c art. 1.026: the reopened appeal runs from
+                # the intimação of the ED judgment, not the raw judgment timestamp.
+                # Reuse the same marco-legal logic so a DJe/publicação date carried
+                # by the resolution movement is honoured; fall back to the resolution
+                # date when the movement gives no explicit milestone.
+                reopened_start = _legal_start_date(resolution, calendar)
+                reopened = replace(
+                    analysis,
+                    movimento_id=f"{analysis.movimento_id}:reabertura-apelacao-ed",
+                    data_hora=resolution.data_hora,
+                    descricao=(
+                        "Prazo de apelação reaberto após intimação do julgamento dos "
+                        "embargos de declaração."
+                    ),
+                )
+                prazos.append(
+                    compute_prazo(
+                        reopened,
+                        _REOPENED_APPEAL_AFTER_ED_RULE,
+                        calendar,
+                        today,
+                        numero_cnj,
+                        data_inicio=reopened_start,
+                    )
+                )
+                continue
+
+        # The ED filing/resolution movements are evidence of interruption/reopening,
+        # not independent action items for this engine.
+        if _is_embargos_declaracao_event(analysis):
             continue
 
         rules = find_applicable_rules(
@@ -202,8 +341,30 @@ def compute_prazos(
             justica,
         )
 
+        # Actionable movement that matches no rule: surface for human review, never drop.
+        if not rules:
+            revisao_manual.append(
+                RevisaoManual(analysis.movimento_id, analysis.categoria, "sem_regra_de_prazo", analysis.descricao)
+            )
+            continue
+
+        start_date = _legal_start_date(analysis, calendar)
+        if start_date is None and _requires_explicit_legal_start(analysis):
+            revisao_manual.append(
+                RevisaoManual(
+                    analysis.movimento_id,
+                    analysis.categoria,
+                    "marco_legal_ausente",
+                    (
+                        "Movimento de citação/intimação sem marco legal confiável "
+                        "(juntada de AR/mandado/carta, confirmação eletrônica ou publicação DJe)."
+                    ),
+                )
+            )
+            continue
+
         for rule in rules:
-            prazo = compute_prazo(analysis, rule, calendar, today, numero_cnj)
+            prazo = compute_prazo(analysis, rule, calendar, today, numero_cnj, data_inicio=start_date)
             prazos.append(prazo)
 
     # Sort by urgency: vencidos first, then by date
@@ -221,18 +382,185 @@ def compute_prazos(
         tribunal=tribunal,
         computed_at=today,
         prazos=prazos,
+        revisao_manual=revisao_manual,
     )
 
 
 def _tribunal_to_uf(tribunal_id: str) -> str:
-    """Extract UF from tribunal ID."""
+    """Extract UF from tribunal ID.
+
+    Multi-state/national courts return ``"br"`` so they use only the federal
+    holiday baseline instead of silently inheriting MG's state calendar.
+    """
+    normalized = tribunal_id.lower().strip()
     _map = {
-        "tjmg": "mg", "tjsp": "sp", "tjrj": "rj", "tjba": "ba",
-        "tjrs": "rs", "tjpr": "pr", "tjpe": "pe", "tjsc": "sc",
-        "tjgo": "go", "tjdf": "df", "tjce": "ce", "tjpa": "pa",
-        "tjma": "ma", "tjam": "am", "tjmt": "mt", "tjms": "ms",
-        "tjes": "es", "tjpb": "pb", "tjrn": "rn", "tjal": "al",
-        "tjpi": "pi", "tjse": "se", "tjro": "ro", "tjac": "ac",
-        "tjap": "ap", "tjrr": "rr", "tjto": "to",
+        "tjmg": "mg",
+        "tjsp": "sp",
+        "tjrj": "rj",
+        "tjba": "ba",
+        "tjrs": "rs",
+        "tjpr": "pr",
+        "tjpe": "pe",
+        "tjsc": "sc",
+        "tjgo": "go",
+        "tjdf": "df",
+        "tjce": "ce",
+        "tjpa": "pa",
+        "tjma": "ma",
+        "tjam": "am",
+        "tjmt": "mt",
+        "tjms": "ms",
+        "tjes": "es",
+        "tjpb": "pb",
+        "tjrn": "rn",
+        "tjal": "al",
+        "tjpi": "pi",
+        "tjse": "se",
+        "tjro": "ro",
+        "tjac": "ac",
+        "tjap": "ap",
+        "tjrr": "rr",
+        "tjto": "to",
+        "trt1": "rj",
+        "trt2": "sp",
+        "trt3": "mg",
+        "trt4": "rs",
+        "trt5": "ba",
+        "trt6": "pe",
+        "trt7": "ce",
+        "trt8": "pa",
+        "trt9": "pr",
+        "trt10": "df",
+        "trt11": "am",
+        "trt12": "sc",
+        "trt13": "pb",
+        "trt14": "ro",
+        "trt15": "sp",
+        "trt16": "ma",
+        "trt17": "es",
+        "trt18": "go",
+        "trt19": "al",
+        "trt20": "se",
+        "trt21": "rn",
+        "trt22": "pi",
+        "trt23": "mt",
+        "trt24": "ms",
+        "trf6": "mg",
     }
-    return _map.get(tribunal_id.lower(), "mg")
+    if normalized.startswith("trf") or normalized in {"tst", "stf", "stj"}:
+        return _map.get(normalized, "br")
+    return _map.get(normalized, "br")
+
+
+def _requires_explicit_legal_start(analysis: AnalysisResult) -> bool:
+    return analysis.categoria in {CategoriaSemantica.CITACAO, CategoriaSemantica.INTIMACAO}
+
+
+def _legal_start_date(analysis: AnalysisResult, calendar: JudicialCalendar) -> date | None:
+    """Return the legal prazo start milestone when it can be identified.
+
+    CPC art. 231 makes citation/intimation deadlines depend on the concrete
+    communication channel. If the MNI movement only says that a citation or
+    intimation was issued, using ``dataHora`` is unsafe; callers should route it
+    to manual review instead of fabricating a fatal deadline.
+    """
+    if analysis.data_hora is None:
+        return None
+    descricao = analysis.descricao or ""
+    movement_date = analysis.data_hora.date()
+
+    if _DJE_AVAILABILITY_RE.search(descricao):
+        disponibilidade = _extract_date(descricao) or movement_date
+        return calendar.next_dia_util(disponibilidade + timedelta(days=1))
+
+    if _PUBLICATION_RE.search(descricao):
+        return _extract_date(descricao) or movement_date
+
+    if _JOINED_SERVICE_RE.search(descricao):
+        return _extract_date(descricao) or movement_date
+
+    if _ELECTRONIC_NOTICE_RE.search(descricao):
+        return _extract_date(descricao) or movement_date
+
+    if _COMPLETED_CITATION_RE.search(descricao):
+        return _extract_date(descricao) or movement_date
+
+    if not _requires_explicit_legal_start(analysis):
+        return movement_date
+
+    return None
+
+
+def _extract_date(text: str) -> date | None:
+    match = _DATE_RE.search(text)
+    if not match:
+        return None
+    try:
+        if match.group("iso_year"):
+            return date(
+                int(match.group("iso_year")),
+                int(match.group("iso_month")),
+                int(match.group("iso_day")),
+            )
+        year = int(match.group("br_year"))
+        if year < 100:
+            year += 2000
+        return date(year, int(match.group("br_month")), int(match.group("br_day")))
+    except ValueError:
+        return None
+
+
+def _is_embargos_declaracao_filing(analysis: AnalysisResult) -> bool:
+    if _is_embargos_declaracao_resolution(analysis):
+        return False
+    return analysis.codigo_tpu == 199 or bool(_EMBARGOS_DECLARACAO_RE.search(analysis.descricao or ""))
+
+
+def _is_embargos_declaracao_resolution(analysis: AnalysisResult) -> bool:
+    descricao = analysis.descricao or ""
+    if not _EMBARGOS_DECLARACAO_RE.search(descricao):
+        return False
+    if analysis.codigo_tpu in {463, 464, 465}:
+        return True
+    return bool(_EMBARGOS_RESOLUTION_RE.search(descricao))
+
+
+def _is_embargos_declaracao_event(analysis: AnalysisResult) -> bool:
+    return _is_embargos_declaracao_filing(analysis) or _is_embargos_declaracao_resolution(analysis)
+
+
+def _movement_ordering_key(analysis: AnalysisResult) -> datetime:
+    """Sort key over already-dated movements; callers pre-filter undated ones."""
+    if analysis.data_hora is None:  # unreachable: lists are filtered before sorting
+        msg = "movement without data_hora used as ordering key"
+        raise ValueError(msg)
+    return analysis.data_hora
+
+
+def _embargos_interruption_for_sentence(
+    sentence: AnalysisResult,
+    analyses: list[AnalysisResult],
+) -> _EmbargosInterruption | None:
+    if sentence.data_hora is None:
+        return None
+    after_sentence = [
+        analysis
+        for analysis in analyses
+        if analysis.data_hora is not None and analysis.data_hora > sentence.data_hora
+    ]
+    filings = [analysis for analysis in after_sentence if _is_embargos_declaracao_filing(analysis)]
+    if not filings:
+        return None
+    filing = min(filings, key=_movement_ordering_key)
+    filing_dt = filing.data_hora
+    if filing_dt is None:  # unreachable: after_sentence already excludes undated movements
+        return None
+    resolutions = [
+        analysis
+        for analysis in after_sentence
+        if analysis.data_hora is not None
+        and analysis.data_hora > filing_dt
+        and _is_embargos_declaracao_resolution(analysis)
+    ]
+    resolution = min(resolutions, key=_movement_ordering_key) if resolutions else None
+    return _EmbargosInterruption(filing=filing, resolution=resolution)

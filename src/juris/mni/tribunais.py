@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 
-class SistemaProcessual(str, Enum):
+class SistemaProcessual(StrEnum):
     PJE = "pje"
     ESAJ = "esaj"
     EPROC = "eproc"

@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Juris — sessão de IA",
+  "version": "0.1.0",
+  "description": "Usa a assinatura Claude.ai/ChatGPT do advogado via bridge local (ADR-0018).",
+  "permissions": ["nativeMessaging", "tabs"],
+  "host_permissions": ["https://claude.ai/*", "https://chatgpt.com/*"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "content_scripts": [
+    {
+      "matches": ["https://claude.ai/*", "https://chatgpt.com/*"],
+      "js": ["dist/content.js"]
+    }
+  ]
+}

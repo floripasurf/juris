@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import UTC, date, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, create_autospec, patch
@@ -20,6 +21,14 @@ from juris.signing.filing import (
 from juris.signing.pades import CertStatus, SigningResult
 
 # --- Fixtures ---
+
+
+class _CaptureLogger:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict[str, object]]] = []
+
+    def warning(self, event: str, **kwargs: object) -> None:
+        self.events.append((event, kwargs))
 
 
 def _make_mni_factory() -> MagicMock:
@@ -384,15 +393,33 @@ def test_render_failure_returns_error(
     mock_mni_client_factory: MagicMock,
     mock_mni_auth: MagicMock,
     filing_request: FilingRequest,
+    monkeypatch,
 ) -> None:
     """Render failure returns error result."""
+    import juris.signing.filing as filing_module
+
+    capture = _CaptureLogger()
+    monkeypatch.setattr(filing_module, "logger", capture)
     orch = _make_orchestrator(mock_signer, audit_log, receipt_store, mock_mni_client_factory, mock_mni_auth)
 
-    with patch("juris.signing.filing.render_petition_pdf", side_effect=ValueError("Empty markdown")):
+    with patch(
+        "juris.signing.filing.render_petition_pdf",
+        side_effect=ValueError("Empty markdown /var/private/render token=abc pin=1234"),
+    ):
         result = asyncio.run(orch.file(filing_request))
 
     assert result.success is False
     assert "Render failed" in (result.error or "")
+    dumped = json.dumps({"error": result.error, "audit": [e.details for e in audit_log.read_all()]})
+    assert "falha operacional" in dumped
+    assert "/var/private/render" not in dumped
+    assert "token=abc" not in dumped
+    assert "pin=1234" not in dumped
+    logged = json.dumps([event[1] for event in capture.events], ensure_ascii=False)
+    assert "/var/private/render" not in logged
+    assert "token=abc" not in logged
+    assert "pin=1234" not in logged
+    assert "exc_info" not in capture.events[0][1]
 
 
 def test_signing_failure_returns_error(
@@ -401,11 +428,16 @@ def test_signing_failure_returns_error(
     mock_cert_status: CertStatus,
     mock_mni_auth: MagicMock,
     filing_request: FilingRequest,
+    monkeypatch,
 ) -> None:
     """Signing failure returns error result."""
+    import juris.signing.filing as filing_module
+
+    capture = _CaptureLogger()
+    monkeypatch.setattr(filing_module, "logger", capture)
     signer = MagicMock()
     signer.validate_cert.return_value = mock_cert_status
-    signer.sign.side_effect = RuntimeError("Token disconnected")
+    signer.sign.side_effect = RuntimeError("Token disconnected /var/private/a3 token=abc pin=1234")
 
     mock_factory = _make_mni_factory()
     orch = _make_orchestrator(signer, audit_log, receipt_store, mock_factory, mock_mni_auth)
@@ -418,6 +450,64 @@ def test_signing_failure_returns_error(
 
     assert result.success is False
     assert "Signing failed" in (result.error or "")
+    dumped = json.dumps({"error": result.error, "audit": [e.details for e in audit_log.read_all()]})
+    assert "falha operacional" in dumped
+    assert "/var/private/a3" not in dumped
+    assert "token=abc" not in dumped
+    assert "pin=1234" not in dumped
+    logged = json.dumps([event[1] for event in capture.events], ensure_ascii=False)
+    assert "/var/private/a3" not in logged
+    assert "token=abc" not in logged
+    assert "pin=1234" not in logged
+    assert "exc_info" not in capture.events[0][1]
+
+
+def test_submit_failure_returns_sanitized_error(
+    mock_signer: MagicMock,
+    audit_log: AuditLog,
+    receipt_store: FilingReceiptStore,
+    mock_mni_auth: MagicMock,
+    filing_request: FilingRequest,
+    monkeypatch,
+) -> None:
+    """MNI submit failures do not expose local paths or secrets in result/audit."""
+    import juris.signing.filing as filing_module
+
+    capture = _CaptureLogger()
+    monkeypatch.setattr(filing_module, "logger", capture)
+    mock_factory = _make_mni_factory()
+    orch = _make_orchestrator(mock_signer, audit_log, receipt_store, mock_factory, mock_mni_auth)
+
+    with patch("juris.signing.filing.render_petition_pdf") as mock_render:
+        mock_render.return_value = MagicMock(
+            pdf_bytes=b"%PDF-1.4 test", page_count=1, pdf_hash="hash"
+        )
+        with patch(
+            "juris.mni.operations.peticionamento.entregar_manifestacao",
+            side_effect=RuntimeError("SOAP /var/private/mni token=abc pin=1234"),
+        ):
+            result = asyncio.run(orch.file(filing_request))
+
+    assert result.success is False
+    assert "MNI filing failed" in (result.error or "")
+    entries = audit_log.read_all()
+    submit_errors = [e for e in entries if e.event_type == "filing.submit_error"]
+    assert len(submit_errors) == 1
+    assert submit_errors[0].details == {
+        "error": "MNI filing failed: falha operacional ao protocolar no MNI.",
+        "pending_receipt": True,
+    }
+    dumped = json.dumps({"error": result.error, "audit": [e.details for e in entries]})
+    assert "falha operacional" in dumped
+    assert "/var/private/mni" not in dumped
+    assert "token=abc" not in dumped
+    assert "pin=1234" not in dumped
+    assert "pending_path" not in dumped
+    logged = json.dumps([event[1] for event in capture.events], ensure_ascii=False)
+    assert "/var/private/mni" not in logged
+    assert "token=abc" not in logged
+    assert "pin=1234" not in logged
+    assert "exc_info" not in capture.events[0][1]
 
 
 def test_audit_integrity_after_full_pipeline(

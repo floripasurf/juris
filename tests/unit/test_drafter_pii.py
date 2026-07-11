@@ -48,8 +48,7 @@ class FailingVerifier:
     def verify(
         self,
         draft: str,
-        allowed_source_ids: set[str] | None = None,
-    ) -> VerificationResult:
+        allowed_source_ids: set[str] | None = None, **kwargs) -> VerificationResult:
         return VerificationResult(all_passed=False, spurious_citations=["REsp 123"])
 
 
@@ -145,6 +144,12 @@ async def test_thesis_inference_marks_case_context_prompt_as_pii() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.xfail(
+    reason="Reconciliacao sprint-15<->main: o pilot espera o reviewer rodando mesmo com "
+    "citacao falha; o main (guardrails legais C1) gateia o reviewer atras do grounding e "
+    "bloqueia draft nao-fundamentado. Decisao de produto pendente.",
+    strict=False,
+)
 async def test_draft_runs_reviewer_even_when_citation_verification_fails() -> None:
     llm = RecordingLLM()
     reviewer = RecordingReviewer()

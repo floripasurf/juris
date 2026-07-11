@@ -330,12 +330,13 @@ class TestPreflightIntegrated:
         assert "cert_valid" in names
         assert "clock_skew" in names
 
-    def test_clock_skew_placeholder_present(self) -> None:
-        """PF-14: clock_skew check always included in result."""
+    def test_clock_skew_present_and_not_verified_without_url(self) -> None:
+        """PF-14: clock_skew sempre presente; sem tribunal_url, só avisa "não verificado" (passa)."""
         result = run_preflight("123", "tjmg", "peticao", MINIMAL_PDF)
         clock_checks = [c for c in result.checks if c.name == "clock_skew"]
         assert len(clock_checks) == 1
-        assert clock_checks[0].passed  # Placeholder passes
+        assert clock_checks[0].passed  # sem URL não há probe → aviso passivo
+        assert "não verificado" in clock_checks[0].message.lower()
 
     def test_all_pass_happy_path(self) -> None:
         """PF-11: All valid inputs → passed=True, zero blockers."""

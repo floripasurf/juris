@@ -35,6 +35,19 @@ class TestFileCredentials:
         raw = cred_file.read_text()
         assert "secret123" not in raw
 
+    def test_fallback_dir_honors_juris_home(self, tmp_path: Path, monkeypatch: object) -> None:
+        import juris.core.credentials as creds
+
+        monkeypatch.setattr(creds, "_FALLBACK_DIR", None)
+        monkeypatch.setenv("JURIS_HOME", str(tmp_path))
+        monkeypatch.setattr(creds, "_try_keychain_store", lambda k, v: False)
+        monkeypatch.setattr(creds, "_try_keychain_get", lambda k: None)
+        monkeypatch.setattr(creds, "_get_machine_identity", lambda: "test-user:12345")
+
+        store_credential("home_key", "secret123")
+
+        assert (tmp_path / "credentials" / "credentials.json").exists()
+
     def test_get_nonexistent(self, tmp_path: Path, monkeypatch: object) -> None:
         import juris.core.credentials as creds
 
@@ -72,6 +85,24 @@ class TestFileCredentials:
         cred_file = cred_dir / "credentials.json"
         mode = cred_file.stat().st_mode & 0o777
         assert mode == 0o600, f"Expected 0600, got {oct(mode)}"
+
+    def test_read_restricts_legacy_file_permissions(self, tmp_path: Path, monkeypatch: object) -> None:
+        import juris.core.credentials as creds
+
+        cred_dir = tmp_path / "creds"
+        monkeypatch.setattr(creds, "_FALLBACK_DIR", cred_dir)
+        monkeypatch.setattr(creds, "_try_keychain_store", lambda k, v: False)
+        monkeypatch.setattr(creds, "_try_keychain_get", lambda k: None)
+        monkeypatch.setattr(creds, "_get_machine_identity", lambda: "test-user:12345")
+
+        store_credential("perm_test", "value")
+        cred_file = cred_dir / "credentials.json"
+        cred_dir.chmod(0o755)
+        cred_file.chmod(0o644)
+
+        assert get_credential("perm_test") == "value"
+        assert (cred_dir.stat().st_mode & 0o777) == 0o700
+        assert (cred_file.stat().st_mode & 0o777) == 0o600
 
     def test_tampered_ciphertext_raises(self, tmp_path: Path, monkeypatch: object) -> None:
         import juris.core.credentials as creds

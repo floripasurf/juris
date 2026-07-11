@@ -29,6 +29,7 @@ class DocumentChunk:
         text: Chunk text content.
         metadata: Additional metadata.
         position: Position index within the parent document.
+        uso: uso resolvido — fundamento/estilo; vazio = derivar do source_type.
     """
 
     chunk_id: str
@@ -37,6 +38,7 @@ class DocumentChunk:
     text: str
     metadata: dict[str, Any] = field(default_factory=dict)
     position: int = 0
+    uso: str = ""
 
 
 def _make_chunk_id(source_id: str, position: int) -> str:
@@ -87,12 +89,17 @@ def _split_by_tokens(
 
 def _build_metadata(fonte: FonteJurisprudencia) -> dict[str, Any]:
     """Build metadata dict from a FonteJurisprudencia."""
+    from juris.repertory.corpus.status import is_active
+
     meta: dict[str, Any] = {
         "tribunal": fonte.tribunal,
         "tipo": fonte.tipo.value,
         "numero": fonte.numero,
         "hierarquia": fonte.hierarquia,
         "situacao": fonte.situacao,
+        # Normalised vigência for the composite filter (ADR-0017): per-tipo
+        # is_active semantics, so the ranker need not know each tipo's statuses.
+        "vigente": is_active(fonte.tipo, fonte.situacao),
     }
     if fonte.temas:
         meta["temas"] = fonte.temas
@@ -102,6 +109,8 @@ def _build_metadata(fonte: FonteJurisprudencia) -> dict[str, Any]:
         meta["relator"] = fonte.relator
     if fonte.data_julgamento:
         meta["data_julgamento"] = fonte.data_julgamento.isoformat()
+    if fonte.source_url:
+        meta["source_url"] = fonte.source_url
     return meta
 
 
@@ -358,9 +367,9 @@ def chunk_fonte(fonte: FonteJurisprudencia) -> list[DocumentChunk]:
         return chunk_acordao(fonte)
     if fonte.tipo == TipoFonte.PRECEDENTE_LOCAL:
         return chunk_acordao(fonte)
-    if fonte.tipo == TipoFonte.MODELO_PETICAO:
+    if fonte.tipo in (TipoFonte.MODELO_PETICAO, TipoFonte.PECA_ESCRITORIO, TipoFonte.NOTA_INTERNA):
         return chunk_template(fonte)
-    if fonte.tipo == TipoFonte.DOUTRINA_PD:
+    if fonte.tipo in (TipoFonte.DOUTRINA_PD, TipoFonte.DOUTRINA_PRIVADA, TipoFonte.DOUTRINA_ESCRITORIO):
         return chunk_doutrina(fonte)
     if fonte.tipo == TipoFonte.NOTICIA_TRIBUNAL:
         return chunk_noticia(fonte)

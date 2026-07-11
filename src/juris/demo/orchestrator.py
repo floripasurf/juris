@@ -28,11 +28,14 @@ from juris.agents.citation_verifier import MarkerCitationVerifier
 from juris.agents.drafter import DrafterAgent, DraftRequest, DraftResult
 from juris.agents.researcher import Researcher
 from juris.core.observability import get_logger
+from juris.core.sanitize import safe_error_text
 from juris.defesas.analyzer import DefesaAnalyzer
 from juris.defesas.context import ProcessoContext
 from juris.demo.output_mode import OutputMode
 from juris.llm.base import AbstractLLM
+from juris.mni.factory import get_mni_read_service
 from juris.mni.parsers.processo import ProcessoDomain
+from juris.mni.service import MNIReadService
 from juris.persistence.audit import AuditLog
 from juris.prazo.engine import PrazoReport, compute_prazos
 from juris.repertory.peticoes.models import TipoPeticao
@@ -112,11 +115,13 @@ class DemoOrchestrator:
         repertory: RepertoryService,
         audit: AuditLog,
         analysis_llm: AbstractLLM | None = None,
+        tenant_id: str | None = None,
     ) -> None:
         self._llm = llm
         self._repertory = repertory
         self._audit = audit
         self._analysis_llm = analysis_llm
+        self._tenant_id = tenant_id  # scope corpus retrieval to this firm (+ public seed)
 
     async def run(
         self,
@@ -157,7 +162,7 @@ class DemoOrchestrator:
                 "demo_mode": is_demo_mode,
                 "output_mode": request.output_mode.value,
                 "llm_provider": _llm_provider_name(self._llm),
-                "out_dir": str(out_dir),
+                "out_dir": out_dir.name,
             },
         )
 
@@ -170,8 +175,8 @@ class DemoOrchestrator:
                 llm=self._analysis_llm if request.use_llm_for_analysis else None,
             )
         except Exception as exc:  # noqa: BLE001 — surface but don't abort
-            logger.warning("demo_analyze_failed", error=str(exc))
-            result.errors.append(f"analyze: {exc}")
+            logger.warning("demo_analyze_failed", error=safe_error_text(exc), exception_type=exc.__class__.__name__)
+            result.errors.append(_public_step_error("analyze"))
 
         # Step 2: compute prazos (only if analysis succeeded)
         if result.analysis is not None:
@@ -182,34 +187,41 @@ class DemoOrchestrator:
                     analyses=result.analysis.analyzed,
                 )
             except Exception as exc:  # noqa: BLE001
-                logger.warning("demo_prazos_failed", error=str(exc))
-                result.errors.append(f"prazos: {exc}")
+                logger.warning("demo_prazos_failed", error=safe_error_text(exc), exception_type=exc.__class__.__name__)
+                result.errors.append(_public_step_error("prazos"))
 
         # Step 3: draft petition
         try:
             result.draft = await self._run_drafter(request, processo)
         except Exception as exc:  # noqa: BLE001
             if _can_degrade_to_deterministic_rascunho(request, exc):
-                logger.warning("demo_rascunho_deterministic_fallback", error=str(exc))
+                safe_reason = safe_error_text(exc)
+                logger.warning(
+                    "demo_rascunho_deterministic_fallback",
+                    error=safe_reason,
+                    exception_type=exc.__class__.__name__,
+                )
                 result.draft = _build_deterministic_rascunho_draft(
                     request=request,
                     processo=processo,
                     analysis=result.analysis,
                 )
                 result.degraded = True
-                result.degradation_reason = str(exc)
+                # A UI mostra este reason ao advogado: copy legível, nunca o texto
+                # cru da exceção (esse fica no audit/log abaixo, já sanitizado).
+                result.degradation_reason = _DETERMINISTIC_FALLBACK_REASON
                 self._audit.log(
                     event_type="demo.rascunho_deterministic_fallback",
                     actor="system",
                     processo_cnj=processo.numero_cnj,
                     details={
-                        "reason": str(exc),
+                        "reason": safe_reason,
                         "output_mode": request.output_mode.value,
                     },
                 )
             else:
-                logger.warning("demo_draft_failed", error=str(exc))
-                result.errors.append(f"draft: {exc}")
+                logger.warning("demo_draft_failed", error=safe_error_text(exc), exception_type=exc.__class__.__name__)
+                result.errors.append(_public_step_error("draft"))
 
         result.finished_at = datetime.now(UTC)
         result.duration_seconds = time.monotonic() - t0
@@ -228,6 +240,8 @@ class DemoOrchestrator:
                 "draft_revisions": result.draft.revisions if result.draft else None,
                 "prazos_count": len(result.prazo_report.prazos) if result.prazo_report else 0,
                 "actionable_count": (len(result.analysis.actionable) if result.analysis else 0),
+                "ai_model": result.draft.ai_model if result.draft else None,
+                "ai_model_thesis": result.draft.ai_model_thesis if result.draft else None,
             },
         )
         return result
@@ -238,12 +252,24 @@ class DemoOrchestrator:
         processo: ProcessoDomain,
     ) -> DraftResult:
         """Wire and run the DrafterAgent against the resolved processo."""
-        researcher = Researcher(repertory=self._repertory, llm=self._llm, audit=self._audit)
-        verifier = MarkerCitationVerifier(repertory=self._repertory)
+        researcher = Researcher(
+            repertory=self._repertory,
+            llm=self._llm,
+            audit=self._audit,
+            tenant_id=self._tenant_id,
+        )
+        verifier = MarkerCitationVerifier(repertory=self._repertory, tenant_id=self._tenant_id)
         defesa_analyzer = DefesaAnalyzer(llm=self._llm)
         reviewer: ReviewerAgent | None = None
         if not request.skip_review:
-            reviewer = ReviewerAgent(llm=self._llm, retriever=self._repertory, audit_log=self._audit)
+            reviewer = ReviewerAgent(
+                llm=self._llm,
+                retriever=self._repertory,
+                audit_log=self._audit,
+                tenant_id=self._tenant_id,
+            )
+
+        from juris.agents.estrategia import EstrategiaAgent
 
         agent = DrafterAgent(
             llm=self._llm,
@@ -253,6 +279,8 @@ class DemoOrchestrator:
             reviewer=reviewer,
             audit=self._audit,
             defesa_analyzer=defesa_analyzer,
+            estrategia=EstrategiaAgent(self._llm),
+            tenant_id=self._tenant_id,
         )
 
         context = ProcessoContext(
@@ -277,6 +305,22 @@ class DemoOrchestrator:
     def _audit_path(self) -> Path:
         # AuditLog stores its path privately; reach in once via name-mangle-free attr.
         return getattr(self._audit, "_path", Path("audit.jsonl"))
+
+
+def _public_step_error(step: str) -> str:
+    return {
+        "analyze": "analyze: falha operacional na análise do processo",
+        "prazos": "prazos: falha operacional no cálculo de prazos",
+        "draft": "draft: falha operacional ao gerar a minuta",
+    }[step]
+
+
+# Copy que a UI mostra quando o rascunho caiu no caminho determinístico: dirigida
+# ao advogado (o erro técnico sanitizado fica no audit e no log estruturado).
+_DETERMINISTIC_FALLBACK_REASON = (
+    "IA indisponível no momento — geramos um rascunho determinístico com os dados "
+    "públicos do processo (movimentos, classificação e prazos)."
+)
 
 
 def _can_degrade_to_deterministic_rascunho(request: DemoRequest, exc: Exception) -> bool:
@@ -368,12 +412,26 @@ def load_processo(
     *,
     use_cache: bool = True,
     audit_path: Path | None = None,
+    cpf: str | None = None,
+    senha: str | None = None,
+    token_pin: str | None = None,
+    mni_service: MNIReadService | None = None,
+    tenant_id: str = "public",
 ) -> ProcessoDomain:
     """Resolve a ProcessoDomain from the configured source.
 
     DATAJUD: live lookup via DataJud public API.
     FIXTURE: synthetic in-memory processo for offline demos.
-    MNI:     not implemented — raises NotImplementedError.
+    MNI:     live read via the lawyer's ICP-Brasil credentials, through the
+             :class:`MNIReadService` boundary (ADR-0015). mTLS tribunals (e.g.
+             TJMG) use the A3 token; others use CPF + PJe password. The caller
+             resolves ``cpf``/``senha``/``token_pin`` (this function never
+             prompts) and a failure surfaces as ``RuntimeError`` rather than a
+             silent fallback to DataJud — in a lawyer-facing demo the real read
+             either works or is reported. ``mni_service`` defaults to the
+             configured service (:func:`get_mni_read_service` — InProcess or
+             Remote by ``JURIS_AGENT_MODE``), so swapping to the split-trust
+             agent is config, not code.
     """
     if source is SourceMode.DATAJUD:
         from juris.datajud.client import consultar_processo as datajud_consulta
@@ -389,10 +447,40 @@ def load_processo(
         return _build_fixture_processo(numero_cnj, tribunal)
 
     if source is SourceMode.MNI:
-        msg = (
-            "Source 'mni' ainda não implementado para o demo. Use 'datajud' (default) ou 'fixture' para teste offline."
+        from juris.api.agent_config import is_remote
+        from juris.mni.tribunais import get_tribunal
+
+        # In remote (split-trust) mode the agent resolves the lawyer's own
+        # cpf/senha/PIN; only co-located needs them at the orchestrator.
+        if not is_remote() and not cpf:
+            msg = "Source 'mni' requer o cpf do advogado constituído (--cpf)."
+            raise ValueError(msg)
+        service = mni_service or get_mni_read_service(tenant_id)  # routes to the tenant's agent
+        tribunal_cfg = get_tribunal(tribunal)
+        processo = service.consultar_processo(
+            numero_cnj,
+            tribunal_cfg,
+            cpf or "",
+            senha or cpf or "",
+            token_pin=token_pin,
         )
-        raise NotImplementedError(msg)
+        # Record the privileged read in the demo's hashed audit chain. The
+        # ProcessoDomain itself never reaches the log — only the metadata of
+        # the call (audit everything; never leak case content here).
+        if audit_path is not None:
+            from juris.persistence.audit import AuditLog
+
+            AuditLog(audit_path).log(
+                event_type="mni.consulta",
+                actor=f"user:{cpf or tenant_id}",
+                processo_cnj=processo.numero_cnj,
+                details={
+                    "tribunal": tribunal_cfg.id,
+                    "mtls": tribunal_cfg.requires_mtls,
+                    "movimentos": len(processo.movimentos),
+                },
+            )
+        return processo
 
     raise ValueError(f"Source desconhecido: {source}")
 
@@ -440,9 +528,14 @@ async def run_demo(
     is_demo_mode: bool,
     processo: ProcessoDomain | None = None,
     analysis_llm: AbstractLLM | None = None,
+    tenant_id: str | None = None,
 ) -> DemoResult:
     """Top-level entry point. Loads processo (if not provided) and runs the
     pipeline.
+
+    ``tenant_id`` scopes corpus retrieval to the shared public seed plus this firm's
+    own uploads, so a draft never grounds on another tenant's private corpus. Left
+    ``None`` by the single-tenant CLI (public seed only).
 
     Callers (CLI) should use `juris.demo.artifacts.write_artifacts(result)`
     to persist the run.
@@ -456,6 +549,7 @@ async def run_demo(
         repertory=repertory,
         audit=audit,
         analysis_llm=analysis_llm,
+        tenant_id=tenant_id,
     )
     return await orchestrator.run(
         request,
@@ -487,7 +581,11 @@ def serialize_processo_summary(processo: ProcessoDomain) -> dict[str, Any]:
         "data_ajuizamento": (processo.data_ajuizamento.isoformat() if processo.data_ajuizamento else None),
         "ultimo_movimento": (
             {
-                "data_hora": processo.ultimo_movimento.data_hora.isoformat(),
+                "data_hora": (
+                    processo.ultimo_movimento.data_hora.isoformat()
+                    if processo.ultimo_movimento.data_hora
+                    else None
+                ),
                 "descricao": processo.ultimo_movimento.descricao,
                 "codigo_nacional": processo.ultimo_movimento.codigo_nacional,
             }

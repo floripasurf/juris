@@ -11,7 +11,7 @@ import hashlib
 import re
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
-from typing import Self
+from typing import Any, Self, cast
 
 import pkcs11
 from cryptography import x509
@@ -62,7 +62,7 @@ def _sha256_hex(data: bytes) -> str:
 def _extract_cn(cert: x509.Certificate) -> str:
     """Extract Common Name from certificate subject."""
     cns = cert.subject.get_attributes_for_oid(x509.oid.NameOID.COMMON_NAME)
-    return cns[0].value if cns else ""
+    return str(cns[0].value) if cns else ""
 
 
 def _extract_cpf(cert: x509.Certificate) -> str:
@@ -119,7 +119,7 @@ class PAdESSigner:
         self._token_label = token_label
         self._pin = pin
         self._use_timestamp = use_timestamp
-        self._lib: pkcs11.lib | None = None
+        self._lib: Any = None  # pkcs11 Lib (no exported type)
         self._session: pkcs11.Session | None = None
         self._cert: x509.Certificate | None = None
 
@@ -131,7 +131,7 @@ class PAdESSigner:
         self.close()
 
     @staticmethod
-    def _find_token(lib: pkcs11.lib, token_label: str) -> pkcs11.Token:
+    def _find_token(lib: Any, token_label: str) -> pkcs11.Token:
         """Find a token by label, skipping slots that raise DeviceError.
 
         SafeNet eToken drivers expose several empty virtual slots whose
@@ -146,7 +146,7 @@ class PAdESSigner:
             except pkcs11.exceptions.DeviceError:
                 continue
             if token.label.strip() == token_label.strip():
-                return token
+                return cast("pkcs11.Token", token)
         raise RuntimeError(
             f"Token with label '{token_label}' not found on any slot"
         )
@@ -227,7 +227,7 @@ class PAdESSigner:
         signer = signers.SimpleSigner(
             signing_cert=signing_cert,
             signing_key=self._session,
-            cert_registry=None,
+            cert_registry=None,  # type: ignore[arg-type]  # pyhanko stub: None is accepted
         )
 
         # Prepare signature field
@@ -250,7 +250,7 @@ class PAdESSigner:
 
         input_buf = BytesIO(pdf_bytes)
         output_buf = BytesIO()
-        pdf_signer.sign_pdf(input_buf, output=output_buf)
+        pdf_signer.sign_pdf(input_buf, output=output_buf)  # type: ignore[arg-type]  # pyhanko stub
         signed_pdf = output_buf.getvalue()
 
         signed_pdf_hash = _sha256_hex(signed_pdf)
@@ -308,8 +308,10 @@ class PAdESSigner:
         if self._session is not None:
             try:
                 self._session.close()
-            except Exception:
-                logger.warning("pkcs11_session_close_error", exc_info=True)
+            except Exception as exc:  # noqa: BLE001
+                from juris.core.sanitize import safe_error_text
+
+                logger.warning("pkcs11_session_close_error", error=safe_error_text(exc))
             finally:
                 self._session = None
         self._cert = None
@@ -319,12 +321,14 @@ class PAdESSigner:
 def _get_pin_attempts(token: pkcs11.Token) -> int | None:
     """Try to read remaining PIN attempts from the token."""
     try:
-        info = token.slot.get_token_info()
+        info = token.slot.get_token_info()  # type: ignore[attr-defined]  # pkcs11 stub
         if hasattr(info, "max_pin_len"):
             # Some tokens expose retry count; not standardized
             return None
-    except Exception:
-        logger.debug("pin_attempts_read_failed", exc_info=True)
+    except Exception as exc:  # noqa: BLE001
+        from juris.core.sanitize import safe_error_text
+
+        logger.debug("pin_attempts_read_failed", error=safe_error_text(exc))
     return None
 
 

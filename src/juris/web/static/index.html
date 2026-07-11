@@ -3,39 +3,370 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Juris</title>
+  <title>Causia</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14.5' fill='%237A2334'/%3E%3Ccircle cx='16' cy='16' r='11.5' fill='none' stroke='%23F6F5F1' stroke-width='1'/%3E%3Ctext x='16' y='21.5' text-anchor='middle' font-family='Georgia,serif' font-size='15' font-weight='600' fill='%23F6F5F1'%3EC%3C/text%3E%3C/svg%3E" />
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%237A2334'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='Georgia,serif' font-size='18' font-weight='600' fill='%23F6F5F1'%3EC%3C/text%3E%3C/svg%3E" />
+  <meta name="theme-color" content="#7A2334" />
+  <meta name="apple-mobile-web-app-title" content="Causia" />
+  <link rel="stylesheet" href="/static/assets/fonts/fonts.css" />
   <style>
+    /* Causia — sistema "papel timbrado": papel, tinta, bordô da advocacia.
+       Sem sombras decorativas; hierarquia por hairlines, serifa e espaçamento. */
     :root {
       color-scheme: light;
-      --bg: #f5f7fb;
-      --panel: #ffffff;
-      --panel-soft: #f8fafc;
-      --text: #172033;
-      --muted: #667085;
-      --line: #d9e0ea;
-      --accent: #0f766e;
-      --accent-dark: #115e59;
-      --danger: #b42318;
-      --ok: #067647;
-      --shadow: 0 18px 50px rgba(20, 32, 54, 0.10);
+      --paper: #F6F5F1;
+      --panel: #FFFFFF;
+      --panel-soft: #FBFAF7;
+      --ink: #23252B;
+      --ink-2: #4B4E57;
+      --muted: #7A7D85;
+      --line: #E5E3DC;
+      --line-2: #CFCCC3;
+      --brand: #7A2334;
+      --brand-dark: #5D1A28;
+      --brand-tint: #F7EDEF;
+      --ok: #1F6B43; --ok-bg: #EDF6F0; --ok-line: #BFDECB;
+      --warn: #8F5F0A; --warn-bg: #FBF4E4; --warn-line: #E8D5A8;
+      --danger: #AE2E24; --danger-bg: #FBEFED; --danger-line: #EBC7C2;
+      --info: #33586E; --info-bg: #EEF3F6; --info-line: #C8D7E0;
+      --serif: "Lora", Georgia, "Times New Roman", serif;
+      --sans: "IBM Plex Sans", -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
+      --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      --focus: 0 0 0 3px rgba(122, 35, 52, 0.16);
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      background: var(--bg);
-      color: var(--text);
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      line-height: 1.45;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--sans);
+      font-size: 14px;
+      line-height: 1.5;
     }
-    header {
+    [hidden] { display: none !important; }
+
+    /* ── Landing pública ──────────────────────────────────── */
+    #landing {
+      min-height: 100vh;
+      background: var(--paper);
+    }
+    .landing-hero {
+      min-height: 88vh;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      color: #fff;
+      padding: 24px clamp(18px, 5vw, 64px) 54px;
+      background:
+        linear-gradient(90deg, rgba(23, 26, 32, 0.92) 0%, rgba(23, 26, 32, 0.78) 54%, rgba(23, 26, 32, 0.38) 100%),
+        url("/static/assets/causia-hero-legal-desk-v2.jpg");
+      background-size: cover;
+      background-position: center;
+    }
+    .landing-main {
+      align-self: center;
+      width: 100%;
+      max-width: 760px;
+      min-width: 0;
+    }
+    .landing-nav {
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: 20px;
+      min-height: 44px;
+    }
+    .landing-nav .brand { color: #fff; }
+    .landing-nav .brand .ia { color: #F0C9D2; }
+    .landing-nav .mark {
+      background: #fff;
+      color: var(--brand);
+      box-shadow: inset 0 0 0 1.5px var(--brand), inset 0 0 0 2.5px #fff;
+    }
+    .landing-nav-note {
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 13px;
+      text-align: right;
+    }
+    .landing-copy {
+      align-self: center;
+      max-width: 740px;
+      min-width: 0;
+      padding: 42px 0 26px;
+    }
+    .landing-kicker {
+      margin: 0 0 14px;
+      color: #F1D5DB;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .landing-copy h1 {
+      color: #fff;
+      font-family: var(--serif);
+      font-size: 56px;
+      line-height: 1.04;
+      font-weight: 600;
+      max-width: 700px;
+    }
+    .landing-copy .lede {
+      color: rgba(255, 255, 255, 0.86);
+      font-size: 19px;
+      line-height: 1.45;
+      max-width: 640px;
+      margin: 18px 0 0;
+    }
+    .landing-cta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 16px;
+      margin-top: 30px;
+    }
+    .landing-primary {
+      display: inline-block;
+      padding: 13px 26px;
+      border-radius: 4px;
+      background: #fff;
+      color: var(--brand-dark);
+      font-weight: 600;
+      font-size: 15px;
+      text-decoration: none;
+      border: 1px solid #fff;
+    }
+    .landing-primary:hover { background: #F7EDEF; border-color: #F7EDEF; }
+    .landing-secondary {
+      width: auto;
+      margin: 0;
+      padding: 6px 2px;
+      background: transparent;
+      border: 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.5);
+      border-radius: 0;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .landing-secondary:hover { background: transparent; border-bottom-color: #fff; }
+    .landing-access {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: end;
+      gap: 10px;
+      max-width: 680px;
+      margin-top: 22px;
+    }
+    .landing-access[hidden] { display: none; }
+    .landing-access label {
+      margin: 0 0 6px;
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 12px;
+      letter-spacing: 0;
+    }
+    .landing-access input {
+      min-height: 46px;
+      border-color: rgba(255, 255, 255, 0.38);
+      background: rgba(255, 255, 255, 0.96);
+      font-family: var(--mono);
+      font-size: 13px;
+    }
+    .landing-access button {
+      width: auto;
+      min-height: 46px;
+      margin-top: 0;
+      padding: 0 18px;
+      white-space: nowrap;
+      border-color: #fff;
+      background: #fff;
+      color: var(--brand-dark);
+    }
+    .landing-access button:hover {
+      border-color: #F7EDEF;
+      background: #F7EDEF;
+      color: var(--brand-dark);
+    }
+    .landing-note {
+      max-width: 660px;
+      margin: 10px 0 0;
+      color: rgba(255, 255, 255, 0.74);
+      font-size: 13px;
+    }
+    .trial-issued {
+      max-width: 680px;
+      margin-top: 18px;
+      padding: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      border-radius: 5px;
+      background: rgba(255, 255, 255, 0.1);
+      color: rgba(255, 255, 255, 0.86);
+      font-size: 13px;
+    }
+    .trial-issued[hidden] { display: none; }
+    .trial-issued code {
+      display: block;
+      margin-top: 8px;
+      padding: 8px;
+      overflow-x: auto;
+      border-radius: 4px;
+      background: rgba(0, 0, 0, 0.22);
+      color: #fff;
+      font-family: var(--mono);
+      white-space: nowrap;
+    }
+    .agent-setup code {
+      display: block;
+      margin-top: 8px;
+      padding: 10px;
+      overflow-x: auto;
+      border-radius: 4px;
+      background: #fff;
+      color: var(--ink);
+      font-family: var(--mono);
+      white-space: nowrap;
+    }
+    .agent-tools {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin: 8px 0 12px;
+    }
+    .agent-tools span { color: var(--muted); font-size: 13px; }
+    #landing-login-error {
+      grid-column: 1 / -1;
+      margin: 0;
+      color: #FFD9D2;
+      font-size: 13px;
+    }
+    #landing-login-error[hidden] { display: none; }
+    .landing-band {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 42px 24px 58px;
+    }
+    .landing-band h2 {
+      color: var(--ink);
+      font-family: var(--serif);
+      font-size: 28px;
+      font-weight: 600;
+      line-height: 1.18;
+      text-transform: none;
+      letter-spacing: 0;
+      max-width: 700px;
+    }
+    .landing-band > p {
+      max-width: 720px;
+      margin: 10px 0 24px;
+      color: var(--ink-2);
+      font-size: 15px;
+    }
+    .landing-features {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .landing-how { padding-bottom: 8px; }
+    .landing-steps {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      counter-reset: none;
+    }
+    .landing-step {
+      position: relative;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-top: 3px solid var(--brand);
+      border-radius: 6px;
+      padding: 18px 16px 14px;
+    }
+    .landing-step .step-num {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 26px; height: 26px; border-radius: 50%;
+      background: var(--brand); color: #fff;
+      font-family: var(--serif); font-weight: 700; font-size: 14px;
+      margin-bottom: 10px;
+    }
+    .landing-step strong { display: block; font-family: var(--serif); font-size: 16px; margin-bottom: 6px; }
+    .landing-step p { margin: 0; font-size: 13.5px; color: var(--ink-2); line-height: 1.55; }
+    .landing-feature {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 20px;
+    }
+    .landing-feature strong {
+      display: block;
+      color: var(--ink);
+      font-size: 16px;
+      margin-bottom: 7px;
+    }
+    .landing-feature p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13.5px;
+    }
+    .landing-technology {
+      padding-top: 28px;
+      padding-bottom: 22px;
+    }
+    .landing-technology h2 { max-width: 780px; }
+    .landing-tech-copy {
+      max-width: 780px;
+      margin: 10px 0 20px;
+      color: var(--ink-2);
+      font-size: 15px;
+    }
+    .landing-tech-points {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .landing-tech-point {
+      border-left: 3px solid var(--brand);
+      padding: 4px 0 4px 14px;
+    }
+    .landing-tech-point strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--ink);
+      font-size: 14.5px;
+    }
+    .landing-tech-point p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13.5px;
+    }
+    .landing-footer {
+      border-top: 1px solid var(--line);
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 30px 24px 44px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: start;
+      gap: 18px 40px;
+    }
+    .landing-footer-brand .brand { font-size: 17px; }
+    .landing-footer-brand p { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
+    .landing-footer-links { display: flex; flex-direction: column; gap: 8px; text-align: right; }
+    .landing-footer-links a { color: var(--ink-2); text-decoration: none; font-size: 13.5px; }
+    .landing-footer-links a:hover { color: var(--brand); text-decoration: underline; }
+    .landing-footer-legal {
+      grid-column: 1 / -1;
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 12.5px;
+    }
+
+    /* ── Cabeçalho ─────────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
       gap: 24px;
-      padding: 24px 32px;
-      border-bottom: 1px solid var(--line);
-      background: rgba(255, 255, 255, 0.86);
-      backdrop-filter: blur(14px);
+      padding: 0 28px;
+      height: 58px;
+      background: var(--paper);
+      border-bottom: 1px solid var(--line-2);
       position: sticky;
       top: 0;
       z-index: 2;
@@ -43,161 +374,1212 @@
     .brand {
       display: flex;
       align-items: center;
-      gap: 12px;
-      font-weight: 760;
-      font-size: 18px;
+      gap: 10px;
+      font-family: var(--serif);
+      font-weight: 600;
+      font-size: 19px;
+      letter-spacing: 0.01em;
     }
+    .brand .ia { color: var(--brand); }
     .mark {
-      width: 34px;
-      height: 34px;
-      border-radius: 8px;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
       display: grid;
       place-items: center;
+      background: var(--brand);
+      color: var(--paper);
+      font-family: var(--serif);
+      font-size: 15px;
+      font-weight: 600;
+      box-shadow: inset 0 0 0 1.5px var(--paper), inset 0 0 0 2.5px var(--brand);
+    }
+    #nav { display: flex; gap: 2px; margin-left: 12px; align-self: stretch; }
+    #nav button {
+      width: auto;
+      margin: 0;
+      padding: 0 14px;
+      background: transparent;
+      border: 0;
+      border-bottom: 2px solid transparent;
+      border-radius: 0;
+      color: var(--ink-2);
+      font-size: 13.5px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    #nav button:hover { color: var(--ink); background: transparent; }
+    #nav button.active {
+      color: var(--ink);
+      font-weight: 600;
+      border-bottom-color: var(--brand);
+      background: transparent;
+    }
+    #nav button { position: relative; }
+    .nav-badge {
+      display: inline-block;
+      min-width: 16px;
+      margin-left: 6px;
+      padding: 0 5px;
+      border-radius: 999px;
+      background: var(--danger);
       color: #fff;
-      background: var(--accent);
-      font-weight: 800;
+      font-size: 10.5px;
+      font-weight: 700;
+      line-height: 16px;
+      text-align: center;
+      vertical-align: middle;
     }
-    .status {
-      color: var(--muted);
-      font-size: 13px;
-      text-align: right;
+    .trial-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 11px;
+      border-radius: 999px;
+      border: 1px solid var(--line-2);
+      background: var(--panel);
+      color: var(--ink-2);
+      font-size: 12px;
+      font-weight: 600;
+      text-decoration: none;
+      white-space: nowrap;
     }
+    .trial-pill::after { content: "Contratar"; color: var(--brand); font-weight: 700; }
+    .trial-pill:hover { border-color: var(--brand); }
+    .trial-pill.urgent { background: var(--warn-bg); border-color: var(--warn-line); color: var(--warn); }
+    .trial-pill[hidden] { display: none; }
+    .header-actions {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header .status { text-align: right; color: var(--muted); font-size: 12.5px; }
+    .header-logout {
+      width: auto;
+      margin: 0;
+      padding: 6px 10px;
+      background: transparent;
+      color: var(--ink-2);
+      border-color: var(--line-2);
+      font-size: 12.5px;
+    }
+    .header-logout:hover {
+      background: var(--panel-soft);
+      color: var(--ink);
+      border-color: var(--line-2);
+    }
+
+    /* ── Estrutura ─────────────────────────────────────────── */
     main {
       display: grid;
       grid-template-columns: minmax(320px, 430px) minmax(0, 1fr);
-      gap: 24px;
-      padding: 28px 32px 36px;
+      gap: 20px;
+      padding: 24px 28px 40px;
       max-width: 1480px;
       margin: 0 auto;
     }
     section {
       background: var(--panel);
       border: 1px solid var(--line);
-      border-radius: 8px;
-      box-shadow: var(--shadow);
+      border-radius: 6px;
     }
-    .form-panel { padding: 24px; align-self: start; position: sticky; top: 96px; }
-    h1, h2 { margin: 0; letter-spacing: 0; }
-    h1 { font-size: 24px; line-height: 1.15; }
-    h2 { font-size: 16px; }
-    .lede { color: var(--muted); margin: 8px 0 22px; font-size: 14px; }
+    .form-panel { padding: 24px; align-self: start; position: sticky; top: 82px; }
+    h1, h2 { margin: 0; }
+    h1 { font-family: var(--serif); font-size: 22px; font-weight: 600; line-height: 1.2; }
+    h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-2); }
+    .lede { color: var(--muted); margin: 8px 0 20px; font-size: 13.5px; }
+    .muted { color: var(--muted); }
+
+    /* ── Formulários ───────────────────────────────────────── */
     label {
       display: block;
       font-size: 12px;
-      font-weight: 720;
-      color: #344054;
-      margin: 16px 0 6px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: var(--ink-2);
+      margin: 16px 0 5px;
     }
     input, select, textarea {
       width: 100%;
-      border: 1px solid #c8d2df;
-      border-radius: 7px;
+      border: 1px solid var(--line-2);
+      border-radius: 4px;
       background: #fff;
-      color: var(--text);
-      padding: 10px 11px;
+      color: var(--ink);
+      padding: 9px 11px;
       font: inherit;
       font-size: 14px;
       outline: none;
+      transition: border-color 120ms ease, box-shadow 120ms ease;
     }
     textarea { min-height: 82px; resize: vertical; }
-    input:focus, select:focus, textarea:focus {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.14);
-    }
+    input:focus, select:focus, textarea:focus { border-color: var(--brand); box-shadow: var(--focus); }
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .checks { display: grid; gap: 10px; margin-top: 16px; }
-    .check { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 13px; }
-    .check input { width: 16px; height: 16px; }
+    .check { display: flex; align-items: center; gap: 9px; color: var(--ink-2); font-size: 13px; }
+    .check input { width: 15px; height: 15px; accent-color: var(--brand); }
     button {
       margin-top: 22px;
       width: 100%;
-      border: 0;
-      border-radius: 7px;
-      background: var(--accent);
+      border: 1px solid var(--brand);
+      border-radius: 4px;
+      background: var(--brand);
       color: #fff;
-      font-weight: 760;
+      font-family: var(--sans);
+      font-weight: 600;
       font-size: 14px;
-      padding: 12px 14px;
+      letter-spacing: 0.01em;
+      padding: 10px 14px;
       cursor: pointer;
+      transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
     }
-    button:hover { background: var(--accent-dark); }
-    button:disabled { opacity: .62; cursor: wait; }
+    button:hover { background: var(--brand-dark); border-color: var(--brand-dark); }
+    button:disabled { opacity: .55; cursor: wait; }
+    button:focus-visible, #nav button:focus-visible { outline: none; box-shadow: var(--focus); }
+    button.ghost { background: transparent; color: var(--ink-2); border: 1px solid var(--line-2); }
+    button.ghost:hover { background: var(--panel-soft); color: var(--ink); border-color: var(--line-2); }
+
+    /* ── Selos e etiquetas (badges) ────────────────────────── */
+    .badge {
+      display: inline-block;
+      border-radius: 3px;
+      padding: 2px 7px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      background: var(--paper);
+      border: 1px solid var(--line-2);
+      color: var(--ink-2);
+      white-space: nowrap;
+    }
+    .urg-alta { color: var(--danger); }
+    .badge.urg-alta { background: var(--danger-bg); border-color: var(--danger-line); }
+    .urg-media { color: var(--warn); }
+    .badge.urg-media { background: var(--warn-bg); border-color: var(--warn-line); }
+    .urg-baixa { color: var(--muted); }
+
+    /* ── Painel de resultados ──────────────────────────────── */
     .results { min-height: 680px; overflow: hidden; }
     .results-head {
       display: flex;
       justify-content: space-between;
       gap: 16px;
-      padding: 22px 24px;
+      padding: 20px 24px;
       border-bottom: 1px solid var(--line);
       background: var(--panel-soft);
     }
     .summary { color: var(--muted); font-size: 13px; margin-top: 5px; }
-    .out { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--muted); }
-    .artifact-list {
-      display: grid;
-      grid-template-columns: 230px minmax(0, 1fr);
-      min-height: 608px;
-    }
-    .tabs {
-      border-right: 1px solid var(--line);
-      background: #fbfcfe;
-      padding: 12px;
-    }
+    .out { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+    #output-dir { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+    .artifact-list { display: grid; grid-template-columns: 230px minmax(0, 1fr); min-height: 608px; }
+    .tabs { border-right: 1px solid var(--line); background: var(--panel-soft); padding: 12px; }
     .tab {
       display: block;
       width: 100%;
-      margin: 0 0 8px;
-      padding: 10px;
+      margin: 0 0 6px;
+      padding: 9px 10px;
       text-align: left;
       background: transparent;
-      color: var(--text);
+      color: var(--ink-2);
       border: 1px solid transparent;
+      border-radius: 4px;
       font-size: 13px;
-      font-weight: 650;
+      font-weight: 500;
     }
-    .tab.active { border-color: #adc2d8; background: #fff; color: var(--accent-dark); }
+    .tab:hover { background: #fff; color: var(--ink); border-color: var(--line); }
+    .tab.active { border-color: var(--line-2); background: #fff; color: var(--brand); font-weight: 600; }
     .preview { padding: 18px 22px; overflow: auto; max-height: 70vh; }
     pre {
       margin: 0;
       white-space: pre-wrap;
       word-break: break-word;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-family: var(--mono);
       font-size: 12.5px;
-      line-height: 1.55;
+      line-height: 1.6;
     }
-    .empty {
-      padding: 74px 24px;
-      text-align: center;
-      color: var(--muted);
+    .preview-toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; margin: -4px 0 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line);
     }
+    .preview-modes { display: inline-flex; flex-shrink: 0; border: 1px solid var(--line-2); border-radius: 5px; overflow: hidden; }
+    .preview-mode {
+      width: auto; margin: 0; border: 0; border-radius: 0; background: var(--panel);
+      color: var(--ink-2); font-size: 12px; font-weight: 500; padding: 5px 12px;
+      white-space: nowrap;
+    }
+    .preview-mode.active { background: var(--brand); color: #fff; }
+    .preview-toolbar .ghost { padding: 5px 12px; font-size: 12.5px; }
+    /* Rendered minuta (Formatado): reads like a document, in the serif face. */
+    .preview-body.md { font-family: var(--serif); font-size: 14.5px; line-height: 1.7; color: var(--ink); }
+    .preview-body.md h1, .preview-body.md h2, .preview-body.md h3, .preview-body.md h4 {
+      font-family: var(--serif); color: var(--ink); margin: 18px 0 8px; line-height: 1.25;
+    }
+    .preview-body.md h1 { font-size: 20px; } .preview-body.md h2 { font-size: 17px; }
+    .preview-body.md h3 { font-size: 15px; } .preview-body.md h4 { font-size: 14px; }
+    .preview-body.md p { margin: 0 0 12px; text-align: justify; }
+    .preview-body.md ul, .preview-body.md ol { margin: 0 0 12px; padding-left: 22px; }
+    .preview-body.md li { margin-bottom: 5px; }
+    .preview-body.md blockquote {
+      margin: 0 0 12px;
+      padding: 8px 14px;
+      border-left: 3px solid var(--warn);
+      background: var(--warn-bg);
+      border-radius: 0 4px 4px 0;
+    }
+    .preview-body.md blockquote p { margin: 0 0 6px; text-align: left; }
+    .preview-body.md blockquote p:last-child { margin-bottom: 0; }
+    .onboarding-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+    .onboarding-actions button { width: auto; margin: 0; }
+    .empty { padding: 74px 24px; text-align: center; color: var(--muted); }
     .notice {
-      border-radius: 7px;
+      border-radius: 4px;
       padding: 10px 12px;
       margin-top: 14px;
       font-size: 13px;
-      background: #ecfdf3;
+      background: var(--ok-bg);
       color: var(--ok);
-      border: 1px solid #abefc6;
+      border: 1px solid var(--ok-line);
     }
-    .notice.error { background: #fef3f2; color: var(--danger); border-color: #fecdca; }
+    .notice.error { background: var(--danger-bg); color: var(--danger); border-color: var(--danger-line); }
+    .notice.warn { background: var(--warn-bg); color: var(--warn); border-color: var(--warn-line); }
+    /* Boas-vindas do teste anônimo: a ÚNICA chance de o advogado guardar a chave. */
+    .trial-welcome {
+      margin: 18px auto 0;
+      max-width: 1436px;
+      padding: 14px 16px;
+      border: 1px solid var(--warn-line);
+      border-left: 4px solid var(--warn);
+      border-radius: 6px;
+      background: var(--warn-bg);
+      color: var(--ink);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .trial-welcome .tw-key-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+    .trial-welcome button { width: auto; margin: 0; padding: 6px 14px; font-size: 13px; }
+    .trial-welcome code {
+      font-family: var(--mono);
+      font-size: 13px;
+      background: rgba(255, 255, 255, 0.7);
+      border: 1px solid var(--warn-line);
+      border-radius: 4px;
+      padding: 4px 8px;
+      word-break: break-all;
+    }
+    .trial-welcome .tw-dismiss { margin-left: auto; }
+    .remember-row {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12.5px; font-weight: 400; margin-top: 10px; cursor: pointer;
+    }
+    .remember-row input[type="checkbox"] { width: auto; margin: 0; }
+
+    /* ── Mesa de trabalho: fichas ──────────────────────────── */
+    .processos-panel, .workbench-panel { grid-column: 1 / -1; padding: 24px; }
+    .workbench-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(200px, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .workbench-onboarding {
+      grid-column: 1 / -1;
+      border: 1px solid var(--line);
+      border-top: 3px solid var(--brand);
+      border-radius: 0 0 6px 6px;
+      background: var(--panel);
+      padding: 32px 28px;
+      max-width: 620px;
+    }
+    .workbench-onboarding h2 {
+      font-family: var(--serif);
+      font-size: 20px;
+      font-weight: 600;
+      text-transform: none;
+      letter-spacing: 0;
+      color: var(--ink);
+    }
+    .workbench-onboarding p { margin: 10px 0 20px; color: var(--ink-2); max-width: 52ch; }
+    .workbench-onboarding button { width: auto; margin: 0; }
+    .queue-column {
+      border: 1px solid var(--line);
+      border-top: 2px solid var(--brand);
+      border-radius: 0 0 5px 5px;
+      background: var(--panel);
+      min-height: 180px;
+      padding: 14px 12px 12px;
+    }
+    .queue-column h2 { margin-bottom: 12px; }
+    .queue-list { display: grid; gap: 8px; }
+    .queue-item {
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: var(--panel-soft);
+      padding: 10px;
+    }
+    .queue-item strong {
+      display: block;
+      font-family: var(--mono);
+      font-weight: 500;
+      font-size: 12px;
+      line-height: 1.4;
+      word-break: break-word;
+    }
+    .queue-item .meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    .queue-actions { display: flex; gap: 6px; margin-top: 8px; }
+    .queue-actions button { width: auto; margin: 0; padding: 5px 9px; font-size: 12px; }
+    .queue-empty { color: var(--muted); font-size: 13px; }
+    .sync-strip {
+      grid-column: 1 / -1;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: var(--panel);
+      padding: 12px 14px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+    }
+    .sync-strip strong { display: block; font-size: 13px; }
+    .sync-strip .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .sync-strip.ok { border-color: var(--ok-line); background: var(--ok-bg); }
+    .sync-strip.bad { border-color: var(--danger-line); background: var(--danger-bg); }
+    .sync-strip.ok .badge { background: #fff; border-color: var(--ok-line); color: var(--ok); }
+    .sync-strip.bad .badge { background: #fff; border-color: var(--danger-line); color: var(--danger); }
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(150px, 1fr));
+      gap: 10px;
+      margin: 12px 0 16px;
+    }
+    .metric { border: 1px solid var(--line); border-radius: 5px; background: var(--panel-soft); padding: 12px; }
+    .metric strong { display: block; font-family: var(--serif); font-size: 20px; font-weight: 600; }
+    .metric span { color: var(--muted); font-size: 12px; }
+
+    /* ── Acervo ────────────────────────────────────────────── */
+    .proc-list { display: flex; flex-direction: column; gap: 0; margin-top: 6px; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+    .proc-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) auto auto;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 14px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+    }
+    .proc-row:last-child { border-bottom: 0; }
+    .proc-row:hover { background: var(--panel-soft); }
+    .proc-cnj { font-family: var(--mono); font-size: 13px; color: var(--ink); }
+    .proc-meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .proc-prazo { font-size: 13px; text-align: right; }
+    .proc-row button { padding: 6px 14px; font-size: 13px; }
+    .proc-empty { color: var(--muted); font-size: 14px; margin-top: 12px; }
+    .proc-actions { display: flex; gap: 6px; }
+    .connect-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 4px 0 16px; }
+    .connect-bar input { width: auto; flex: 0 1 180px; margin: 0; }
+    .connect-bar button { width: auto; flex: 0 0 auto; margin-top: 0; }
+    #connect-status { color: var(--muted); font-size: 13px; }
+    .first-access-guide {
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--brand);
+      border-radius: 5px;
+      background: var(--panel-soft);
+      padding: 16px 18px;
+      margin: 18px 0 16px;
+    }
+    .first-access-title {
+      margin: 0 0 4px;
+      font-family: var(--serif);
+      font-size: 18px;
+      font-weight: 650;
+      text-transform: none;
+      letter-spacing: 0;
+      color: var(--ink);
+    }
+    .first-access-guide > p {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+      max-width: 78ch;
+    }
+    .first-access-steps {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(180px, 1fr));
+      gap: 12px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .first-access-step {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+    }
+    .step-number {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      background: var(--brand);
+      color: white;
+      font-weight: 700;
+      font-size: 13px;
+      line-height: 1;
+    }
+    .first-access-step strong { display: block; color: var(--ink); font-size: 13px; }
+    .first-access-step p { margin: 4px 0 10px; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+    .first-access-step button { width: auto; margin: 0; padding: 7px 11px; font-size: 12.5px; }
+    .connect-seed {
+      flex: 1 0 100%;
+      margin-top: 4px;
+      max-width: 640px;
+    }
+    .connect-seed summary {
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 650;
+    }
+    .connect-seed textarea {
+      min-height: 78px;
+      margin: 8px 0 0;
+      resize: vertical;
+    }
+    .field-note { margin: 8px 0 0; color: var(--muted); font-size: 12.5px; }
+    .list-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 10px 0 14px; }
+    .list-tools input, .list-tools select { width: auto; min-width: 180px; margin: 0; }
+    .list-tools button { width: auto; margin: 0; }
+
+    /* ── Estratégia ────────────────────────────────────────── */
+    .estrategia-card {
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--brand);
+      border-radius: 4px;
+      padding: 16px 18px;
+      margin-bottom: 16px;
+      background: var(--panel);
+    }
+    .estrategia-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .estrategia-head h3 { margin: 0; font-family: var(--serif); font-size: 16px; font-weight: 600; }
+    .estrategia-card .tese { font-family: var(--serif); font-size: 16px; font-weight: 500; margin: 10px 0; color: var(--ink); }
+    .estrategia-card .conseq { font-size: 13px; color: var(--ink-2); margin: 6px 0 12px; }
+    .estrategia-card .badge { font-size: 11px; }
+    .conf-alta { background: var(--ok-bg); border-color: var(--ok-line); color: var(--ok); }
+    .conf-media { background: var(--warn-bg); border-color: var(--warn-line); color: var(--warn); }
+    .conf-baixa { background: var(--danger-bg); border-color: var(--danger-line); color: var(--danger); }
+    .ordem-principal { background: var(--brand); border-color: var(--brand); color: #fff; }
+    .ordem-subsidiaria { background: var(--brand-tint); border-color: var(--brand-tint); color: var(--brand); }
+    .ordem-eventual { background: var(--paper); border-color: var(--line-2); color: var(--ink-2); }
+    .estrategia-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 8px; }
+    .estrategia-cols h4 { margin: 0 0 4px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .estrategia-cols ul { margin: 0; padding-left: 18px; font-size: 13px; }
+    .estrategia-cols .muted, .estrategia-alts .muted { color: var(--muted); list-style: none; margin-left: -18px; }
+    .estrategia-alert {
+      margin-top: 14px;
+      padding: 10px 14px;
+      border-radius: 4px;
+      background: var(--danger-bg);
+      border: 1px solid var(--danger-line);
+      color: var(--danger);
+      font-size: 13px;
+    }
+    .estrategia-alert ul { margin: 6px 0 0; padding-left: 18px; }
+    .estrategia-alts { margin-top: 12px; font-size: 13px; }
+    .estrategia-alts summary { cursor: pointer; color: var(--brand); font-weight: 600; }
+    .estrategia-alts ul { margin: 8px 0 0; padding-left: 18px; }
+
+    /* ── Detalhe do processo (modal) ───────────────────────── */
+    .modal {
+      position: fixed; inset: 0; background: rgba(35, 37, 43, 0.5);
+      display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; z-index: 50;
+      overflow-y: auto;
+    }
+    .modal[hidden] { display: none; }
+    .modal-card {
+      position: relative; background: #fff; border: 1px solid var(--line-2); border-radius: 6px;
+      padding: 26px 30px; max-width: 720px; width: 100%;
+      box-shadow: 0 12px 40px rgba(35, 37, 43, 0.18);
+    }
+    .modal-close {
+      position: absolute; top: 10px; right: 12px; width: auto; margin: 0; padding: 2px 8px;
+      background: transparent; border: 0; color: var(--muted); font-size: 24px; line-height: 1;
+    }
+    .modal-close:hover { background: var(--paper); color: var(--ink); }
+    .modal-card h2 { font-family: var(--mono); font-size: 15px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--ink); }
+    .modal-card h4 { margin: 20px 0 6px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .agent-credentials-card { max-width: 560px; }
+    .agent-credentials-card h2 { font-family: var(--serif); font-size: 24px; font-weight: 650; margin: 0 0 8px; }
+    .agent-credentials-card p { margin: 0 0 16px; color: var(--muted); line-height: 1.5; }
+    .agent-credentials-form { display: grid; gap: 12px; }
+    .agent-credentials-form label { display: grid; gap: 6px; font-weight: 650; color: var(--ink); }
+    .agent-credentials-form input { margin: 0; }
+    .agent-credentials-form button { width: auto; margin-top: 6px; justify-self: start; }
+    #agent-credentials-status { min-height: 20px; margin: 0; color: var(--muted); font-size: 13px; }
+    #agent-credentials-status.error { color: var(--danger); }
+    .detail-meta { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 18px; margin: 14px 0 0; }
+    .detail-meta dt { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .detail-meta dd { margin: 0; font-size: 13.5px; }
+    .detail-prazos { margin: 0; padding-left: 18px; font-size: 13px; }
+    .detail-prazos li, .timeline li { margin-bottom: 6px; }
+    .timeline { list-style: none; margin: 0; padding: 0; border-left: 1px solid var(--line-2); }
+    .timeline li {
+      position: relative; padding: 4px 0 10px 18px; font-size: 13px;
+      display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;
+    }
+    .timeline li::before {
+      content: ""; position: absolute; left: -4.5px; top: 10px; width: 8px; height: 8px;
+      background: var(--brand);
+    }
+    .mov-date { color: var(--muted); font-family: var(--mono); font-size: 12px; flex: 0 0 90px; }
+    .mov-desc { flex: 1; }
+    .mov-cat { background: var(--info-bg); border-color: var(--info-line); color: var(--info); }
+
+    /* ── Revisão e lastro (grounding) ──────────────────────── */
+    .grounding-chip {
+      display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+      padding: 12px 16px; border-radius: 4px; margin: 16px 0; font-size: 13.5px;
+    }
+    .grounding-chip .g-dot { width: 9px; height: 9px; flex: 0 0 auto; }
+    .grounding-chip .muted { color: var(--muted); }
+    .grounding-chip code { background: rgba(35, 37, 43, 0.06); padding: 1px 5px; border-radius: 3px; font-family: var(--mono); }
+    .grounding-chip > div { flex-basis: 100%; font-size: 12.5px; margin-top: 2px; }
+    .grounding-ok { background: var(--ok-bg); border: 1px solid var(--ok-line); color: var(--ok); }
+    .grounding-ok .g-dot { background: var(--ok); }
+    .grounding-blocked { background: var(--danger-bg); border: 1px solid var(--danger-line); color: var(--danger); }
+    .grounding-blocked .g-dot { background: var(--danger); }
+    .review-card {
+      border: 1px solid var(--line); border-radius: 4px; padding: 16px 18px;
+      margin-bottom: 16px; background: var(--panel);
+    }
+    .review-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .review-head h3 { margin: 0; font-family: var(--serif); font-size: 16px; font-weight: 600; }
+    .sev-chips { display: flex; gap: 6px; }
+    .sev-chip, .sev-tag {
+      font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 3px; white-space: nowrap;
+      text-transform: uppercase; letter-spacing: 0.04em; border: 1px solid transparent;
+    }
+    .sev-critical { background: var(--danger-bg); border-color: var(--danger-line); color: var(--danger); }
+    .sev-important { background: var(--warn-bg); border-color: var(--warn-line); color: var(--warn); }
+    .sev-suggestion { background: var(--info-bg); border-color: var(--info-line); color: var(--info); }
+    .review-issues { list-style: none; margin: 14px 0 0; padding: 0; }
+    .review-issues li {
+      padding: 10px 12px; border-radius: 0 4px 4px 0; margin-bottom: 8px;
+      background: var(--panel-soft); border-left: 3px solid var(--line-2);
+    }
+    .review-issues li.sev-critical { border-left-color: var(--danger); background: var(--panel-soft); color: inherit; }
+    .review-issues li.sev-important { border-left-color: var(--warn); background: var(--panel-soft); color: inherit; }
+    .review-issues li.sev-suggestion { border-left-color: var(--info); background: var(--panel-soft); color: inherit; }
+    .issue-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .review-issues p { margin: 6px 0 0; font-size: 13px; }
+    .review-issues .sugg { color: var(--brand); }
+
+    /* ── Auditoria ─────────────────────────────────────────── */
+    .audit-verdict { margin: 12px 0; padding: 10px 14px; border-radius: 4px; font-weight: 600; }
+    .audit-verdict.ok { background: var(--ok-bg); color: var(--ok); border: 1px solid var(--ok-line); }
+    .audit-verdict.bad { background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger-line); }
+    .audit-timeline .badge.audit-ev { background: var(--paper); border-color: var(--line-2); color: var(--ink-2); }
+    .audit-timeline li.audit-bad::before { background: var(--danger); }
+
+    /* ── Acesso ────────────────────────────────────────────── */
+    #login-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 60; /* acima dos .modal (50): o login cobre qualquer modal aberto */
+      display: grid;
+      place-items: center;
+      background: rgba(35, 37, 43, 0.5);
+      backdrop-filter: blur(4px);
+    }
+    #login-overlay[hidden] { display: none; }
+    .login-panel {
+      background: var(--panel);
+      border: 1px solid var(--line-2);
+      border-top: 3px solid var(--brand);
+      border-radius: 6px;
+      box-shadow: 0 12px 40px rgba(35, 37, 43, 0.18);
+      padding: 30px 28px 26px;
+      width: min(400px, calc(100vw - 48px));
+      display: grid;
+      gap: 12px;
+    }
+    .login-panel h2 {
+      font-family: var(--serif);
+      font-size: 19px;
+      font-weight: 600;
+      text-transform: none;
+      letter-spacing: 0;
+      color: var(--ink);
+    }
+    .login-panel p { margin: 0; color: var(--muted); font-size: 13px; }
+    .login-panel input { width: 100%; font-family: var(--mono); font-size: 13px; }
+    .login-panel button { margin-top: 6px; }
+    #login-error { color: var(--danger); font-size: 13px; }
+    #login-error[hidden] { display: none; }
+
+    /* ── Responsivo e acessibilidade ───────────────────────── */
     @media (max-width: 920px) {
-      header { padding: 18px; align-items: flex-start; }
-      main { grid-template-columns: 1fr; padding: 18px; }
+      .landing-hero {
+        min-height: 86vh;
+        padding: 18px 18px 38px;
+        background:
+          linear-gradient(90deg, rgba(23, 26, 32, 0.9) 0%, rgba(23, 26, 32, 0.76) 58%, rgba(23, 26, 32, 0.46) 100%),
+          url("/static/assets/causia-hero-legal-desk-v2.jpg");
+        background-size: cover;
+        background-position: center;
+      }
+      .landing-nav { align-items: flex-start; }
+      .landing-nav-note {
+        max-width: 190px;
+        font-size: 12.5px;
+      }
+      .landing-copy h1 { font-size: 40px; }
+      .landing-copy .lede { font-size: 17px; }
+      .landing-features { grid-template-columns: 1fr; }
+      .landing-steps { grid-template-columns: 1fr; }
+      .landing-tech-points { grid-template-columns: 1fr; }
+      header { padding: 8px 12px 0; gap: 8px; height: auto; min-height: 58px; flex-wrap: wrap; }
+      .header-actions {
+        order: 1;
+        margin-left: auto;
+      }
+      #nav {
+        order: 2;
+        width: 100%;
+        margin-left: 0;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+      }
+      #nav::-webkit-scrollbar { display: none; }
+      #nav button { flex: 0 0 auto; padding: 10px 14px; }
+      main { grid-template-columns: 1fr; padding: 16px; }
       .form-panel { position: static; }
       .artifact-list { grid-template-columns: 1fr; }
       .tabs { border-right: 0; border-bottom: 1px solid var(--line); }
       .row { grid-template-columns: 1fr; }
+      .workbench-grid { grid-template-columns: 1fr; }
+      .first-access-steps { grid-template-columns: 1fr; }
+      .metric-grid { grid-template-columns: 1fr 1fr; }
+      .proc-row { grid-template-columns: 1fr; gap: 6px; }
+      .proc-prazo { text-align: left; }
+    }
+    @media (max-width: 640px) {
+      .landing-hero { overflow: hidden; }
+      .landing-main, .landing-copy, .landing-nav, .landing-nav-note {
+        box-sizing: border-box;
+        width: calc(100vw - 36px);
+        max-width: calc(100vw - 36px);
+        min-width: 0;
+      }
+      .landing-copy { padding-top: 30px; }
+      .landing-copy h1 {
+        width: 100%;
+        max-width: 100%;
+        font-size: 30px;
+        line-height: 1.08;
+        overflow-wrap: break-word;
+      }
+      .landing-copy .lede, .landing-note {
+        width: 100%;
+        max-width: 100%;
+        font-size: 16px;
+        overflow-wrap: break-word;
+      }
+      .landing-note { font-size: 13px; }
+      .landing-cta { align-items: flex-start; flex-direction: column; gap: 12px; }
+      .landing-primary { width: 100%; text-align: center; }
+      .landing-access { grid-template-columns: 1fr; }
+      .landing-access button { width: 100%; }
+      .landing-nav {
+        display: grid;
+        grid-template-columns: 1fr;
+      }
+      .landing-nav-note { text-align: left; overflow-wrap: anywhere; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition: none !important; animation: none !important; }
     }
   </style>
 </head>
 <body>
-  <header>
-    <div class="brand"><div class="mark">J</div><div>Juris</div></div>
-    <div class="status">Interface local do piloto<br>artefatos auditáveis em Markdown</div>
+  <section id="landing">
+    <div class="landing-hero">
+      <div class="landing-nav">
+        <div class="brand"><div class="mark">C</div><div>Caus<span class="ia">ia</span></div></div>
+        <div class="landing-nav-note">Comece um teste anônimo por 30 dias, sem informar nome, e-mail ou escritório.</div>
+      </div>
+      <div class="landing-main">
+        <div class="landing-copy">
+          <p class="landing-kicker">IA jurídica privada para escritórios</p>
+          <h1>Transforme processos em trabalho pronto sem expor os dados do cliente.</h1>
+          <p class="lede">Causia organiza acervo, prazos, minutas e protocolo controlado em uma mesa de trabalho jurídica. Gere um teste anônimo, conecte seu token no agente local e avalie por 30 dias.</p>
+          <div class="landing-cta">
+            <button type="button" id="start-trial" class="landing-primary">Começar teste anônimo</button>
+            <button type="button" id="have-key-toggle" class="landing-secondary">Já tenho uma chave</button>
+          </div>
+          <div id="trial-issued" class="trial-issued" role="status" aria-live="polite" hidden></div>
+          <form id="landing-login-form" class="landing-access" hidden>
+            <div>
+              <label for="landing-api-key">Chave de acesso</label>
+              <input id="landing-api-key" type="password" placeholder="Cole sua chave de acesso" autocomplete="off" required />
+            </div>
+            <button type="submit">Entrar</button>
+            <label class="remember-row"><input type="checkbox" id="landing-remember" /> Manter conectado neste computador <span class="muted">(use apenas em computador pessoal)</span></label>
+            <p id="landing-login-error" hidden></p>
+          </form>
+          <p class="landing-note">Não pedimos seus dados para liberar o teste. Seus processos ficam isolados no ambiente Causia só enquanto o teste está ativo e são apagados automaticamente ao final; a chave fica salva neste navegador (saia com "Sair" em computador compartilhado) e expira em 30 dias.</p>
+        </div>
+      </div>
+    </div>
+    <div class="landing-band landing-how">
+      <h2>Como funciona</h2>
+      <p>Do clique ao primeiro documento em minutos — sem instalar nada para experimentar.</p>
+      <div class="landing-steps">
+        <div class="landing-step">
+          <span class="step-num">1</span>
+          <strong>Comece anônimo</strong>
+          <p>Clique em "Começar teste anônimo": sem cadastro, sem cartão. Você recebe uma chave de acesso e a sua mesa de trabalho.</p>
+        </div>
+        <div class="landing-step">
+          <span class="step-num">2</span>
+          <strong>Veja com dados de exemplo — ou com seu acervo</strong>
+          <p>Explore um caso de demonstração em um clique. Quando quiser usar seu acervo, baixe o agente local para se conectar com o PJe e o token A3: suas senhas e o PIN ficam neste computador e não são enviados aos servidores do Causia.</p>
+        </div>
+        <div class="landing-step">
+          <span class="step-num">3</span>
+          <strong>Minuta com lastro, protocolo com controle</strong>
+          <p>Gere rascunhos e minutas com citações verificadas contra o corpus, acompanhe prazos na agenda e protocole só depois de revisão e consentimento explícitos.</p>
+        </div>
+      </div>
+    </div>
+    <div class="landing-band landing-technology">
+      <h2>Nossa tecnologia: acesse seus processos sem compartilhar suas credenciais.</h2>
+      <p class="landing-tech-copy">Baixe o agente local para se conectar com o PJe, seu token A3 e os serviços dos tribunais. Suas senhas e o PIN do token ficam neste computador e não são enviados aos servidores do Causia.</p>
+      <div class="landing-tech-points">
+        <div class="landing-tech-point">
+          <strong>Conexão local com o tribunal</strong>
+          <p>O agente roda no computador onde o token está conectado e faz a ponte com PJe/MNI.</p>
+        </div>
+        <div class="landing-tech-point">
+          <strong>Credenciais sob seu controle</strong>
+          <p>CPF, senha PJe e PIN são informados no agente local, não em um formulário do servidor.</p>
+        </div>
+        <div class="landing-tech-point">
+          <strong>Acervo no Causia, acesso protegido</strong>
+          <p>O Causia recebe os dados necessários para organizar processos e prazos, sem receber suas senhas.</p>
+        </div>
+      </div>
+    </div>
+    <div class="landing-band">
+      <h2>Uma mesa de trabalho para usar antes de contratar qualquer plano.</h2>
+      <p>O piloto abre o console completo por 30 dias: acervo, agenda, geração de artefatos, busca explicável e fluxo de protocolo com controle humano.</p>
+      <div class="landing-features">
+        <div class="landing-feature">
+          <strong>Sem cadastro</strong>
+          <p>O teste nasce anônimo: sem nome, e-mail, telefone ou formulário comercial.</p>
+        </div>
+        <div class="landing-feature">
+          <strong>30 dias gratuitos</strong>
+          <p>Tempo suficiente para testar com rotina real, revisar minutas e medir ganho operacional.</p>
+        </div>
+        <div class="landing-feature">
+          <strong>Privacidade por desenho</strong>
+          <p>Credenciais nunca ficam armazenadas em nossos servidores. Dados de processo ficam isolados por escritório e são apagados automaticamente, com certificado, ao fim do teste — ou antes, a seu pedido.</p>
+        </div>
+      </div>
+    </div>
+    <footer class="landing-footer">
+      <div class="landing-footer-brand">
+        <div class="brand"><div class="mark">C</div><div>Caus<span class="ia">ia</span></div></div>
+        <p>IA jurídica privada para escritórios brasileiros.</p>
+      </div>
+      <nav class="landing-footer-links" aria-label="Contato e documentos">
+        <a href="mailto:lages.raphael@gmail.com?subject=Contato%20Causia">Falar com a equipe</a>
+        <a href="/static/termos.html">Termos de uso</a>
+        <a href="/static/privacidade.html">Privacidade</a>
+      </nav>
+      <p class="landing-footer-legal">© 2026 Causia · Credenciais nunca ficam armazenadas em nossos servidores; dados de processo, isolados por escritório, são apagados ao fim do teste.</p>
+    </footer>
+  </section>
+
+  <div id="login-overlay" hidden>
+    <div class="login-panel">
+      <div class="brand"><div class="mark">C</div><div>Caus<span class="ia">ia</span></div></div>
+      <h2>Acesso do escritório</h2>
+      <p>Informe a chave de acesso (X-API-Key) fornecida para o seu escritório. Por padrão ela vale só nesta aba; marque abaixo para mantê-la neste computador.</p>
+      <form id="login-form">
+        <input id="login-api-key" type="password" placeholder="Chave de acesso" autocomplete="off" required />
+        <label class="remember-row"><input type="checkbox" id="login-remember" /> Manter conectado neste computador</label>
+        <p id="login-error" hidden></p>
+        <button type="submit">Entrar</button>
+      </form>
+    </div>
+  </div>
+  <header id="app-header" hidden>
+    <div class="brand"><div class="mark">C</div><div>Caus<span class="ia">ia</span></div></div>
+    <nav id="nav">
+      <button type="button" data-nav="mesa" class="active">Mesa</button>
+      <button type="button" data-nav="acervo">Acervo</button>
+      <button type="button" data-nav="biblioteca">Biblioteca</button>
+      <button type="button" data-nav="agenda">Agenda</button>
+      <button type="button" data-nav="caso">Novo caso</button>
+      <button type="button" data-nav="protocolo">Protocolo</button>
+      <button type="button" data-nav="acessos">Acessos</button>
+    </nav>
+    <div class="header-actions">
+      <a id="trial-status" class="trial-pill" role="status" aria-live="polite" hidden
+         href="mailto:lages.raphael@gmail.com?subject=Quero%20contratar%20o%20Causia&body=Ol%C3%A1%2C%20estou%20testando%20o%20Causia%20e%20gostaria%20de%20conversar%20sobre%20contratar."></a>
+      <div class="status" id="ai-session" role="status" aria-live="polite" title="Modo de IA e proteção de dados">IA: …</div>
+      <button type="button" id="logout-button" class="header-logout">Sair</button>
+    </div>
   </header>
 
-  <main>
-    <section class="form-panel">
+  <main id="app-shell" hidden>
+    <div id="trial-welcome" class="trial-welcome" role="status" aria-live="polite" hidden></div>
+    <section class="workbench-panel" data-view="mesa">
+      <h1>Mesa de trabalho</h1>
+      <p class="lede">Filas do dia por prazo, movimentação, rascunho, bloqueio e artefatos recentes.</p>
+      <div id="workbench" class="workbench-grid"></div>
+    </section>
+
+    <section class="processos-panel" data-view="acervo" hidden>
+      <h1>Meus processos</h1>
+      <p class="lede">Acervo importado pelo agente local do seu computador. Clique em conectar para importar e manter atualizado.</p>
+      <section class="first-access-guide" aria-labelledby="first-access-title">
+        <h2 id="first-access-title" class="first-access-title">Primeiro acesso: siga nesta ordem</h2>
+        <p>Use o computador onde o token A3 está conectado. Suas senhas e o PIN do token ficam neste computador e não são enviados aos servidores do Causia.</p>
+        <ol class="first-access-steps">
+          <li class="first-access-step">
+            <span class="step-number" aria-hidden="true">1</span>
+            <div>
+              <strong>Abra o Causia Agent</strong>
+              <p>Deixe o aplicativo local aberto e o token A3 conectado antes de sincronizar.</p>
+            </div>
+          </li>
+          <li class="first-access-step">
+            <span class="step-number" aria-hidden="true">2</span>
+            <div>
+              <strong>Informe CPF, senha PJe e PIN</strong>
+              <p>Essas credenciais são salvas no agente local deste computador para conectar com o PJe.</p>
+              <button id="first-access-credentials" class="ghost" type="button">Atualizar credenciais</button>
+            </div>
+          </li>
+          <li class="first-access-step">
+            <span class="step-number" aria-hidden="true">3</span>
+            <div>
+              <strong>Sincronize seus processos</strong>
+              <p>Depois importe avisos pendentes ou informe CNJs para acompanhar processos específicos.</p>
+              <button id="first-access-connect" type="button">Conectar / sincronizar</button>
+            </div>
+          </li>
+        </ol>
+      </section>
+      <div id="agent-setup" class="notice agent-setup" role="status" aria-live="polite" hidden></div>
+      <div class="agent-tools"><span id="agent-pairing-status" role="status" aria-live="polite"></span></div>
+      <form id="connect-form" class="connect-bar">
+        <input id="c_cpf" placeholder="CPF do advogado" autocomplete="off" hidden disabled />
+        <input id="c_pin" placeholder="PIN do token A3" type="password" autocomplete="off" hidden disabled />
+        <button id="connect-btn" type="submit">Conectar / sincronizar</button>
+        <button id="agent-credentials-edit" class="ghost" type="button">Atualizar credenciais</button>
+        <span id="connect-status"></span>
+        <details class="connect-seed">
+          <summary>Adicionar processos por número CNJ</summary>
+          <textarea id="c_seed" placeholder="Cole um ou mais números CNJ para acompanhar processos sem aviso pendente."></textarea>
+        </details>
+      </form>
+      <p id="connect-note" class="field-note">O PIN é usado só para assinar no seu computador e não é armazenado.</p>
+      <p class="field-note">
+        Ainda não instalou? <a id="agent-download-mac" href="#" target="_blank" rel="noopener">Baixar o agente (macOS)</a>
+        · <a id="agent-download-win" href="#" target="_blank" rel="noopener">Windows</a>
+        <span id="agent-latest-version" class="muted"></span>
+      </p>
+      <div class="list-tools">
+        <input id="processos-filter" placeholder="Filtrar CNJ, classe ou assunto" autocomplete="off" />
+        <select id="processos-sort">
+          <option value="prazo">ordenar por prazo</option>
+          <option value="sync">ordenar por última atualização</option>
+          <option value="prazos">ordenar por nº de prazos</option>
+        </select>
+      </div>
+      <div id="processos" class="proc-empty">Carregando…</div>
+    </section>
+
+    <section class="processos-panel" data-view="agenda" hidden>
+      <h1>Agenda de prazos</h1>
+      <p class="lede">Prazos pendentes do acervo, mais próximos primeiro.</p>
+      <div class="list-tools">
+        <input id="prazos-filter" placeholder="Filtrar CNJ ou prazo" autocomplete="off" />
+        <select id="prazos-urgency">
+          <option value="">todas urgências</option>
+          <option value="alta">alta</option>
+          <option value="media">média</option>
+          <option value="baixa">baixa</option>
+        </select>
+      </div>
+      <div id="prazos" class="proc-empty">Carregando…</div>
+    </section>
+
+    <section class="processos-panel" data-view="biblioteca" hidden>
+      <h1>Biblioteca do Escritório</h1>
+      <p class="lede">Peças, modelos e doutrina do seu escritório. Documentos de estilo ensinam a forma das minutas e nunca são citados como fonte. Seus arquivos ficam isolados por escritório e são apagáveis com certificado.</p>
+      <form id="library-upload-form" class="connect-bar">
+        <input id="library-files" type="file" multiple accept=".pdf,.docx,.txt,.md" />
+        <select id="library-tipo">
+          <option value="peca_escritorio">Peça do escritório (estilo)</option>
+          <option value="modelo_peticao">Modelo de petição (estilo)</option>
+          <option value="nota_interna">Tese/nota interna (estilo)</option>
+          <option value="acordao_publicado">Decisão/acórdão (fonte citável)</option>
+          <option value="doutrina_escritorio">Doutrina do escritório (fonte citável)</option>
+        </select>
+        <select id="library-tipo-peticao">
+          <option value="">tipo de peça (opcional)</option>
+          <option value="contestacao">contestação</option>
+          <option value="inicial">inicial</option>
+          <option value="agravo">agravo</option>
+          <option value="recurso">recurso</option>
+          <option value="parecer">parecer</option>
+        </select>
+        <input id="library-area" placeholder="área (ex.: cível)" required />
+        <label class="check"><input id="library-copyright-ack" type="checkbox" /> Declaro responsabilidade pelo direito de uso da doutrina enviada</label>
+        <button type="submit">Enviar para a biblioteca</button>
+      </form>
+      <p id="library-upload-status" class="field-note" hidden></p>
+      <div id="library-coverage" class="proc-empty">Carregando…</div>
+      <div id="library-list" class="proc-empty">Carregando…</div>
+      <form id="library-search-form" class="connect-bar">
+        <input id="library-search-q" placeholder="Buscar na biblioteca e no corpus" />
+        <input id="library-search-area" placeholder="área da busca (ex.: cível)" />
+        <button type="submit">Buscar</button>
+      </form>
+      <div id="library-search-results" hidden>
+        <h2>Fontes jurídicas para citar</h2>
+        <div id="library-results-fundamento" class="proc-empty"></div>
+        <h2>Modelos e peças do escritório (estilo)</h2>
+        <div id="library-results-estilo" class="proc-empty"></div>
+      </div>
+    </section>
+
+    <section class="processos-panel" data-view="acessos" hidden>
+      <h1>Acessos</h1>
+      <p class="lede">Gere uma chave para estagiário ou colega advogado acessar o mesmo acervo durante o período do teste.</p>
+      <div id="my-key-box" class="trial-welcome" hidden></div>
+      <form id="access-key-form" class="connect-bar">
+        <input id="access-key-label" placeholder="Nome do acesso (ex.: estagiário)" autocomplete="off" />
+        <button id="access-key-submit" type="submit">Gerar chave</button>
+        <span id="access-key-status"></span>
+      </form>
+      <div id="access-summary" class="proc-empty">Carregando…</div>
+      <div id="access-key-result" class="notice" role="status" aria-live="polite" hidden></div>
+    </section>
+
+    <section class="processos-panel" data-view="piloto" hidden>
+      <h1>Registro do piloto</h1>
+      <p class="lede">Área interna: registre valor, qualidade e lacunas de corpus para cada caso real.</p>
+      <form id="pilot-form">
+        <div class="row">
+          <div>
+            <label for="pf_cnj">Número CNJ</label>
+            <input id="pf_cnj" autocomplete="off" />
+          </div>
+          <div>
+            <label for="pf_output_dir">Documentos gerados (pasta)</label>
+            <input id="pf_output_dir" autocomplete="off" />
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="pf_time">Tempo economizado (min)</label>
+            <input id="pf_time" type="number" min="0" value="0" />
+          </div>
+          <div>
+            <label for="pf_mode">Modo usado</label>
+            <select id="pf_mode">
+              <option value="rascunho">rascunho</option>
+              <option value="minuta">minuta</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="pf_acc">Citações aceitas</label>
+            <input id="pf_acc" type="number" min="0" value="0" />
+          </div>
+          <div>
+            <label for="pf_rej">Citações rejeitadas</label>
+            <input id="pf_rej" type="number" min="0" value="0" />
+          </div>
+        </div>
+        <label for="pf_missing">Fonte faltante</label>
+        <input id="pf_missing" autocomplete="off" />
+        <label for="pf_error">Erro de prazo/análise</label>
+        <input id="pf_error" autocomplete="off" />
+        <div class="row">
+          <div>
+            <label for="pf_utility">Utilidade percebida (1-5)</label>
+            <input id="pf_utility" type="number" min="1" max="5" value="4" />
+          </div>
+          <label class="check" style="margin-top:34px"><input id="pf_corpus" type="checkbox" /> aproveitável para corpus</label>
+        </div>
+        <label for="pf_notes">Notas</label>
+        <textarea id="pf_notes"></textarea>
+        <button id="pilot-submit" type="submit">Registrar feedback</button>
+      </form>
+      <div class="list-tools">
+        <button type="button" class="ghost" id="pilot-export-json">exportar JSON</button>
+        <button type="button" class="ghost" id="pilot-export-csv">exportar CSV</button>
+        <button type="button" class="ghost" id="pilot-export-md">relatório MD</button>
+      </div>
+      <div id="pilot-summary"></div>
+      <div class="row">
+        <div>
+          <h2>Fila de corpus</h2>
+          <div id="corpus-candidates" class="proc-empty">Carregando…</div>
+        </div>
+        <div>
+          <h2>Cobertura do corpus dirigido</h2>
+          <div id="corpus-coverage" class="proc-empty">Carregando…</div>
+        </div>
+      </div>
+      <h2>Adicionar ao corpus — acervo do escritório</h2>
+      <p class="lede">Decisões que o escritório já possui (PDF, TXT, MD ou texto colado) entram no corpus privado com proveniência e ficam pesquisáveis na hora.</p>
+      <form id="corpus-upload-form">
+        <div class="row">
+          <div>
+            <label for="cu_file">Arquivo (PDF, TXT ou MD)</label>
+            <input id="cu_file" type="file" accept=".pdf,.txt,.md" />
+          </div>
+          <div>
+            <label for="cu_title">Título / identificação</label>
+            <input id="cu_title" placeholder="ex.: Apelação 1.0000.24.123456-7/001" />
+          </div>
+        </div>
+        <label for="cu_text">Ou cole o texto da decisão</label>
+        <textarea id="cu_text" placeholder="Inteiro teor, quando não houver arquivo"></textarea>
+        <div class="row">
+          <div>
+            <label for="cu_tipo">Tipo</label>
+            <select id="cu_tipo">
+              <option value="acordao_publicado">acórdão publicado</option>
+              <option value="precedente_local">precedente local</option>
+              <option value="modelo_peticao">modelo de petição</option>
+            </select>
+          </div>
+          <div>
+            <label for="cu_tribunal">Tribunal</label>
+            <input id="cu_tribunal" placeholder="ex.: tjmg" />
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="cu_data">Data da decisão</label>
+            <input id="cu_data" type="date" />
+          </div>
+          <div>
+            <label for="cu_tema">Tema / área</label>
+            <input id="cu_tema" placeholder="ex.: honorários sucumbenciais" />
+          </div>
+        </div>
+        <label for="cu_url">URL de origem (consulta pública ou PJe)</label>
+        <input id="cu_url" type="url" placeholder="https://…" />
+        <button id="cu_submit" type="submit">Adicionar ao corpus</button>
+        <div id="cu_notice" class="notice" hidden></div>
+      </form>
+
+      <h2>Busca explicável na jurisprudência</h2>
+      <p class="lede">Cada resultado mostra <strong>por que</strong> ranqueou: fonte, autoridade, vigência, corroboração.</p>
+      <form id="corpus-search-form" class="row">
+        <input id="corpus-search-q" type="text" placeholder="ex.: honorários sucumbenciais fazenda pública" />
+        <button type="submit">Buscar</button>
+      </form>
+      <div id="corpus-search-results" class="proc-empty">Digite uma consulta.</div>
+      <h2>Segunda execução dos casos</h2>
+      <div id="pilot-comparison" class="proc-empty">Carregando…</div>
+      <div id="pilot-feedback" class="proc-empty">Carregando…</div>
+    </section>
+
+    <section class="processos-panel" data-view="protocolo" hidden>
+      <h1>Protocolo controlado</h1>
+      <p class="lede">Valide o documento antes do envio, confira a checagem obrigatória e a trilha de custódia, e só assine com revisão e consentimento explícitos.</p>
+      <form id="filing-form">
+        <div class="row">
+          <div>
+            <label for="fl_cnj">Número CNJ</label>
+            <input id="fl_cnj" autocomplete="off" />
+          </div>
+          <div>
+            <label for="fl_tribunal">Tribunal</label>
+            <input id="fl_tribunal" value="tjmg" />
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="fl_tipo_doc">Tipo de documento</label>
+            <select id="fl_tipo_doc">
+              <option value="manifestacao">Manifestação</option>
+              <option value="peticao">Petição intermediária</option>
+              <option value="contestacao">Contestação</option>
+              <option value="recurso">Recurso</option>
+            </select>
+          </div>
+          <div>
+            <label for="fl_tipo_peticao">Tipo de petição</label>
+            <select id="fl_tipo_peticao">
+              <option value="manifestacao">Manifestação</option>
+              <option value="peticao">Petição intermediária</option>
+              <option value="contestacao">Contestação</option>
+              <option value="recurso">Recurso</option>
+            </select>
+          </div>
+        </div>
+        <div id="filing-secret-row" class="row">
+          <div>
+            <label for="fl_cpf">CPF</label>
+            <input id="fl_cpf" autocomplete="off" />
+          </div>
+          <div>
+            <label for="fl_pin">PIN token A3</label>
+            <input id="fl_pin" type="password" autocomplete="off" />
+          </div>
+        </div>
+        <div id="filing-senha-row">
+          <label for="fl_senha">Senha do PJe</label>
+          <input id="fl_senha" type="password" autocomplete="off" />
+          <p class="field-note">Usada só para protocolar no seu computador; não é armazenada.</p>
+        </div>
+        <label for="fl_artifact">Artefato recente</label>
+        <div class="connect-bar">
+          <select id="fl_artifact"></select>
+          <button type="button" class="ghost" id="filing-load-artifact">carregar minuta</button>
+        </div>
+        <label for="fl_draft">Minuta revisada (texto editável)</label>
+        <textarea id="fl_draft" style="min-height:180px"></textarea>
+        <div class="list-tools">
+          <button type="button" class="ghost" id="fl_download_docx">Baixar .docx</button>
+          <span id="fl_download_status" class="field-note" hidden></span>
+        </div>
+        <label for="fl_prazo_override">Override de prazo</label>
+        <input id="fl_prazo_override" autocomplete="off" />
+        <div class="checks">
+          <label class="check"><input id="fl_review" type="checkbox" /> revisão humana concluída</label>
+          <label class="check"><input id="fl_consent" type="checkbox" /> autorizo assinar e protocolar esta versão</label>
+        </div>
+        <div class="list-tools">
+          <button type="button" id="filing-dry-run">Validar antes do envio</button>
+          <button type="button" id="filing-submit" class="ghost">assinar e protocolar</button>
+        </div>
+      </form>
+      <div id="filing-result" class="proc-empty">Nenhuma validação executada.</div>
+      <h2>Filings pendentes e recibos</h2>
+      <div id="filing-recovery" class="proc-empty">Selecione um filing pendente para recuperar.</div>
+      <div id="filing-status" class="proc-empty">Carregando…</div>
+    </section>
+
+    <section class="form-panel" data-view="caso" hidden>
       <h1>Novo caso</h1>
       <p class="lede">Gere rascunho de pesquisa ou minuta sugerida a partir do pipeline atual.</p>
       <form id="demo-form">
@@ -229,10 +1611,15 @@
 
         <label for="source">Origem</label>
         <select id="source">
-          <option value="fixture">fixture demo</option>
+          <option value="fixture">Dados demonstrativos</option>
           <option value="datajud">DataJud</option>
           <option value="mni">MNI</option>
         </select>
+
+        <div id="nc_cpf_row" style="display:none">
+          <label for="nc_cpf">CPF do advogado (MNI co-localizado)</label>
+          <input id="nc_cpf" placeholder="CPF do advogado" autocomplete="off" />
+        </div>
 
         <label for="thesis">Tese ou objetivo</label>
         <textarea id="thesis" placeholder="Opcional"></textarea>
@@ -241,16 +1628,16 @@
         <textarea id="instructions" placeholder="Opcional"></textarea>
 
         <div class="checks">
-          <label class="check"><input id="cloud" type="checkbox" /> usar Claude cloud</label>
-          <label class="check"><input id="skip_review" type="checkbox" /> pular revisão pós-draft</label>
+          <label class="check"><input id="cloud" type="checkbox" /> Usar IA em nuvem, com dados protegidos</label>
+          <label class="check"><input id="skip_review" type="checkbox" /> pular a revisão automática</label>
         </div>
 
         <button id="submit" type="submit">Gerar artefatos</button>
-        <div id="notice" class="notice" hidden></div>
+        <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
       </form>
     </section>
 
-    <section class="results">
+    <section class="results" data-view="caso" hidden>
       <div class="results-head">
         <div>
           <h2 id="result-title">Artefatos</h2>
@@ -258,21 +1645,881 @@
         </div>
         <div id="output-dir" class="out"></div>
       </div>
+      <div id="grounding"></div>
+      <div id="provider-warning" class="notice warn" hidden></div>
+      <div id="estrategia"></div>
+      <div id="review"></div>
       <div id="artifacts" class="empty">Os documentos gerados aparecerão aqui.</div>
     </section>
   </main>
 
+  <div id="agent-credentials-modal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="agent-credentials-title">
+    <div class="modal-card agent-credentials-card">
+      <button type="button" class="modal-close" id="agent-credentials-cancel" aria-label="Fechar">×</button>
+      <h2 id="agent-credentials-title">Conectar token e PJe</h2>
+      <p>O agente local usa estas credenciais para se conectar com o PJe. Suas senhas e o PIN do token ficam neste computador e não são enviados aos servidores do Causia.</p>
+      <form id="agent-credentials-form" class="agent-credentials-form">
+        <label for="agent-credential-cpf">CPF do advogado
+          <input id="agent-credential-cpf" name="cpf" inputmode="numeric" autocomplete="username" required />
+        </label>
+        <label for="agent-credential-senha">Senha PJe
+          <input id="agent-credential-senha" name="senha" type="password" autocomplete="current-password" required />
+        </label>
+        <label for="agent-credential-pin">PIN do token A3
+          <input id="agent-credential-pin" name="pin" type="password" autocomplete="off" required />
+        </label>
+        <label for="agent-credential-tribunal">Tribunal
+          <input id="agent-credential-tribunal" name="tribunal" value="tjmg" autocomplete="off" required />
+        </label>
+        <button type="submit">Salvar e sincronizar</button>
+        <p id="agent-credentials-status" role="status" aria-live="polite"></p>
+      </form>
+    </div>
+  </div>
+
+  <div id="proc-modal" class="modal" hidden role="dialog" aria-modal="true" aria-label="Detalhe do processo">
+    <div class="modal-card">
+      <button type="button" class="modal-close" aria-label="Fechar">×</button>
+      <div id="proc-modal-body"></div>
+    </div>
+  </div>
+
   <script>
+    // Auth seam: toda chamada /api/* passa por apiFetch, que anexa X-API-Key
+    // (sessionStorage) e reabre o login em 401. Em deploy aberto (sem tenants)
+    // nenhum 401 acontece e o overlay nunca aparece.
+    const API_KEY_STORAGE = "jurisApiKey";
+    const landing = document.querySelector("#landing");
+    const appHeader = document.querySelector("#app-header");
+    const appShell = document.querySelector("#app-shell");
+    const landingForm = document.querySelector("#landing-login-form");
+    const landingInput = document.querySelector("#landing-api-key");
+    const landingError = document.querySelector("#landing-login-error");
+    const startTrialButton = document.querySelector("#start-trial");
+    const trialIssued = document.querySelector("#trial-issued");
+    const agentSetup = document.querySelector("#agent-setup");
+    const agentPairingStatus = document.querySelector("#agent-pairing-status");
+    const agentCredentialsModal = document.querySelector("#agent-credentials-modal");
+    const agentCredentialsForm = document.querySelector("#agent-credentials-form");
+    const agentCredentialsStatus = document.querySelector("#agent-credentials-status");
+    const agentCredentialsCancel = document.querySelector("#agent-credentials-cancel");
+    const loginOverlay = document.querySelector("#login-overlay");
+    const loginForm = document.querySelector("#login-form");
+    const loginInput = document.querySelector("#login-api-key");
+    const loginError = document.querySelector("#login-error");
+    const logoutButton = document.querySelector("#logout-button");
+    let consoleBooted = false;
+
+    function getApiKey() {
+      // sessionStorage primeiro (sessão corrente); localStorage como retorno de
+      // quem optou por "manter conectado" — ao retomar, reidrata a sessão.
+      try {
+        const session = sessionStorage.getItem(API_KEY_STORAGE);
+        if (session) return session;
+        const persisted = localStorage.getItem(API_KEY_STORAGE);
+        if (persisted) { sessionStorage.setItem(API_KEY_STORAGE, persisted); return persisted; }
+        return "";
+      } catch (_) { return ""; }
+    }
+    function setApiKey(value) {
+      try {
+        if (value) sessionStorage.setItem(API_KEY_STORAGE, value);
+        else {
+          // Limpar limpa TUDO: logout e 401 (chave inválida/expirada) nunca
+          // deixam uma chave persistida para trás.
+          sessionStorage.removeItem(API_KEY_STORAGE);
+          localStorage.removeItem(API_KEY_STORAGE);
+        }
+      } catch (_) { /* private mode */ }
+    }
+    // Opt-in "manter conectado": grava a chave corrente no localStorage. Só é
+    // chamada após a chave ser VALIDADA (login) ou emitida (trial).
+    function persistApiKey() {
+      try {
+        const key = sessionStorage.getItem(API_KEY_STORAGE);
+        if (key) localStorage.setItem(API_KEY_STORAGE, key);
+      } catch (_) { /* private mode */ }
+    }
+    function showLogin(message) {
+      loginOverlay.hidden = false;
+      if (message) { loginError.textContent = message; loginError.hidden = false; }
+      else { loginError.hidden = true; }
+      loginInput.focus();
+    }
+    function hideLogin() {
+      loginOverlay.hidden = true;
+      loginError.hidden = true;
+      loginInput.value = "";
+    }
+    function showLanding() {
+      landing.hidden = false;
+      appHeader.hidden = true;
+      appShell.hidden = true;
+      hideLogin();
+    }
+    function hideLandingError() {
+      landingError.hidden = true;
+      landingError.textContent = "";
+    }
+    function showLandingError(message) {
+      landingError.textContent = message;
+      landingError.hidden = false;
+    }
+    function showConsoleShell() {
+      landing.hidden = true;
+      appHeader.hidden = false;
+      appShell.hidden = false;
+    }
+    function logout() {
+      setApiKey("");
+      try {
+        sessionStorage.removeItem("causiaTrialSetup");
+        sessionStorage.removeItem("causiaTrialWelcome");
+        sessionStorage.removeItem("causiaStartView");
+      } catch (_) { /* private mode */ }
+      hideLandingError();
+      landingInput.value = "";
+      showLanding();
+    }
+    function setFormBusy(formEl, busy, label) {
+      const button = formEl.querySelector("button[type='submit']");
+      if (!button) return;
+      if (!button.dataset.idleLabel) button.dataset.idleLabel = button.textContent;
+      button.disabled = busy;
+      button.textContent = busy ? label : button.dataset.idleLabel;
+    }
+    function setButtonBusy(button, busy, label) {
+      if (!button) return;
+      if (!button.dataset.idleLabel) button.dataset.idleLabel = button.textContent;
+      button.disabled = busy;
+      button.textContent = busy ? label : button.dataset.idleLabel;
+    }
+    async function apiFetch(url, options) {
+      const opts = Object.assign({}, options);
+      const suppressLogin = Boolean(opts.suppressLogin);
+      delete opts.suppressLogin;
+      const headers = new Headers(opts.headers || {});
+      const key = getApiKey();
+      if (key) headers.set("X-API-Key", key);
+      opts.headers = headers;
+      const response = await window.fetch(url, opts);
+      if (response.status === 401) {
+        const hadKey = Boolean(key);
+        setApiKey("");
+        if (!suppressLogin) {
+          if (hadKey) showLogin("Chave inválida ou expirada. Informe a chave do escritório.");
+          else if (landing.hidden && loginOverlay.hidden) showLogin("");
+        }
+      }
+      return response;
+    }
+    async function verifyApiKey(candidate, onError) {
+      if (!candidate) return;
+      setApiKey(candidate);
+      try {
+        const probe = await apiFetch("/api/workbench", { suppressLogin: true });
+        if (probe.status === 401) {
+          setApiKey("");
+          onError("Chave inválida ou expirada. Confira a API key e tente novamente.");
+          return false;
+        }
+        if (!probe.ok) {
+          onError("Chave aceita, mas o servidor respondeu com erro. Tente de novo.");
+          return false;
+        }
+      } catch (_) {
+        setApiKey("");
+        onError("Não foi possível falar com o servidor. Verifique a conexão.");
+        return false;
+      }
+      return true;
+    }
+    landingForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const candidate = landingInput.value.trim();
+      if (!candidate) return;
+      hideLandingError();
+      setFormBusy(landingForm, true, "Validando...");
+      const ok = await verifyApiKey(candidate, showLandingError);
+      setFormBusy(landingForm, false, "");
+      if (!ok) return;
+      const rememberLanding = document.querySelector("#landing-remember");
+      if (rememberLanding && rememberLanding.checked) persistApiKey();
+      landingInput.value = "";
+      hideLogin();
+      bootConsole();
+    });
+    if (startTrialButton) {
+      startTrialButton.addEventListener("click", async () => {
+        hideLandingError();
+        if (trialIssued) trialIssued.hidden = true;
+        setButtonBusy(startTrialButton, true, "Gerando teste...");
+        try {
+          const response = await window.fetch("/api/trial/start", { method: "POST" });
+          const data = await response.json();
+          if (!response.ok) throw new Error(apiErrorMessage(data, "Não foi possível gerar o teste."));
+          setApiKey(data.api_key);
+          // Trial anônimo: persistir por padrão — fechar a aba não pode custar o
+          // teste inteiro (não há e-mail para recuperar). "Sair" limpa tudo.
+          persistApiKey();
+          try {
+            sessionStorage.setItem("causiaTrialWelcome", JSON.stringify(data));
+            sessionStorage.setItem("causiaTrialSetup", JSON.stringify(data));
+            // A Mesa recebe o novo trial: o card "Comece por aqui" oferece os dois
+            // caminhos (dados de exemplo, sem instalar nada, ou conectar o acervo).
+            // Cair direto no Acervo pedia CPF/PIN como primeira tela do teste anônimo.
+            sessionStorage.setItem("causiaStartView", "mesa");
+          } catch (_) { /* private mode */ }
+          if (trialIssued) {
+            trialIssued.innerHTML = "";
+            const msg = document.createElement("div");
+            msg.textContent = `Teste anônimo ativo até ${fmtDate(data.expires_at)}. Você vai entrar agora; guarde a chave se quiser voltar em outro navegador.`;
+            const code = document.createElement("code");
+            code.textContent = data.api_key;
+            trialIssued.append(msg, code);
+            trialIssued.hidden = false;
+          }
+          bootConsole();
+        } catch (error) {
+          showLandingError(error.message);
+        } finally {
+          setButtonBusy(startTrialButton, false, "");
+        }
+      });
+    }
+    loginForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const candidate = loginInput.value.trim();
+      if (!candidate) return;
+      loginError.hidden = true;
+      setFormBusy(loginForm, true, "Validando...");
+      const ok = await verifyApiKey(candidate, (message) => showLogin(message));
+      setFormBusy(loginForm, false, "");
+      if (!ok) return;
+      const rememberOverlay = document.querySelector("#login-remember");
+      if (rememberOverlay && rememberOverlay.checked) persistApiKey();
+      hideLogin();
+      bootConsole();
+    });
+    logoutButton.addEventListener("click", logout);
+
+    // "Já tenho uma chave" reveals the secondary key form; anonymous trial is the
+    // primary path for new visitors.
+    const haveKeyToggle = document.querySelector("#have-key-toggle");
+    if (haveKeyToggle) {
+      haveKeyToggle.addEventListener("click", () => {
+        landingForm.hidden = false;
+        haveKeyToggle.hidden = true;
+        landingInput.focus();
+      });
+    }
+
     const form = document.querySelector("#demo-form");
     const submit = document.querySelector("#submit");
     const notice = document.querySelector("#notice");
+    const providerWarningEl = document.querySelector("#provider-warning");
     const artifactsEl = document.querySelector("#artifacts");
     const titleEl = document.querySelector("#result-title");
     const summaryEl = document.querySelector("#result-summary");
     const outputDirEl = document.querySelector("#output-dir");
+    const estrategiaEl = document.querySelector("#estrategia");
+    const workbenchEl = document.querySelector("#workbench");
+
+    const CONF_LABEL = { alta: "Confiança alta", media: "Confiança média", baixa: "Confiança baixa" };
+
+    function renderEstrategia(est) {
+      estrategiaEl.innerHTML = "";
+      if (!est || !est.escolhida) return;
+      const esc = est.escolhida;
+      const card = document.createElement("div");
+      card.className = "estrategia-card";
+
+      const conf = escHtml(esc.confianca || "media");
+      const ordem = escHtml(esc.ordem || "principal");
+      const list = (arr) => (arr && arr.length ? arr.map((x) => `<li>${escHtml(x)}</li>`).join("") : "<li class='muted'>—</li>");
+      const tom = est.tom_minuta || "cauteloso";
+
+      let html = `<div class="estrategia-head">
+          <h3>Linha argumentativa <span class="badge ordem-${ordem}">${ordem}</span></h3>
+          <span class="badge conf-${conf}">${escHtml(CONF_LABEL[conf] || conf)}</span>
+        </div>
+        <p class="tese">${escHtml(esc.tese || "")}</p>
+        <div class="proc-meta"><strong>Tom da minuta:</strong> ${escHtml(tom)}</div>`;
+      if (esc.fundamento_consequencialista) {
+        html += `<p class="conseq"><strong>Argumento consequencialista:</strong> ${escHtml(esc.fundamento_consequencialista)}</p>`;
+      }
+      html += `<div class="estrategia-cols">
+          <div><h4>Fundamentos</h4><ul>${list(esc.fundamentos)}</ul></div>
+          <div><h4>Citações</h4><ul>${list(esc.citacoes)}</ul></div>
+          <div><h4>Riscos</h4><ul>${list(esc.riscos)}</ul></div>
+        </div>`;
+
+      if (est.lacunas_prova && est.lacunas_prova.length) {
+        const gaps = est.lacunas_prova
+          .map((g) => `<li><strong>${escHtml(g.alegacao || "Alegação")}</strong><br/><span class="muted">${escHtml((g.lacunas || []).join("; ") || "sem prova indicada")}</span></li>`)
+          .join("");
+        html += `<div class="estrategia-alert">
+            <strong>Lacunas de prova antes da minuta</strong>
+            <ul>${gaps}</ul>
+          </div>`;
+      }
+
+      if (est.revisao_humana_obrigatoria || (est.avisos_deontologicos && est.avisos_deontologicos.length)) {
+        const avisos = (est.avisos_deontologicos || []).map((a) => `<li>${escHtml(a)}</li>`).join("");
+        html += `<div class="estrategia-alert">
+            <strong>⚠ Revisão humana obrigatória</strong>
+            ${avisos ? `<ul>${avisos}</ul>` : "<p>Confiança baixa ou lastro probatório fraco.</p>"}
+          </div>`;
+      }
+
+      if (est.alternativas && est.alternativas.length) {
+        const alts = est.alternativas
+          .map((a) => `<li><span class="badge ordem-${escHtml(a.ordem)}">${escHtml(a.ordem)}</span> ${escHtml(a.tese)} <span class="muted">(${(a.score ?? 0).toFixed(2)})</span></li>`)
+          .join("");
+        html += `<details class="estrategia-alts"><summary>Vice-campeãs (${est.alternativas.length})</summary><ul>${alts}</ul></details>`;
+      }
+
+      card.innerHTML = html;
+      estrategiaEl.appendChild(card);
+    }
+
+    async function openAudit(dir) {
+      procModalBody.innerHTML = "<p class='muted'>Verificando cadeia…</p>";
+      openProcModal();
+      try {
+        const r = await apiFetch(`/api/audit?output_dir=${encodeURIComponent(dir)}`);
+        if (!r.ok) throw new Error(r.status === 404 ? "audit.jsonl não encontrado" : "Falha ao verificar");
+        renderAudit(await r.json());
+      } catch (err) {
+        procModalBody.innerHTML = `<p class="notice error" style="position:static">${escHtml(err.message)}</p>`;
+      }
+    }
+
+    function renderAudit(a) {
+      const verdict = a.intact
+        ? `<div class="audit-verdict ok">✓ Cadeia íntegra · ${a.total} eventos</div>`
+        : `<div class="audit-verdict bad">✗ Cadeia adulterada · ${a.corrupted.length} de ${a.total} comprometidos</div>`;
+      const rows = (a.entries || [])
+        .map((e) => `<li class="${e.corrupted ? "audit-bad" : ""}">
+            <span class="mov-date">${e.timestamp ? new Date(e.timestamp).toLocaleString("pt-BR") : "—"}</span>
+            <span class="badge audit-ev">${escHtml(e.event_type)}</span>
+            <span class="mov-desc">${escHtml(e.actor)}${e.processo_cnj ? " · " + escHtml(e.processo_cnj) : ""}</span>
+            ${e.corrupted ? '<span class="badge sev-critical">adulterado</span>' : ""}
+          </li>`)
+        .join("");
+      procModalBody.innerHTML = `<h2>Auditoria</h2>${verdict}
+        <h4>Cadeia de eventos</h4><ul class="timeline audit-timeline">${rows}</ul>`;
+    }
+
+    const groundingEl = document.querySelector("#grounding");
+
+    function renderGrounding(g) {
+      groundingEl.innerHTML = "";
+      if (!g) return;
+      const card = document.createElement("div");
+      if (!g.blocked) {
+        card.className = "grounding-chip grounding-ok";
+        card.innerHTML = "<span class='g-dot'></span><strong>Lastro verificado</strong>" +
+          "<span class='muted'>todas as citações conferem com o corpus</span>";
+        groundingEl.appendChild(card);
+        return;
+      }
+      card.className = "grounding-chip grounding-blocked";
+      const failed = (g.failed_citation_ids || []).map((x) => `<code>${escHtml(x)}</code>`).join(", ");
+      const spurious = (g.spurious_citations || []).map((x) => `<code>${escHtml(x)}</code>`).join(", ");
+      let refs = "";
+      if (failed) refs += `<div>Marcadores inválidos: ${failed}</div>`;
+      if (spurious) refs += `<div>Jurisprudência sem fonte verificada: ${spurious}</div>`;
+      card.innerHTML = "<span class='g-dot'></span><strong>Minuta bloqueada — sem lastro verificável</strong>" +
+        `<span class='muted'>${escHtml(g.blocked_reason || "grounding falhou")}</span>${refs}`;
+      groundingEl.appendChild(card);
+    }
+
+    const reviewEl = document.querySelector("#review");
+    const SEV_LABEL = { critical: "Crítico", important: "Importante", suggestion: "Sugestão" };
+
+    function renderReview(rev) {
+      reviewEl.innerHTML = "";
+      if (!rev) return;
+      const c = rev.counts || {};
+      const card = document.createElement("div");
+      card.className = "review-card";
+      const chips = ["critical", "important", "suggestion"]
+        .map((s) => `<span class="sev-chip sev-${s}">${c[s] || 0} ${SEV_LABEL[s].toLowerCase()}</span>`)
+        .join("");
+      const verifiedCites = (rev.citations || []).filter((x) => x.found).length;
+      const totalCites = (rev.citations || []).length;
+
+      const issues = (rev.issues || []).length
+        ? rev.issues
+            .map((i) => `<li class="sev-row sev-${escHtml(i.severity)}">
+                <div class="issue-head"><span class="sev-tag sev-${escHtml(i.severity)}">${escHtml(SEV_LABEL[i.severity] || i.severity)}</span>
+                <strong>${escHtml(i.title || "")}</strong> <span class="muted">${escHtml(i.dimension || "")}</span></div>
+                <p>${escHtml(i.description || "")}</p>
+                ${i.suggestion ? `<p class="sugg">↳ ${escHtml(i.suggestion)}</p>` : ""}
+              </li>`)
+            .join("")
+        : "<li class='muted'>Nenhum apontamento — revisão limpa.</li>";
+
+      card.innerHTML = `<div class="review-head"><h3>Revisão automática</h3><div class="sev-chips">${chips}</div></div>
+        <div class="proc-meta">Citações verificadas: ${verifiedCites}/${totalCites}</div>
+        <ul class="review-issues">${issues}</ul>`;
+      reviewEl.appendChild(card);
+    }
 
     const value = (id) => document.querySelector(`#${id}`).value;
+
+    // Escape untrusted text (LLM output, court/process data) before innerHTML.
+    const ESC_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+    const escHtml = (v) => (v == null ? "" : String(v).replace(/[&<>"']/g, (c) => ESC_MAP[c]));
+
+    // Minimal, XSS-safe Markdown → HTML for the minuta preview: escape FIRST,
+    // then apply headings/bold/lists on the escaped text (only <strong>/<h*>/<li>
+    // wrap already-escaped content — no untrusted HTML ever reaches the DOM).
+    function renderMarkdownSafe(md) {
+      const inline = (t) => escHtml(t)
+        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+        .replace(/__(.+?)__/g, "<strong>$1</strong>")
+        .replace(/\*([^*\n]+)\*/g, "<em>$1</em>")
+        .replace(/(^|[\s(])_([^_\n]+)_(?=[\s).,;:!?]|$)/g, "$1<em>$2</em>");
+      const lines = String(md || "").replace(/\r\n/g, "\n").split("\n");
+      const out = [];
+      let list = null;
+      let para = [];
+      let quote = null; // parágrafos acumulados do blockquote corrente
+      const closeList = () => { if (list) { out.push(`</${list}>`); list = null; } };
+      const flushPara = () => { if (para.length) { out.push(`<p>${inline(para.join(" ").trim())}</p>`); para = []; } };
+      const flushQuote = () => {
+        if (!quote) return;
+        const paras = quote.filter((p) => p.trim()).map((p) => `<p>${inline(p.trim())}</p>`).join("");
+        if (paras) out.push(`<blockquote>${paras}</blockquote>`);
+        quote = null;
+      };
+      for (const line of lines) {
+        const bq = line.match(/^\s*>\s?(.*)$/);
+        if (bq) {
+          flushPara(); closeList();
+          if (!quote) quote = [""];
+          // "> " vazio separa parágrafos dentro do bloco citado (os disclaimers usam isso).
+          const content = bq[1].replace(/^\s*>\s?/, ""); // tolera "> >" de fonte aninhada
+          if (!content.trim()) quote.push("");
+          else quote[quote.length - 1] = `${quote[quote.length - 1]} ${content}`.trim();
+          continue;
+        }
+        flushQuote();
+        const h = line.match(/^(#{1,6})\s+(.*)$/);
+        const ul = line.match(/^\s*[-*]\s+(.*)$/);
+        const ol = line.match(/^\s*\d+[.)]\s+(.*)$/);
+        if (h) { flushPara(); closeList(); const lvl = Math.min(h[1].length, 4); out.push(`<h${lvl}>${inline(h[2])}</h${lvl}>`); }
+        else if (ul) { flushPara(); if (list !== "ul") { closeList(); out.push("<ul>"); list = "ul"; } out.push(`<li>${inline(ul[1])}</li>`); }
+        else if (ol) { flushPara(); if (list !== "ol") { closeList(); out.push("<ol>"); list = "ol"; } out.push(`<li>${inline(ol[1])}</li>`); }
+        else if (!line.trim()) { flushPara(); closeList(); }
+        else para.push(line);
+      }
+      flushPara(); closeList(); flushQuote();
+      return out.join("\n");
+    }
+
+    const trialWelcomeEl = document.querySelector("#trial-welcome");
+
+    async function copyToClipboard(text, button) {
+      try {
+        await navigator.clipboard.writeText(text);
+        const old = button.textContent;
+        button.textContent = "copiado ✓";
+        setTimeout(() => { button.textContent = old; }, 1600);
+      } catch (_) {
+        button.textContent = "selecione e copie manualmente";
+      }
+    }
+
+    // Boas-vindas do teste anônimo: mostra a chave com ação de copiar. Sem isso a
+    // única exibição da chave (na landing) era coberta pelo boot do console no
+    // mesmo instante — e a chave é irrecuperável depois que a aba fecha.
+    function renderTrialWelcome(data) {
+      if (!trialWelcomeEl) return;
+      const apiKey = getApiKey();
+      trialWelcomeEl.innerHTML = "";
+      const msg = document.createElement("div");
+      msg.innerHTML =
+        `<strong>Teste anônimo ativo até ${escHtml(fmtDate(data.expires_at))}.</strong> ` +
+        "Guarde a chave abaixo em um local seguro (ex.: gerenciador de senhas): " +
+        "ela é a única forma de acessar este teste em outro navegador ou se este for limpo. " +
+        "Depois, explore com dados de exemplo ou conecte seu acervo na Mesa.";
+      trialWelcomeEl.appendChild(msg);
+      if (apiKey) {
+        const row = document.createElement("div");
+        row.className = "tw-key-row";
+        const code = document.createElement("code");
+        code.textContent = apiKey;
+        const copyBtn = document.createElement("button");
+        copyBtn.type = "button";
+        copyBtn.textContent = "copiar chave";
+        copyBtn.addEventListener("click", () => copyToClipboard(apiKey, copyBtn));
+        const dismiss = document.createElement("button");
+        dismiss.type = "button";
+        dismiss.className = "ghost tw-dismiss";
+        dismiss.textContent = "já guardei";
+        dismiss.addEventListener("click", () => { trialWelcomeEl.hidden = true; });
+        row.append(code, copyBtn, dismiss);
+        trialWelcomeEl.appendChild(row);
+      }
+      trialWelcomeEl.hidden = false;
+    }
+
+    // Trial countdown + upgrade CTA (conversão): show days left for a trial tenant.
+    function renderTrialStatus(data) {
+      const pill = document.querySelector("#trial-status");
+      if (!pill) return;
+      if (!data || data.trial !== true || !data.expires_at) { pill.hidden = true; return; }
+      const ms = new Date(data.expires_at).getTime() - Date.now();
+      const days = Math.max(0, Math.ceil(ms / 86400000));
+      pill.textContent = `Teste: ${days} ${days === 1 ? "dia" : "dias"} · `;
+      pill.classList.toggle("urgent", days <= 5);
+      pill.hidden = false;
+    }
+
+    // Deadline badge on a nav tab (rotina): surface urgency without navigating.
+    function setNavBadge(name, count) {
+      const btn = document.querySelector(`#nav button[data-nav="${name}"]`);
+      if (!btn) return;
+      let badge = btn.querySelector(".nav-badge");
+      if (!count || count <= 0) { if (badge) badge.remove(); return; }
+      if (!badge) { badge = document.createElement("span"); badge.className = "nav-badge"; btn.appendChild(badge); }
+      badge.textContent = String(count);
+      badge.setAttribute("aria-label", `${count} prazo(s) crítico(s)`);
+    }
+
+    // Download a minuta as .docx (entrega): the lawyer finishes in Word.
+    async function downloadDocx(body, suggestedName, statusEl) {
+      const setStatus = (msg, isError) => {
+        if (!statusEl) return;
+        statusEl.textContent = msg;
+        statusEl.classList.toggle("error", Boolean(isError));
+        statusEl.hidden = false;
+      };
+      try {
+        setStatus("Gerando .docx…", false);
+        const r = await apiFetch("/api/export/docx", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!r.ok) { setStatus("Não foi possível gerar o .docx.", true); return; }
+        const blob = await r.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = suggestedName || "minuta.docx";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+        setStatus("", false);
+        if (statusEl) statusEl.hidden = true;
+      } catch (_) {
+        setStatus("Falha ao baixar o .docx.", true);
+      }
+    }
+    const apiErrorMessage = (data, fallback) => {
+      if (data && data.detail && data.detail.message) return data.detail.message;
+      if (data && typeof data.detail === "string") return data.detail;
+      return fallback;
+    };
+
+    // View navigation — show one section group at a time.
+    function showView(name) {
+      document.querySelectorAll("main [data-view]").forEach((el) => {
+        el.hidden = el.dataset.view !== name;
+      });
+      document.querySelectorAll("#nav button").forEach((b) => {
+        const isActive = b.dataset.nav === name;
+        b.classList.toggle("active", isActive);
+        if (isActive) b.setAttribute("aria-current", "page");
+        else b.removeAttribute("aria-current");
+      });
+    }
+    document.querySelectorAll("#nav button").forEach((b) => {
+      b.addEventListener("click", () => showView(b.dataset.nav));
+    });
+    // Internal telemetry ("Registro do piloto") stays out of the lawyer's task menu.
+    // Reveal it only for the team: ?admin=1 (persisted) exposes the tab.
+    (function initAdminNav() {
+      let admin = false;
+      try {
+        if (new URLSearchParams(location.search).get("admin") === "1") localStorage.setItem("causiaAdmin", "1");
+        admin = localStorage.getItem("causiaAdmin") === "1";
+      } catch (_) { admin = new URLSearchParams(location.search).get("admin") === "1"; }
+      if (!admin) return;
+      const nav = document.querySelector("#nav");
+      if (!nav || nav.querySelector('[data-nav="piloto"]')) return;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.dataset.nav = "piloto";
+      btn.textContent = "Piloto";
+      btn.addEventListener("click", () => showView("piloto"));
+      nav.appendChild(btn);
+    })();
     const checked = (id) => document.querySelector(`#${id}`).checked;
+    const LOCAL_AGENT_BASE_URLS = ["http://127.0.0.1:8765", "http://localhost:8765"];
+    let pendingCredentialsResolve = null;
+
+    // Split-trust mode (ADR-0015): hide local secrets until the backend explicitly
+    // confirms a co-located setup.
+    let AGENT_REMOTE = true;
+    const sourceSel = document.querySelector("#source");
+    const ncCpfRow = document.querySelector("#nc_cpf_row");
+    function toggleNewCaseCpf() {
+      // CPF field only matters for co-located source=mni (remote: agent resolves it)
+      ncCpfRow.style.display = sourceSel.value === "mni" && !AGENT_REMOTE ? "" : "none";
+    }
+    function applyAgentMode() {
+      ["#c_cpf", "#c_pin"].forEach((sel) => {
+        const el = document.querySelector(sel);
+        if (el) {
+          el.hidden = AGENT_REMOTE;
+          el.disabled = AGENT_REMOTE;
+        }
+      });
+      ["#filing-secret-row", "#filing-senha-row"].forEach((sel) => {
+        const el = document.querySelector(sel);
+        if (el) el.style.display = AGENT_REMOTE ? "none" : "";
+      });
+      const connectNote = document.querySelector("#connect-note");
+      if (connectNote) connectNote.style.display = AGENT_REMOTE ? "none" : "";
+      if (AGENT_REMOTE) {
+        const cs = document.querySelector("#connect-status");
+        if (cs) cs.textContent = "Modo seguro: o agente local no seu computador resolve o token (sem CPF/PIN aqui).";
+      }
+      toggleNewCaseCpf();
+    }
+    function renderTrialSetup() {
+      if (!agentSetup) return;
+      let data = null;
+      try {
+        data = JSON.parse(sessionStorage.getItem("causiaTrialSetup") || "null");
+      } catch (_) {
+        data = null;
+      }
+      const command = data && data.show_agent_command === true && data.agent && data.agent.command;
+      if (!command) {
+        agentSetup.hidden = true;
+        agentSetup.innerHTML = "";
+        return;
+      }
+      agentSetup.innerHTML = "";
+      const p = document.createElement("p");
+      p.textContent = "Opção avançada: se o botão não encontrar o agente local instalado, use este comando técnico no computador com o token A3.";
+      const code = document.createElement("code");
+      code.textContent = command;
+      agentSetup.append(p, code);
+      agentSetup.hidden = false;
+    }
+    function clearAgentSetup() {
+      try {
+        const data = JSON.parse(sessionStorage.getItem("causiaTrialSetup") || "null");
+        if (data) {
+          data.show_agent_command = false;
+          sessionStorage.setItem("causiaTrialSetup", JSON.stringify(data));
+        }
+      } catch (_) { /* private mode */ }
+      renderTrialSetup();
+    }
+    function storeAgentSetup(data) {
+      try {
+        sessionStorage.setItem(
+          "causiaTrialSetup",
+          JSON.stringify({ show_agent_command: true, agent: { command: data.command } })
+        );
+      } catch (_) { /* private mode */ }
+      renderTrialSetup();
+    }
+    async function pairLocalAgent(data) {
+      const local = data.local_pairing || (data.agent && data.agent.local_pairing);
+      if (!local || !local.endpoint) return false;
+      const endpoints = [local.endpoint];
+      if (local.endpoint.includes("127.0.0.1")) endpoints.push(local.endpoint.replace("127.0.0.1", "localhost"));
+      let lastError = null;
+      for (const endpoint of endpoints) {
+        try {
+          const response = await window.fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              relay_url: local.relay_url,
+              tenant_id: local.tenant_id,
+              agent_token: local.agent_token,
+            }),
+          });
+          if (!response.ok) throw new Error("Agente local recusou o pareamento.");
+          return true;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      throw lastError || new Error("Agente local recusou o pareamento.");
+    }
+    async function fetchLocalAgent(path, options) {
+      let lastError = null;
+      for (const baseUrl of LOCAL_AGENT_BASE_URLS) {
+        try {
+          return await window.fetch(`${baseUrl}${path}`, options);
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      throw lastError || new Error("Causia Agent local não respondeu.");
+    }
+    async function localAgentCredentialsStatus() {
+      const response = await fetchLocalAgent("/credentials/status");
+      if (!response.ok) throw new Error("Causia Agent local não respondeu.");
+      return await response.json();
+    }
+    async function saveAgentCredentialsFromModal() {
+      const formData = new FormData(agentCredentialsForm);
+      const response = await fetchLocalAgent("/credentials", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(Object.fromEntries(formData.entries())),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(apiErrorMessage(data, "Não foi possível salvar no agente local."));
+      return true;
+    }
+    function openAgentCredentialsModal() {
+      agentCredentialsStatus.textContent = "";
+      agentCredentialsStatus.className = "";
+      agentCredentialsModal.hidden = false;
+      const first = agentCredentialsModal.querySelector("input");
+      if (first) first.focus();
+      return new Promise((resolve) => {
+        pendingCredentialsResolve = resolve;
+      });
+    }
+    function closeAgentCredentialsModal(saved) {
+      agentCredentialsModal.hidden = true;
+      if (pendingCredentialsResolve) pendingCredentialsResolve(saved === true);
+      pendingCredentialsResolve = null;
+    }
+    if (agentCredentialsForm) {
+      agentCredentialsForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const submit = agentCredentialsForm.querySelector('button[type="submit"]');
+        setButtonBusy(submit, true, "Salvando...");
+        agentCredentialsStatus.className = "";
+        agentCredentialsStatus.textContent = "Salvando no agente local...";
+        try {
+          await saveAgentCredentialsFromModal();
+          try { sessionStorage.setItem("causiaAgentCredentialsConfigured", "1"); } catch (_) { /* private mode */ }
+          agentCredentialsForm.reset();
+          agentCredentialsForm.querySelector('[name="tribunal"]').value = "tjmg";
+          closeAgentCredentialsModal(true);
+        } catch (error) {
+          agentCredentialsStatus.className = "error";
+          agentCredentialsStatus.textContent = error.message;
+        } finally {
+          setButtonBusy(submit, false, "");
+        }
+      });
+      agentCredentialsCancel.addEventListener("click", () => closeAgentCredentialsModal(false));
+      agentCredentialsModal.addEventListener("click", (event) => {
+        if (event.target === agentCredentialsModal) closeAgentCredentialsModal(false);
+      });
+      document.addEventListener("keydown", (event) => {
+        if (agentCredentialsModal.hidden) return;
+        if (event.key === "Escape") { closeAgentCredentialsModal(false); return; }
+        if (event.key !== "Tab") return;
+        const focusables = agentCredentialsModal.querySelectorAll('button, input, select, textarea, [tabindex]:not([tabindex="-1"])');
+        if (!focusables.length) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      });
+    }
+    async function ensureLocalCredentials() {
+      try {
+        const status = await localAgentCredentialsStatus();
+        if (status.configured === true) {
+          connectStatus.textContent = "Credenciais locais já salvas neste computador. Sincronizando...";
+          return true;
+        }
+      } catch (error) {
+        throw new Error("Não encontrei o Causia Agent aberto neste computador.");
+      }
+      connectStatus.textContent = "Informe CPF, senha PJe e PIN do token para salvar no agente local.";
+      const saved = await openAgentCredentialsModal();
+      if (!saved) throw new Error("Sincronização cancelada.");
+      return true;
+    }
+    async function pairCurrentLocalAgent() {
+      let pairingData = null;
+      const response = await apiFetch("/api/agent/pairing", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(apiErrorMessage(data, "Falha ao preparar agente local"));
+      pairingData = data;
+      try {
+        await pairLocalAgent(data);
+        clearAgentSetup();
+        agentPairingStatus.textContent = "";
+      } catch (error) {
+        if (pairingData && pairingData.command) storeAgentSetup(pairingData);
+        throw new Error("Não encontrei o Causia Agent aberto neste computador.");
+      }
+    }
+    function renderAgentHealth(h) {
+      const cs = document.querySelector("#connect-status");
+      if (!cs || !h || !h.remote) return;
+      if (h.message && h.ready === false) {
+        cs.textContent = h.message;
+        return;
+      }
+      if (h.ready === true) {
+        cs.textContent = h.message || "Causia Agent conectado: token A3 detectado.";
+        return;
+      }
+      if (h.error || h.reachable === false) {
+        cs.textContent = "Causia Agent ainda não conectado neste computador. Abra o aplicativo local e siga os passos abaixo.";
+        return;
+      }
+      if (h.token_connected === false) {
+        cs.textContent = "Causia Agent conectado, mas o token A3 não foi detectado.";
+        return;
+      }
+      if (h.token_connected === true) {
+        cs.textContent = "Causia Agent conectado: token A3 detectado.";
+      }
+    }
+    async function loadAgentMode() {
+      try {
+        const r = await apiFetch("/api/agent-mode");
+        if (r.ok) AGENT_REMOTE = (await r.json()).remote === true;
+      } catch (_) {
+        /* fail closed: keep the remote-safe UI until the mode can be confirmed */
+      }
+      applyAgentMode();
+      renderTrialSetup();
+      if (AGENT_REMOTE) {
+        try {
+          const h = await apiFetch("/api/agent-health");
+          if (h.ok) renderAgentHealth(await h.json());
+        } catch (_) {
+          /* keep the mode message */
+        }
+      }
+    }
+    async function loadAgentDownload() {
+      const REL = "https://github.com/floripasurf/juris/releases/latest/download";
+      const mac = document.querySelector("#agent-download-mac");
+      const win = document.querySelector("#agent-download-win");
+      if (mac) mac.href = `${REL}/CausiaAgente.dmg`;
+      if (win) win.href = `${REL}/CausiaAgente-win.zip`;
+      try {
+        const r = await window.fetch("/api/agent/latest");   // público (pré-auth ok)
+        if (r.ok) { const d = await r.json(); const v = document.querySelector("#agent-latest-version"); if (v && d.version) v.textContent = `· versão ${d.version}`; }
+      } catch (_) { /* opcional */ }
+    }
+    sourceSel.addEventListener("change", toggleNewCaseCpf);
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -294,15 +2541,19 @@
         cloud: checked("cloud"),
         skip_review: checked("skip_review"),
       };
+      // Co-located MNI needs the CPF; in remote the agent resolves it.
+      if (payload.source === "mni" && !AGENT_REMOTE) {
+        payload.cpf = document.querySelector("#nc_cpf").value.trim() || null;
+      }
 
       try {
-        const response = await fetch("/api/demo-runs", {
+        const response = await apiFetch("/api/demo-runs", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || "Falha desconhecida");
+        if (!response.ok) throw new Error(apiErrorMessage(data, "Falha desconhecida"));
         renderRun(data);
       } catch (error) {
         notice.textContent = error.message;
@@ -321,10 +2572,31 @@
     function renderRun(data) {
       titleEl.textContent = data.succeeded ? "Execução concluída" : "Execução parcial";
       summaryEl.textContent = `${data.artifacts.length} artefatos · ${data.duration_seconds.toFixed(1)}s`;
-      outputDirEl.textContent = data.output_dir;
+      outputDirEl.innerHTML = `<span class="muted">${escHtml(data.output_dir)}</span>`;
+      if (data.output_dir) {
+        const auditBtn = document.createElement("button");
+        auditBtn.type = "button";
+        auditBtn.className = "ghost";
+        auditBtn.textContent = "ver auditoria";
+        auditBtn.addEventListener("click", () => openAudit(data.output_dir));
+        outputDirEl.appendChild(auditBtn);
+      }
       notice.textContent = data.degraded ? `Execução degradada: ${data.degradation_reason}` : "Artefatos gerados.";
       notice.className = data.succeeded ? "notice" : "notice error";
       notice.hidden = false;
+
+      if (data.provider_warning) {
+        providerWarningEl.textContent = data.provider_warning;
+        providerWarningEl.hidden = false;
+      } else {
+        providerWarningEl.textContent = "";
+        providerWarningEl.hidden = true;
+      }
+
+      renderGrounding(data.grounding);
+      renderEstrategia(data.estrategia);
+      renderReview(data.review);
+      loadWorkbench();
 
       if (!data.artifacts.length) {
         artifactsEl.className = "empty";
@@ -333,11 +2605,71 @@
       }
 
       artifactsEl.className = "artifact-list";
-      artifactsEl.innerHTML = '<div class="tabs"></div><div class="preview"><pre></pre></div>';
+      artifactsEl.innerHTML = `<div class="tabs"></div>
+        <div class="preview">
+          <div class="preview-toolbar">
+            <div class="preview-modes">
+              <button type="button" class="preview-mode active" data-mode="formatado">Formatado</button>
+              <button type="button" class="preview-mode" data-mode="markdown">Markdown</button>
+            </div>
+            <button type="button" class="ghost" id="artifact-download">Baixar .docx</button>
+          </div>
+          <div class="preview-body md"></div>
+          <p id="artifact-download-status" class="field-note" hidden></p>
+        </div>`;
       const tabs = artifactsEl.querySelector(".tabs");
-      const preview = artifactsEl.querySelector("pre");
+      const body = artifactsEl.querySelector(".preview-body");
+      const dlStatus = artifactsEl.querySelector("#artifact-download-status");
+      // Ordena por valor para o advogado: minuta/rascunho primeiro, auditoria e
+      // manifesto por último. A ordem alfabética abria o run no audit-summary.md.
+      const artifactRank = (name) => {
+        const n = String(name || "").toLowerCase();
+        if (n.startsWith("minuta")) return 0;
+        if (n.startsWith("rascunho")) return 1;
+        if (n.startsWith("prazos")) return 2;
+        if (n.startsWith("case-summary")) return 3;
+        if (n.startsWith("audit-summary")) return 4;
+        if (n.startsWith("audit")) return 5;
+        return 6; // run-manifest e demais técnicos
+      };
+      const sortedArtifacts = [...data.artifacts].sort(
+        (a, b) => artifactRank(a.name) - artifactRank(b.name) || String(a.name).localeCompare(String(b.name))
+      );
+      let activeArtifact = sortedArtifacts[0];
+      let mode = "formatado";
 
-      data.artifacts.forEach((artifact, index) => {
+      const paint = () => {
+        const text = activeArtifact ? (activeArtifact.preview || "") : "";
+        if (mode === "markdown") {
+          const pre = document.createElement("pre");
+          pre.textContent = text || "(sem prévia)";
+          body.innerHTML = "";
+          body.classList.remove("md");
+          body.appendChild(pre);
+        } else {
+          body.classList.add("md");
+          body.innerHTML = renderMarkdownSafe(text) || "<p class='muted'>(sem prévia)</p>";
+        }
+      };
+
+      artifactsEl.querySelectorAll(".preview-mode").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          mode = btn.dataset.mode;
+          artifactsEl.querySelectorAll(".preview-mode").forEach((b) => b.classList.toggle("active", b === btn));
+          paint();
+        });
+      });
+      artifactsEl.querySelector("#artifact-download").addEventListener("click", () => {
+        if (!activeArtifact) return;
+        const base = (activeArtifact.name || "minuta").replace(/\.[^.]+$/, "");
+        downloadDocx(
+          { output_dir: data.output_dir, name: activeArtifact.name, filename: `${base}.docx` },
+          `${base}.docx`,
+          dlStatus
+        );
+      });
+
+      sortedArtifacts.forEach((artifact, index) => {
         const tab = document.createElement("button");
         tab.type = "button";
         tab.className = `tab${index === 0 ? " active" : ""}`;
@@ -345,12 +2677,1555 @@
         tab.addEventListener("click", () => {
           tabs.querySelectorAll(".tab").forEach((item) => item.classList.remove("active"));
           tab.classList.add("active");
-          preview.textContent = artifact.preview || "(sem prévia)";
+          activeArtifact = artifact;
+          paint();
         });
         tabs.appendChild(tab);
-        if (index === 0) preview.textContent = artifact.preview || "(sem prévia)";
+      });
+      paint();
+    }
+
+    const processosEl = document.querySelector("#processos");
+    const processosFilter = document.querySelector("#processos-filter");
+    const processosSort = document.querySelector("#processos-sort");
+    let processosCache = [];
+
+    const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString("pt-BR") : "—");
+
+    function useProcesso(cnj, tribunal) {
+      showView("caso");
+      document.querySelector("#numero_cnj").value = cnj;
+      document.querySelector("#tribunal").value = tribunal;
+      document.querySelector("#source").value = "mni";
+      const target = document.querySelector("#numero_cnj");
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      target.focus();
+    }
+
+    async function copyText(text) {
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch (_) {
+        const el = document.createElement("textarea");
+        el.value = text;
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand("copy");
+        el.remove();
+      }
+    }
+
+    function queueItem(title, meta, actions) {
+      const item = document.createElement("div");
+      item.className = "queue-item";
+      item.innerHTML = `<strong>${escHtml(title)}</strong><div class="meta">${escHtml(meta || "")}</div>`;
+      if (actions && actions.length) {
+        const actionRow = document.createElement("div");
+        actionRow.className = "queue-actions";
+        actions.forEach((action) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = action.ghost ? "ghost" : "";
+          btn.textContent = action.label;
+          btn.addEventListener("click", action.run);
+          actionRow.appendChild(btn);
+        });
+        item.appendChild(actionRow);
+      }
+      return item;
+    }
+
+    function renderQueue(title, items, emptyText) {
+      const col = document.createElement("div");
+      col.className = "queue-column";
+      col.innerHTML = `<h2>${escHtml(title)}</h2>`;
+      const list = document.createElement("div");
+      list.className = "queue-list";
+      if (!items.length) {
+        const empty = document.createElement("div");
+        empty.className = "queue-empty";
+        empty.textContent = emptyText;
+        list.appendChild(empty);
+      } else {
+        items.forEach((item) => list.appendChild(item));
+      }
+      col.appendChild(list);
+      return col;
+    }
+
+    // Rótulos de operação em linguagem de advogado (nada de "fixture"/"grounding"/"0/0/0").
+    const SOURCE_LABELS = { fixture: "dados de exemplo", datajud: "DataJud", mni: "tribunal (MNI)" };
+    const GROUNDING_LABELS = { verified: "citações verificadas", blocked: "citações bloqueadas", unverified: "citações não verificadas" };
+
+    function sourceLabel(source) {
+      return SOURCE_LABELS[source] || source || "fonte —";
+    }
+
+    function reviewSummary(review) {
+      if (!review) return "sem revisão";
+      const critical = review.critical || 0;
+      const important = review.important || 0;
+      const suggestion = review.suggestion || 0;
+      if (!critical && !important && !suggestion) return "revisão sem apontamentos";
+      return `revisão: ${critical} crítico(s), ${important} importante(s), ${suggestion} sugestão(ões)`;
+    }
+
+    function groundingLabel(status) {
+      return GROUNDING_LABELS[status] || (status ? `citações: ${status}` : "citações —");
+    }
+
+    function runMeta(run) {
+      return `${sourceLabel(run.source)} · ${groundingLabel(run.grounding_status)} · ${reviewSummary(run.review)}`;
+    }
+
+    function caseMeta(item, fallback) {
+      if (!item.latest_run) return fallback;
+      return `${fallback} · ${runMeta(item.latest_run)}`;
+    }
+
+    function caseActions(item, primaryLabel) {
+      const actions = [
+        { label: primaryLabel || "minuta", run: () => useProcesso(item.numero_cnj, item.tribunal || "tjmg") },
+      ];
+      if (item.latest_run && item.latest_run.output_dir) {
+        actions.unshift({ label: "auditoria", ghost: true, run: () => openAudit(item.latest_run.output_dir) });
+      }
+      return actions;
+    }
+
+    function renderSyncStatus(status) {
+      const last = status && status.last_run;
+      const box = document.createElement("div");
+      const failed = Number(status && status.failed_runs || 0);
+      const ok = last && last.success && failed === 0;
+      box.className = `sync-strip ${failed ? "bad" : ok ? "ok" : ""}`;
+      const body = document.createElement("div");
+      const title = document.createElement("strong");
+      title.textContent = last ? `Última atualização: ${fmtDate(last.finished_at || last.started_at)}` : "Atualização automática ainda não executada";
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      if (last) {
+        const statusText = last.success ? "concluída" : "falhou";
+        const changes = last.had_changes ? `${last.new_movimentos || 0} movimento(s)` : "sem alterações";
+        const failure = last.error ? ` · ${last.error}` : "";
+        meta.textContent = `${statusText} · ${(last.source || "fonte").toUpperCase()} · ${changes}${failure}`;
+      } else {
+        meta.textContent = "A agenda depende do job noturno ou do connect com sincronização.";
+      }
+      body.append(title, meta);
+      const badge = document.createElement("span");
+      badge.className = "badge";
+      badge.textContent = failed ? `${failed} alerta(s)` : "sem alertas";
+      box.append(body, badge);
+      return box;
+    }
+
+    function workbenchIsEmpty(wb) {
+      const queues = [
+        "critical_deadlines", "recent_movements", "draft_ready",
+        "blocked_cases", "pending_filings", "recent_artifacts",
+      ];
+      const noItems = queues.every((k) => !(wb[k] && wb[k].length));
+      const neverSynced = !(wb.sync_status && wb.sync_status.last_run);
+      return noItems && neverSynced;
+    }
+
+    function exploreWithSampleData() {
+      // "Explorar" tem que explorar: pré-preenche E executa. Antes só abria o
+      // formulário técnico e parava — o advogado do teste anônimo não sabe o que
+      // é "modo de saída" e desistia antes de ver o produto.
+      showView("caso");
+      const source = document.querySelector("#source");
+      if (source) { source.value = "fixture"; source.dispatchEvent(new Event("change")); }
+      const demoForm = document.querySelector("#demo-form");
+      if (demoForm) demoForm.requestSubmit();
+      const results = document.querySelector("#result-title");
+      if (results) results.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    function renderWorkbenchOnboarding() {
+      const box = document.createElement("div");
+      box.className = "workbench-onboarding";
+      box.innerHTML = `
+        <h2>Comece por aqui</h2>
+        <p>Você pode avaliar o Causia agora com dados de exemplo, sem instalar nada — ou
+           conectar seu acervo real quando quiser. As credenciais do seu token ficam no
+           seu computador, nunca neste navegador.</p>
+        <div class="onboarding-actions">
+          <button type="button" id="onboarding-explore">Explorar com dados de exemplo</button>
+          <button type="button" id="onboarding-goto-acervo" class="ghost">Conectar meu acervo</button>
+        </div>`;
+      box.querySelector("#onboarding-explore").addEventListener("click", exploreWithSampleData);
+      box.querySelector("#onboarding-goto-acervo").addEventListener("click", () => showView("acervo"));
+      return box;
+    }
+
+    function renderWorkbench(wb) {
+      setNavBadge("agenda", (wb.critical_deadlines || []).length);
+      const critical = (wb.critical_deadlines || [])
+        .map((p) => queueItem(
+          p.numero_cnj,
+          caseMeta(p, `${fmtDate(p.data_limite)} · ${p.rule_nome || "prazo pendente"}`),
+          caseActions(p, "minuta")
+        ));
+
+      const updated = (wb.recent_movements || [])
+        .map((p) => queueItem(
+          p.numero_cnj,
+          caseMeta(p, `sync ${fmtDate(p.last_sync_at)} · ${(p.tribunal || "").toUpperCase()}`),
+          [
+            { label: "abrir", ghost: true, run: () => openProcessoDetail(p.numero_cnj) },
+            ...caseActions(p, "minuta"),
+          ]
+        ));
+
+      const draftReady = (wb.draft_ready || [])
+        .map((p) => queueItem(
+          p.numero_cnj,
+          caseMeta(p, `${p.classe || "processo"} · ${p.prazos_pendentes || 0} prazo(s)`),
+          caseActions(p, "gerar")
+        ));
+
+      const blocked = (wb.blocked_cases || []).map((b) => queueItem(
+        b.numero_cnj,
+        `${b.grounding_blocked_reason || "citações sem lastro bloquearam a minuta"} · ${runMeta(b)}`,
+        [{ label: "abrir caso", run: () => useProcesso(b.numero_cnj, b.tribunal || "tjmg") }]
+      ));
+
+      const pending = (wb.pending_filings || []).map((p) => queueItem(
+        p.numero_cnj || p.receipt_id || "protocolo",
+        `protocolo interrompido · ${escHtml(p.receipt_id || "")}`,
+        [{ label: "retomar", run: () => { showView("protocolo"); loadPendingRecovery(p.pending_key); } }]
+      ));
+
+      const artifacts = (wb.recent_artifacts || []).map((a) => queueItem(
+        a.numero_cnj || "última execução",
+        `${a.artifact_count || 0} artefato(s) · ${runMeta(a)} · ${fmtDate(a.finished_at)}`,
+        [
+          { label: "auditoria", ghost: true, run: () => openAudit(a.output_dir) },
+          { label: "copiar caminho", run: () => copyText(a.output_dir) },
+        ]
+      ));
+
+      workbenchEl.innerHTML = "";
+      if (workbenchIsEmpty(wb)) {
+        workbenchEl.append(renderWorkbenchOnboarding());
+        return;
+      }
+      workbenchEl.append(
+        renderSyncStatus(wb.sync_status || {}),
+        renderQueue("Prazos críticos", critical, "Nenhum prazo crítico."),
+        renderQueue("Novas movimentações", updated, "Sem sync recente."),
+        renderQueue("Prontos para rascunho", draftReady, "Nenhum processo importado."),
+        renderQueue("Bloqueados", blocked, "Nenhum bloqueio nesta sessão."),
+        renderQueue("Protocolos pendentes", pending, "Nenhum protocolo interrompido."),
+        renderQueue("Artefatos recentes", artifacts, "Nenhum artefato nesta sessão.")
+      );
+    }
+
+    async function loadWorkbench() {
+      try {
+        const response = await apiFetch("/api/workbench");
+        const data = response.ok ? await response.json() : {};
+        renderWorkbench(data);
+      } catch (_) {
+        workbenchEl.innerHTML = "";
+        workbenchEl.appendChild(renderQueue("Mesa", [], "Não foi possível carregar a mesa."));
+      }
+    }
+
+    const procModal = document.querySelector("#proc-modal");
+    const procModalBody = document.querySelector("#proc-modal-body");
+    let procLastFocus = null;
+    function openProcModal() {
+      procLastFocus = document.activeElement;
+      procModal.hidden = false;
+      const closeBtn = procModal.querySelector(".modal-close");
+      if (closeBtn) closeBtn.focus();
+    }
+    function closeProcModal() {
+      procModal.hidden = true;
+      if (procLastFocus && procLastFocus.focus) procLastFocus.focus();
+      procLastFocus = null;
+    }
+    procModal.querySelector(".modal-close").addEventListener("click", closeProcModal);
+    procModal.addEventListener("click", (e) => { if (e.target === procModal) closeProcModal(); });
+    document.addEventListener("keydown", (e) => {
+      if (procModal.hidden) return;
+      if (e.key === "Escape") { closeProcModal(); return; }
+      if (e.key === "Tab") {
+        // focus trap: keep Tab within the modal
+        const focusables = procModal.querySelectorAll('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+        if (!focusables.length) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    });
+
+    async function openProcessoDetail(cnj) {
+      procModalBody.innerHTML = "<p class='muted'>Carregando…</p>";
+      openProcModal();
+      try {
+        const r = await apiFetch(`/api/processos/${encodeURIComponent(cnj)}`);
+        if (!r.ok) throw new Error(r.status === 404 ? "Processo não encontrado" : "Falha ao carregar");
+        const detail = await r.json();
+        // Protocolo ligado ao caso: pull this case's pending filings so the lawyer can
+        // resume a filing without leaving the case page.
+        let pending = [];
+        try {
+          const fs = await apiFetch("/api/filing/status");
+          if (fs.ok) pending = ((await fs.json()).pending || []).filter((p) => p.numero_cnj === cnj);
+        } catch (_) { /* filing status is best-effort in the case view */ }
+        renderProcDetail(detail, pending);
+      } catch (err) {
+        procModalBody.innerHTML = `<p class="notice error" style="position:static">${escHtml(err.message)}</p>`;
+      }
+    }
+
+    // Resume a pending filing from the case page: close the modal, go to Protocolo, load it.
+    function resumeFilingFromCase(pendingKey) {
+      closeProcModal();
+      showView("protocolo");
+      loadPendingRecovery(pendingKey);
+    }
+
+    function renderProcDetail(d, pendingFilings) {
+      const meta = [
+        ["Classe", d.classe], ["Assunto", d.assunto], ["Órgão", d.orgao_julgador],
+        ["Valor da causa", d.valor_causa != null ? `R$ ${d.valor_causa.toLocaleString("pt-BR")}` : null],
+        ["Última sinc.", fmtDate(d.last_sync_at)],
+      ].filter(([, v]) => v).map(([k, v]) => `<div><dt>${k}</dt><dd>${escHtml(v)}</dd></div>`).join("");
+
+      const prazos = d.prazos.length
+        ? d.prazos.map((p) => `<li><span class="badge ${p.urgencia ? "urg-" + escHtml(p.urgencia) : "urg-baixa"}">${fmtDate(p.data_limite)}</span> ${escHtml(p.rule_nome || "—")} <span class="muted">${escHtml(p.tipo_acao || "")}</span></li>`).join("")
+        : "<li class='muted'>Nenhum prazo pendente.</li>";
+
+      const movs = d.movimentos.length
+        ? d.movimentos.map((m) => `<li><span class="mov-date">${fmtDate(m.data_hora)}</span><span class="mov-desc">${escHtml(m.descricao || "—")}</span>${m.categoria ? `<span class="badge mov-cat">${escHtml(m.categoria)}</span>` : ""}</li>`).join("")
+        : "<li class='muted'>Sem movimentos sincronizados.</li>";
+
+      const pending = pendingFilings || [];
+      const pendingHtml = pending.length
+        ? pending.map((p) => `<li>protocolo interrompido <span class="muted">(${escHtml(p.tipo_documento || p.pending_key)})</span>
+            <button type="button" class="ghost" data-resume="${escHtml(p.pending_key)}">retomar</button></li>`).join("")
+        : "<li class='muted'>Nenhum protocolo pendente para este caso.</li>";
+
+      procModalBody.innerHTML = `
+        <h2>${escHtml(d.numero_cnj)}</h2>
+        <div class="proc-meta">${escHtml((d.tribunal || "").toUpperCase())}</div>
+        <dl class="detail-meta">${meta}</dl>
+        <h4>Prazos pendentes</h4>
+        <ul class="detail-prazos">${prazos}</ul>
+        <h4>Protocolo</h4>
+        <ul class="detail-prazos">${pendingHtml}</ul>
+        <div class="row"><button type="button" data-protocolar="${escHtml(d.numero_cnj)}">Protocolar peça</button></div>
+        <h4>Histórico de movimentos (${d.movimentos.length})</h4>
+        <ul class="timeline">${movs}</ul>`;
+
+      procModalBody.querySelectorAll("[data-resume]").forEach((btn) => {
+        btn.addEventListener("click", () => resumeFilingFromCase(btn.dataset.resume));
+      });
+      const protoBtn = procModalBody.querySelector("[data-protocolar]");
+      if (protoBtn) protoBtn.addEventListener("click", () => { closeProcModal(); showView("protocolo"); });
+    }
+
+    function filteredProcessos() {
+      const q = (processosFilter.value || "").trim().toLowerCase();
+      const sorted = processosCache
+        .filter((p) => {
+          if (!q) return true;
+          return [p.numero_cnj, p.classe, p.assunto, p.tribunal].some((v) => String(v || "").toLowerCase().includes(q));
+        })
+        .slice();
+      if (processosSort.value === "sync") {
+        sorted.sort((a, b) => String(b.last_sync_at || "").localeCompare(String(a.last_sync_at || "")));
+      } else if (processosSort.value === "prazos") {
+        sorted.sort((a, b) => (b.prazos_pendentes || 0) - (a.prazos_pendentes || 0));
+      } else {
+        sorted.sort((a, b) => String(a.proximo_prazo || "9999").localeCompare(String(b.proximo_prazo || "9999")));
+      }
+      return sorted;
+    }
+
+    function renderProcessos(items) {
+      if (!items.length) {
+        processosEl.className = "proc-empty";
+        processosEl.textContent =
+          processosCache.length ? "Nenhum processo encontrado com esses filtros." : "Nenhum processo importado ainda.";
+        return;
+      }
+      processosEl.className = "proc-list";
+      processosEl.innerHTML = "";
+      items.forEach((p) => {
+        const row = document.createElement("div");
+        row.className = "proc-row";
+        const urg = p.proximo_prazo_urgencia ? `urg-${p.proximo_prazo_urgencia}` : "urg-baixa";
+        const prazo = p.proximo_prazo
+          ? `<span class="badge ${urg}">${fmtDate(p.proximo_prazo)}</span>`
+          : '<span class="urg-baixa">sem prazo</span>';
+        const left = document.createElement("div");
+        left.innerHTML = `<div class="proc-cnj">${escHtml(p.numero_cnj)}</div><div class="proc-meta">${escHtml(p.classe || "—")} · ${escHtml((p.tribunal || "").toUpperCase())}</div>`;
+        const mid = document.createElement("div");
+        mid.className = "proc-meta";
+        mid.textContent = p.assunto || "";
+        const right = document.createElement("div");
+        right.className = "proc-prazo";
+        right.innerHTML = `${prazo}<div class="proc-meta">${p.prazos_pendentes} prazo(s)</div>`;
+        const action = document.createElement("div");
+        action.className = "proc-actions";
+        const detBtn = document.createElement("button");
+        detBtn.type = "button";
+        detBtn.className = "ghost";
+        detBtn.textContent = "detalhes";
+        detBtn.addEventListener("click", () => openProcessoDetail(p.numero_cnj));
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = "minuta";
+        btn.addEventListener("click", () => useProcesso(p.numero_cnj, p.tribunal));
+        action.append(detBtn, btn);
+        row.append(left, mid, right, action);
+        processosEl.appendChild(row);
       });
     }
+
+    async function loadProcessos() {
+      try {
+        const response = await apiFetch("/api/processos");
+        const data = await response.json();
+        processosCache = data.processos || [];
+        renderProcessos(filteredProcessos());
+      } catch (error) {
+        processosEl.className = "proc-empty";
+        processosEl.textContent = "Não foi possível carregar os processos.";
+      }
+    }
+    function persistFilter(key, val) { try { localStorage.setItem(key, val); } catch (_) { /* private mode */ } }
+    function restoreFilter(key) { try { return localStorage.getItem(key) || ""; } catch (_) { return ""; } }
+    // Restore persisted filters so the daily view survives a reload.
+    processosFilter.value = restoreFilter("juris.filter.processos");
+    if (restoreFilter("juris.sort.processos")) processosSort.value = restoreFilter("juris.sort.processos");
+    processosFilter.addEventListener("input", () => {
+      persistFilter("juris.filter.processos", processosFilter.value);
+      renderProcessos(filteredProcessos());
+    });
+    processosSort.addEventListener("change", () => {
+      persistFilter("juris.sort.processos", processosSort.value);
+      renderProcessos(filteredProcessos());
+    });
+
+    const connectForm = document.querySelector("#connect-form");
+    const connectBtn = document.querySelector("#connect-btn");
+    const connectStatus = document.querySelector("#connect-status");
+    const agentCredentialsEdit = document.querySelector("#agent-credentials-edit");
+    const firstAccessCredentials = document.querySelector("#first-access-credentials");
+    const firstAccessConnect = document.querySelector("#first-access-connect");
+    const connectSeed = document.querySelector("#c_seed");
+
+    async function updateAgentCredentialsFromAcervo() {
+      connectStatus.textContent = "Atualize CPF, senha PJe e PIN do token neste computador.";
+      const saved = await openAgentCredentialsModal();
+      connectStatus.textContent = saved
+        ? "Credenciais atualizadas. Agora clique em Conectar / sincronizar."
+        : "Atualização cancelada.";
+    }
+
+    if (agentCredentialsEdit) agentCredentialsEdit.addEventListener("click", updateAgentCredentialsFromAcervo);
+    if (firstAccessCredentials) firstAccessCredentials.addEventListener("click", updateAgentCredentialsFromAcervo);
+    if (firstAccessConnect) firstAccessConnect.addEventListener("click", () => connectBtn.click());
+
+    connectForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const cpf = document.querySelector("#c_cpf").value.trim();
+      const pin = document.querySelector("#c_pin").value;
+      const seedText = connectSeed ? connectSeed.value.trim() : "";
+      // Split-trust: in remote mode the local agent resolves CPF/PIN — the cloud must
+      // send neither. Co-located still requires both.
+      let body;
+      if (AGENT_REMOTE) {
+        body = { tribunal: "tjmg", sync: true };
+      } else {
+        if (!cpf || !pin) {
+          connectStatus.textContent = "Informe CPF e PIN.";
+          return;
+        }
+        body = { cpf, pin, tribunal: "tjmg", sync: true };
+      }
+      if (seedText) body.seed_text = seedText;
+      connectBtn.disabled = true;
+      connectBtn.textContent = "Conectando…";
+      connectStatus.textContent = AGENT_REMOTE
+        ? "Preparando o agente local..."
+        : "Lendo token e sincronizando (em segundo plano)…";
+      try {
+        if (AGENT_REMOTE) {
+          await ensureLocalCredentials();
+          connectStatus.textContent = "Conectando o agente local...";
+          await pairCurrentLocalAgent();
+          connectStatus.textContent = "Lendo token e sincronizando (em segundo plano)…";
+        }
+        const response = await apiFetch("/api/connect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(apiErrorMessage(data, "Falha ao conectar"));
+        document.querySelector("#c_pin").value = "";
+        await pollConnect(data.job_id);
+      } catch (error) {
+        connectStatus.textContent = error.message;
+      } finally {
+        connectBtn.disabled = false;
+        connectBtn.textContent = "Conectar / sincronizar";
+      }
+    });
+
+    async function pollConnect(jobId) {
+      for (let i = 0; i < 600; i++) {
+        const r = await apiFetch(`/api/connect/${jobId}`);
+        const job = await r.json();
+        if (job.status === "running") {
+          await new Promise((res) => setTimeout(res, 2000));
+          continue;
+        }
+        if (job.status === "error") {
+          connectStatus.textContent = `Falha: ${job.error}`;
+          return;
+        }
+        const d = job.result;
+        const sync = d.sync ? `, ${d.sync.succeeded}/${d.sync.total} sincronizados` : "";
+        if (d.total_tracked === 0) {
+          connectStatus.textContent =
+            "Conectado ao agente local, mas nenhum processo foi importado. " +
+            "Não encontramos avisos pendentes e nenhum CNJ foi informado para acompanhar.";
+        } else {
+          connectStatus.textContent =
+            `${d.avisos_added} por avisos, ${d.seed_added} por CNJs informados ` +
+            `(total ${d.total_tracked})${sync}.`;
+        }
+        loadProcessos();
+        loadPrazos();
+        loadWorkbench();
+        return;
+      }
+      connectStatus.textContent = "Tempo limite aguardando a sincronização.";
+    }
+
+    const prazosEl = document.querySelector("#prazos");
+    const prazosFilter = document.querySelector("#prazos-filter");
+    const prazosUrgency = document.querySelector("#prazos-urgency");
+    let prazosCache = [];
+
+    function filteredPrazos() {
+      const q = (prazosFilter.value || "").trim().toLowerCase();
+      const urgency = prazosUrgency.value;
+      return prazosCache
+        .filter((p) => !urgency || p.urgencia === urgency)
+        .filter((p) => {
+          if (!q) return true;
+          return [p.numero_cnj, p.rule_nome, p.tipo_acao].some((v) => String(v || "").toLowerCase().includes(q));
+        })
+        .slice()
+        .sort((a, b) => String(a.data_limite || "9999").localeCompare(String(b.data_limite || "9999")));
+    }
+
+    function renderPrazos(items) {
+      if (!items.length) {
+        prazosEl.className = "proc-empty";
+        prazosEl.textContent = prazosCache.length ? "Nenhum prazo encontrado com esses filtros." : "Nenhum prazo pendente.";
+        return;
+      }
+      prazosEl.className = "proc-list";
+      prazosEl.innerHTML = "";
+      items.forEach((p) => {
+        const row = document.createElement("div");
+        row.className = "proc-row";
+        const urg = p.urgencia ? `urg-${escHtml(p.urgencia)}` : "urg-baixa";
+        const left = document.createElement("div");
+        left.innerHTML = `<div class="proc-cnj">${escHtml(p.numero_cnj)}</div><div class="proc-meta">${escHtml(p.rule_nome || "—")}</div>`;
+        const mid = document.createElement("div");
+        mid.className = "proc-meta";
+        mid.textContent = p.tipo_acao || "";
+        const right = document.createElement("div");
+        right.className = "proc-prazo";
+        right.innerHTML = `<span class="badge ${urg}">${fmtDate(p.data_limite)}</span>`;
+        const action = document.createElement("div");
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = "minuta";
+        btn.addEventListener("click", () => useProcesso(p.numero_cnj, "tjmg"));
+        action.appendChild(btn);
+        row.append(left, mid, right, action);
+        prazosEl.appendChild(row);
+      });
+    }
+
+    async function loadPrazos() {
+      try {
+        const response = await apiFetch("/api/prazos");
+        const data = await response.json();
+        prazosCache = data.prazos || [];
+        renderPrazos(filteredPrazos());
+      } catch (error) {
+        prazosEl.className = "proc-empty";
+        prazosEl.textContent = "Não foi possível carregar a agenda.";
+      }
+    }
+    prazosFilter.addEventListener("input", () => renderPrazos(filteredPrazos()));
+    if (restoreFilter("juris.filter.prazos")) prazosUrgency.value = restoreFilter("juris.filter.prazos");
+    prazosUrgency.addEventListener("change", () => {
+      persistFilter("juris.filter.prazos", prazosUrgency.value);
+      renderPrazos(filteredPrazos());
+    });
+
+    const accessForm = document.querySelector("#access-key-form");
+    const accessLabel = document.querySelector("#access-key-label");
+    const accessStatus = document.querySelector("#access-key-status");
+    const accessSummary = document.querySelector("#access-summary");
+    const accessKeyResult = document.querySelector("#access-key-result");
+    const accessSubmit = document.querySelector("#access-key-submit");
+
+    // "Sua chave de acesso": a chave crua só existe neste navegador (o servidor
+    // guarda apenas o hash). Sem esta seção o titular não tinha como copiá-la —
+    // e a chave é o único caminho de volta a um teste anônimo.
+    function renderMyKey(data) {
+      const box = document.querySelector("#my-key-box");
+      if (!box) return;
+      const apiKey = getApiKey();
+      if (!apiKey) { box.hidden = true; return; }
+      box.innerHTML = "";
+      const msg = document.createElement("div");
+      msg.innerHTML =
+        "<strong>Sua chave de acesso (deste navegador).</strong> " +
+        "Guarde-a em local seguro: ela não fica salva em nossos servidores" +
+        (data && data.trial === true ? " e é a única forma de acessar este teste em outro navegador." : ".");
+      const row = document.createElement("div");
+      row.className = "tw-key-row";
+      const code = document.createElement("code");
+      code.textContent = apiKey;
+      const copyBtn = document.createElement("button");
+      copyBtn.type = "button";
+      copyBtn.textContent = "copiar chave";
+      copyBtn.addEventListener("click", () => copyToClipboard(apiKey, copyBtn));
+      row.append(code, copyBtn);
+      box.append(msg, row);
+      box.hidden = false;
+    }
+
+    function renderAccessSummary(data) {
+      renderTrialStatus(data);
+      renderMyKey(data);
+      const keys = data.keys || [];
+      accessSummary.className = keys.length ? "proc-list" : "proc-empty";
+      accessSummary.innerHTML = "";
+      if (!keys.length) {
+        accessSummary.textContent = "Nenhuma chave adicional gerada.";
+        return;
+      }
+      keys.forEach((key) => {
+        const row = document.createElement("div");
+        row.className = "proc-row";
+        const left = document.createElement("div");
+        left.innerHTML = `<div class="proc-cnj">${escHtml(key.label || key.id)}</div><div class="proc-meta">${escHtml(key.id)}</div>`;
+        const meta = document.createElement("div");
+        meta.className = "proc-meta";
+        meta.textContent = data.expires_at ? `expira em ${fmtDate(data.expires_at)}` : "sem expiração de teste";
+        row.append(left, meta);
+        accessSummary.appendChild(row);
+      });
+    }
+
+    async function loadAccessSummary() {
+      try {
+        const response = await apiFetch("/api/access");
+        const data = await response.json();
+        if (!response.ok) throw new Error(apiErrorMessage(data, "Falha ao carregar acessos"));
+        renderAccessSummary(data);
+      } catch (error) {
+        accessSummary.className = "proc-empty";
+        accessSummary.textContent = error.message;
+      }
+    }
+
+    async function loadLibrary() {
+      const box = document.querySelector("#library-list");
+      const cov = document.querySelector("#library-coverage");
+      try {
+        const resp = await apiFetch("/api/library");
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(apiErrorMessage(data, "Falha ao carregar a biblioteca"));
+        const items = data.items || [];
+        box.className = items.length ? "proc-list" : "proc-empty";
+        box.innerHTML = "";
+        if (!items.length) box.textContent = "Nenhum documento na biblioteca ainda. Envie peças e modelos acima.";
+        items.forEach((item) => {
+          const row = document.createElement("div");
+          row.className = "proc-row";
+          const usoLabel = item.uso === "estilo" ? "estilo (não citável)" : "fonte citável";
+          row.innerHTML = `<div><div class="proc-cnj">${escHtml(item.title || item.id)}</div>` +
+            `<div class="proc-meta">${escHtml(item.source_type)} · ${escHtml(usoLabel)}` +
+            `${item.tipo_peticao ? " · " + escHtml(item.tipo_peticao) : ""}` +
+            `${item.area ? " · " + escHtml(item.area) : ""}</div></div>` +
+            `<div class="proc-meta">${escHtml(item.source_date || "")}</div>`;
+          box.appendChild(row);
+        });
+        // /api/library aninha o retorno de coverage_report() sob "coverage", que já
+        // devolve os contadores sob sua própria chave "coverage" (dupla aninhagem).
+        const coverage = (data.coverage && data.coverage.coverage) || {};
+        const byTipoPeticao = coverage.tipo_peticao || {};
+        const byArea = coverage.area || {};
+        const parts = Object.entries(byTipoPeticao).map(([k, v]) => `${k}: ${v}`);
+        const areaParts = Object.entries(byArea).map(([k, v]) => `${k}: ${v}`);
+        cov.className = "proc-meta";
+        cov.textContent = [
+          parts.length ? `Tipo de peça — ${parts.join(" · ")}` : "Tipo de peça: sem classificação ainda",
+          areaParts.length ? `Áreas — ${areaParts.join(" · ")}` : "Áreas: nenhuma área enviada ainda",
+        ].join(" | ");
+      } catch (error) {
+        box.className = "proc-empty";
+        box.textContent = error.message;
+      }
+    }
+
+    async function uploadLibraryBatch(event) {
+      event.preventDefault();
+      const filesInput = document.querySelector("#library-files");
+      const status = document.querySelector("#library-upload-status");
+      const files = Array.from(filesInput.files || []);
+      if (!files.length) return;
+      const tipo = document.querySelector("#library-tipo").value;
+      const tipoPeticao = document.querySelector("#library-tipo-peticao").value;
+      const area = document.querySelector("#library-area").value.trim();
+      const copyrightAck = document.querySelector("#library-copyright-ack");
+      if (!area) {
+        status.hidden = false;
+        status.textContent = "Informe a área de atuação antes de enviar para a biblioteca.";
+        return;
+      }
+      if (tipo === "doutrina_escritorio" && !copyrightAck.checked) {
+        status.hidden = false;
+        status.textContent = "Para enviar doutrina, confirme a responsabilidade pelo direito de uso do material.";
+        return;
+      }
+      status.hidden = false;
+      let ok = 0;
+      const errors = [];
+      try {
+        for (let i = 0; i < files.length; i += 1) {           // sequencial: endpoint é rate-limited
+          const file = files[i];
+          status.textContent = `Enviando ${i + 1}/${files.length}: ${file.name}…`;
+          const payload = {
+            filename: file.name,
+            content_base64: await fileToBase64(file),
+            title: file.name.replace(/\.[^.]+$/, ""),
+            source_type: tipo,
+            tipo_peticao: tipoPeticao,
+            area,
+            provenance_kind: "acervo_do_escritorio",
+            source_publisher: "acervo do escritório",
+            source_date: new Date().toISOString().slice(0, 10),
+            copyright_ack: tipo === "doutrina_escritorio",
+          };
+          let attempt = 0;
+          let settled = false;                                // conta como sucesso OU erro; 429 persistente não some
+          while (attempt < 3) {
+            const resp = await apiFetch("/api/corpus/upload", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            });
+            if (resp.status === 429) {                         // backoff: prefixo caro (12/min)
+              attempt += 1;
+              status.textContent = `Limite de envio atingido — aguardando para continuar (${file.name})…`;
+              await new Promise((r) => setTimeout(r, 6000 * attempt));
+              continue;
+            }
+            if (resp.ok) ok += 1;
+            else {
+              const data = await resp.json().catch(() => ({}));
+              errors.push(`${file.name}: ${apiErrorMessage(data, "falha no envio")}`);
+            }
+            settled = true;
+            break;
+          }
+          if (!settled) errors.push(`${file.name}: limite de envio persistente — tente novamente em alguns minutos`);
+        }
+      } catch (error) {
+        errors.push(`falha de rede: ${error.message}`);       // fetch rejeitado no meio do lote não trava o status
+      }
+      status.textContent = `Concluído: ${ok}/${files.length} enviados.` +
+        (errors.length ? ` Erros: ${errors.join(" · ")}` : "");
+      filesInput.value = "";
+      loadLibrary();
+    }
+
+    async function searchLibrary(event) {
+      event.preventDefault();
+      const q = document.querySelector("#library-search-q").value.trim();
+      if (!q) return;
+      const area = document.querySelector("#library-search-area").value.trim();
+      const wrap = document.querySelector("#library-search-results");
+      const fundEl = document.querySelector("#library-results-fundamento");
+      const estEl = document.querySelector("#library-results-estilo");
+      let results = [];
+      try {
+        const params = new URLSearchParams({ q, include_estilo: "1", top_k: "12" });
+        if (area) params.set("area", area);
+        const resp = await apiFetch(`/api/corpus/search?${params.toString()}`);
+        const data = await resp.json();
+        results = data.results || [];
+      } catch (error) {
+        fundEl.className = "proc-empty";
+        fundEl.textContent = `Falha na busca: ${error.message}`;
+        estEl.className = "proc-empty";
+        estEl.textContent = "";
+        wrap.hidden = false;
+        return;
+      }
+      const render = (el, rows, vazio) => {
+        el.innerHTML = "";
+        el.className = rows.length ? "proc-list" : "proc-empty";
+        if (!rows.length) { el.textContent = vazio; return; }
+        rows.forEach((r) => {
+          const row = document.createElement("div");
+          row.className = "proc-row";
+          const meta = [r.tribunal || r.tipo || "", r.area ? `área: ${r.area}` : ""].filter(Boolean).join(" · ");
+          row.innerHTML = `<div><div class="proc-meta">${escHtml(meta)}</div>` +
+            `<div>${escHtml(String(r.texto || "").slice(0, 220))}…</div></div>`;
+          el.appendChild(row);
+        });
+      };
+      render(fundEl, results.filter((r) => r.uso !== "estilo"), "Nenhuma fonte citável encontrada.");
+      render(estEl, results.filter((r) => r.uso === "estilo"), "Nenhum modelo/peça do escritório encontrado.");
+      wrap.hidden = false;
+    }
+
+    document.querySelector("#library-upload-form").addEventListener("submit", uploadLibraryBatch);
+    document.querySelector("#library-search-form").addEventListener("submit", searchLibrary);
+
+    accessForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      accessKeyResult.hidden = true;
+      accessStatus.textContent = "";
+      setButtonBusy(accessSubmit, true, "Gerando...");
+      try {
+        const response = await apiFetch("/api/access-keys", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ label: accessLabel.value.trim() || "equipe" }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(apiErrorMessage(data, "Falha ao gerar chave"));
+        accessKeyResult.innerHTML = "";
+        const p = document.createElement("p");
+        p.textContent = `Chave gerada${data.expires_at ? `, válida até ${fmtDate(data.expires_at)}` : ""}. Ela aparece só agora.`;
+        const code = document.createElement("code");
+        code.textContent = data.api_key;
+        accessKeyResult.append(p, code);
+        accessKeyResult.className = "notice";
+        accessKeyResult.hidden = false;
+        accessLabel.value = "";
+        await loadAccessSummary();
+      } catch (error) {
+        accessStatus.textContent = error.message;
+      } finally {
+        setButtonBusy(accessSubmit, false, "");
+      }
+    });
+
+    const filingStatusEl = document.querySelector("#filing-status");
+    const filingResultEl = document.querySelector("#filing-result");
+    const filingRecoveryEl = document.querySelector("#filing-recovery");
+    const filingDryRunBtn = document.querySelector("#filing-dry-run");
+    const filingSubmitBtn = document.querySelector("#filing-submit");
+    const filingArtifactSel = document.querySelector("#fl_artifact");
+    const filingLoadArtifactBtn = document.querySelector("#filing-load-artifact");
+    let filingArtifacts = [];
+
+    function filingPayload() {
+      const payload = {
+        numero_cnj: document.querySelector("#fl_cnj").value.trim(),
+        tribunal: document.querySelector("#fl_tribunal").value.trim() || "tjmg",
+        tipo_documento: document.querySelector("#fl_tipo_doc").value.trim() || "manifestacao",
+        tipo_peticao: document.querySelector("#fl_tipo_peticao").value.trim() || "manifestacao",
+        draft_markdown: document.querySelector("#fl_draft").value,
+        prazo_override: document.querySelector("#fl_prazo_override").value.trim() || null,
+        review_confirmed: document.querySelector("#fl_review").checked,
+        consent: document.querySelector("#fl_consent").checked,
+      };
+      if (!AGENT_REMOTE) {
+        payload.cpf = document.querySelector("#fl_cpf").value.trim();
+        payload.senha = document.querySelector("#fl_senha").value;
+        payload.pin = document.querySelector("#fl_pin").value;
+      }
+      return payload;
+    }
+
+    function renderFilingResult(data) {
+      const pf = data.preflight || {};
+      const checks = (pf.checks || []).map((c) => `<li class="${c.passed ? "sev-suggestion" : "sev-critical"}">
+          <strong>${escHtml(c.name)}</strong>
+          <p>${escHtml(c.message)}</p>
+        </li>`).join("") || "<li class='muted'>Sem itens de checagem.</li>";
+      const coc = data.chain_of_custody;
+      const hashes = coc ? `<div class="queue-item"><strong>Cadeia de custódia</strong>
+          <div class="meta">PDF: ${escHtml(coc.pdf_hash)}</div>
+          <div class="meta">Assinado: ${escHtml(coc.signed_pdf_hash)}</div>
+          <div class="meta">Payload: ${escHtml(coc.submitted_payload_hash)}</div>
+          <div class="meta">Recibo: ${escHtml(coc.receipt_hash)}</div>
+        </div>` : "";
+      const receipt = data.receipt ? `<div class="queue-item"><strong>Recibo ${escHtml(data.receipt.protocolo || "sem protocolo")}</strong>
+          <div class="meta">${escHtml(data.receipt.mensagem || "")}</div>
+        </div>` : "";
+      filingResultEl.className = "review-card";
+      filingResultEl.innerHTML = `<div class="review-head"><h3>${data.success ? "Operação concluída" : "Operação bloqueada"}</h3>
+          <span class="sev-chip ${data.success ? "sev-suggestion" : "sev-critical"}">${data.success ? "ok" : "falha"}</span></div>
+        ${data.error ? `<p class="notice error" style="position:static">${escHtml(data.error)}</p>` : ""}
+        <div class="proc-meta">Prazo: ${escHtml(pf.prazo_status || "—")} · checagem ${pf.passed === false ? "bloqueada" : "ok"}</div>
+        <ul class="review-issues">${checks}</ul>
+        ${hashes}${receipt}`;
+    }
+
+    function renderFilingStatus(data) {
+      const pending = data.pending || [];
+      const receipts = data.recent_receipts || [];
+      if (!pending.length && !receipts.length) {
+        filingStatusEl.className = "proc-empty";
+        filingStatusEl.textContent = "Nenhum filing pendente ou recibo local.";
+        return;
+      }
+      filingStatusEl.className = "proc-list";
+      filingStatusEl.innerHTML = "";
+      pending.forEach((p) => {
+        const row = document.createElement("div");
+        row.className = "queue-item";
+        row.innerHTML = `<strong>Pendente: ${escHtml(p.numero_cnj)}</strong>
+          <div class="meta">${escHtml(p.receipt_id)} · ${escHtml(p.pending_key || "")}</div>
+          <div class="meta">signed hash: ${escHtml((p.hashes || {}).signed_pdf_hash || "—")}</div>`;
+        const actions = document.createElement("div");
+        actions.className = "queue-actions";
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "ghost";
+        btn.textContent = "recuperar";
+        btn.addEventListener("click", () => loadPendingRecovery(p.pending_key));
+        actions.appendChild(btn);
+        row.appendChild(actions);
+        filingStatusEl.appendChild(row);
+      });
+      receipts.forEach((r) => {
+        const row = document.createElement("div");
+        row.className = "queue-item";
+        row.innerHTML = `<strong>Recibo: ${escHtml(r.protocolo || r.receipt_id)}</strong>
+          <div class="meta">${escHtml(r.numero_cnj)} · ${escHtml(r.tribunal || "")} · ${escHtml(r.filed_at || "")} · ${escHtml(r.receipt_key || "")}</div>
+          <div class="meta">PDF: ${escHtml((r.hashes || {}).pdf_hash || "—")} · assinado: ${escHtml((r.hashes || {}).signed_pdf_hash || "—")} · recibo: ${escHtml((r.hashes || {}).receipt_hash || "—")}</div>`;
+        filingStatusEl.appendChild(row);
+      });
+    }
+
+    async function loadFilingStatus() {
+      try {
+        const response = await apiFetch("/api/filing/status");
+        const data = response.ok ? await response.json() : {};
+        renderFilingStatus(data);
+      } catch (_) {
+        filingStatusEl.className = "proc-empty";
+        filingStatusEl.textContent = "Não foi possível carregar status de protocolo.";
+      }
+    }
+
+    function renderPendingRecovery(data) {
+      const checks = (data.checklist || []).map((c) => `<li>${escHtml(c.label)}${c.required ? " · obrigatório" : ""}</li>`).join("");
+      const actions = (data.recovery_actions || []).map((a) => `<li>${escHtml(a)}</li>`).join("");
+      const retryState = data.retry_state ? `<div class="proc-meta">retry: ${escHtml(data.retry_state.status || "—")} · ${escHtml(data.retry_state.idempotency_key || "")}</div>` : "";
+      const retryControls = AGENT_REMOTE ? "" : `<h4>Retry controlado</h4>
+        <label for="filing-retry-cpf">CPF</label>
+        <input id="filing-retry-cpf" autocomplete="off" value="${escHtml(document.querySelector("#fl_cpf")?.value || "")}" />
+        <label for="filing-retry-senha">Senha PJe</label>
+        <input id="filing-retry-senha" type="password" autocomplete="off" />
+        <label class="check"><input id="filing-retry-confirm" type="checkbox" /> conferi no portal que não existe protocolo para este PDF</label>
+        <button type="button" class="ghost" id="filing-retry-btn">reenviar protocolo pendente</button>`;
+      filingRecoveryEl.className = "review-card";
+      filingRecoveryEl.innerHTML = `<div class="review-head"><h3>Recuperação de filing pendente</h3>
+          <span class="sev-chip sev-important">sem retry automático</span></div>
+        <div class="proc-meta">${escHtml(data.pending_key || "")} · signed hash ${escHtml((data.hashes || {}).signed_pdf_hash || "—")}</div>
+        ${retryState}
+        <p>${escHtml(data.retry_note || "")}</p>
+        <h4>Checklist</h4><ul class="detail-prazos">${checks}</ul>
+        <h4>Ações operacionais</h4><ul class="detail-prazos">${actions}</ul>
+        ${retryControls}
+        <label for="filing-archive-reason">Justificativa para arquivar</label>
+        <input id="filing-archive-reason" autocomplete="off" />
+        <label class="check"><input id="filing-archive-confirm" type="checkbox" /> conferi manualmente o portal/recibo</label>
+        <button type="button" class="ghost" id="filing-archive-btn">arquivar pendente</button>`;
+      document.querySelector("#filing-archive-btn").addEventListener("click", () => archivePending(data.pending_key));
+      document.querySelector("#filing-retry-btn")?.addEventListener("click", () => retryPending(data.pending_key));
+    }
+
+    async function loadPendingRecovery(pendingKey) {
+      try {
+        const response = await apiFetch("/api/filing/pending/recovery", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pending_key: pendingKey }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(apiErrorMessage(data, "Falha ao carregar recuperação"));
+        renderPendingRecovery(data);
+      } catch (err) {
+        filingRecoveryEl.className = "proc-empty";
+        filingRecoveryEl.innerHTML = `<p class="notice error" style="position:static">${escHtml(err.message)}</p>`;
+      }
+    }
+
+    async function archivePending(pendingKey) {
+      const reason = document.querySelector("#filing-archive-reason").value.trim();
+      const confirm = document.querySelector("#filing-archive-confirm").checked;
+      try {
+        const response = await apiFetch("/api/filing/pending/archive", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pending_key: pendingKey,
+            reason,
+            confirm_manual_resolution: confirm,
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(apiErrorMessage(data, "Falha ao arquivar pendente"));
+        filingRecoveryEl.className = "proc-empty";
+        filingRecoveryEl.textContent = `Pendente arquivado: ${data.archived_key || ""}`;
+        await loadFilingStatus();
+      } catch (err) {
+        filingRecoveryEl.className = "proc-empty";
+        filingRecoveryEl.innerHTML = `<p class="notice error" style="position:static">${escHtml(err.message)}</p>`;
+      }
+    }
+
+    async function retryPending(pendingKey) {
+      const cpf = document.querySelector("#filing-retry-cpf")?.value.trim() || "";
+      const senha = document.querySelector("#filing-retry-senha")?.value || "";
+      const confirm = document.querySelector("#filing-retry-confirm")?.checked || false;
+      try {
+        const response = await apiFetch("/api/filing/pending/retry", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pending_key: pendingKey,
+            cpf,
+            senha,
+            confirm_no_existing_protocol: confirm,
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(apiErrorMessage(data, "Falha ao reenviar pendente"));
+        filingRecoveryEl.className = "review-card";
+        filingRecoveryEl.innerHTML = `<div class="review-head"><h3>Retry concluído</h3>
+            <span class="sev-chip sev-suggestion">ok</span></div>
+          <div class="proc-meta">${escHtml(data.receipt_key || "")}</div>
+          <div class="queue-item"><strong>Recibo ${escHtml((data.receipt || {}).protocolo || "sem protocolo")}</strong>
+            <div class="meta">idempotência: ${escHtml(data.idempotency_key || "")}</div></div>`;
+        await loadFilingStatus();
+      } catch (err) {
+        filingRecoveryEl.className = "proc-empty";
+        filingRecoveryEl.innerHTML = `<p class="notice error" style="position:static">${escHtml(err.message)}</p>`;
+      }
+    }
+
+    function renderFilingArtifacts(items) {
+      filingArtifacts = items || [];
+      filingArtifactSel.innerHTML = "";
+      if (!filingArtifacts.length) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = "nenhuma minuta disponível para protocolo (rascunhos de pesquisa não são protocoláveis)";
+        filingArtifactSel.appendChild(opt);
+        return;
+      }
+      filingArtifacts.forEach((artifact, index) => {
+        const opt = document.createElement("option");
+        opt.value = String(index);
+        opt.textContent = `${artifact.numero_cnj || "sem CNJ"} · ${artifact.artifact_name} · ${groundingLabel(artifact.grounding_status)}`;
+        filingArtifactSel.appendChild(opt);
+      });
+    }
+
+    async function loadFilingArtifacts() {
+      try {
+        const response = await apiFetch("/api/filing/artifacts");
+        const data = response.ok ? await response.json() : { artifacts: [] };
+        renderFilingArtifacts(data.artifacts || []);
+      } catch (_) {
+        renderFilingArtifacts([]);
+      }
+    }
+
+    async function loadSelectedFilingArtifact() {
+      const selected = filingArtifacts[Number(filingArtifactSel.value)];
+      if (!selected) return;
+      filingLoadArtifactBtn.disabled = true;
+      const oldText = filingLoadArtifactBtn.textContent;
+      filingLoadArtifactBtn.textContent = "carregando…";
+      try {
+        const response = await apiFetch("/api/filing/artifacts/content", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            output_dir: selected.output_dir,
+            artifact_name: selected.artifact_name,
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(apiErrorMessage(data, "Falha ao carregar artefato"));
+        document.querySelector("#fl_draft").value = data.content || "";
+        document.querySelector("#fl_cnj").value = selected.numero_cnj || "";
+        document.querySelector("#fl_tribunal").value = selected.tribunal || "tjmg";
+        document.querySelector("#fl_tipo_peticao").value = selected.tipo_peticao || "manifestacao";
+      } catch (err) {
+        filingResultEl.className = "proc-empty";
+        filingResultEl.innerHTML = `<p class="notice error" style="position:static">${escHtml(err.message)}</p>`;
+      } finally {
+        filingLoadArtifactBtn.disabled = false;
+        filingLoadArtifactBtn.textContent = oldText;
+      }
+    }
+
+    async function runFiling(endpoint, button) {
+      button.disabled = true;
+      const oldText = button.textContent;
+      button.textContent = endpoint.endsWith("submit") ? "Protocolando…" : "Verificando…";
+      try {
+        const response = await apiFetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(filingPayload()),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(apiErrorMessage(data, "Falha no protocolo"));
+        renderFilingResult(data);
+        await loadFilingStatus();
+      } catch (err) {
+        filingResultEl.className = "proc-empty";
+        filingResultEl.innerHTML = `<p class="notice error" style="position:static">${escHtml(err.message)}</p>`;
+      } finally {
+        button.disabled = false;
+        button.textContent = oldText;
+      }
+    }
+
+    filingDryRunBtn.addEventListener("click", () => runFiling("/api/filing/dry-run", filingDryRunBtn));
+    filingSubmitBtn.addEventListener("click", () => runFiling("/api/filing/submit", filingSubmitBtn));
+    filingLoadArtifactBtn.addEventListener("click", loadSelectedFilingArtifact);
+    document.querySelector("#fl_download_docx").addEventListener("click", () => {
+      const draft = document.querySelector("#fl_draft").value.trim();
+      const status = document.querySelector("#fl_download_status");
+      if (!draft) {
+        status.textContent = "Cole ou carregue uma minuta antes de baixar.";
+        status.classList.add("error");
+        status.hidden = false;
+        return;
+      }
+      const cnj = (document.querySelector("#fl_cnj").value.trim() || "minuta").replace(/[^\w.-]+/g, "-");
+      downloadDocx({ markdown: draft, filename: `${cnj}.docx` }, `${cnj}.docx`, status);
+    });
+
+    // Explicit consent gate: "assinar e protocolar" stays disabled until the lawyer
+    // confirms human review AND authorizes signing (defense-in-depth over the API 400).
+    function syncFilingConsent() {
+      const ready = document.querySelector("#fl_review").checked && document.querySelector("#fl_consent").checked;
+      filingSubmitBtn.disabled = !ready;
+      filingSubmitBtn.title = ready ? "" : "Marque revisão humana + consentimento para assinar.";
+    }
+    document.querySelector("#fl_review").addEventListener("change", syncFilingConsent);
+    document.querySelector("#fl_consent").addEventListener("change", syncFilingConsent);
+    syncFilingConsent();
+
+    const pilotForm = document.querySelector("#pilot-form");
+    const pilotFeedbackEl = document.querySelector("#pilot-feedback");
+    const pilotSummaryEl = document.querySelector("#pilot-summary");
+    const pilotSubmit = document.querySelector("#pilot-submit");
+    const corpusCandidatesEl = document.querySelector("#corpus-candidates");
+    const corpusCoverageEl = document.querySelector("#corpus-coverage");
+    const pilotComparisonEl = document.querySelector("#pilot-comparison");
+
+    function renderPilotSummary(summary) {
+      const citations = summary.citations || {};
+      const gaps = summary.prioritized_gaps || [];
+      const candidates = summary.corpus_candidates || [];
+      const gapRows = gaps.length
+        ? gaps.slice(0, 5).map((g) => `<li>${escHtml(g.label)} <span class="proc-meta">${escHtml(g.kind)} · ${g.count} caso(s)</span></li>`).join("")
+        : "<li class='proc-meta'>Nenhuma lacuna registrada.</li>";
+      const candidateRows = candidates.length
+        ? candidates.slice(0, 5).map((c) => `<li>${escHtml(c.numero_cnj)} <span class="proc-meta">${escHtml(c.missing_source || c.notes || "")}</span></li>`).join("")
+        : "<li class='proc-meta'>Nenhum caso marcado para corpus.</li>";
+
+      pilotSummaryEl.innerHTML = `
+        <div class="metric-grid">
+          <div class="metric"><strong>${summary.total_cases || 0}</strong><span>casos avaliados</span></div>
+          <div class="metric"><strong>${summary.total_time_saved_minutes || 0} min</strong><span>tempo economizado</span></div>
+          <div class="metric"><strong>${summary.average_utility || 0}/5</strong><span>utilidade média</span></div>
+          <div class="metric"><strong>${citations.acceptance_rate == null ? "—" : Math.round(citations.acceptance_rate * 100) + "%"}</strong><span>aceitação de citações</span></div>
+        </div>
+        <div class="row">
+          <div><h2>Lacunas priorizadas</h2><ul class="detail-prazos">${gapRows}</ul></div>
+          <div><h2>Aproveitáveis para corpus</h2><ul class="detail-prazos">${candidateRows}</ul></div>
+        </div>`;
+    }
+
+    async function loadPilotSummary() {
+      try {
+        const response = await apiFetch("/api/pilot-feedback/summary");
+        const data = response.ok ? await response.json() : {};
+        renderPilotSummary(data);
+      } catch (_) {
+        pilotSummaryEl.innerHTML = "";
+      }
+    }
+
+    function renderPilotFeedback(items) {
+      if (!items.length) {
+        pilotFeedbackEl.className = "proc-empty";
+        pilotFeedbackEl.textContent = "Nenhum feedback registrado.";
+        return;
+      }
+      pilotFeedbackEl.className = "proc-list";
+      pilotFeedbackEl.innerHTML = "";
+      items.forEach((f) => {
+        const row = document.createElement("div");
+        row.className = "proc-row";
+        const left = document.createElement("div");
+        left.innerHTML = `<div class="proc-cnj">${escHtml(f.numero_cnj)}</div><div class="proc-meta">${fmtDate(f.created_at)} · ${escHtml(f.mode_used || "—")}</div>`;
+        const mid = document.createElement("div");
+        mid.className = "proc-meta";
+        mid.textContent = `${f.time_saved_minutes || 0} min · utilidade ${f.perceived_utility || "—"}/5`;
+        const right = document.createElement("div");
+        right.className = "proc-prazo";
+        right.innerHTML = `<span class="badge ${f.corpus_usable ? "urg-alta" : "urg-baixa"}">${f.corpus_usable ? "corpus" : "não corpus"}</span><div class="proc-meta">${f.citations_accepted || 0}/${f.citations_rejected || 0} citações</div>`;
+        const action = document.createElement("div");
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "ghost";
+        btn.textContent = "copiar";
+        btn.addEventListener("click", () => copyText(f.output_dir || f.numero_cnj || ""));
+        action.appendChild(btn);
+        row.append(left, mid, right, action);
+        pilotFeedbackEl.appendChild(row);
+      });
+    }
+
+    async function loadPilotFeedback() {
+      try {
+        const response = await apiFetch("/api/pilot-feedback");
+        const data = response.ok ? await response.json() : { feedback: [] };
+        renderPilotFeedback(data.feedback || []);
+      } catch (_) {
+        pilotFeedbackEl.className = "proc-empty";
+        pilotFeedbackEl.textContent = "Não foi possível carregar o feedback.";
+      }
+    }
+
+    function renderCorpusCandidates(items) {
+      if (!items.length) {
+        corpusCandidatesEl.className = "proc-empty";
+        corpusCandidatesEl.textContent = "Nenhum candidato marcado no piloto.";
+        return;
+      }
+      corpusCandidatesEl.className = "proc-list";
+      corpusCandidatesEl.innerHTML = "";
+      items.forEach((c) => {
+        const row = document.createElement("div");
+        row.className = "queue-item";
+        row.innerHTML = `<strong>${escHtml(c.numero_cnj)}</strong>
+          <div class="meta">${escHtml(c.missing_source || c.notes || "fonte a avaliar")} · ${c.accepted ? "aceita" : "pendente"}</div>`;
+        corpusCandidatesEl.appendChild(row);
+      });
+    }
+
+    function renderCorpusCoverage(report) {
+      const coverage = report.coverage || {};
+      const fmtCounts = (obj) => Object.entries(obj || {}).map(([k, v]) => `${escHtml(k)}: ${v}`).join(" · ") || "—";
+      corpusCoverageEl.className = "proc-list";
+      corpusCoverageEl.innerHTML = `
+        <div class="queue-item"><strong>${report.accepted_count || 0}</strong><div class="meta">fontes aceitas</div></div>
+        <div class="queue-item"><strong>${(report.pending_reingest || []).length}</strong><div class="meta">pendentes de reingestão</div></div>
+        <div class="queue-item"><strong>Tribunais</strong><div class="meta">${fmtCounts(coverage.tribunal)}</div></div>
+        <div class="queue-item"><strong>Temas</strong><div class="meta">${fmtCounts(coverage.tema)}</div></div>`;
+    }
+
+    async function loadCorpusQueue() {
+      try {
+        const [candidatesResp, coverageResp] = await Promise.all([
+          apiFetch("/api/corpus/candidates"),
+          apiFetch("/api/corpus/coverage"),
+        ]);
+        const candidates = candidatesResp.ok ? await candidatesResp.json() : { candidates: [] };
+        const coverage = coverageResp.ok ? await coverageResp.json() : {};
+        renderCorpusCandidates(candidates.candidates || []);
+        renderCorpusCoverage(coverage);
+      } catch (_) {
+        corpusCandidatesEl.className = "proc-empty";
+        corpusCandidatesEl.textContent = "Não foi possível carregar candidatos.";
+        corpusCoverageEl.className = "proc-empty";
+        corpusCoverageEl.textContent = "Não foi possível carregar cobertura.";
+      }
+    }
+
+    async function searchCorpus(query) {
+      const el = document.querySelector("#corpus-search-results");
+      if (!query.trim()) { el.className = "proc-empty"; el.textContent = "Digite uma consulta."; return; }
+      el.className = "proc-empty";
+      el.textContent = "Buscando…";
+      try {
+        const resp = await apiFetch(`/api/corpus/search?q=${encodeURIComponent(query)}`);
+        if (!resp.ok) throw new Error(await apiErrorMessage(resp));
+        const data = await resp.json();
+        const results = data.results || [];
+        if (!results.length) { el.className = "proc-empty"; el.textContent = data.detail || "Nenhum resultado."; return; }
+        el.className = "proc-list";
+        el.innerHTML = "";
+        results.forEach((r) => {
+          const ex = r.explain || {};
+          const row = document.createElement("div");
+          row.className = "queue-item";
+          const url = (r.source_url || "").trim();
+          const isHttp = /^https?:\/\//i.test(url);
+          const link = isHttp
+            ? `<div class="meta"><a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer">ver fonte oficial ↗</a></div>`
+            : "";
+          row.innerHTML = `<strong>${escHtml(r.source_id)}</strong>
+            <div class="meta">${escHtml(ex.fonte || r.tribunal || "—")} · <em>${escHtml(ex.motivo || "relevância textual")}</em> · score ${escHtml(String(r.score))}</div>
+            <div class="meta">${escHtml((r.texto || "").slice(0, 180))}…</div>${link}`;
+          el.appendChild(row);
+        });
+      } catch (err) {
+        el.className = "proc-empty";
+        el.textContent = `Falha na busca: ${err.message}`;
+      }
+    }
+
+    function renderPilotComparison(data) {
+      const items = data.comparisons || [];
+      if (!items.length) {
+        pilotComparisonEl.className = "proc-empty";
+        pilotComparisonEl.textContent = "Nenhum caso com segunda execução registrada.";
+        return;
+      }
+      pilotComparisonEl.className = "proc-list";
+      pilotComparisonEl.innerHTML = "";
+      items.forEach((c) => {
+        const row = document.createElement("div");
+        row.className = "proc-row";
+        const left = document.createElement("div");
+        left.innerHTML = `<div class="proc-cnj">${escHtml(c.numero_cnj)}</div><div class="proc-meta">${c.runs} execuções comparadas</div>`;
+        const mid = document.createElement("div");
+        mid.className = "proc-meta";
+        mid.textContent = `tempo ${c.delta_time_saved_minutes} min · utilidade ${c.delta_utility}`;
+        const right = document.createElement("div");
+        right.className = "proc-prazo";
+        right.innerHTML = `<span class="badge ${c.delta_utility > 0 ? "urg-alta" : "urg-baixa"}">citações ${c.delta_citation_acceptance == null ? "—" : Math.round(c.delta_citation_acceptance * 100) + "%"}</span>`;
+        row.append(left, mid, right, document.createElement("div"));
+        pilotComparisonEl.appendChild(row);
+      });
+    }
+
+    async function loadPilotComparison() {
+      try {
+        const response = await apiFetch("/api/pilot-feedback/comparison");
+        const data = response.ok ? await response.json() : { comparisons: [] };
+        renderPilotComparison(data);
+      } catch (_) {
+        pilotComparisonEl.className = "proc-empty";
+        pilotComparisonEl.textContent = "Não foi possível carregar comparação.";
+      }
+    }
+
+    pilotForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      pilotSubmit.disabled = true;
+      pilotSubmit.textContent = "Registrando…";
+      const payload = {
+        numero_cnj: document.querySelector("#pf_cnj").value.trim(),
+        output_dir: document.querySelector("#pf_output_dir").value.trim() || null,
+        time_saved_minutes: Number(document.querySelector("#pf_time").value || 0),
+        mode_used: document.querySelector("#pf_mode").value,
+        citations_accepted: Number(document.querySelector("#pf_acc").value || 0),
+        citations_rejected: Number(document.querySelector("#pf_rej").value || 0),
+        missing_source: document.querySelector("#pf_missing").value.trim(),
+        deadline_or_analysis_error: document.querySelector("#pf_error").value.trim(),
+        perceived_utility: Number(document.querySelector("#pf_utility").value || 1),
+        corpus_usable: document.querySelector("#pf_corpus").checked,
+        notes: document.querySelector("#pf_notes").value.trim(),
+      };
+      try {
+        const response = await apiFetch("/api/pilot-feedback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(apiErrorMessage(data, "Falha ao registrar feedback"));
+        pilotForm.reset();
+        document.querySelector("#pf_time").value = "0";
+        document.querySelector("#pf_utility").value = "4";
+        await loadPilotFeedback();
+        await loadPilotSummary();
+        await loadCorpusQueue();
+        await loadPilotComparison();
+      } catch (err) {
+        pilotFeedbackEl.className = "proc-empty";
+        pilotFeedbackEl.textContent = err.message;
+      } finally {
+        pilotSubmit.disabled = false;
+        pilotSubmit.textContent = "Registrar feedback";
+      }
+    });
+
+    document.querySelector("#pilot-export-json").addEventListener("click", () => {
+      window.open("/api/pilot-feedback/export?format=json", "_blank");
+    });
+    document.querySelector("#pilot-export-csv").addEventListener("click", () => {
+      window.open("/api/pilot-feedback/export?format=csv", "_blank");
+    });
+    document.querySelector("#pilot-export-md").addEventListener("click", () => {
+      window.open("/api/pilot-feedback/export?format=md", "_blank");
+    });
+
+    async function loadAiSession() {
+      const el = document.getElementById("ai-session");
+      try {
+        const r = await apiFetch("/api/ai-session");
+        const s = await r.json();
+        const labels = { browser_session: "sessão do navegador", cloud_deid: "nuvem", local: "local" };
+        const deid = s.deidentify ? " · dados protegidos" : "";
+        const browserNeedsSetup = s.mode === "browser_session" && s.browser?.status && s.browser.status !== "ready";
+        const setup = browserNeedsSetup ? " · configurar bridge" : "";
+        el.textContent = `IA: ${labels[s.mode] || s.mode}${deid}${setup}`;
+        if (s.browser?.message) el.title = s.browser.message;
+      } catch {
+        el.textContent = "IA: indisponível";
+      }
+    }
+
+    const cuNotice = document.querySelector("#cu_notice");
+    function showCuNotice(message, isError) {
+      cuNotice.textContent = message;
+      cuNotice.classList.toggle("error", Boolean(isError));
+      cuNotice.hidden = false;
+    }
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(",", 2)[1] || "");
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+    }
+    document.querySelector("#corpus-upload-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const submitBtn = document.querySelector("#cu_submit");
+      const fileInput = document.querySelector("#cu_file");
+      const file = fileInput.files && fileInput.files[0];
+      const payload = {
+        source_text: document.querySelector("#cu_text").value.trim(),
+        title: document.querySelector("#cu_title").value.trim(),
+        source_type: document.querySelector("#cu_tipo").value,
+        tribunal: document.querySelector("#cu_tribunal").value.trim(),
+        source_date: document.querySelector("#cu_data").value,
+        tema: document.querySelector("#cu_tema").value.trim(),
+        area: document.querySelector("#cu_tema").value.trim(),
+        source_url: document.querySelector("#cu_url").value.trim(),
+        provenance_kind: "acervo_do_escritorio",
+        source_publisher: "acervo do escritório",
+      };
+      if (!payload.area) {
+        showCuNotice("Informe o tema/área antes de adicionar ao corpus.", true);
+        return;
+      }
+      if (!file && !payload.source_text) {
+        showCuNotice("Envie um arquivo ou cole o texto da decisão.", true);
+        return;
+      }
+      submitBtn.disabled = true;
+      try {
+        if (file) {
+          payload.filename = file.name;
+          payload.content_base64 = await fileToBase64(file);
+        }
+        const response = await apiFetch("/api/corpus/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const body = await response.json();
+        if (!response.ok) {
+          const detail = body && body.detail;
+          showCuNotice((detail && detail.message) || "Falha ao adicionar ao corpus.", true);
+          return;
+        }
+        const chunks = body.reingest ? body.reingest.chunks : 0;
+        showCuNotice(`Adicionado ao corpus: ${chunks} trecho(s) pesquisável(is).`, false);
+        document.querySelector("#corpus-upload-form").reset();
+        loadCorpusQueue();
+      } catch (_) {
+        showCuNotice("Não foi possível enviar o documento. Tente de novo.", true);
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
+    document.querySelector("#corpus-search-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      searchCorpus(document.querySelector("#corpus-search-q").value);
+    });
+
+    function bootConsole() {
+      showConsoleShell();
+      let initialView = "mesa";
+      try {
+        initialView = sessionStorage.getItem("causiaStartView") || "mesa";
+        sessionStorage.removeItem("causiaStartView");
+      } catch (_) { /* private mode */ }
+      showView(initialView);
+      renderTrialSetup();
+      try {
+        const welcome = sessionStorage.getItem("causiaTrialWelcome");
+        if (welcome && trialWelcomeEl) {
+          const data = JSON.parse(welcome);
+          renderTrialWelcome(data);
+          sessionStorage.removeItem("causiaTrialWelcome");
+        }
+      } catch (_) { /* private mode */ }
+      if (consoleBooted) {
+        loadAiSession();
+        loadWorkbench();
+        loadProcessos();
+        loadPrazos();
+        loadAccessSummary();
+        loadLibrary();
+        loadFilingStatus();
+        return;
+      }
+      consoleBooted = true;
+      loadAgentMode();
+      loadAgentDownload();
+      loadAiSession();
+      loadWorkbench();
+      loadProcessos();
+      loadPrazos();
+      loadAccessSummary();
+      loadLibrary();
+      loadPilotFeedback();
+      loadPilotSummary();
+      loadCorpusQueue();
+      loadPilotComparison();
+      loadFilingStatus();
+      loadFilingArtifacts();
+    }
+
+    if (getApiKey()) bootConsole();
+    else showLanding();
   </script>
 </body>
 </html>

@@ -58,8 +58,10 @@ async def extract_structure(
             max_tokens=2048,
             temperature=0.0,
         )
-    except Exception:
-        logger.exception("extract_structure_llm_error", petition_id=petition_id)
+    except Exception as exc:  # noqa: BLE001
+        from juris.core.sanitize import safe_error_text
+
+        logger.warning("extract_structure_llm_error", petition_id=petition_id, error=safe_error_text(exc))
         return _minimal_template(petition_id, tipo_peticao)
 
     # Parse structured response

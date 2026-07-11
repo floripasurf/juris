@@ -7,7 +7,7 @@ import hashlib
 from dataclasses import dataclass
 
 from juris.core.observability import get_logger
-from juris.core.storage import StorageBackend, StoredObject
+from juris.core.storage import StorageBackend
 
 logger = get_logger(__name__)
 
@@ -51,7 +51,7 @@ async def store_document(
     ext = _mime_to_ext(mime_type)
     storage_key = f"documentos/{cnj_clean}/{id_documento}.{ext}"
 
-    stored = await storage.put(storage_key, raw_bytes, content_type=mime_type)
+    await storage.put(storage_key, raw_bytes, content_type=mime_type)
 
     logger.info(
         "document_stored",
@@ -90,13 +90,13 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> str | None:
 
         doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
         texts = []
-        for page in doc:
+        for page in doc:  # type: ignore[attr-defined]  # pymupdf stub: Document is iterable
             texts.append(page.get_text())
         doc.close()
         result = "\n".join(texts).strip()
         if result:
             return result
-    except Exception:
+    except Exception:  # noqa: BLE001, S110 — best-effort; fall through to the next extractor
         pass
 
     # Fallback to pdfplumber
@@ -114,7 +114,7 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> str | None:
             result = "\n".join(texts).strip()
             if result:
                 return result
-    except Exception:
+    except Exception:  # noqa: BLE001, S110 — best-effort; no more extractors to try
         pass
 
     return None

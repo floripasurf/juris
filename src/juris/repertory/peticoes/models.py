@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 
-class TipoPeticao(str, Enum):
+class TipoPeticao(StrEnum):
     """Types of legal petitions in Brazilian law."""
 
     INICIAL = "inicial"

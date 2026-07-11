@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from juris.busca.abc import SearchChannel
 from juris.busca.models import FonteOrigem
 from juris.busca.registry import ChannelRegistry

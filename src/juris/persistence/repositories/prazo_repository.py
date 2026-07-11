@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select, update
 
 from juris.core.observability import get_logger
-from juris.persistence.models import PrazoComputed, Processo
+from juris.persistence.models import PrazoComputed
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession

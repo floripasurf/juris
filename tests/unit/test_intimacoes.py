@@ -6,10 +6,9 @@ from datetime import datetime
 from unittest.mock import MagicMock
 
 from juris.mni.operations.intimacoes import (
-    AvisosResult,
+    confirmar_recebimento,
     consultar_avisos_pendentes,
     consultar_teor_comunicacao,
-    confirmar_recebimento,
 )
 from tests.fixtures.mni_avisos_response import (
     make_avisos_response,

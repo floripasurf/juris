@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import json as json_module
+from datetime import date
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
+from juris.search.adapters.base import HealthCheckResult
 from juris.search.cnj_router import cnj_to_court
 from juris.search.dispatcher import SearchDispatcher
-from juris.search.models import SearchQuery
+from juris.search.models import QueryType, SearchExplain, SearchQuery, SearchResponse
 
 search_app = typer.Typer(
     name="search",
@@ -28,9 +30,9 @@ def _resolve_query(
     cpf: str | None,
     cnpj: str | None,
     cnj: str | None,
-) -> tuple[str, str]:
+) -> tuple[QueryType, str]:
     """Return (query_type, value) from mutually exclusive options."""
-    options = [
+    options: list[tuple[QueryType, str | None]] = [
         ("tema", tema),
         ("oab", oab),
         ("nome", nome),
@@ -76,7 +78,7 @@ def search_command(
     query_type, value = _resolve_query(tema, oab, nome, cpf, cnpj, cnj)
 
     # Parse date range
-    date_range = None
+    date_range: tuple[date, date] | None = None
     if date_from or date_to:
         from juris.search.utils import parse_br_date
 
@@ -123,7 +125,7 @@ def search_command(
             console.print(f"[yellow]Warning:[/yellow] {court}: {error}")
 
 
-def _print_table(response: object) -> None:
+def _print_table(response: SearchResponse) -> None:
     """Print results as a rich table."""
     table = Table(title=f"Search Results ({response.total_count} found, {response.elapsed_seconds:.1f}s)")
     table.add_column("Court", style="cyan", width=6)
@@ -145,7 +147,7 @@ def _print_table(response: object) -> None:
     console.print(table)
 
 
-def _print_json(response: object) -> None:
+def _print_json(response: SearchResponse) -> None:
     """Print results as JSON."""
     data = {
         "query": {"type": response.query.query_type, "value": response.query.value},
@@ -168,7 +170,7 @@ def _print_json(response: object) -> None:
     console.print_json(json_module.dumps(data, ensure_ascii=False, indent=2))
 
 
-def _print_markdown(response: object) -> None:
+def _print_markdown(response: SearchResponse) -> None:
     """Print results as markdown."""
     for i, r in enumerate(response.results, 1):
         date_str = r.decision_date.strftime("%d/%m/%Y") if r.decision_date else "N/A"
@@ -179,7 +181,7 @@ def _print_markdown(response: object) -> None:
         console.print("---\n")
 
 
-def _print_explain(explain: object) -> None:
+def _print_explain(explain: SearchExplain) -> None:
     """Print explain/debug information."""
     console.print("\n[bold]--- Explain ---[/bold]")
     console.print(f"Courts requested: {explain.courts_requested}")
@@ -203,7 +205,7 @@ def doctor() -> None:
 
     adapters: list[SearchAdapter] = [cls() for cls in adapter_classes.values()]
 
-    async def _run_checks() -> list:
+    async def _run_checks() -> list[HealthCheckResult]:
         tasks = [a.health_check() for a in adapters]
         return await asyncio.gather(*tasks)
 

@@ -4,10 +4,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    pass
+from typing import Any
 
 from juris.repertory.vector_store import SearchResult
 
@@ -37,7 +34,7 @@ class CrossEncoderReranker:
     ) -> None:
         self._model_name = model_name
         self._device = device
-        self._model: object | None = None
+        self._model: Any | None = None
         self._loaded = False
         self._cache: dict[str, float] = {}
 
@@ -53,7 +50,7 @@ class CrossEncoderReranker:
             logger.info(
                 "Loaded reranker model %s on %s", self._model_name, self._device
             )
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning(
                 "Could not load reranker model '%s'. Reranking will be skipped.",
                 self._model_name,
@@ -106,7 +103,7 @@ class CrossEncoderReranker:
         if uncached_pairs:
             pairs = [[query, text] for _, _, text in uncached_pairs]
             try:
-                raw_scores = self._model.predict(pairs)  # type: ignore[union-attr]
+                raw_scores = self._model.predict(pairs)
                 for (idx, key, _), raw_score in zip(
                     uncached_pairs, raw_scores, strict=True
                 ):
@@ -117,7 +114,7 @@ class CrossEncoderReranker:
                         score=score_val,
                         cached=False,
                     )
-            except Exception:
+            except Exception:  # noqa: BLE001
                 logger.warning("Reranking failed, returning original order")
                 return candidates[:top_k]
 
@@ -135,6 +132,8 @@ class CrossEncoderReranker:
                     score=sc.score,
                     text=orig.text,
                     metadata=orig.metadata,
+                    source_type=orig.source_type,
+                    uso=orig.uso,
                 )
             )
         return reranked

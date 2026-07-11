@@ -8,10 +8,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
 
 from juris.core.observability import get_logger
-from juris.mni.parsers.processo import Movimento, ProcessoDomain, parse_processo
+from juris.mni.parsers.processo import Movimento, ProcessoDomain
 
 logger = get_logger(__name__)
 
@@ -47,7 +46,7 @@ class DiffResult:
 def detect_new_movements(
     fetched: ProcessoDomain,
     last_sync_at: datetime | None,
-    known_movimento_keys: set[tuple[datetime, int | None, str | None]] | None = None,
+    known_movimento_keys: set[tuple[datetime | None, int | None, str | None]] | None = None,
 ) -> list[Movimento]:
     """Detect movements that are new since the last sync.
 
@@ -70,20 +69,19 @@ def detect_new_movements(
     new_movs: list[Movimento] = []
 
     for mov in fetched.movimentos:
-        # Timestamp-based fast filter
+        # Timestamp-based fast filter. An undated movement can't be filtered by time —
+        # treat it as new (never silently drop it; it goes to manual review downstream).
         mov_time = mov.data_hora
-        if mov_time.tzinfo is None:
-            # Treat naive as UTC for comparison
-            from datetime import timezone
-            mov_time = mov_time.replace(tzinfo=timezone.utc)
+        if mov_time is not None:
+            if mov_time.tzinfo is None:
+                mov_time = mov_time.replace(tzinfo=UTC)  # treat naive as UTC
 
-        last_sync_aware = last_sync_at
-        if last_sync_aware.tzinfo is None:
-            from datetime import timezone
-            last_sync_aware = last_sync_aware.replace(tzinfo=timezone.utc)
+            last_sync_aware = last_sync_at
+            if last_sync_aware.tzinfo is None:
+                last_sync_aware = last_sync_aware.replace(tzinfo=UTC)
 
-        if mov_time < last_sync_aware:
-            continue
+            if mov_time < last_sync_aware:
+                continue
 
         # Key-based dedup
         key = (mov.data_hora, mov.codigo_nacional, mov.id_movimento)
@@ -118,7 +116,7 @@ def detect_new_documents(
 def diff_processo(
     fetched: ProcessoDomain,
     last_sync_at: datetime | None,
-    known_movimento_keys: set[tuple[datetime, int | None, str | None]] | None = None,
+    known_movimento_keys: set[tuple[datetime | None, int | None, str | None]] | None = None,
     known_doc_ids: set[str] | None = None,
 ) -> DiffResult:
     """Run a full differential comparison for a processo.

@@ -31,29 +31,105 @@ advogado(a) parceiro(a). Prepare estes itens com antecedência — o objetivo
   docker compose -f docker/docker-compose.yml up -d
   ```
 - [ ] Variáveis de ambiente em `.env`:
-  - `ANTHROPIC_API_KEY=` (opcional; use apenas para tarefas sem PII).
+  - `ANTHROPIC_API_KEY=` (opcional — só para o caminho de API sem PII).
   - `DATAJUD_API_KEY=` (se a chave do CNJ for exigida).
-- [ ] CLI cloud autenticado (`claude` ou `codex`) para a primeira sessão
-  fixture/anônima sem PII.
-- [ ] Não depender de Ollama local para caso complexo. O piloto atual trata
-  Ollama como fraco para redação jurídica complexa; caso real com PII fica
-  bloqueado até haver rota cloud com anonimização/consentimento ou outro
-  backend local suficientemente forte.
+- [ ] Ollama rodando localmente (`ollama serve`) como **fallback** — o modelo de
+  fronteira vem da sessão de IA do(a) advogado(a) (ver §3.5).
 - [ ] Repertório indexado: arquivo `data/repertory.db` presente; senão:
   ```bash
   uv run juris repertory ingest
   ```
 
+## 3.5 Sessão de IA (modelo de fronteira via assinatura)
+
+O juris usa a **assinatura de IA do(a) próprio(a) advogado(a)** (Claude ou
+ChatGPT) através de uma extensão de navegador na máquina dele(a) — o modelo de
+fronteira faz a análise/estratégia/minuta, e a sessão **nunca sai do perímetro
+do(a) advogado(a)** (ADR-0018). Passo a passo, **na ordem**:
+
+- [ ] **Assinatura paga ativa**: Claude (Pro/Max) **ou** ChatGPT (Plus/Pro).
+  O plano que o(a) advogado(a) já usa serve — sem custo adicional de API.
+
+- [ ] **⚠️ DESLIGAR o treino / coleta de dados** (passo crítico — sigilo da OAB +
+  LGPD: o conteúdo do processo **não pode** treinar o modelo de um terceiro):
+  - **Claude.ai:** *Configurações → Privacidade* → desligue a opção de **ajudar a
+    melhorar o Claude** / uso de conversas para treino.
+  - **ChatGPT:** *Configurações → Controles de dados (Data Controls)* → **"Melhorar
+    o modelo para todos" = DESLIGADO**.
+  - Os rótulos exatos mudam com o tempo — confirme que **nenhuma** opção de uso de
+    dados para treinamento esteja ativa. Em caso de dúvida, use também o modo de
+    chat temporário/não salvo.
+  - *Defesa em profundidade:* mesmo com o treino desligado, o juris **de-identifica**
+    o que sai para a sessão e re-identifica a resposta — **identificadores estruturados**
+    (CPF/CNPJ/CNJ/OAB) por regex e **nomes** via NER LeNER-Br.
+  - **Pré-baixar o modelo NER** (uma vez, para o caminho cloud/sessão):
+    `uv run python -c "from juris.core.ner import LegalNER; LegalNER().redact_entities('teste')"`.
+    Sem o modelo, o caminho cloud **falha fechado** (não envia nomes) — é o
+    comportamento seguro do ADR-0016.
+
+- [ ] **Instalar a extensão juris + o host de mensagens nativas** e autorizá-la no
+  navegador:
+  ```bash
+  cd docs/browser-extension
+  npm install
+  npm run build
+  ```
+  Em `chrome://extensions`, ative o modo desenvolvedor, carregue
+  `docs/browser-extension` como extensão unpacked, copie o ID da extensão e rode:
+  ```bash
+  uv run juris browser install-native-host --extension-id <EXTENSION_ID>
+  export JURIS_BROWSER_BRIDGE_URL=ws://127.0.0.1:8787
+  uv run juris browser status
+  ```
+  O status deve mostrar `browser_session`, de-id ligado e, após recarregar a
+  extensão, `ready` para o bridge. Se aparecer `agent_offline`, recarregue a
+  extensão e confirme que a aba Claude.ai/ChatGPT está aberta.
+
+- [ ] **Logar no Claude.ai / ChatGPT** na mesma janela do navegador e deixar a aba
+  aberta (a extensão usa a sessão autenticada).
+
+- [ ] **Conectar e verificar**: o agente local detecta a sessão; faça um prompt de
+  teste curto e confirme que a resposta volta ao juris. Se a sessão falhar (não
+  logado, layout mudou, timeout), o juris **cai no modelo local** e avisa.
+
+> **Escopo:** para o uso do **próprio escritório** este caminho é apropriado. Para
+> revenda multi-tenant, revisitar os termos de uso do provedor e a base de DPA
+> (ADR-0018).
+
 ## 4. Sessão de smoke test (1 hora)
 
-Estrutura sugerida:
+### Sequência de comandos (no Mac Mini, com o token conectado)
+
+```bash
+# 0. Atualize a cópia local (a do Mac Mini pode estar atrás)
+git fetch && git pull && uv sync
+
+# 1. Pré-voo ÚNICO — token A3 + corpus + embeddings + Ollama num comando.
+#    --live também valida o certificado do token (sem PIN). Qualquer FAIL aborta.
+uv run juris pilot preflight --live
+
+# 2. Primeira conexão: importa o acervo (avisos + seed) e calcula prazos.
+uv run juris connect --cpf <CPF> --file acervo.txt   # nas próximas vezes: só o diferencial
+
+# 3. Lê o processo, analisa, e gera a minuta com a linha estratégica selecionada.
+uv run juris demo <NUMERO_CNJ> contestacao --source mni
+
+# 4. Verifica a íntegra da cadeia de auditoria.
+uv run juris audit verify juris-out/<NUMERO_CNJ>/audit.jsonl
+```
+
+> Se o `preflight --live` acusar **token_a3 FAIL**, o token não está conectado ou
+> o certificado expirou — resolva antes de seguir. **Ollama indisponível** é WARN
+> (cai no fallback); na arquitetura nova, o modelo de fronteira vem da §3.5.
+
+### Estrutura sugerida
 
 | Tempo | Atividade |
 | ---: | --- |
-| 0:00–0:05 | Revisão dos limites do piloto (§2 dos termos). |
-| 0:05–0:25 | Demo em **modo fixture** para mostrar o pipeline sem PII: `uv run juris demo 0000000-00.0000.0.00.0000 contestacao --source fixture --modo rascunho-pesquisa --cli-cloud claude` |
-| 0:25–0:35 | Discutir um caso real apenas no nível operacional: área, peça, complexidade e riscos de PII. Não inserir dados reais no LLM. |
-| 0:35–0:50 | Revisão conjunta de `rascunho-pesquisa.md`, `reviewer-report.md`, `prazos.md`. Capturar fricções em `docs/pilot/smoke-test-notes.md`. |
+| 0:00–0:05 | Revisão dos limites do piloto (§2 dos termos) + `juris pilot preflight --live`. |
+| 0:05–0:15 | Demo em **modo fixture** para mostrar o pipeline sem pressão: `uv run juris demo 0000000-00.0000.0.00.0000 contestacao --source fixture` |
+| 0:15–0:35 | Demo em modo real (DataJud) sobre o caso escolhido pelo(a) advogado(a). |
+| 0:35–0:50 | Revisão conjunta de `draft.md`, `reviewer-report.md`, `prazos.md`. Capturar fricções em `docs/pilot/smoke-test-notes.md`. |
 | 0:50–0:55 | Verificação de auditoria: `uv run juris audit verify <caso>/audit.jsonl` |
 | 0:55–1:00 | Próximos passos, escolha do modelo de cobrança (§5 dos termos). |
 

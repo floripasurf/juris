@@ -3,17 +3,38 @@
 from __future__ import annotations
 
 import getpass
+from datetime import datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, cast
 
 import typer
-from rich.console import Console
 from rich.table import Table
+
+from juris.cli.commands.agent import agent_app
+from juris.cli.commands.doctor import doctor
+from juris.cli.commands.tenant import tenant_app
+from juris.cli.console import console
+
+# Tracked-list helpers are shared with the web layer (juris.jobs.tracking).
+from juris.jobs.tracking import get_tracked as _get_tracked_processos
+from juris.jobs.tracking import merge_tracked as _merge_tracked
+from juris.jobs.tracking import parse_cnj_seed as _parse_cnj_seed
+
+if TYPE_CHECKING:
+    from juris.core.types import NumeroCNJ
+    from juris.llm.base import AbstractLLM
+    from juris.mni.parsers.processo import ProcessoDomain
+    from juris.mni.token import TokenMaterial
+    from juris.mni.tribunais import TribunalConfig
 
 app = typer.Typer(
     name="juris",
     help="Brazilian Legal AI for law firms — MNI integration, prazo engine, petition drafting.",
     no_args_is_help=True,
 )
-console = Console()
+app.add_typer(agent_app)  # juris agent … (extracted to cli/commands/agent.py)
+app.add_typer(tenant_app)  # juris tenant … (onboarding, cli/commands/tenant.py)
+app.command("doctor")(doctor)  # juris doctor — production readiness (cli/commands/doctor.py)
 
 
 def _get_senha(tribunal: str, cpf: str, senha: str | None) -> str:
@@ -43,6 +64,7 @@ def consulta(
     com_documentos: bool = typer.Option(False, "--com-documentos", "-d", help="Include full documents"),
     cpf: str = typer.Option(..., "--cpf", help="CPF do consultante"),
     senha: str = typer.Option(None, "--senha", "-s", help="Senha PJe (prompted + saved if omitted)"),
+    pin: str = typer.Option(None, "--pin", help="PIN do token A3 (mTLS; senão TOKEN_PIN/prompt)"),
 ) -> None:
     """Fetch a case from a tribunal via MNI consultarProcesso."""
     from juris.core.types import NumeroCNJ
@@ -62,7 +84,7 @@ def consulta(
 
     # mTLS tribunals (e.g. TJMG) need the A3 hardware token, not zeep+password.
     if tribunal_cfg.requires_mtls:
-        _consulta_mtls(cnj, tribunal_cfg, cpf, senha, com_documentos)
+        _consulta_mtls(cnj, tribunal_cfg, cpf, senha, com_documentos, pin)
         return
 
     from juris.mni.auth import PasswordAuth
@@ -139,7 +161,11 @@ def logout(
     console.print(f"[green]Credentials removed for {tribunal.upper()}.[/green]")
 
 
-def _print_processo(processo) -> None:
+def _format_dt(value: datetime | None, fmt: str, fallback: str = "-") -> str:
+    return value.strftime(fmt) if value is not None else fallback
+
+
+def _print_processo(processo: ProcessoDomain) -> None:
     """Pretty-print a ProcessoDomain to the console."""
     console.print(f"\n[bold green]Processo: {processo.numero_cnj}[/bold green]")
     console.print(f"  Classe: {processo.classe or 'N/A'}")
@@ -163,7 +189,7 @@ def _print_processo(processo) -> None:
 
         for m in processo.movimentos[-10:]:  # Last 10
             table.add_row(
-                m.data_hora.strftime("%Y-%m-%d %H:%M"),
+                _format_dt(m.data_hora, "%Y-%m-%d %H:%M"),
                 str(m.codigo_nacional or ""),
                 m.descricao or "",
                 (m.complemento or "")[:60],
@@ -176,60 +202,63 @@ def _print_processo(processo) -> None:
             console.print(f"  [{d.id_documento}] {d.tipo_documento}: {d.descricao or ''}")
 
 
-def _consulta_mtls(cnj, tribunal_cfg, cpf: str, senha: str | None, com_documentos: bool) -> None:
-    """consultarProcesso against an mTLS tribunal using the A3 hardware token."""
-    from juris.mni.operations.consulta_pkcs11 import consultar_processo_pkcs11
+def _consulta_mtls(
+    cnj: NumeroCNJ,
+    tribunal_cfg: TribunalConfig,
+    cpf: str,
+    senha: str | None,
+    com_documentos: bool,
+    pin: str | None = None,
+) -> None:
+    """consultarProcesso against an mTLS tribunal, through the MNIReadService boundary."""
+    from juris.mni.service import InProcessMNIReadService
 
     console.print(f"[bold]Fetching case (mTLS):[/bold] {cnj}")
     console.print(f"  Tribunal: {tribunal_cfg.id} ({tribunal_cfg.nome})")
 
-    pkcs11_config, host, path, resolved_senha, _material = _mtls_session(tribunal_cfg, cpf, senha)
+    _material, resolved_senha, resolved_pin = _mtls_session(tribunal_cfg, cpf, senha, pin)
 
     try:
-        result = consultar_processo_pkcs11(
-            host=host,
-            path=path,
-            pkcs11_config=pkcs11_config,
-            id_consultante=cpf,
-            senha_consultante=resolved_senha,
-            numero_cnj=str(cnj),
-            mni_version=tribunal_cfg.mni_version,
+        processo = InProcessMNIReadService().consultar_processo(
+            str(cnj),
+            tribunal_cfg,
+            cpf,
+            resolved_senha,
+            token_pin=resolved_pin,
             com_documentos=com_documentos,
         )
-    except Exception as e:
-        console.print(f"[red]MNI Error:[/red] {type(e).__name__}: {e}")
-        raise typer.Exit(code=1) from e
-
-    if not result.sucesso:
-        console.print(f"[red]MNI returned error:[/red] {result.mensagem}")
-        if "login" in result.mensagem.lower() or "autenticação" in result.mensagem.lower():
+    except RuntimeError as e:
+        msg = str(e)
+        console.print(f"[red]MNI returned error:[/red] {msg}")
+        if "login" in msg.lower() or "autenticação" in msg.lower():
             from juris.core.credentials import delete_credential
 
             delete_credential(f"mni_{tribunal_cfg.id}_{cpf}")
             console.print("[yellow]Senha PJe limpa do Keychain. Rode de novo para reinserir.[/yellow]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
-    _print_consulta_result(result)
+    _print_processo(processo)
 
 
-def _mtls_session(tribunal_cfg, cpf: str, senha: str | None, pin: str | None = None):
-    """Build the PKCS#11 mTLS session pieces shared by consulta and avisos.
+def _mtls_session(
+    tribunal_cfg: TribunalConfig, cpf: str, senha: str | None, pin: str | None = None
+) -> tuple[TokenMaterial, str, str]:
+    """Resolve mTLS credentials at the CLI edge, shared by consulta and avisos.
 
-    Reads the token cert (no PIN), resolves the token PIN (arg → env → prompt)
-    and the PJe password (arg → Keychain → prompt), and derives host/path.
+    Reads the token cert via :class:`TokenService` (no PIN), resolves the token
+    PIN (arg → env → prompt) and the PJe password (arg → Keychain → prompt). The
+    transport (host/path/PKCS#11 config) is built inside ``MNIReadService``, not
+    here — the CLI only owns credential resolution.
 
     Returns:
-        Tuple (pkcs11_config, host, path, resolved_senha, material).
+        Tuple (material, resolved_senha, resolved_pin).
     """
-    from urllib.parse import urlparse
-
     from juris.config import get_settings
-    from juris.mni.token import TokenError, build_pkcs11_config, extract_token_material
+    from juris.mni.token import InProcessTokenService, TokenError
 
-    settings = get_settings()
     try:
         console.print("[dim]Lendo certificado do token…[/dim]")
-        material = extract_token_material(settings.pkcs11_module)
+        material = InProcessTokenService().read_material()
     except TokenError as e:
         console.print(f"[red]Token:[/red] {e}")
         raise typer.Exit(code=1) from e
@@ -239,6 +268,7 @@ def _mtls_session(tribunal_cfg, cpf: str, senha: str | None, pin: str | None = N
     if material.cpf and material.cpf != cpf:
         console.print(f"[yellow]Aviso:[/yellow] CPF do token ({material.cpf}) ≠ --cpf ({cpf}).")
 
+    settings = get_settings()
     resolved_pin = pin or (settings.token_pin.get_secret_value() if settings.token_pin else None)
     if not resolved_pin:
         resolved_pin = getpass.getpass("PIN do token A3: ")
@@ -247,17 +277,7 @@ def _mtls_session(tribunal_cfg, cpf: str, senha: str | None, pin: str | None = N
         raise typer.Exit(code=1)
 
     resolved_senha = _get_senha(tribunal_cfg.id, cpf, senha)
-
-    service_url = tribunal_cfg.service_url_override or tribunal_cfg.wsdl_url.replace("?wsdl", "")
-    parsed = urlparse(service_url)
-    pkcs11_config = build_pkcs11_config(material, resolved_pin, settings.pkcs11_module)
-    return (
-        pkcs11_config,
-        parsed.hostname or "",
-        parsed.path or "/pje/intercomunicacao",
-        resolved_senha,
-        material,
-    )
+    return material, resolved_senha, resolved_pin
 
 
 @app.command()
@@ -274,7 +294,7 @@ def avisos(
     With --track, every processo with a pending aviso is added to the tracked
     list so 'juris overnight' computes its deadlines.
     """
-    from juris.mni.operations.intimacoes import consultar_avisos_pendentes_pkcs11
+    from juris.mni.service import InProcessMNIReadService
     from juris.mni.tribunais import get_tribunal
 
     try:
@@ -291,16 +311,13 @@ def avisos(
         raise typer.Exit(code=1)
 
     console.print(f"[bold]Avisos pendentes (mTLS):[/bold] {tribunal_cfg.nome}")
-    pkcs11_config, host, path, resolved_senha, _material = _mtls_session(tribunal_cfg, cpf, senha, pin)
+    _material, resolved_senha, resolved_pin = _mtls_session(tribunal_cfg, cpf, senha, pin)
 
-    result = consultar_avisos_pendentes_pkcs11(
-        host=host,
-        path=path,
-        pkcs11_config=pkcs11_config,
-        id_consultante=cpf,
-        senha_consultante=resolved_senha,
-        mni_version=tribunal_cfg.mni_version,
-    )
+    try:
+        result = InProcessMNIReadService().consultar_avisos(tribunal_cfg, cpf, resolved_senha, token_pin=resolved_pin)
+    except RuntimeError as e:
+        console.print(f"[red]MNI Error:[/red] {e}")
+        raise typer.Exit(code=1) from e
 
     if not result.sucesso:
         console.print(f"[red]MNI returned error:[/red] {result.mensagem}")
@@ -326,59 +343,14 @@ def avisos(
         from juris.core.credentials import store_credential
 
         tracked = _get_tracked_processos()
-        existing = {f"{p['tribunal']}:{p['numero_cnj']}" for p in tracked}
-        added = 0
-        for a in result.avisos:
-            if not a.numero_processo:
-                continue
-            key = f"{tribunal}:{a.numero_processo}"
-            if key not in existing:
-                tracked.append({"numero_cnj": a.numero_processo, "tribunal": tribunal})
-                existing.add(key)
-                added += 1
+        entries = [{"numero_cnj": a.numero_processo, "tribunal": tribunal} for a in result.avisos if a.numero_processo]
+        tracked, added = _merge_tracked(tracked, entries)
         store_credential("tracked_processos", json.dumps(tracked))
         console.print(f"[green]Rastreando +{added} processo(s)[/green] [dim](total: {len(tracked)})[/dim]")
         console.print("[dim]Rode 'juris overnight --cpf " + cpf + "' para calcular os prazos.[/dim]")
 
 
-def _print_consulta_result(result) -> None:
-    """Pretty-print a ConsultaResult (PKCS#11 mTLS path) to the console."""
-    console.print(f"\n[bold green]Processo: {result.numero or 'N/A'}[/bold green]")
-    console.print(f"  [dim]{result.mensagem}[/dim]")
-    console.print(f"  Classe: {result.classe or 'N/A'}")
-    if result.orgao_julgador:
-        console.print(f"  Órgão: {result.orgao_julgador}")
-
-    if result.partes:
-        console.print("\n[bold]Partes:[/bold]")
-        for p in result.partes:
-            advs = f" (Advs: {', '.join(p['advogados'])})" if p.get("advogados") else ""
-            console.print(f"  [{p['tipo']}] {p['nome']}{advs}")
-
-    if result.movimentos:
-        console.print(f"\n[bold]Movimentos ({len(result.movimentos)}):[/bold]")
-        ordered = sorted(result.movimentos, key=lambda m: m.get("data", ""))
-        table = Table()
-        table.add_column("Data", style="cyan", width=16)
-        table.add_column("Código", width=7)
-        table.add_column("Descrição")
-        table.add_column("Complemento")
-        for m in ordered[-15:]:
-            table.add_row(
-                _fmt_mni_datetime(m.get("data", "")),
-                str(m.get("codigo") or ""),
-                (m.get("descricao") or "")[:40],
-                (m.get("complemento") or "")[:40],
-            )
-        console.print(table)
-
-    if result.documentos:
-        console.print(f"\n[bold]Documentos ({len(result.documentos)}):[/bold]")
-        for d in result.documentos:
-            console.print(f"  [{d['id']}] {d['tipo']}: {d.get('descricao') or ''}")
-
-
-def _safe_get_tribunal(tribunal_id: str):
+def _safe_get_tribunal(tribunal_id: str) -> TribunalConfig | None:
     """Return the TribunalConfig for an id, or None if unknown."""
     from juris.mni.tribunais import get_tribunal
 
@@ -388,13 +360,100 @@ def _safe_get_tribunal(tribunal_id: str):
         return None
 
 
-def _fmt_mni_datetime(raw: str) -> str:
-    """Format an MNI timestamp (YYYYMMDDHHMMSS[ms]) as YYYY-MM-DD HH:MM."""
-    if len(raw) >= 12 and raw[:12].isdigit():
-        return f"{raw[0:4]}-{raw[4:6]}-{raw[6:8]} {raw[8:10]}:{raw[10:12]}"
-    if len(raw) >= 8 and raw[:8].isdigit():
-        return f"{raw[0:4]}-{raw[4:6]}-{raw[6:8]}"
-    return raw
+def _nightly_processos(
+    tracked_list: list[dict[str, str]], tribunal_filter: str | None
+) -> list[dict[str, str]]:
+    """Normalize tracked entries into the shape expected by ``run_nightly``."""
+    if tribunal_filter:
+        tracked_list = [p for p in tracked_list if p.get("tribunal") == tribunal_filter]
+    return [{"numero_cnj": p["numero_cnj"], "tribunal": p.get("tribunal", "tjmg")} for p in tracked_list]
+
+
+def _resolve_nightly_senha(cpf: str, senha: str, processos: list[dict[str, str]]) -> str:
+    """Resolve PJe password from Keychain for the tribunals in this nightly batch."""
+    if senha or not cpf:
+        return senha
+    from juris.core.credentials import get_credential
+
+    tribunais = {p["tribunal"] for p in processos}
+    for trib in tribunais:
+        stored = get_credential(f"mni_{trib}_{cpf}")
+        if stored:
+            return stored
+    return ""
+
+
+def _resolve_nightly_pin(
+    pin: str | None, processos: list[dict[str, str]], *, remote_agent: bool
+) -> str | None:
+    """Resolve token PIN when the token is co-located; remote agents resolve it locally."""
+    if remote_agent:
+        return None
+    needs_mtls = any((_t := _safe_get_tribunal(p["tribunal"])) is not None and _t.requires_mtls for p in processos)
+    if not needs_mtls or pin:
+        return pin
+    from juris.config import get_settings
+
+    settings = get_settings()
+    if settings.token_pin:
+        return settings.token_pin.get_secret_value()
+    return getpass.getpass("PIN do token A3 (mTLS): ")
+
+
+def _print_nightly_results(summary: Any) -> None:
+    """Render the per-process part of a nightly summary."""
+    for r in summary.results:
+        if r.error:
+            console.print(f"  [red]FAIL[/red] {r.numero_cnj}: {r.error}")
+        else:
+            parts = [f"[green]OK[/green] {r.numero_cnj}"]
+            if r.new_movimentos:
+                parts.append(f"+{r.new_movimentos} mov")
+            if r.prazos_computed:
+                parts.append(f"{r.prazos_computed} prazos")
+            if r.critical_alerts:
+                parts.append(f"[red]{r.critical_alerts} alertas[/red]")
+            if not r.new_movimentos and r.success:
+                parts.append("no changes")
+            console.print(f"  {' | '.join(parts)}")
+
+            # Show critical alerts inline
+            if r.alert_batch and r.alert_batch.has_critical:
+                from juris.alerts.deadline_alerts import AlertLevel
+
+                for a in r.alert_batch.alerts:
+                    if a.level == AlertLevel.CRITICAL:
+                        console.print(f"    [red]{a.short_message}[/red]")
+
+
+def _print_nightly_summary(summary: Any) -> None:
+    console.print("\n[bold]Summary:[/bold]")
+    console.print(f"  Succeeded: {summary.succeeded}/{summary.total}")
+    if summary.total_critical_alerts:
+        console.print(f"  [red]Critical alerts: {summary.total_critical_alerts}[/red]")
+    console.print(f"  Duration: {summary.duration_seconds:.1f}s")
+
+
+def _deliver_nightly_alerts(db: Any, summary: Any) -> int:
+    """Send pending alerts for one DB; return desired process exit code."""
+    import asyncio
+
+    from juris.alerts.pending import send_pending_deadline_alerts
+
+    alert_summary = asyncio.run(send_pending_deadline_alerts(db=db))
+    if not alert_summary.smtp_configured:
+        msg = "SMTP not configured; pending alerts were not sent."
+        if summary.total_critical_alerts:
+            console.print(f"[red]{msg} Set ALERT_SMTP_HOST, ALERT_FROM_ADDRESS, ALERT_TO_ADDRESSES.[/red]")
+            return 2
+        console.print(f"[yellow]{msg}[/yellow]")
+        return 0
+    console.print(
+        "[bold]Alert delivery:[/bold] "
+        f"{alert_summary.sent} sent | {alert_summary.failed} failed | "
+        f"{alert_summary.alerts} alert(s) | {alert_summary.suppressed} deduped"
+    )
+    return 2 if alert_summary.failed else 0
 
 
 @app.command()
@@ -454,8 +513,7 @@ def consulta_cert(
     """Fetch a case using ICP-Brasil A3 token (mTLS via PKCS#11)."""
     from juris.core.credentials import get_credential, store_credential
     from juris.core.types import NumeroCNJ
-    from juris.mni.operations.consulta_pkcs11 import consultar_processo_pkcs11
-    from juris.mni.pkcs11_transport import PKCS11Config
+    from juris.mni.service import InProcessMNIReadService
     from juris.mni.tribunais import get_tribunal
 
     try:
@@ -471,7 +529,7 @@ def consulta_cert(
         raise typer.Exit(code=1) from e
 
     # Resolve PIN: arg > stored > prompt
-    resolved_pin = pin
+    resolved_pin: str | None = pin
     if not resolved_pin:
         resolved_pin = get_credential("token_pin")
     if not resolved_pin:
@@ -484,155 +542,73 @@ def consulta_cert(
         console.print("[red]Token PIN is required.[/red]")
         raise typer.Exit(code=1)
 
-    # Detect cert/key paths
-
-    cert_pem = "/tmp/juris_user_cert.pem"
-    chain_pem = "/tmp/juris_chain.pem"
-    key_uri = "pkcs11:token=TOKEN%20CERTDATA;object=p11%23e835efffba274fac;type=private"
-
-    # Auto-export cert if not present
-    if not __import__("os").path.exists(cert_pem):
-        console.print("[yellow]Exporting certificate from token...[/yellow]")
-        _export_token_cert(cert_pem, chain_pem, resolved_pin)
-
-    pkcs11_config = PKCS11Config(
-        pin=resolved_pin,
-        cert_pem_path=cert_pem,
-        chain_pem_path=chain_pem,
-        key_uri=key_uri,
-    )
-
-    # Determine host/path from tribunal config
-    from urllib.parse import urlparse
-
-    endpoint = tribunal_cfg.service_url_override or tribunal_cfg.wsdl_url.replace("?wsdl", "")
-    parsed = urlparse(endpoint)
-    host = parsed.hostname or ""
-    path = parsed.path or "/pje/intercomunicacao"
-
     console.print(f"[bold]Fetching case (cert auth):[/bold] {cnj}")
-    console.print(f"  Tribunal: {tribunal} ({host})")
+    console.print(f"  Tribunal: {tribunal_cfg.id} ({tribunal_cfg.nome})")
 
+    # The MNIReadService extracts the token material itself — no hardcoded cert
+    # paths or key URI. senha_consultante defaults to the CPF for this command.
     try:
-        result = consultar_processo_pkcs11(
-            host=host,
-            path=path,
-            pkcs11_config=pkcs11_config,
-            id_consultante=cpf,
-            senha_consultante=cpf,
-            numero_cnj=str(cnj),
-            mni_version=tribunal_cfg.mni_version,
+        processo = InProcessMNIReadService().consultar_processo(
+            str(cnj),
+            tribunal_cfg,
+            cpf,
+            cpf,
+            token_pin=resolved_pin,
             com_documentos=com_documentos,
         )
-    except Exception as e:
-        console.print(f"[red]MNI Error:[/red] {type(e).__name__}: {e}")
-        raise typer.Exit(code=1) from e
-
-    if not result.sucesso:
-        console.print(f"[red]MNI returned error:[/red] {result.mensagem}")
-        if "login" in result.mensagem.lower() or "autorizado" in result.mensagem.lower():
+    except RuntimeError as e:
+        msg = str(e)
+        console.print(f"[red]MNI returned error:[/red] {msg}")
+        if "login" in msg.lower() or "autorizado" in msg.lower():
             from juris.core.credentials import delete_credential
 
             delete_credential("token_pin")
             console.print("[yellow]Stored PIN cleared. Re-run to enter new PIN.[/yellow]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
-    # Print results
-    console.print(f"\n[bold green]Processo: {result.numero or str(cnj)}[/bold green]")
-    console.print(f"  Classe: {result.classe or 'N/A'}")
-    console.print(f"  Assunto: {result.assunto or 'N/A'}")
-    if result.valor_causa:
-        console.print(f"  Valor: R$ {result.valor_causa:,.2f}")
-    console.print(f"  Órgão: {result.orgao_julgador or 'N/A'}")
-
-    if result.partes:
-        console.print(f"\n[bold]Partes ({len(result.partes)}):[/bold]")
-        for p in result.partes:
-            advs = f" (Advs: {', '.join(p['advogados'])})" if p.get("advogados") else ""
-            console.print(f"  [{p.get('tipo', '?')}] {p.get('nome', '?')}{advs}")
-
-    if result.movimentos:
-        console.print(f"\n[bold]Movimentos ({len(result.movimentos)}):[/bold]")
-        table = Table()
-        table.add_column("Data", style="cyan", width=20)
-        table.add_column("Código", width=8)
-        table.add_column("Complemento")
-        for m in result.movimentos[-10:]:
-            table.add_row(m.get("data", ""), m.get("codigo", ""), (m.get("complemento", ""))[:80])
-        console.print(table)
-
-    if result.documentos:
-        console.print(f"\n[bold]Documentos ({len(result.documentos)}):[/bold]")
-        for d in result.documentos:
-            console.print(f"  [{d.get('id', '')}] {d.get('tipo', '')}: {d.get('descricao', '')}")
-
-    console.print(f"\n[dim]Raw XML: {len(result.raw_xml)} bytes[/dim]")
-
-
-def _export_token_cert(cert_path: str, chain_path: str, pin: str) -> None:
-    """Export user certificate and CA chain from the PKCS#11 token."""
-    import subprocess
-
-    pkcs11_module = "/usr/local/lib/libeTPkcs11.dylib"
-
-    # Export all certs from token
-    result = subprocess.run(
-        [
-            "p11tool",
-            f"--provider={pkcs11_module}",
-            "--list-all-certs",
-            "pkcs11:token=TOKEN%20CERTDATA",
-            "--outder",
-        ],
-        capture_output=True,
-        env={**__import__("os").environ, "GNUTLS_PIN": pin},
-    )
-
-    # Use p11tool to export the specific user cert
-    user_cert_uri = (
-        "pkcs11:token=TOKEN%20CERTDATA;"
-        "id=%79%70%44%5A%2D%53%6B%39%42%54%79%42%53%51%56%42%49%51%55%56%4D%49%45%31%42%55%6C%52%4A;"
-        "object=p11%23e835efffba274fac;type=cert"
-    )
-    result = subprocess.run(
-        ["p11tool", f"--provider={pkcs11_module}", "--export", user_cert_uri],
-        capture_output=True,
-        env={**__import__("os").environ, "GNUTLS_PIN": pin},
-    )
-    if result.returncode == 0 and result.stdout:
-        with open(cert_path, "wb") as f:
-            f.write(result.stdout)
-
-    # Export CA chain (all certs except user cert)
-    result = subprocess.run(
-        [
-            "p11tool",
-            f"--provider={pkcs11_module}",
-            "--export-chain",
-            user_cert_uri,
-        ],
-        capture_output=True,
-        env={**__import__("os").environ, "GNUTLS_PIN": pin},
-    )
-    if result.returncode == 0 and result.stdout:
-        with open(chain_path, "wb") as f:
-            f.write(result.stdout)
+    _print_processo(processo)
 
 
 @app.command()
 def track(
-    numero_cnj: str = typer.Argument(..., help="Case number to track"),
-    tribunal: str = typer.Option("tjmg", "--tribunal", "-t", help="Tribunal ID"),
+    numero_cnj: str = typer.Argument(None, help="Case number to track (omit when using --file)"),
+    tribunal: str = typer.Option("tjmg", "--tribunal", "-t", help="Tribunal ID (default if CNJ court unknown)"),
+    seed: str = typer.Option(None, "--file", "-f", help="Seed file: one CNJ per line (# comments ok)"),
 ) -> None:
-    """Add a processo to the tracked list for overnight sync."""
+    """Add processos to the tracked list for overnight sync.
+
+    Single:  juris track <numero_cnj>
+    Bulk:    juris track --file acervo.txt   (tribunal derived per CNJ)
+
+    The seed import is the manual half of process discovery: the lawyer's
+    historical acervo is imported once; from then on the differential sync and
+    'juris avisos --track' keep it current.
+    """
     import json
 
     from juris.core.credentials import store_credential
 
     tracked = _get_tracked_processos()
-    key = f"{tribunal}:{numero_cnj}"
+    existing_keys = {f"{p['tribunal']}:{p['numero_cnj']}" for p in tracked}
 
-    if key in {f"{p['tribunal']}:{p['numero_cnj']}" for p in tracked}:
+    if seed is not None:
+        entries, errors = _parse_cnj_seed(Path(seed).read_text(encoding="utf-8"), default_tribunal=tribunal)
+        tracked, added = _merge_tracked(tracked, entries)
+        store_credential("tracked_processos", json.dumps(tracked))
+        console.print(f"[green]Seed import:[/green] {added} novo(s), {len(entries) - added} já rastreado(s).")
+        if errors:
+            console.print(f"[yellow]{len(errors)} linha(s) ignorada(s):[/yellow]")
+            for err in errors[:10]:
+                console.print(f"  - {err}")
+        console.print(f"[dim]Total tracked: {len(tracked)}[/dim]")
+        return
+
+    if not numero_cnj:
+        console.print("[red]Informe um numero_cnj ou use --file.[/red]")
+        raise typer.Exit(code=1)
+
+    key = f"{tribunal}:{numero_cnj}"
+    if key in existing_keys:
         console.print(f"[yellow]Already tracking:[/yellow] {numero_cnj} ({tribunal})")
         return
 
@@ -681,6 +657,93 @@ def tracked() -> None:
         table.add_row(str(i), p.get("tribunal", "?"), p.get("numero_cnj", "?"))
 
     console.print(table)
+
+
+@app.command()
+def connect(
+    cpf: str | None = typer.Option(None, "--cpf", help="CPF do advogado (não exigido no modo remoto)"),
+    tribunal: str = typer.Option("tjmg", "--tribunal", "-t", help="Tribunal ID (mTLS)"),
+    seed: str = typer.Option(None, "--file", "-f", help="Seed inicial: arquivo com 1 CNJ por linha"),
+    senha: str = typer.Option(None, "--senha", "-s", help="Senha PJe (senão Keychain/prompt)"),
+    pin: str = typer.Option(None, "--pin", help="PIN do token A3 (senão TOKEN_PIN/prompt)"),
+    no_sync: bool = typer.Option(False, "--no-sync", help="Só atualizar a lista; não buscar agora"),
+) -> None:
+    """Conectar o token: importar/atualizar o acervo e calcular prazos.
+
+    1ª conexão: importa os processos com intimação pendente (avisos) + o seed
+    opcional (--file) do acervo histórico, e faz a leitura inicial completa.
+    Conexões seguintes: adiciona processos novos (avisos) e busca só os
+    andamentos posteriores ao último carregamento (diferencial).
+    """
+    import asyncio
+
+    from juris.jobs.connect import run_connect
+    from juris.mni.tribunais import get_tribunal
+
+    try:
+        tribunal_cfg = get_tribunal(tribunal)
+    except KeyError as e:
+        console.print(f"[red]Tribunal não encontrado:[/red] {tribunal}")
+        raise typer.Exit(code=1) from e
+    if not tribunal_cfg.requires_mtls:
+        console.print(f"[yellow]connect hoje suporta apenas tribunais mTLS (ex.: tjmg), não {tribunal}.[/yellow]")
+        raise typer.Exit(code=1)
+
+    console.print(f"[bold]Conectando ao {tribunal_cfg.nome}…[/bold]")
+    # Resolve credentials at the CLI edge ONLY when co-located. In remote
+    # (split-trust) mode the agent resolves the lawyer's own PIN/senha — the
+    # orchestrator must never touch the token (ADR-0015).
+    from juris.api.agent_config import is_remote
+
+    if is_remote():
+        if pin or senha:
+            console.print(
+                "[yellow]Aviso:[/yellow] --pin/--senha são ignorados no modo remoto (o "
+                "agente resolve) — evite passá-los: podem ficar no histórico do shell."
+            )
+        resolved_senha, resolved_pin = "", None
+    else:
+        if not cpf:
+            console.print("[red]--cpf é obrigatório no modo co-localizado.[/red]")
+            raise typer.Exit(code=1)
+        _material, resolved_senha, resolved_pin = _mtls_session(tribunal_cfg, cpf, senha, pin)
+    seed_text = Path(seed).read_text(encoding="utf-8") if seed else None
+
+    try:
+        result = asyncio.run(
+            run_connect(
+                tribunal_cfg,
+                cpf or "",  # remote: the agent resolves the lawyer's own CPF
+                resolved_senha,
+                token_pin=resolved_pin,
+                seed_text=seed_text,
+                do_sync=not no_sync,
+            )
+        )
+    except RuntimeError as e:
+        console.print(f"[red]Falha ao conectar:[/red] {e}")
+        raise typer.Exit(code=1) from e
+
+    console.print(
+        f"[green]Lista:[/green] +{result.avisos_added} via avisos, "
+        f"+{result.seed_added} via seed (total {result.total_tracked})."
+    )
+    if result.seed_errors:
+        console.print(
+            f"[yellow]{len(result.seed_errors)} linha(s) de seed inválida(s) ignorada(s):[/yellow] "
+            f"{', '.join(result.seed_errors)}"
+        )
+    if result.sync is None:
+        if not result.total_tracked:
+            console.print("[yellow]Nada rastreado ainda.[/yellow] Use --file para semear o acervo.")
+        else:
+            console.print("[dim]Sync pulado (--no-sync). Rode 'juris connect' sem --no-sync para buscar.[/dim]")
+        return
+
+    console.print(
+        f"[green]Concluído:[/green] {result.sync.succeeded}/{result.sync.total} ok, "
+        f"{result.sync.total_critical_alerts} alerta(s) crítico(s)."
+    )
 
 
 @app.command()
@@ -741,7 +804,8 @@ def pull_updates(
     console.print(f"[bold]Syncing {len(processos)} processos...[/bold]")
     if differential_count:
         console.print(
-            f"[dim]{differential_count} with prior sync (differential), {len(processos) - differential_count} full sync[/dim]"
+            f"[dim]{differential_count} with prior sync (differential), "
+            f"{len(processos) - differential_count} full sync[/dim]"
         )
     console.print()
 
@@ -758,10 +822,7 @@ def pull_updates(
         if not result.error and result.had_changes:
             # Persist new movimentos
             proc = db.get_processo_by_cnj(result.numero_cnj)
-            if proc is None:
-                proc_id = db.upsert_processo(result.numero_cnj, result.tribunal_id)
-            else:
-                proc_id = proc.id
+            proc_id = db.upsert_processo(result.numero_cnj, result.tribunal_id) if proc is None else proc.id
 
             mov_dicts = [
                 {
@@ -812,21 +873,6 @@ def pull_updates(
     console.print(f"  [dim]DB: {db.path}[/dim]")
 
 
-def _get_tracked_processos() -> list[dict]:
-    """Load tracked processos from credential storage."""
-    import json
-
-    from juris.core.credentials import get_credential
-
-    raw = get_credential("tracked_processos")
-    if not raw:
-        return []
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        return []
-
-
 @app.command()
 def analyze(
     numero_cnj: str = typer.Argument(..., help="Case number in CNJ format"),
@@ -864,7 +910,7 @@ def analyze(
 
             llm = OllamaLLM()
             console.print("[dim]LLM: Ollama (local) for ambiguous movements[/dim]")
-        except Exception:
+        except Exception:  # noqa: BLE001
             console.print("[yellow]Ollama not available, using rules only.[/yellow]")
 
     analysis = asyncio.run(
@@ -902,7 +948,7 @@ def analyze(
     for r in items:
         style = urgency_colors.get(r.urgencia, "")
         table.add_row(
-            r.data_hora.strftime("%Y-%m-%d"),
+            _format_dt(r.data_hora, "%Y-%m-%d"),
             f"[{style}]{r.urgencia.value}[/{style}]",
             r.categoria.value,
             r.metodo,
@@ -911,7 +957,8 @@ def analyze(
     console.print(table)
 
     console.print(
-        f"\n[dim]Rule: {analysis.rule_classified} | LLM: {analysis.llm_calls} | Total: {analysis.total_movimentos}[/dim]"
+        f"\n[dim]Rule: {analysis.rule_classified} | LLM: {analysis.llm_calls} | "
+        f"Total: {analysis.total_movimentos}[/dim]"
     )
 
 
@@ -1070,6 +1117,16 @@ def overnight(
     pin: str = typer.Option(None, "--pin", help="Token PIN for mTLS tribunals (else prompted/env)"),
     analyze: bool = typer.Option(True, "--analyze/--no-analyze", help="Run analysis after sync"),
     max_concurrent: int = typer.Option(10, "--max-concurrent", "-c", help="Max concurrent syncs"),
+    all_tenants: bool = typer.Option(
+        False,
+        "--all-tenants",
+        help="Run the nightly pipeline for every tenant configured in JURIS_TENANTS_FILE",
+    ),
+    send_alerts: bool = typer.Option(
+        True,
+        "--send-alerts/--no-send-alerts",
+        help="Send pending critical/warning deadline alerts after the nightly run",
+    ),
 ) -> None:
     """Full nightly pipeline: differential sync → analyze → prazos → alerts.
 
@@ -1078,91 +1135,74 @@ def overnight(
     """
     import asyncio
 
-    from juris.jobs.nightly import run_nightly
-    from juris.persistence.local_db import LocalDB
+    from rich.markup import escape
 
-    tracked_list = _get_tracked_processos()
-    if not tracked_list:
-        console.print("[yellow]No processos tracked. Use 'juris track <numero_cnj>' first.[/yellow]")
+    from juris.api.agent_config import is_remote
+    from juris.jobs.nightly import run_nightly
+    from juris.mni.factory import get_mni_read_service
+    from juris.persistence.local_db import LocalDB
+    from juris.web.auth import Tenant, default_registry, tenant_db_path
+
+    registry = default_registry()
+    if all_tenants:
+        if registry.is_open:
+            console.print("[red]--all-tenants exige JURIS_TENANTS_FILE configurado.[/red]")
+            raise typer.Exit(code=1)
+        tenant_ids = registry.tenant_ids
+    else:
+        tenant_ids = ("public",)
+
+    remote_agent = is_remote()
+    resolved_cpf = cpf or ""
+    exit_code = 0
+    ran_any = False
+
+    for tenant_id in tenant_ids:
+        tenant = Tenant(tenant_id)
+        db = LocalDB(tenant_db_path(tenant)) if all_tenants else LocalDB()
+        tracked_list = _get_tracked_processos(db=db) if all_tenants else _get_tracked_processos()
+        processos = _nightly_processos(tracked_list, tribunal)
+        if not processos:
+            console.print(f"[yellow]No processos tracked for tenant {tenant_id}.[/yellow]")
+            continue
+
+        ran_any = True
+        resolved_senha = _resolve_nightly_senha(resolved_cpf, senha or "", processos)
+        resolved_pin = _resolve_nightly_pin(pin, processos, remote_agent=remote_agent)
+        mni_service = get_mni_read_service(tenant_id) if all_tenants or remote_agent else None
+
+        heading = f"Nightly pipeline [{tenant_id}]: {len(processos)} processos"
+        console.print(f"[bold]{escape(heading)}[/bold]")
+        console.print(f"[dim]DB: {db.path} | Concurrent: {max_concurrent} | Analyze: {analyze}[/dim]\n")
+
+        summary = asyncio.run(
+            run_nightly(
+                processos=processos,
+                db=db,
+                cpf=resolved_cpf,
+                senha=resolved_senha,
+                max_concurrent=max_concurrent,
+                token_pin=resolved_pin,
+                mni_service=mni_service,
+            )
+        )
+
+        _print_nightly_results(summary)
+        _print_nightly_summary(summary)
+        if send_alerts:
+            exit_code = max(exit_code, _deliver_nightly_alerts(db, summary))
+
+    if not ran_any:
+        hint = (
+            "Use 'juris track <numero_cnj>' first."
+            if not all_tenants
+            else "Conecte/importe processos por tenant primeiro."
+        )
+        console.print(f"[yellow]No processos tracked. {hint}[/yellow]")
         raise typer.Exit(code=1)
 
-    if tribunal:
-        tracked_list = [p for p in tracked_list if p.get("tribunal") == tribunal]
-
-    processos = [{"numero_cnj": p["numero_cnj"], "tribunal": p.get("tribunal", "tjmg")} for p in tracked_list]
-
-    db = LocalDB()
-    resolved_cpf = cpf or ""
-    # Resolve PJe password from Keychain when a CPF is known and senha omitted.
-    resolved_senha = senha or ""
-    if resolved_cpf and not resolved_senha:
-        from juris.core.credentials import get_credential
-
-        tribunais = {p["tribunal"] for p in processos}
-        for trib in tribunais:
-            stored = get_credential(f"mni_{trib}_{resolved_cpf}")
-            if stored:
-                resolved_senha = stored
-                break
-
-    # If any tracked tribunal needs mTLS, ensure we have a token PIN.
-    needs_mtls = any(
-        (_t := _safe_get_tribunal(p["tribunal"])) is not None and _t.requires_mtls
-        for p in processos
-    )
-    resolved_pin = pin
-    if needs_mtls and not resolved_pin:
-        from juris.config import get_settings
-
-        settings = get_settings()
-        if settings.token_pin:
-            resolved_pin = settings.token_pin.get_secret_value()
-        else:
-            resolved_pin = getpass.getpass("PIN do token A3 (mTLS): ")
-
-    console.print(f"[bold]Nightly pipeline: {len(processos)} processos[/bold]")
-    console.print(f"[dim]DB: {db.path} | Concurrent: {max_concurrent} | Analyze: {analyze}[/dim]\n")
-
-    summary = asyncio.run(
-        run_nightly(
-            processos=processos,
-            db=db,
-            cpf=resolved_cpf,
-            senha=resolved_senha,
-            max_concurrent=max_concurrent,
-            token_pin=resolved_pin,
-        )
-    )
-
-    # Print results
-    for r in summary.results:
-        if r.error:
-            console.print(f"  [red]FAIL[/red] {r.numero_cnj}: {r.error}")
-        else:
-            parts = [f"[green]OK[/green] {r.numero_cnj}"]
-            if r.new_movimentos:
-                parts.append(f"+{r.new_movimentos} mov")
-            if r.prazos_computed:
-                parts.append(f"{r.prazos_computed} prazos")
-            if r.critical_alerts:
-                parts.append(f"[red]{r.critical_alerts} alertas[/red]")
-            if not r.new_movimentos and r.success:
-                parts.append("no changes")
-            console.print(f"  {' | '.join(parts)}")
-
-            # Show critical alerts inline
-            if r.alert_batch and r.alert_batch.has_critical:
-                from juris.alerts.deadline_alerts import AlertLevel
-
-                for a in r.alert_batch.alerts:
-                    if a.level == AlertLevel.CRITICAL:
-                        console.print(f"    [red]{a.short_message}[/red]")
-
-    console.print("\n[bold]Summary:[/bold]")
-    console.print(f"  Succeeded: {summary.succeeded}/{summary.total}")
-    if summary.total_critical_alerts:
-        console.print(f"  [red]Critical alerts: {summary.total_critical_alerts}[/red]")
-    console.print(f"  Duration: {summary.duration_seconds:.1f}s")
+    if exit_code:
+        raise typer.Exit(code=exit_code)
 
 
 @app.command()
@@ -1279,7 +1319,7 @@ def defesas(
 
     # Build ProcessoContext from ProcessoDomain
     movimentos_raw = [
-        {"codigo": m.codigo_nacional, "data": m.data_hora.strftime("%Y-%m-%d")} for m in (processo.movimentos or [])
+        {"codigo": m.codigo_nacional, "data": _format_dt(m.data_hora, "%Y-%m-%d")} for m in (processo.movimentos or [])
     ]
     partes_raw = [{"nome": p.nome, "tipo": p.tipo} for p in (processo.partes or [])]
 
@@ -1578,17 +1618,17 @@ def repertory_ingest(
         entry = REGISTRY[source]
         # Class-based ingester (e.g., tjdft-modelos, stf-landmark)
         if entry.source_dir or entry.ingester_class:
-            dir_path = Path(corpus_dir) if corpus_dir else Path(__file__).resolve().parents[3]
-            result = ingest_source(source, dir_path / "data" / "corpus", store, limit=limit)
+            base_dir = Path(corpus_dir) if corpus_dir else Path(__file__).resolve().parents[3]
+            result = ingest_source(source, base_dir / "data" / "corpus", store, limit=limit)
         else:
-            dir_path = Path(corpus_dir) if corpus_dir else None
-            loader = SeedLoader(corpus_dir=dir_path, include_superseded=include_superseded)
+            seed_dir = Path(corpus_dir) if corpus_dir else None
+            loader = SeedLoader(corpus_dir=seed_dir, include_superseded=include_superseded)
             audit_path = fts_path.parent / "audit.jsonl"
             audit = AuditLog(path=audit_path)
             result = loader.ingest(store, audit_log=audit)
     else:
-        dir_path = Path(corpus_dir) if corpus_dir else None
-        loader = SeedLoader(corpus_dir=dir_path, include_superseded=include_superseded)
+        seed_dir = Path(corpus_dir) if corpus_dir else None
+        loader = SeedLoader(corpus_dir=seed_dir, include_superseded=include_superseded)
         audit_path = fts_path.parent / "audit.jsonl"
         audit = AuditLog(path=audit_path)
         result = loader.ingest(store, audit_log=audit)
@@ -1597,6 +1637,73 @@ def repertory_ingest(
     console.print(f"  Chunks:  {result.total_chunks}")
     console.print(f"  Stored:  {result.total_embedded}")
     console.print("[green]Done.[/green]")
+
+
+@repertory_app.command("ingest-file")
+def repertory_ingest_file(
+    path: str = typer.Argument(..., help="Arquivo de texto com o inteiro teor da decisão."),
+    data: str = typer.Option(..., "--data", help="Data da fonte (ISO, ex. 2020-05-13)."),
+    url: str = typer.Option(..., "--url", help="URL oficial pública (http/https) da fonte."),
+    tipo: str = typer.Option("acordao_publicado", "--tipo", help="Tipo da fonte (source_type)."),
+    tribunal: str | None = typer.Option(None, "--tribunal", help="Tribunal (ou use --publisher)."),
+    publisher: str | None = typer.Option(None, "--publisher", help="Publicador (se não for tribunal)."),
+    titulo: str | None = typer.Option(None, "--titulo", help="Título/identificação (ex. REsp 1.234.567)."),
+    tema: str | None = typer.Option(None, "--tema", help="Tema/área."),
+    encoding: str = typer.Option("utf-8", "--encoding", help="Codificação do arquivo (ex.: utf-8, cp1252, latin-1)."),
+) -> None:
+    """Ingere um arquivo de INTEIRO TEOR (documento do próprio escritório) no corpus.
+
+    Fonte real, ToS inequívoco (arquivos que o escritório já possui). Proveniência
+    obrigatória (URL/fonte/data/tipo/hash) é validada antes de qualquer ingestão; o
+    conteúdo é tagueado como semente local (single-tenant) e fica pesquisável.
+    """
+    import os
+    from pathlib import Path
+
+    from juris.repertory.readiness import resolve_repertory_path
+    from juris.web.auth import PUBLIC_TENANT_ID, Tenant, tenant_scoped_dir
+    from juris.web.corpus_queue import append_accepted_source, reingest_pending_sources
+
+    file_path = Path(path)
+    if not file_path.is_file():
+        console.print(f"[red]Arquivo não encontrado:[/red] {path}")
+        raise typer.Exit(code=1)
+    try:
+        text = file_path.read_text(encoding=encoding).strip()
+    except (UnicodeDecodeError, LookupError) as exc:
+        # Brazilian legal exports are often cp1252/latin-1 — a clean message beats a
+        # raw traceback, and never silently ingests mojibake into a legal corpus.
+        console.print(
+            f"[red]Falha ao ler o arquivo como {encoding!r}:[/red] {exc.__class__.__name__}. "
+            "Reexecute com --encoding cp1252 (ou latin-1), ou salve o arquivo como UTF-8."
+        )
+        raise typer.Exit(code=1) from exc
+    if not text:
+        console.print("[red]Arquivo vazio — nada a ingerir.[/red]")
+        raise typer.Exit(code=1)
+
+    out_root = Path(os.environ.get("JURIS_OUT_ROOT", "juris-out"))
+    root = tenant_scoped_dir(Tenant(PUBLIC_TENANT_ID), out_root)
+    payload: dict[str, object] = {
+        "source_type": tipo,
+        "source_date": data,
+        "source_url": url,
+        "tribunal": tribunal or "",
+        "source_publisher": publisher or "",
+        "title": titulo or file_path.stem,
+        "tema": tema or "",
+        "source_text": text,
+    }
+    try:
+        append_accepted_source(root, payload)
+    except ValueError as exc:
+        console.print(f"[red]Proveniência incompleta:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    report = reingest_pending_sources(root, resolve_repertory_path(), tenant_id=None)
+    console.print(f"[green]Ingerido com proveniência:[/green] {report.processed} fonte(s), {report.chunks} chunk(s).")
+    if report.errors:
+        console.print(f"[yellow]{len(report.errors)} erro(s) de reingestão — verifique o log.[/yellow]")
 
 
 @repertory_app.command("sources")
@@ -1679,14 +1786,62 @@ def repertory_verify() -> None:
         raise typer.Exit(code=1)
 
 
+@repertory_app.command("backfill-embeddings")
+def repertory_backfill_embeddings(
+    batch_size: int = typer.Option(64, "--batch-size", min=1, max=512, help="Chunks por lote de embeddings."),
+    limit: int | None = typer.Option(None, "--limit", min=1, help="Máximo de chunks a atualizar nesta execução."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Apenas informa quantos chunks precisam de embedding."),
+) -> None:
+    """Populate dense embeddings for existing SQLite chunks."""
+    from juris.repertory.embeddings import LegalEmbedder
+    from juris.repertory.readiness import resolve_repertory_path
+    from juris.repertory.vector_store import LocalFTSStore
+
+    db_path = resolve_repertory_path()
+    if not db_path.exists():
+        console.print("[yellow]No corpus ingested yet. Run 'juris repertory ingest' first.[/yellow]")
+        raise typer.Exit(code=1)
+
+    store = LocalFTSStore(db_path=db_path)
+    try:
+        missing = store.missing_embedding_count()
+        if missing == 0:
+            console.print("[green]Todos os chunks já têm embeddings densos.[/green]")
+            return
+        target = min(missing, limit) if limit is not None else missing
+        if dry_run:
+            console.print(f"[yellow]{missing} chunks sem embedding[/yellow] ({target} seriam atualizados).")
+            return
+
+        embedder = LegalEmbedder()
+        updated = 0
+        with console.status("[bold]Gerando embeddings densos para o repertório..."):
+            while updated < target:
+                remaining = target - updated
+                batch = store.fetch_chunks_missing_embeddings(limit=min(batch_size, remaining))
+                if not batch:
+                    break
+                chunk_ids = [chunk_id for chunk_id, _text in batch]
+                texts = [text for _chunk_id, text in batch]
+                embeddings = embedder.embed_texts(texts)
+                if embeddings is None:
+                    console.print("[red]Modelo de embeddings indisponível.[/red]")
+                    raise typer.Exit(code=1)
+                updated += store.update_embeddings(dict(zip(chunk_ids, embeddings, strict=True)))
+        console.print(f"[green]Embeddings atualizados:[/green] {updated} chunks.")
+    finally:
+        store.close()
+
+
 @repertory_app.command("search")
 def repertory_search(
     query: str = typer.Argument(..., help="Search query"),
     top_k: int = typer.Option(10, "--top-k", "-k", help="Number of results"),
 ) -> None:
-    """Search the jurisprudence corpus."""
+    """Search the jurisprudence corpus (composite-ranked, with score breakdown)."""
     from rich.table import Table as RichTable
 
+    from juris.cli.formatting import format_score_components
     from juris.repertory.readiness import resolve_repertory_path
     from juris.repertory.vector_store import LocalFTSStore
 
@@ -1694,8 +1849,20 @@ def repertory_search(
     if not fts_path.exists():
         console.print("[yellow]No corpus ingested yet. Run 'juris repertory ingest' first.[/yellow]")
         raise typer.Exit(code=1)
+
+    # Prefer the composite-ranked service (ADR-0017) so results carry the
+    # auditable score breakdown; in dev it can fall back to FTS, while production
+    # fails closed if the embedding model is unavailable.
     store = LocalFTSStore(db_path=fts_path)
-    results = store.search_text(query, top_k=top_k)
+    try:
+        from juris.repertory.embeddings import LegalEmbedder
+        from juris.repertory.retrieval.hybrid import HybridRetriever
+        from juris.repertory.retrieval.service import RepertoryService
+
+        retriever = HybridRetriever(dense_store=store, sparse_store=store, embedder=LegalEmbedder())
+        results: list[Any] = list(RepertoryService(retriever=retriever).search_jurisprudencia(query=query, top_k=top_k))
+    except Exception:  # noqa: BLE001
+        results = list(store.search_text(query, top_k=top_k))
 
     if not results:
         console.print("[yellow]No results found.[/yellow]")
@@ -1704,18 +1871,59 @@ def repertory_search(
     table = RichTable(title=f"Results for: {query}")
     table.add_column("#", style="dim", width=3)
     table.add_column("Score", width=8)
-    table.add_column("Source", width=30)
-    table.add_column("Text", width=60)
+    table.add_column("Por quê", width=30)  # composite-score breakdown
+    table.add_column("Source", width=28)
+    table.add_column("Text", width=50)
 
     for i, r in enumerate(results, 1):
+        texto = str(getattr(r, "texto", "") or getattr(r, "text", ""))
+        why = format_score_components(getattr(r, "score_components", None))
+        # Prepend the human-readable driver ("alta autoridade do tribunal", …) so the
+        # lawyer sees WHY it ranked, not only the numeric breakdown (ADR-0017).
+        if getattr(r, "score_components", None) and hasattr(r, "hierarchy_label"):
+            from juris.repertory.retrieval.service import explain_ranking
+
+            motivo = str(explain_ranking(r)["motivo"])
+            why = f"{motivo} · {why}" if why else motivo
         table.add_row(
             str(i),
             f"{r.score:.4f}",
-            r.source_id[:30],
-            r.text[:60] + "..." if len(r.text) > 60 else r.text,
+            why or "—",
+            r.source_id[:28],
+            texto[:50] + "..." if len(texto) > 50 else texto,
         )
 
     console.print(table)
+
+
+@repertory_app.command("consolidate")
+def repertory_consolidate(
+    archive: bool = typer.Option(False, "--archive", help="Após consolidar, arquiva o banco legado como .bak."),
+) -> None:
+    """Consolida o banco legado (data/repertory.db) no canônico do JURIS_HOME."""
+    from juris.repertory.consolidate import consolidate_repertory
+
+    result = consolidate_repertory()
+    if result.merged == 0 and not result.copied_whole:
+        console.print("[green]Nada a consolidar.[/green] O canônico já está atualizado (ou não há banco legado).")
+        return
+
+    if result.copied_whole:
+        console.print(f"[green]Banco legado copiado[/green] ({result.merged} chunks) → {result.canonical}")
+        return
+
+    console.print(
+        f"[green]Consolidado:[/green] +{result.merged} chunks ({result.skipped} já presentes) → {result.canonical}"
+    )
+    if archive and result.legacy.exists():
+        bak = result.legacy.with_suffix(".db.bak")
+        result.legacy.rename(bak)
+        console.print(f"[dim]Banco legado arquivado em {bak}[/dim]")
+    elif result.legacy.exists():
+        console.print(
+            f"[yellow]Remova ou arquive o banco legado[/yellow] ({result.legacy}) "
+            "para silenciar o aviso do preflight — use --archive."
+        )
 
 
 @repertory_app.command("poll-noticias")
@@ -1730,7 +1938,7 @@ def repertory_status(
         None,
         "--path",
         "-p",
-        help="Caminho do repertory.db (default: ~/.juris/repertory.db ou JURIS_REPERTORY_PATH).",
+        help="Caminho do repertory.db (default: ${JURIS_HOME:-~/.juris}/repertory.db ou JURIS_REPERTORY_PATH).",
     ),
     json_output: bool = typer.Option(False, "--json", help="Saída em JSON, sem cores ou tabela."),
     min_chunks: int | None = typer.Option(
@@ -1853,9 +2061,9 @@ def repertory_ingest_peticoes(
         from juris.llm.ollama import OllamaLLM
 
         llm = OllamaLLM()
-    except Exception:
+    except Exception:  # noqa: BLE001
         console.print("[red]Ollama not available. LLM is required for extraction.[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     templates = asyncio.run(ingest_peticoes(directory=dir_path, llm=llm))
 
@@ -1908,31 +2116,34 @@ def review(
         raise typer.Exit(code=1)
 
     # Set up LLM
+    llm: AbstractLLM
     if cloud:
         try:
             from juris.config import get_settings
+            from juris.core.deid_llm import cloud_safe_llm
             from juris.llm.claude import ClaudeLLM
 
             settings = get_settings()
             if not settings.anthropic_api_key:
                 console.print("[red]ANTHROPIC_API_KEY not configured. Set it in .env or environment.[/red]")
                 raise typer.Exit(code=1)
-            llm = ClaudeLLM(api_key=settings.anthropic_api_key.get_secret_value())
-            console.print("[dim]LLM: Claude (cloud)[/dim]")
+            # ADR-0016: de-identify case PII before it reaches the cloud model.
+            llm = cloud_safe_llm(ClaudeLLM(api_key=settings.anthropic_api_key.get_secret_value()))
+            console.print("[dim]LLM: Claude (cloud, de-identificado)[/dim]")
         except typer.Exit:
             raise
-        except Exception:
+        except Exception:  # noqa: BLE001
             console.print("[red]Claude not available. Check ANTHROPIC_API_KEY.[/red]")
-            raise typer.Exit(code=1)
+            raise typer.Exit(code=1) from None
     else:
         try:
             from juris.llm.ollama import OllamaLLM
 
             llm = OllamaLLM()
             console.print("[dim]LLM: Ollama (local)[/dim]")
-        except Exception:
+        except Exception:  # noqa: BLE001
             console.print("[red]Ollama not available.[/red]")
-            raise typer.Exit(code=1)
+            raise typer.Exit(code=1) from None
 
     # Set up retriever
     from juris.repertory.embeddings import LegalEmbedder
@@ -1947,7 +2158,7 @@ def review(
         console.print("[dim]Proceeding without retrieval context...[/dim]")
 
     store = LocalFTSStore(db_path=fts_path)
-    embedder = LegalEmbedder()  # lazy-loads model; returns None if unavailable
+    embedder = LegalEmbedder()  # lazy-loads model; prod fails closed if unavailable
 
     retriever = HybridRetriever(
         dense_store=store,
@@ -1957,9 +2168,10 @@ def review(
     service = RepertoryService(retriever=retriever)
 
     # Set up audit
+    from juris.core.paths import juris_home
     from juris.persistence.audit import AuditLog
 
-    audit_path = Path.home() / ".juris" / "audit.jsonl"
+    audit_path = juris_home() / "audit.jsonl"
     audit = AuditLog(path=audit_path)
 
     # Parse dimensions
@@ -1995,7 +2207,8 @@ def review(
     # Print summary
     console.print(f"\n[bold green]Review complete[/bold green] ({report.duration_seconds:.1f}s)")
     console.print(
-        f"  Critical: {report.critical_count} | Important: {report.important_count} | Suggestions: {report.suggestion_count}"
+        f"  Critical: {report.critical_count} | Important: {report.important_count} | "
+        f"Suggestions: {report.suggestion_count}"
     )
     console.print(f"  Citations: {len(report.citations_found)} | LLM calls: {report.llm_calls}")
 
@@ -2059,6 +2272,7 @@ def draft(
         raise typer.Exit(code=1) from e
 
     # Set up LLM (same pattern as review command)
+    llm: AbstractLLM
     if cloud:
         console.print(
             "[yellow bold]AVISO PII:[/yellow bold] --cloud envia dados do processo para API externa. "
@@ -2066,14 +2280,16 @@ def draft(
         )
         try:
             from juris.config import get_settings
+            from juris.core.deid_llm import cloud_safe_llm
             from juris.llm.claude import ClaudeLLM
 
             settings = get_settings()
             if not settings.anthropic_api_key:
                 console.print("[red]ANTHROPIC_API_KEY not configured. Set it in .env or environment.[/red]")
                 raise typer.Exit(code=1)
-            llm = ClaudeLLM(api_key=settings.anthropic_api_key.get_secret_value())
-            console.print("[dim]LLM: Claude (cloud)[/dim]")
+            # ADR-0016: de-identify case PII before it reaches the cloud model.
+            llm = cloud_safe_llm(ClaudeLLM(api_key=settings.anthropic_api_key.get_secret_value()))
+            console.print("[dim]LLM: Claude (cloud, de-identificado)[/dim]")
         except typer.Exit:
             raise
         except Exception as exc:
@@ -2177,6 +2393,9 @@ def draft(
     console.print()
     console.print("[bold]--- Resumo ---[/bold]")
     console.print(f"Cobertura: {result.research_summary}")
+    console.print(f"Grounding: {result.grounding_report.status.value}")
+    if result.blocked_reason:
+        console.print(f"Bloqueio: {result.blocked_reason}")
     console.print(f"Citacoes: {len(result.citations_used)}")
     console.print(f"Revisoes: {result.revisions}")
     console.print(f"Duracao: {result.total_duration_seconds:.1f}s")
@@ -2200,6 +2419,127 @@ def draft(
             console.print(f"[green]Contraponto saved to {contra_path}[/green]")
 
 
+escavacao_app = typer.Typer(name="escavacao", help="Escavação — coleta o inteiro teor dos casos-líderes (o fosso).")
+app.add_typer(escavacao_app)
+
+
+@escavacao_app.command("run")
+def escavacao_run(
+    seed: str = typer.Option(
+        ..., "--seed", help="JSON com a espinha: lista de {id, hierarquia, precedentes_processos}."
+    ),
+    out: str = typer.Option("escavacao-out", "--out", "-o", help="Diretório de saída do inteiro teor."),
+    max_alvos: int | None = typer.Option(None, "--max", help="Máximo de alvos por execução."),
+) -> None:
+    """Constrói a fila priorizada da espinha e coleta o inteiro teor via DataJud."""
+    import asyncio
+    import json as _json
+    from pathlib import Path as FilePath
+    from types import SimpleNamespace
+
+    from juris.escavacao.executor import executar_escavacao, write_inteiro_teor
+    from juris.escavacao.fetchers import build_escavacao_fetcher
+    from juris.escavacao.queue import construir_fila
+
+    raw = _json.loads(FilePath(seed).read_text(encoding="utf-8"))
+    precedentes = [
+        SimpleNamespace(
+            id=str(e["id"]),
+            hierarquia=int(e.get("hierarquia", 6)),
+            precedentes_processos=list(e.get("precedentes_processos", [])),
+        )
+        for e in raw
+    ]
+    fila = construir_fila(precedentes, max_alvos=max_alvos)
+    console.print(f"Fila priorizada: {len(fila)} alvos de inteiro teor.")
+    if not fila:
+        console.print("[yellow]Nada a escavar — a espinha não trouxe precedentes_processos.[/yellow]")
+        return
+
+    result = asyncio.run(executar_escavacao(fila, build_escavacao_fetcher()))
+    paths = write_inteiro_teor(result.coletados, FilePath(out))
+    console.print(f"[green]Coletados:[/green] {len(paths)} inteiros teores ({len(result.falhas)} falhas) → {out}/")
+
+    # Bridge the harvest INTO the searchable corpus (else the moat is JSON on disk).
+    from juris.escavacao.executor import ingest_inteiro_teor
+    from juris.repertory.readiness import resolve_repertory_path
+    from juris.repertory.vector_store import LocalFTSStore
+
+    store = LocalFTSStore(resolve_repertory_path())
+    try:
+        ingested = ingest_inteiro_teor(result.coletados, store)
+    finally:
+        store.close()
+    console.print(f"[green]Corpus:[/green] {ingested} chunks de inteiro teor ingeridos (buscáveis)")
+
+    if result.falhas:
+        amostra = ", ".join(result.falhas[:5])
+        console.print(f"[yellow]Falhas:[/yellow] {amostra}{'…' if len(result.falhas) > 5 else ''}")
+
+
+browser_app = typer.Typer(name="browser", help="Browser-session AI bridge (ADR-0018).")
+app.add_typer(browser_app)
+
+
+@browser_app.command("install-native-host")
+def browser_install_native_host(
+    extension_id: str = typer.Option(
+        ...,
+        "--extension-id",
+        help="ID da extensão carregada em chrome://extensions.",
+    ),
+    browser: str = typer.Option(
+        "chrome",
+        "--browser",
+        help="Navegador alvo: chrome, chromium, brave ou edge.",
+    ),
+    port: int = typer.Option(8787, "--port", help="Porta WS local exposta pelo host nativo."),
+) -> None:
+    """Install the Chrome Native Messaging host for the browser LLM session."""
+    from juris.api.native_host import install_native_host
+
+    try:
+        installation = install_native_host(extension_id=extension_id, browser=browser, ws_port=port)
+    except (RuntimeError, ValueError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from None
+
+    console.print("[green]Host nativo instalado.[/green]")
+    console.print(f"  Manifest: {installation.manifest_path}")
+    console.print(f"  Launcher: {installation.launcher_path}")
+    console.print("\nConfigure o juris para usar a ponte local:")
+    console.print(f"  export JURIS_BROWSER_BRIDGE_URL={installation.bridge_url}")
+
+    import os
+
+    from juris.llm.browser_session import normalize_browser_provider
+
+    declared = normalize_browser_provider(os.environ.get("JURIS_AI_BROWSER_PROVIDER"))
+    display = {"claude": "Claude.ai", "chatgpt": "ChatGPT"}.get(declared or "", "Claude.ai/ChatGPT")
+    console.print(f"Depois recarregue a extensão e mantenha {display} logado em uma aba.")
+    console.print("Desligue o treino do provedor (LGPD/ADR-0018):")
+    if declared in (None, "claude"):
+        console.print("  Claude.ai: Settings → Privacy → desative 'Help improve Claude'.")
+    if declared in (None, "chatgpt"):
+        console.print("  ChatGPT: Settings → Data Controls → 'Improve the model for everyone' = off.")
+
+
+@browser_app.command("status")
+def browser_status() -> None:
+    """Show browser-session readiness and de-id posture."""
+    from juris.web.ai_status import resolve_ai_session_status
+
+    status = resolve_ai_session_status()
+    browser = status.get("browser", {})
+    mode = str(status.get("mode"))
+    deid = "ligado" if status.get("deidentify") else "desligado"
+    console.print(f"Modo de IA: [bold]{mode}[/bold] · de-id: {deid}")
+    if isinstance(browser, dict):
+        console.print(f"Bridge URL: {browser.get('bridge_url') or 'não configurada'}")
+        console.print(f"Host nativo: {'instalado' if browser.get('native_host_installed') else 'não encontrado'}")
+        console.print(f"Status: {browser.get('status')} — {browser.get('message')}")
+
+
 alerts_app = typer.Typer(name="alerts", help="Deadline alert management.")
 app.add_typer(alerts_app)
 
@@ -2209,77 +2549,24 @@ def alerts_send() -> None:
     """Send pending deadline alerts via email."""
     import asyncio
 
-    from juris.alerts.delivery import AlertDelivery, AlertEmailConfig
-    from juris.config import get_settings
-    from juris.persistence.local_db import LocalDB
+    from juris.alerts.pending import alert_email_config_from_settings, send_pending_deadline_alerts
 
-    settings = get_settings()
-
-    # Build SMTP config
-    to_list = [a.strip() for a in settings.alert_to_addresses.split(",") if a.strip()]
-    smtp_config = AlertEmailConfig(
-        smtp_host=settings.alert_smtp_host,
-        smtp_port=settings.alert_smtp_port,
-        smtp_user=settings.alert_smtp_user,
-        smtp_password=settings.alert_smtp_password.get_secret_value() if settings.alert_smtp_password else "",
-        from_address=settings.alert_from_address,
-        to_addresses=to_list,
-    )
-
+    smtp_config = alert_email_config_from_settings()
     if not smtp_config.is_configured:
         console.print("[red]SMTP not configured. Set ALERT_SMTP_HOST, ALERT_FROM_ADDRESS, ALERT_TO_ADDRESSES.[/red]")
         raise typer.Exit(code=1)
 
-    db = LocalDB()
-    delivery = AlertDelivery(smtp_config)
-
-    # Get all processos with pending prazos
-    processos = db.get_all_processos()
-    if not processos:
+    summary = asyncio.run(send_pending_deadline_alerts(config=smtp_config))
+    if summary.processos_checked == 0:
         console.print("[yellow]No processos in database.[/yellow]")
         return
 
-    sent = 0
-    failed = 0
-    for proc in processos:
-        pending = db.get_pending_prazos(proc.numero_cnj)
-        if not pending:
-            continue
-
-        # Build a minimal AlertBatch from pending prazos
-        from datetime import date
-
-        from juris.alerts.deadline_alerts import AlertBatch, AlertLevel, DeadlineAlert
-
-        alerts_list = []
-        for pr in pending:
-            if pr.status in ("vencido", "urgente", "proximo"):
-                level = AlertLevel.CRITICAL if pr.status in ("vencido", "urgente") else AlertLevel.WARNING
-                alerts_list.append(
-                    DeadlineAlert(
-                        prazo=pr,
-                        level=level,
-                        message=f"{pr.rule_nome}: {pr.status}",
-                    )
-                )
-
-        if not alerts_list:
-            continue
-
-        batch = AlertBatch(
-            numero_cnj=proc.numero_cnj,
-            tribunal=proc.tribunal_id,
-            generated_at=date.today(),
-            alerts=alerts_list,
-        )
-
-        success = asyncio.run(delivery.send_alert_batch(batch))
-        if success:
-            sent += 1
-        else:
-            failed += 1
-
-    console.print(f"[bold]Alerts sent:[/bold] {sent} processos | [red]Failed:[/red] {failed}")
+    console.print(
+        f"[bold]Alerts sent:[/bold] {summary.sent} processos | "
+        f"[red]Failed:[/red] {summary.failed} | {summary.alerts} alert(s)"
+    )
+    if summary.failed:
+        raise typer.Exit(code=2)
 
 
 benchmark_app = typer.Typer(name="benchmark", help="Retrieval quality benchmark tools.")
@@ -2407,7 +2694,7 @@ def file_petition(
         ..., help="Path to draft markdown file, or petition type (loads most recent draft)"
     ),
     tribunal: str = typer.Option("tjmg", "--tribunal", "-t", help="Tribunal ID"),
-    cpf: str = typer.Option(..., "--cpf", help="CPF do advogado"),
+    cpf: str | None = typer.Option(None, "--cpf", help="CPF do advogado (não exigido no modo remoto)"),
     tipo_doc: str = typer.Option("manifestacao", "--tipo-doc", help="Tipo de documento para protocolo"),
     skip_preflight: bool = typer.Option(False, "--skip-preflight", help="Skip pre-flight checks"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Render and check only — no signing or filing"),
@@ -2422,13 +2709,13 @@ def file_petition(
 
     Use --dry-run for a side-effect-free preview.
     """
+
     import asyncio
     from pathlib import Path as FilePath
 
     from juris.core.credentials import get_credential, store_credential
-    from juris.persistence.audit import AuditLog
-    from juris.persistence.filing_receipt import FilingReceiptStore
-    from juris.signing.filing import FilingOrchestrator, FilingRequest
+    from juris.core.paths import juris_home
+    from juris.signing.filing import FilingRequest
 
     # 1. Load draft markdown
     draft_path = FilePath(draft_path_or_tipo)
@@ -2439,7 +2726,7 @@ def file_petition(
     else:
         # Treat as tipo_peticao, look for most recent draft in ~/.juris/drafts/
         tipo_peticao = draft_path_or_tipo
-        drafts_dir = FilePath.home() / ".juris" / "drafts" / numero_cnj.replace(".", "_").replace("-", "_")
+        drafts_dir = juris_home() / "drafts" / numero_cnj.replace(".", "_").replace("-", "_")
         if drafts_dir.exists():
             drafts = sorted(drafts_dir.glob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True)
             if drafts:
@@ -2453,83 +2740,56 @@ def file_petition(
             console.print("[dim]Provide a path to a markdown file or run 'juris draft' first.[/dim]")
             raise typer.Exit(code=1)
 
-    # 2. Resolve PIN
-    resolved_pin = pin
-    if not resolved_pin:
-        resolved_pin = get_credential("token_pin")
-    if not resolved_pin:
-        import getpass
+    # 2-3. Resolve PIN + senha — ONLY when co-located. In remote (split-trust) mode
+    # the agent resolves the lawyer's own secrets; the orchestrator must never ask
+    # for or store them (ADR-0015).
+    from juris.api.agent_config import is_remote
 
-        resolved_pin = getpass.getpass("PIN do token A3: ")
-        if resolved_pin:
-            store_credential("token_pin", resolved_pin)
-            console.print("[dim]PIN salvo no Keychain.[/dim]")
+    remote = is_remote()
+    resolved_pin: str | None = None
+    resolved_senha = ""
+    if remote and (pin or senha):
+        console.print(
+            "[yellow]Aviso:[/yellow] --pin/--senha são ignorados no modo remoto (o "
+            "agente resolve) — evite passá-los: podem ficar no histórico do shell."
+        )
+    if not remote:
+        if not cpf:
+            console.print("[red]--cpf é obrigatório no modo co-localizado.[/red]")
+            raise typer.Exit(code=1)
+        resolved_pin = pin or get_credential("token_pin")
+        if not resolved_pin:
+            import getpass
 
-    if not resolved_pin:
-        console.print("[red]PIN do token é obrigatório.[/red]")
-        raise typer.Exit(code=1)
+            resolved_pin = getpass.getpass("PIN do token A3: ")
+            if resolved_pin:
+                store_credential("token_pin", resolved_pin)
+                console.print("[dim]PIN salvo no Keychain.[/dim]")
+        if not resolved_pin:
+            console.print("[red]PIN do token é obrigatório.[/red]")
+            raise typer.Exit(code=1)
+        resolved_senha = _get_senha(tribunal, cpf, senha)
 
-    # 3. Resolve senha
-    resolved_senha = _get_senha(tribunal, cpf, senha)
-    from juris.mni.auth import AuthStrategy, PasswordAuth
-
-    mni_auth = PasswordAuth(cpf=cpf, senha=resolved_senha)
-
-    # 4. Setup components
-    juris_dir = FilePath.home() / ".juris"
-    audit = AuditLog(juris_dir / "audit.jsonl")
-    receipt_store = FilingReceiptStore(juris_dir / "filings", audit)
-
-    # 5. MNI client factory
-    def mni_client_factory(tribunal_id: str, auth: AuthStrategy) -> object:
-        from juris.mni.client import get_mni_client
-
-        return get_mni_client(tribunal_id, auth)
-
-    # 6. Build filing request
+    # 4. Build the filing request. The service runs the whole pipeline where the
+    # token lives — InProcess here, or Remote (/ws/file at the agent) when
+    # JURIS_AGENT_MODE=remote, with no code change (ADR-0015).
     filing_request = FilingRequest(
         numero_cnj=numero_cnj,
         tribunal=tribunal,
         tipo_documento=tipo_doc,
         draft_markdown=draft_markdown,
         tipo_peticao=tipo_peticao,
-        cpf=cpf,
+        cpf=cpf or "",  # remote: the agent resolves the lawyer's own CPF
         senha=resolved_senha,
         skip_preflight=skip_preflight,
         dry_run=dry_run,
         prazo_override=prazo_override,
     )
 
-    # 7. Initialize signer and run pipeline
-    from juris.signing.pades import PAdESSigner
-
-    pkcs11_module = "/usr/local/lib/libeTPkcs11.dylib"
-    token_label = "TOKEN CERTDATA"
+    from juris.signing.filing_service import get_filing_service
 
     try:
-        if dry_run and skip_preflight:
-            # Dry-run without preflight doesn't need the hardware token
-            from unittest.mock import MagicMock
-
-            mock_signer = MagicMock(spec=PAdESSigner)
-            orchestrator = FilingOrchestrator(
-                signer=mock_signer,
-                audit=audit,
-                receipt_store=receipt_store,
-                mni_client_factory=mni_client_factory,
-                mni_auth=mni_auth,
-            )
-            result = asyncio.run(orchestrator.file(filing_request))
-        else:
-            with PAdESSigner(pkcs11_module, token_label, resolved_pin) as signer:
-                orchestrator = FilingOrchestrator(
-                    signer=signer,
-                    audit=audit,
-                    receipt_store=receipt_store,
-                    mni_client_factory=mni_client_factory,
-                    mni_auth=mni_auth,
-                )
-                result = asyncio.run(orchestrator.file(filing_request))
+        result = asyncio.run(get_filing_service().file(filing_request, pin=resolved_pin))
     except Exception as exc:
         console.print(f"[red]Erro fatal: {exc}[/red]")
         raise typer.Exit(code=1) from exc
@@ -2580,7 +2840,7 @@ def file_petition(
         raise typer.Exit(code=1)
 
 
-from juris.cli.search_cli import search_app
+from juris.cli.search_cli import search_app  # noqa: E402 — deferred to avoid a circular import
 
 app.add_typer(search_app, name="search")
 
@@ -2592,14 +2852,24 @@ def web(
     reload: bool = typer.Option(False, "--reload", help="Recarregar servidor durante desenvolvimento"),
 ) -> None:
     """Start the local browser UI for the Juris pilot workflow."""
+    import os
+
     import uvicorn
+
+    from juris.core.observability import setup_logging
 
     if host not in {"127.0.0.1", "localhost"}:
         console.print("[red]A interface web local só pode escutar em 127.0.0.1 ou localhost.[/red]")
         raise typer.Exit(code=1)
 
+    # Access logs record the full path+query — for a legal tool that leaks CNJ and
+    # search terms (case-identifying) into a plaintext file. Off by default; the
+    # structured audit log is the intended trail. Opt in with JURIS_WEB_ACCESS_LOG=1.
+    access_log = os.environ.get("JURIS_WEB_ACCESS_LOG", "").strip().lower() in {"1", "true", "yes"}
+    setup_logging(log_level=os.environ.get("JURIS_LOG_LEVEL", "INFO"))
+
     console.print(f"[green]Juris web:[/green] http://{host}:{port}")
-    uvicorn.run("juris.web.app:app", host=host, port=port, reload=reload)
+    uvicorn.run("juris.web.app:app", host=host, port=port, reload=reload, access_log=access_log)
 
 
 # ---------------------------------------------------------------------------
@@ -2612,7 +2882,9 @@ def demo(
     numero_cnj: str = typer.Argument(..., help="Número CNJ do processo"),
     tipo: str = typer.Argument(..., help="Tipo de petição (contestacao, inicial, apelacao, ...)"),
     tribunal: str = typer.Option("tjmg", "--tribunal", "-t", help="ID do tribunal"),
-    cpf: str | None = typer.Option(None, "--cpf", help="CPF do advogado (futuro: MNI)"),
+    cpf: str | None = typer.Option(None, "--cpf", help="CPF do advogado constituído (obrigatório p/ --source mni)"),
+    senha: str | None = typer.Option(None, "--senha", "-s", help="Senha PJe (MNI; senão Keychain/prompt)"),
+    pin: str | None = typer.Option(None, "--pin", help="PIN do token A3 (MNI mTLS; senão TOKEN_PIN/prompt)"),
     source: str = typer.Option("datajud", "--source", help="Origem do processo: datajud | mni | fixture"),
     out_root: str = typer.Option("juris-out", "--out", "-o", help="Diretório raiz para artefatos"),
     thesis: str | None = typer.Option(None, "--thesis", "-T", help="Tese explícita"),
@@ -2746,6 +3018,13 @@ def demo(
             )
             raise typer.Exit(code=1)
 
+    # MNI needs the constituted lawyer's CPF. Checked after the corpus gate so
+    # the corpus safety invariant always reports first (see demo safety-gate
+    # tests), but before any model/retrieval setup.
+    if source_mode is SourceMode.MNI and not cpf:
+        console.print("[red]Source 'mni' requer --cpf do advogado constituído.[/red]")
+        raise typer.Exit(code=1)
+
     # Resolve output paths
     out_root_path = FilePath(out_root)
     case_dir = out_root_path / output_dir_name(numero_cnj, demo_mode=is_demo_mode)
@@ -2760,11 +3039,15 @@ def demo(
         )
 
     # Set up LLM (mirrors `draft` command)
+    llm: AbstractLLM
     if cli_cloud is not None:
-        from juris.llm.local_cli import LocalCliLLM
+        from typing import cast
+
+        from juris.llm.local_cli import CliCloudProvider, LocalCliLLM
 
         model = cli_model if cli_cloud == "claude" else None
-        llm = LocalCliLLM(provider=cli_cloud, model=model)
+        # cli_cloud já validado ∈ {claude, codex} acima; cast satisfaz o Literal do provider.
+        llm = LocalCliLLM(provider=cast(CliCloudProvider, cli_cloud), model=model)
         contexto = "anonimizado" if anonimizado else "sem PII"
         console.print(f"[dim]LLM: {llm.model_name} (cloud via CLI; {contexto})[/dim]")
         if anonimizado and not is_demo_mode:
@@ -2779,14 +3062,16 @@ def demo(
         )
         try:
             from juris.config import get_settings
+            from juris.core.deid_llm import cloud_safe_llm
             from juris.llm.claude import ClaudeLLM
 
             settings = get_settings()
             if not settings.anthropic_api_key:
                 console.print("[red]ANTHROPIC_API_KEY não configurada (.env ou ambiente).[/red]")
                 raise typer.Exit(code=1)
-            llm = ClaudeLLM(api_key=settings.anthropic_api_key.get_secret_value())
-            console.print("[dim]LLM: Claude (cloud)[/dim]")
+            # ADR-0016: de-identify case PII before it reaches the cloud model.
+            llm = cloud_safe_llm(ClaudeLLM(api_key=settings.anthropic_api_key.get_secret_value()))
+            console.print("[dim]LLM: Claude (cloud, de-identificado)[/dim]")
         except typer.Exit:
             raise
         except Exception as exc:
@@ -2826,11 +3111,51 @@ def demo(
         console.print(f"[red]Falha ao inicializar retrieval: {exc}[/red]")
         raise typer.Exit(code=1) from exc
 
+    # For MNI, resolve the lawyer's credentials at the CLI edge (the library
+    # never prompts): PJe password via arg → Keychain → prompt, and the A3
+    # token PIN via arg → TOKEN_PIN → prompt. mTLS tribunals (e.g. TJMG) need
+    # the PIN; password tribunals ignore it.
+    resolved_senha = senha
+    resolved_pin = pin
+    if source_mode is SourceMode.MNI:
+        from juris.config import get_settings
+        from juris.mni.tribunais import get_tribunal
+
+        resolved_senha = _get_senha(tribunal, cpf or "", senha)
+        try:
+            tribunal_cfg = get_tribunal(tribunal)
+        except KeyError as exc:
+            console.print(f"[red]Tribunal '{tribunal}' não encontrado.[/red]")
+            raise typer.Exit(code=1) from exc
+        if tribunal_cfg.requires_mtls and not resolved_pin:
+            settings = get_settings()
+            resolved_pin = settings.token_pin.get_secret_value() if settings.token_pin else None
+            if not resolved_pin:
+                resolved_pin = getpass.getpass("PIN do token A3: ")
+            if not resolved_pin:
+                console.print("[red]PIN do token A3 vazio.[/red]")
+                raise typer.Exit(code=1)
+
     # Load processo
     try:
-        processo = load_processo(numero_cnj, tribunal, source_mode, use_cache=use_cache, audit_path=audit_path)
-    except (LookupError, NotImplementedError) as exc:
+        processo = load_processo(
+            numero_cnj,
+            tribunal,
+            source_mode,
+            use_cache=use_cache,
+            audit_path=audit_path,
+            cpf=cpf,
+            senha=resolved_senha,
+            token_pin=resolved_pin,
+        )
+    except (LookupError, NotImplementedError, ValueError, KeyError, RuntimeError) as exc:
         console.print(f"[red]{exc}[/red]")
+        if source_mode is SourceMode.MNI:
+            console.print(
+                "[yellow]Leitura via MNI falhou. Para um teste sem token, use "
+                "[bold]--source datajud[/bold] (consulta pública) ou "
+                "[bold]--source fixture[/bold] (offline).[/yellow]"
+            )
         raise typer.Exit(code=1) from exc
 
     # Build request
@@ -2930,6 +3255,76 @@ def audit_verify(
 
 
 # ---------------------------------------------------------------------------
+# backup — operational backup/restore for legal-critical local state
+# ---------------------------------------------------------------------------
+
+
+backup_app = typer.Typer(name="backup", help="Backup/restore operacional do estado local.")
+app.add_typer(backup_app)
+
+
+@backup_app.command("create")
+def backup_create(
+    output: str | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Arquivo .tar.gz ou diretório de destino. Default: ${JURIS_BACKUP_DIR:-$JURIS_HOME/backups}.",
+    ),
+    include_out_root: bool = typer.Option(
+        True,
+        "--include-out-root/--no-out-root",
+        help="Inclui artefatos gerados em JURIS_OUT_ROOT além do JURIS_HOME e repertory.db.",
+    ),
+) -> None:
+    """Cria um backup local com audit logs, bancos por tenant, corpus e recibos."""
+    from juris.ops.backup import create_backup
+
+    try:
+        result = create_backup(
+            output=Path(output).expanduser() if output else None,
+            include_out_root=include_out_root,
+        )
+    except Exception as exc:
+        console.print(f"[red]Falha ao criar backup:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    console.print(f"[green]Backup criado:[/green] {result.archive_path}")
+    console.print(f"  SHA-256: {result.archive_sha256}")
+    console.print(f"  Checksum: {result.checksum_path}")
+    console.print(f"  Arquivos: {result.file_count} ({result.total_bytes} bytes)")
+    for warning in result.warnings:
+        console.print(f"[yellow]Aviso:[/yellow] {warning}")
+
+
+@backup_app.command("restore")
+def backup_restore(
+    archive: str = typer.Argument(..., help="Arquivo .tar.gz criado por `juris backup create`."),
+    target_root: str = typer.Argument(..., help="Diretório onde a árvore restaurada será materializada."),
+    overwrite: bool = typer.Option(False, "--overwrite", help="Sobrescreve arquivos já existentes no destino."),
+) -> None:
+    """Restaura um backup em uma árvore de destino confinada."""
+    from juris.ops.backup import restore_backup
+
+    try:
+        result = restore_backup(
+            Path(archive).expanduser(),
+            target_root=Path(target_root).expanduser(),
+            overwrite=overwrite,
+        )
+    except FileExistsError as exc:
+        console.print(f"[red]Arquivo já existe no destino:[/red] {exc}")
+        console.print("[yellow]Use --overwrite apenas depois de conferir a árvore de restore.[/yellow]")
+        raise typer.Exit(code=1) from exc
+    except Exception as exc:
+        console.print(f"[red]Falha ao restaurar backup:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    console.print(f"[green]Backup restaurado em:[/green] {result.target_root}")
+    console.print(f"  Arquivos restaurados: {len(result.files_restored)}")
+
+
+# ---------------------------------------------------------------------------
 # pilot — operator preflight before a lawyer-facing demo session
 # ---------------------------------------------------------------------------
 
@@ -2974,6 +3369,11 @@ def pilot_preflight(
         "--cli-cloud",
         help="Conta uma assinatura CLI cloud como provedor para sessão fixture sem PII: claude | codex.",
     ),
+    live: bool = typer.Option(
+        False,
+        "--live",
+        help="Sessão real: também verifica o token A3 conectado (cert válida, sem PIN).",
+    ),
     json_output: bool = typer.Option(False, "--json", help="Saída em JSON, sem cores ou tabela."),
 ) -> None:
     """Roda checks de readiness antes de uma sessão real com advogado(a).
@@ -3001,6 +3401,8 @@ def pilot_preflight(
         embedding_model=embedding_model,
         cli_cloud_provider=cli_cloud,
         probe_ollama=not skip_ollama_probe,
+        probe_token=live,
+        probe_ner=live,
     )
 
     if json_output:
@@ -3033,6 +3435,95 @@ def pilot_preflight(
 
     console.print("[red]Preflight falhou. Não rode `juris demo` em modo real até remediar os checks com FAIL.[/red]")
     raise typer.Exit(code=1)
+
+
+def _pilot_feedback_root() -> Path:
+    """The default (single-tenant) pilot feedback dir, matching the web console."""
+    import os
+
+    from juris.web.auth import PUBLIC_TENANT_ID, Tenant, tenant_scoped_dir
+
+    out_root = Path(os.environ.get("JURIS_OUT_ROOT", "juris-out"))
+    return tenant_scoped_dir(Tenant(PUBLIC_TENANT_ID), out_root)
+
+
+@pilot_app.command("report")
+def pilot_report(
+    output: str | None = typer.Option(
+        None, "--output", "-o", help="Escreve o relatório Markdown neste arquivo (senão, stdout)."
+    ),
+) -> None:
+    """Gera o relatório do piloto (evidência + backlog priorizado) a partir do feedback coletado."""
+    from juris.web.pilot_feedback import export_feedback_report_markdown, list_feedback
+
+    root = _pilot_feedback_root()
+    if not list_feedback(root):
+        console.print(
+            "[yellow]Nenhum feedback de piloto ainda.[/yellow] Rode casos reais e registre o "
+            "feedback (console web ou /api/pilot-feedback) antes de gerar o relatório."
+        )
+        raise typer.Exit(code=1)
+    markdown = export_feedback_report_markdown(root)
+    if output:
+        Path(output).write_text(markdown, encoding="utf-8")
+        console.print(f"[green]Relatório de piloto escrito em[/green] {output}")
+    else:
+        console.print(markdown)
+
+
+@pilot_app.command("summary")
+def pilot_summary() -> None:
+    """Imprime as métricas-chave do piloto (tempo economizado, aceitação de citações, utilidade, lacunas)."""
+    from juris.web.pilot_feedback import summarize_feedback
+
+    summary = summarize_feedback(_pilot_feedback_root())
+    citations = cast("dict[str, object]", summary["citations"])
+    gaps = summary["prioritized_gaps"]
+    console.print(
+        f"Casos: {summary['total_cases']} · tempo economizado: {summary['total_time_saved_minutes']} min "
+        f"(média {summary['average_time_saved_minutes']}) · utilidade média: {summary['average_utility']}"
+    )
+    console.print(f"Citações aceitas/rejeitadas: {citations['accepted']}/{citations['rejected']}")
+    console.print(f"Lacunas priorizadas: {len(gaps) if isinstance(gaps, list) else 0}")
+
+
+@pilot_app.command("gate")
+def pilot_gate(
+    min_cases: int = typer.Option(
+        5,
+        "--min-cases",
+        min=1,
+        help="Mínimo de casos reais distintos para permitir decisão de valor.",
+    ),
+    target_cases: int = typer.Option(
+        10,
+        "--target-cases",
+        min=1,
+        help="Meta recomendada de casos reais distintos antes de vender o piloto como validado.",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Saída em JSON, sem texto formatado."),
+) -> None:
+    """Falha enquanto o piloto não tiver evidência mínima em casos reais."""
+    import json as _json
+
+    from juris.web.pilot_feedback import evaluate_value_gate
+
+    gate = evaluate_value_gate(_pilot_feedback_root(), min_cases=min_cases, target_cases=target_cases)
+    if json_output:
+        console.print_json(_json.dumps(gate, ensure_ascii=False))
+    else:
+        summary = cast("dict[str, object]", gate["summary"])
+        console.print(gate["message"])
+        console.print(
+            f"Casos reais: {gate['real_cases']}/{gate['required_cases']} "
+            f"(meta recomendada: {gate['target_cases']}) · feedbacks: {gate['total_feedback_records']}"
+        )
+        console.print(
+            f"Tempo economizado: {summary['total_time_saved_minutes']} min · "
+            f"utilidade média: {summary['average_utility']}"
+        )
+    if not gate["decision_ready"]:
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":

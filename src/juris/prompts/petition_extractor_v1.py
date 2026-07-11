@@ -34,7 +34,7 @@ Return a JSON object with the following fields:
 
 Respond ONLY with valid JSON, no additional text."""
 
-EXTRACT_SCHEMA: dict = {
+EXTRACT_SCHEMA: dict[str, object] = {
     "type": "object",
     "properties": {
         "titulo": {"type": "string"},

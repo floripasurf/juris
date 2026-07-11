@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd template for the Juris nightly prazo pipeline.
+  Runs `juris overnight --all-tenants --send-alerts` once per night, so sync +
+  prazo analysis and email delivery are one operational unit per tenant. Copy to
+  ~/Library/LaunchAgents/com.juris.overnight.plist, fill in REPLACE_* values,
+  then: launchctl load ~/Library/LaunchAgents/com.juris.overnight.plist
+
+  For a co-located single-lawyer pilot, remove `--all-tenants` and add
+  `--cpf <cpf-do-advogado>` to ProgramArguments.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.juris.overnight</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/uv</string>
+    <string>run</string>
+    <string>juris</string>
+    <string>overnight</string>
+    <string>--all-tenants</string>
+    <string>--max-concurrent</string>
+    <string>4</string>
+    <string>--send-alerts</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>REPLACE_WITH_PATH_TO/juris</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <!-- Required for production split-trust. -->
+    <key>ENVIRONMENT</key>
+    <string>prod</string>
+    <key>JURIS_REQUIRE_TENANTS</key>
+    <string>1</string>
+    <key>JURIS_AGENT_MODE</key>
+    <string>remote</string>
+    <key>JURIS_TENANTS_FILE</key>
+    <string>REPLACE_WITH_/etc/juris/tenants.json</string>
+    <key>JURIS_AGENTS_FILE</key>
+    <string>REPLACE_WITH_/etc/juris/agents.json</string>
+    <key>JURIS_HOME</key>
+    <string>REPLACE_WITH_/var/lib/juris</string>
+    <key>JURIS_OUT_ROOT</key>
+    <string>REPLACE_WITH_/var/lib/juris/out</string>
+
+    <!-- Required for email delivery. -->
+    <key>ALERT_SMTP_HOST</key>
+    <string>REPLACE_WITH_SMTP_HOST</string>
+    <key>ALERT_SMTP_PORT</key>
+    <string>587</string>
+    <key>ALERT_SMTP_USER</key>
+    <string>REPLACE_WITH_SMTP_USER_OR_EMPTY</string>
+    <key>ALERT_SMTP_PASSWORD</key>
+    <string>REPLACE_WITH_SMTP_PASSWORD_OR_EMPTY</string>
+    <key>ALERT_FROM_ADDRESS</key>
+    <string>juris@example.com</string>
+    <key>ALERT_TO_ADDRESSES</key>
+    <string>advogado@example.com</string>
+  </dict>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>3</integer>
+    <key>Minute</key>
+    <integer>15</integer>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/juris-overnight.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/juris-overnight.err</string>
+</dict>
+</plist>

@@ -26,6 +26,7 @@ from juris.repertory.readiness import (
     ENV_MIN_SOURCE_TYPES,
     ENV_REPERTORY_PATH,
     LEGACY_REPERTORY_PATH,
+    resolve_repertory_path,
 )
 
 runner = CliRunner()
@@ -61,6 +62,7 @@ def _seed(path: Path, rows: list[tuple[str, str, str, str]]) -> None:
 def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
     for name in (ENV_REPERTORY_PATH, ENV_MIN_CHUNKS, ENV_MIN_SOURCE_TYPES):
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.delenv("JURIS_HOME", raising=False)
 
 
 class TestExitCodes:
@@ -110,6 +112,34 @@ class TestExitCodes:
         )
         assert result.exit_code == 0, result.output
         assert "sim" in result.output
+
+
+def test_repertory_backfill_embeddings_populates_legacy_sqlite(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    db = tmp_path / "legacy.db"
+    _seed(
+        db,
+        [
+            ("c1", "s1", "sumula_vinculante", "honorários advocatícios"),
+            ("c2", "s2", "acordao_publicado", "prescrição intercorrente"),
+        ],
+    )
+    monkeypatch.setenv(ENV_REPERTORY_PATH, str(db))
+
+    class _FakeEmbedder:
+        def embed_texts(self, texts: list[str]) -> list[list[float]]:
+            return [[1.0, 0.0] if "honorários" in text else [0.0, 1.0] for text in texts]
+
+    monkeypatch.setattr("juris.repertory.embeddings.LegalEmbedder", _FakeEmbedder)
+
+    result = runner.invoke(app, ["repertory", "backfill-embeddings", "--batch-size", "1"])
+
+    assert result.exit_code == 0, result.output
+    assert "Embeddings atualizados" in result.output
+    conn = sqlite3.connect(db)
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM chunks WHERE embedding IS NOT NULL").fetchone()[0] == 2
+    finally:
+        conn.close()
 
 
 class TestTextOutput:
@@ -206,6 +236,13 @@ class TestJsonOutput:
 
 
 class TestEnvOverrides:
+    def test_default_repertory_path_honors_juris_home(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("JURIS_HOME", str(tmp_path))
+
+        assert resolve_repertory_path() == tmp_path / "repertory.db"
+
     def test_env_repertory_path_used_when_no_flag(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

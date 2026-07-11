@@ -6,6 +6,7 @@ import asyncio
 import logging
 import time
 
+from juris.core.sanitize import safe_error_text
 from juris.search.adapters import get_all_adapters
 from juris.search.adapters.base import SearchAdapter
 from juris.search.models import SearchExplain, SearchQuery, SearchResponse, SearchResult
@@ -89,8 +90,9 @@ class SearchDispatcher:
                 return results
             except Exception as exc:  # noqa: BLE001
                 per_court_latency[court] = time.monotonic() - ct0
-                failed.append((court, str(exc)))
-                logger.warning("Adapter error for court %s: %s", court, exc)
+                safe_error = safe_error_text(exc)
+                failed.append((court, safe_error))
+                logger.warning("Adapter error for court %s: %s", court, safe_error)
                 return []
 
         tasks = [_search_one(court, adapter) for court, adapter in active.items()]

@@ -7,6 +7,7 @@ from collections import defaultdict
 from juris.busca.abc import SearchChannel
 from juris.busca.models import FonteOrigem
 from juris.core.observability import get_logger
+from juris.core.sanitize import safe_error_text
 
 logger = get_logger(__name__)
 
@@ -39,7 +40,7 @@ def _auto_discover_channels() -> list[SearchChannel]:
                 "channel_load_failed",
                 module=module_path,
                 cls=class_name,
-                error=str(exc),
+                error=safe_error_text(exc),
             )
 
     return channels

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
-from typing import Any
 
 from juris.agents.analyzer import ProcessoAnalysis, analyze_processo
 from juris.alerts.deadline_alerts import AlertBatch, generate_alerts
@@ -116,7 +115,7 @@ async def run_pipeline_single(
     # 1. Fetch
     try:
         processo = _fetch_processo(numero_cnj, tribunal)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         result.error = f"Fetch failed: {type(e).__name__}: {e}"
         db.log_sync(numero_cnj, tribunal, "datajud", success=False, error=result.error)
         return result

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import stat
 from datetime import datetime
 from pathlib import Path
 
@@ -16,6 +18,10 @@ CNJ = "1234567-89.2026.8.13.0001"
 SIGNED_PDF = b"%PDF-fake-signed-content"
 RENDER_HASH = "abc123render"
 PAYLOAD_HASH = "def456payload"
+
+
+def _mode(path: Path) -> int:
+    return stat.S_IMODE(path.stat().st_mode)
 
 
 def _make_store(tmp_path: Path) -> FilingReceiptStore:
@@ -46,6 +52,9 @@ class TestPrepare:
         assert pending.exists()
         assert pending.name.endswith("_pending")
         assert (pending / "signed.pdf").read_bytes() == SIGNED_PDF
+        assert _mode(pending.parent) == 0o700
+        assert _mode(pending) == 0o700
+        assert _mode(pending / "signed.pdf") == 0o600
 
     def test_creates_hashes_json(self, tmp_path: Path) -> None:
         store = _make_store(tmp_path)
@@ -55,6 +64,51 @@ class TestPrepare:
         hashes = json.loads((pending / "hashes.json").read_text())
         assert hashes["pdf_hash"] == RENDER_HASH
         assert "signed_pdf_hash" in hashes
+        assert _mode(pending / "hashes.json") == 0o600
+
+    def test_creates_recovery_metadata_json(self, tmp_path: Path) -> None:
+        store = _make_store(tmp_path)
+        pending_path = store.prepare(
+            CNJ,
+            SIGNED_PDF,
+            RENDER_HASH,
+            tribunal="tjmg",
+            tipo_documento="manifestacao",
+        )
+        pending = Path(pending_path)
+
+        metadata = json.loads((pending / "metadata.json").read_text(encoding="utf-8"))
+
+        assert metadata["numero_cnj"] == CNJ
+        assert metadata["tribunal"] == "tjmg"
+        assert metadata["tipo_documento"] == "manifestacao"
+        assert "prepared_at" in metadata
+        assert _mode(pending / "metadata.json") == 0o600
+
+    def test_pending_paths_are_unique_within_same_second(self, tmp_path: Path) -> None:
+        store = _make_store(tmp_path)
+
+        first = store.prepare(CNJ, SIGNED_PDF, RENDER_HASH)
+        second = store.prepare(CNJ, SIGNED_PDF, RENDER_HASH)
+
+        assert first != second
+        assert Path(first).exists()
+        assert Path(second).exists()
+
+    def test_prepare_audit_omits_absolute_pending_path(self, tmp_path: Path) -> None:
+        audit = AuditLog(tmp_path / "audit.jsonl")
+        store = FilingReceiptStore(tmp_path / "filings", audit)
+        pending_path = store.prepare(CNJ, SIGNED_PDF, RENDER_HASH)
+
+        prepared = [e for e in audit.read_all() if e.event_type == "filing.receipt_prepared"]
+
+        assert len(prepared) == 1
+        assert prepared[0].details == {
+            "pending_id": Path(pending_path).name,
+            "pending_receipt": True,
+            "signed_pdf_hash": hashlib.sha256(SIGNED_PDF).hexdigest(),
+        }
+        assert "pending_path" not in prepared[0].details
 
 
 class TestConfirm:
@@ -75,13 +129,34 @@ class TestConfirm:
         assert (final_dir / "receipt.json").exists()
         assert (final_dir / "hashes.json").exists()
         assert (final_dir / "metadata.json").exists()
+        assert _mode(final_dir / "signed.pdf") == 0o600
+        assert _mode(final_dir / "receipt.json") == 0o600
+        assert _mode(final_dir / "hashes.json") == 0o600
+        assert _mode(final_dir / "metadata.json") == 0o600
 
     def test_raises_for_nonexistent_pending_path(self, tmp_path: Path) -> None:
         store = _make_store(tmp_path)
         receipt = _make_receipt()
 
         with pytest.raises(FileNotFoundError):
-            store.confirm("/nonexistent/path", receipt, PAYLOAD_HASH)
+            missing = tmp_path / "filings" / "missing_pending"
+            store.confirm(str(missing), receipt, PAYLOAD_HASH)
+
+    def test_rejects_pending_path_outside_storage_root(self, tmp_path: Path) -> None:
+        store = _make_store(tmp_path)
+        outside = tmp_path / "outside_pending"
+        outside.mkdir()
+
+        with pytest.raises(ValueError, match="outside filing storage root"):
+            store.confirm(str(outside), _make_receipt(), PAYLOAD_HASH)
+
+    def test_rejects_pending_path_that_is_not_pending_dir(self, tmp_path: Path) -> None:
+        store = _make_store(tmp_path)
+        invalid = tmp_path / "filings" / "not-pending"
+        invalid.mkdir(parents=True)
+
+        with pytest.raises(ValueError, match="Invalid pending"):
+            store.confirm(str(invalid), _make_receipt(), PAYLOAD_HASH)
 
     def test_atomic_rename_contains_timestamp_and_protocolo(self, tmp_path: Path) -> None:
         store = _make_store(tmp_path)
@@ -133,6 +208,12 @@ class TestGet:
     def test_returns_none_for_nonexistent(self, tmp_path: Path) -> None:
         store = _make_store(tmp_path)
         assert store.get(CNJ, "nonexistent_receipt") is None
+
+    def test_rejects_unsafe_receipt_id(self, tmp_path: Path) -> None:
+        store = _make_store(tmp_path)
+
+        with pytest.raises(ValueError, match="Invalid receipt_id"):
+            store.get(CNJ, "../escape")
 
 
 class TestListByProcesso:

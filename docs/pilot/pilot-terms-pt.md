@@ -71,6 +71,10 @@ Juris está sujeito à LGPD (Lei 13.709/2018) e segue estes princípios:
 - **Consentimento do cliente**: o(a) advogado(a) garante que o uso da Juris
   para processar dados de seus clientes está coberto pelo contrato de
   prestação de serviços ou por consentimento expresso, conforme aplicável.
+- **DPA/ROPA/RIPD**: antes de piloto com casos reais, as partes devem revisar e
+  preencher o pacote operacional em `docs/compliance/` (`dpa-template-pt.md`,
+  `ropa-pilot.md` e `ripd-pilot.md`), ajustando subprocessadores, retenção e
+  medidas de segurança ao escritório.
 
 ### 2.4. Revisão OAB obrigatória antes de protocolar
 
@@ -142,7 +146,11 @@ No encerramento:
 - Os artefatos do(a) advogado(a) (drafts, audit logs) permanecem com o
   escritório.
 - Dados de cliente em posse da Juris são apagados em até 30 dias, salvo
-  obrigação legal em contrário.
+  obrigação legal em contrário. A operação segue o runbook
+  `docs/deploy/data-erasure.md` e registra certificado sem conteúdo sensível em
+  `compliance-erasure.jsonl`.
+- Backups e fontes aceitas para corpus devem seguir, respectivamente,
+  `docs/deploy/backup-restore.md` e `data/tos_compliance_log.md`.
 
 ---
 

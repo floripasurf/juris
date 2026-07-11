@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Any, cast
 
 from juris.core.observability import get_logger
 
@@ -56,7 +57,9 @@ def extract_text_from_file(path: Path) -> str:
 def _extract_pdf(path: Path) -> str:
     """Extract text from PDF using pymupdf."""
     import pymupdf
-    doc = pymupdf.open(str(path))
+
+    # pymupdf ships no type stubs; the runtime API is correct (Document is iterable).
+    doc = cast(Any, pymupdf.open(str(path)))
     parts = []
     for page in doc:
         parts.append(page.get_text())

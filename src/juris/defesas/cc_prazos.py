@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from juris.defesas.models import PrazoInstituto
 
-
 # All CC Art. 205-206 prescription periods + related statutes
 PRAZOS_PRESCRICAO: list[PrazoInstituto] = [
     # === Art. 205 — Prazo geral ===
@@ -15,7 +14,6 @@ PRAZOS_PRESCRICAO: list[PrazoInstituto] = [
         termo_inicial="Data da violacao do direito",
         notas="Aplica-se quando nao houver prazo especifico previsto em lei.",
     ),
-
     # === Art. 206 par.1 — 1 ano ===
     PrazoInstituto(
         tipo_acao="Hospedagem e alimentacao",
@@ -38,7 +36,6 @@ PRAZOS_PRESCRICAO: list[PrazoInstituto] = [
         termo_inicial="Cessacao da administracao",
         notas="Pretensao do credor de prestar contas contra mandatario, tutor, etc.",
     ),
-
     # === Art. 206 par.2 — 2 anos ===
     PrazoInstituto(
         tipo_acao="Alimentos",
@@ -47,7 +44,6 @@ PRAZOS_PRESCRICAO: list[PrazoInstituto] = [
         termo_inicial="Data do vencimento de cada parcela",
         notas="Pretensao para haver prestacoes alimentares.",
     ),
-
     # === Art. 206 par.3 — 3 anos ===
     PrazoInstituto(
         tipo_acao="Cobranca de alugueis",
@@ -84,7 +80,6 @@ PRAZOS_PRESCRICAO: list[PrazoInstituto] = [
         termo_inicial="Data do acidente de transito",
         notas="Seguro obrigatorio DPVAT. Sumula 405 STJ.",
     ),
-
     # === Art. 206 par.4 — 4 anos ===
     PrazoInstituto(
         tipo_acao="Tutela e curatela",
@@ -93,7 +88,6 @@ PRAZOS_PRESCRICAO: list[PrazoInstituto] = [
         termo_inicial="Cessacao da tutela ou curatela",
         notas="Pretensao relativa a tutela ou curatela.",
     ),
-
     # === Art. 206 par.5 — 5 anos ===
     PrazoInstituto(
         tipo_acao="Cobranca",
@@ -102,7 +96,6 @@ PRAZOS_PRESCRICAO: list[PrazoInstituto] = [
         termo_inicial="Data do vencimento da divida",
         notas="Dividas liquidas constantes de instrumento publico ou particular.",
     ),
-
     # === Prazos de leis especiais ===
     PrazoInstituto(
         tipo_acao="Responsabilidade contratual",
@@ -116,8 +109,7 @@ PRAZOS_PRESCRICAO: list[PrazoInstituto] = [
         prazo_anos=1,
         base_legal="Art. 558 CPC c/c Art. 924 CPC",
         termo_inicial="Data do esbulho ou turbacao",
-        notas="Acao de forca nova (interdito proibitorio/reintegracao). "
-              "Apos 1 ano e dia, segue rito comum.",
+        notas="Acao de forca nova (interdito proibitorio/reintegracao). Apos 1 ano e dia, segue rito comum.",
     ),
     PrazoInstituto(
         tipo_acao="Trabalhista bienal",
@@ -133,7 +125,6 @@ PRAZOS_PRESCRICAO: list[PrazoInstituto] = [
         termo_inicial="Data do ajuizamento da acao",
         notas="Limita pretensao aos 5 anos anteriores ao ajuizamento.",
     ),
-
     # === CDC ===
     PrazoInstituto(
         tipo_acao="CDC vicio aparente produto nao duravel",
@@ -160,9 +151,7 @@ PRAZOS_PRESCRICAO: list[PrazoInstituto] = [
 
 
 # Lookup map for fast search by tipo_acao (normalized lowercase)
-_PRAZO_MAP: dict[str, PrazoInstituto] = {
-    p.tipo_acao.lower(): p for p in PRAZOS_PRESCRICAO
-}
+_PRAZO_MAP: dict[str, PrazoInstituto] = {p.tipo_acao.lower(): p for p in PRAZOS_PRESCRICAO}
 
 
 def buscar_prazo_prescricional(tipo_acao: str) -> PrazoInstituto | None:

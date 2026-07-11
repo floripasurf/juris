@@ -1,0 +1,20 @@
+AGENTE CAUSIA — instala uma vez, roda sozinho.
+
+O que faz: guarda o seu token A3 no SEU computador e conversa com o Causia.
+Seu token e sua senha NUNCA saem da sua máquina.
+
+INSTALAR (macOS):
+1. Abra o CausiaAgente.dmg e arraste "Causia Agente" para a pasta Aplicativos.
+2. Na PRIMEIRA vez: clique com o botão direito em "Causia Agente" -> Abrir ->
+   Abrir. (O aviso de "desenvolvedor não identificado" é esperado — é porque o
+   app ainda não é assinado; só nesta primeira vez.)
+3. Pronto: o agente sobe sozinho sempre que você liga o computador.
+
+CONECTAR (uma vez):
+1. Abra causia.com.br, entre, e vá em Acervo -> Conectar agente local.
+2. Cole o código que aparece na tela e informe CPF, senha do PJe e PIN do token.
+   Isso vai direto para o agente no SEU computador — o site não recebe.
+
+Não precisa mexer em firewall: o agente não abre porta; ele só liga para fora.
+Quando sair uma versão nova, o Causia avisa no site e você baixa o instalador
+de novo — mesmo processo, 1 minuto.

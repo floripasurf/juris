@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 
-class CodigoProcessual(str, Enum):
+class CodigoProcessual(StrEnum):
     """Procedural code systems in Brazilian law."""
 
     CPC = "CPC"
@@ -16,7 +16,7 @@ class CodigoProcessual(str, Enum):
     CC = "CC"
 
 
-class TipoDefesa(str, Enum):
+class TipoDefesa(StrEnum):
     """Types of procedural defenses available."""
 
     PRESCRICAO = "prescricao"
@@ -107,9 +107,13 @@ class DefesaReport:
     Args:
         numero_cnj: Case number in CNJ format.
         defesas_identificadas: List of defense check results.
+        codigos_consultados: Procedural code catalogs used for deterministic checks.
+        institutos_consultados: Defense institutes considered from the catalog.
         summary: Human-readable summary.
     """
 
     numero_cnj: str
     defesas_identificadas: list[ResultadoDefesa] = field(default_factory=list)
+    codigos_consultados: list[str] = field(default_factory=list)
+    institutos_consultados: list[str] = field(default_factory=list)
     summary: str = ""

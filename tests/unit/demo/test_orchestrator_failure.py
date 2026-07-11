@@ -13,6 +13,7 @@ non-zero CLI exit. These tests pin the exact contract:
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -21,6 +22,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 
 from juris.demo.orchestrator import (
+    _DETERMINISTIC_FALLBACK_REASON,
     DemoOrchestrator,
     DemoRequest,
     DemoResult,
@@ -32,6 +34,14 @@ from juris.demo.output_mode import OutputMode
 from juris.mni.parsers.processo import Movimento, ProcessoDomain
 from juris.persistence.audit import AuditLog
 from juris.repertory.peticoes.models import TipoPeticao
+
+
+class _CaptureLogger:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict[str, object]]] = []
+
+    def warning(self, event: str, **kwargs: object) -> None:
+        self.events.append((event, kwargs))
 
 
 def _processo() -> ProcessoDomain:
@@ -109,14 +119,46 @@ class TestOrchestratorErrorPaths:
         audit = AuditLog(audit_path)
         return DemoOrchestrator(llm=llm, repertory=repertory, audit=audit), audit
 
+    def test_started_audit_event_does_not_record_absolute_out_dir(self, tmp_path: Path) -> None:
+        skeleton, audit_path = _result_skeleton(tmp_path)
+        orch, audit = self._build(audit_path)
+        orch._run_drafter = AsyncMock(return_value=MagicMock(  # type: ignore[method-assign]
+            revisions=0, citations_used=[], audit_entry_ids=[],
+            research_summary="", reviewer_report=None, contraponto_section="",
+        ))
+        fake_analysis = MagicMock(analyzed=[], actionable=[], summary="ok")
+
+        with (
+            patch(
+                "juris.demo.orchestrator.analyze_processo",
+                AsyncMock(return_value=fake_analysis),
+            ),
+            patch("juris.demo.orchestrator.compute_prazos") as mock_prazos,
+        ):
+            mock_prazos.return_value = MagicMock(prazos=[], summary="ok")
+            asyncio.run(
+                orch.run(
+                    skeleton.request,
+                    processo=skeleton.processo,
+                    out_dir=skeleton.out_dir,
+                    is_demo_mode=True,
+                )
+            )
+
+        started = next(e for e in audit.read_all() if e.event_type == "demo.started")
+        assert started.details["out_dir"] == skeleton.out_dir.name
+        assert str(tmp_path) not in json.dumps(started.details)
+
     def test_drafter_failure_records_error_and_keeps_going(
         self, tmp_path: Path
     ) -> None:
         skeleton, audit_path = _result_skeleton(tmp_path)
         orch, _ = self._build(audit_path)
 
-        # Force the drafter wrapper to raise.
-        orch._run_drafter = AsyncMock(side_effect=RuntimeError("drafter boom"))  # type: ignore[method-assign]
+        # Force the drafter wrapper to raise with detail that must not become public.
+        orch._run_drafter = AsyncMock(  # type: ignore[method-assign]
+            side_effect=RuntimeError("drafter /var/private/model token=abc pin=1234")
+        )
 
         # Stub analyzer to succeed quickly.
         fake_analysis = MagicMock(analyzed=[], actionable=[], summary="ok")
@@ -139,7 +181,11 @@ class TestOrchestratorErrorPaths:
 
         assert result.draft is None
         assert any(e.startswith("draft:") for e in result.errors)
-        assert "drafter boom" in result.errors[0]
+        dumped = json.dumps(result.errors)
+        assert "falha operacional" in dumped
+        assert "/var/private/model" not in dumped
+        assert "token=abc" not in dumped
+        assert "pin=1234" not in dumped
         assert result.succeeded is False
 
     def test_analyzer_failure_skips_prazos_and_marks_error(
@@ -156,7 +202,7 @@ class TestOrchestratorErrorPaths:
         with (
             patch(
                 "juris.demo.orchestrator.analyze_processo",
-                AsyncMock(side_effect=ValueError("bad movements")),
+                AsyncMock(side_effect=ValueError("bad movements /var/private/db token=abc")),
             ),
             patch("juris.demo.orchestrator.compute_prazos") as mock_prazos,
         ):
@@ -172,6 +218,8 @@ class TestOrchestratorErrorPaths:
         assert result.analysis is None
         assert result.prazo_report is None
         assert any(e.startswith("analyze:") for e in result.errors)
+        assert "/var/private/db" not in json.dumps(result.errors)
+        assert "token=abc" not in json.dumps(result.errors)
         # compute_prazos must NOT have been called when analysis is missing.
         mock_prazos.assert_not_called()
         # Drafter still ran, so draft is present, but errors keep succeeded False.
@@ -195,7 +243,7 @@ class TestOrchestratorErrorPaths:
             ),
             patch(
                 "juris.demo.orchestrator.compute_prazos",
-                side_effect=RuntimeError("prazo blew up"),
+                side_effect=RuntimeError("prazo blew up /var/private/cache token=abc"),
             ),
         ):
             result = asyncio.run(
@@ -209,10 +257,16 @@ class TestOrchestratorErrorPaths:
 
         assert result.prazo_report is None
         assert any(e.startswith("prazos:") for e in result.errors)
+        assert "/var/private/cache" not in json.dumps(result.errors)
+        assert "token=abc" not in json.dumps(result.errors)
         assert result.draft is not None
         assert result.succeeded is False
 
-    def test_rascunho_mode_degrades_when_local_llm_unavailable(self, tmp_path: Path) -> None:
+    def test_rascunho_mode_degrades_when_local_llm_unavailable(self, tmp_path: Path, monkeypatch) -> None:
+        import juris.demo.orchestrator as orchestrator
+
+        capture = _CaptureLogger()
+        monkeypatch.setattr(orchestrator, "logger", capture)
         skeleton, audit_path = _result_skeleton(tmp_path, is_demo_mode=False)
         request = replace(
             skeleton.request,
@@ -222,7 +276,7 @@ class TestOrchestratorErrorPaths:
         orch, audit = self._build(audit_path)
 
         request_error = httpx.ConnectError(
-            "All connection attempts failed",
+            "All connection attempts failed /var/private/ollama token=abc pin=1234",
             request=httpx.Request("POST", "http://localhost:11434/api/chat"),
         )
         orch._run_drafter = AsyncMock(  # type: ignore[method-assign]
@@ -259,11 +313,19 @@ class TestOrchestratorErrorPaths:
         assert "modo determinístico sem LLM" in result.draft.research_summary
         assert result.succeeded is True
         assert result.degraded is True
-        assert "All connection attempts failed" in result.degradation_reason
-        assert any(
-            e.event_type == "demo.rascunho_deterministic_fallback"
-            for e in audit.read_all()
-        )
+        # O reason que a UI mostra é copy para o advogado — nunca o texto cru da exceção.
+        assert result.degradation_reason == _DETERMINISTIC_FALLBACK_REASON
+        assert "All connection attempts failed" not in result.degradation_reason
+        assert "/var/private/ollama" not in result.degradation_reason
+        assert "token=abc" not in result.degradation_reason
+        assert "pin=1234" not in result.degradation_reason
+        # O detalhe técnico continua auditável (audit + logs), sem segredo/caminho privado.
+        fallback = next(e for e in audit.read_all() if e.event_type == "demo.rascunho_deterministic_fallback")
+        dumped = json.dumps({"audit": fallback.details, "logs": [event[1] for event in capture.events]})
+        assert "All connection attempts failed" in dumped
+        assert "/var/private/ollama" not in dumped
+        assert "token=abc" not in dumped
+        assert "pin=1234" not in dumped
 
     def test_rascunho_mode_does_not_hide_non_llm_connection_failure(self, tmp_path: Path) -> None:
         skeleton, audit_path = _result_skeleton(tmp_path, is_demo_mode=False)

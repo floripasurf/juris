@@ -14,6 +14,7 @@ from typing import Any
 
 from docx import Document
 
+from juris.core.sanitize import safe_error_text
 from juris.repertory.chunking import DocumentChunk, chunk_fonte
 from juris.repertory.corpus.models import FonteJurisprudencia, TipoFonte
 from juris.repertory.ingestion.base import CorpusIngester
@@ -117,8 +118,8 @@ class TJDFTModelosIngester(CorpusIngester):
 
                 fonte = self._file_to_fonte(filepath, text)
                 fontes.append(fonte)
-            except Exception:
-                logger.warning("Failed to read .docx: %s", filepath.name, exc_info=True)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Failed to read .docx %s: %s", filepath.name, safe_error_text(exc))
 
         logger.info("Loaded %d TJDFT templates from %s", len(fontes), self._source_dir)
         return fontes

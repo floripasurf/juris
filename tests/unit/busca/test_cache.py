@@ -5,8 +5,6 @@ from __future__ import annotations
 import time
 from unittest.mock import patch
 
-import pytest
-
 from juris.busca.cache import BuscaCache
 from juris.busca.models import (
     BuscaRequest,

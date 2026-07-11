@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from juris.agents.analyzer import ProcessoAnalysis, analyze_processo
 from juris.alerts.deadline_alerts import AlertBatch, generate_alerts
@@ -23,6 +23,9 @@ from juris.jobs.overnight import (
 from juris.mni.operations.differential import DiffResult
 from juris.persistence.local_db import LocalDB
 from juris.prazo.engine import PrazoReport, compute_prazos
+
+if TYPE_CHECKING:
+    from juris.mni.service import MNIReadService
 
 logger = get_logger(__name__)
 
@@ -109,6 +112,7 @@ async def run_nightly_single(
     senha: str,
     today: date | None = None,
     token_pin: str | None = None,
+    mni_service: MNIReadService | None = None,
 ) -> NightlyResult:
     """Run the nightly pipeline for a single processo.
 
@@ -146,6 +150,7 @@ async def run_nightly_single(
         diff = await sync_processo_mni(
             numero_cnj, tribunal, cpf, senha, last_sync_at, known_keys,
             token_pin=token_pin,
+            mni_service=mni_service,
         )
         source = "mni"
         if diff.error:
@@ -179,8 +184,8 @@ async def run_nightly_single(
     processo = diff.fetched
     if processo is None:
         try:
-            processo = _fetch_full_processo(numero_cnj, tribunal)
-        except Exception as e:
+            processo = await asyncio.to_thread(_fetch_full_processo, numero_cnj, tribunal)
+        except Exception as e:  # noqa: BLE001
             result.error = f"Full fetch failed: {type(e).__name__}: {e}"
             db.log_sync(numero_cnj, tribunal, source, success=False, error=result.error)
             return result
@@ -283,6 +288,7 @@ async def run_nightly(
     max_concurrent: int = 10,
     today: date | None = None,
     token_pin: str | None = None,
+    mni_service: MNIReadService | None = None,
 ) -> NightlySummary:
     """Run the nightly pipeline for a batch of processos with concurrency control.
 
@@ -311,13 +317,14 @@ async def run_nightly(
                 senha=senha,
                 today=today,
                 token_pin=token_pin,
+                mni_service=mni_service,
             )
 
     tasks = [_run_one(proc) for proc in processos]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     for r in results:
-        if isinstance(r, Exception):
+        if isinstance(r, BaseException):
             err_result = NightlyResult(
                 numero_cnj="unknown",
                 tribunal="unknown",

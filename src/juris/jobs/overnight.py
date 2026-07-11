@@ -14,10 +14,14 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from juris.core.observability import get_logger, new_correlation_id
+from juris.core.sanitize import safe_error_text
 from juris.mni.operations.differential import DiffResult, diff_processo
+
+if TYPE_CHECKING:
+    from juris.mni.service import MNIReadService
 from juris.mni.parsers.processo import ProcessoDomain, parse_processo
 from juris.mni.retry import circuit_breaker
 
@@ -54,9 +58,10 @@ async def sync_processo_mni(
     cpf: str,
     senha: str,
     last_sync_at: datetime | None = None,
-    known_movimento_keys: set[tuple] | None = None,
+    known_movimento_keys: set[tuple[datetime | None, int | None, str | None]] | None = None,
     known_doc_ids: set[str] | None = None,
     token_pin: str | None = None,
+    mni_service: MNIReadService | None = None,
 ) -> DiffResult:
     """Sync a single processo via MNI.
 
@@ -95,35 +100,55 @@ async def sync_processo_mni(
         # mTLS tribunals (e.g. TJMG) authenticate with the A3 hardware token,
         # not zeep+password. Route them through the PKCS#11 path.
         if tribunal_cfg is not None and tribunal_cfg.requires_mtls:
-            fetched = _fetch_mni_mtls(
-                numero_cnj=numero_cnj,
-                tribunal_cfg=tribunal_cfg,
-                cpf=cpf,
-                senha=senha,
-                token_pin=token_pin,
-            )
+            if mni_service is not None:
+                # Split-trust: the agent does the mTLS read (token stays remote).
+                # Run the (blocking) service off the event loop.
+                fetched = await asyncio.to_thread(
+                    mni_service.consultar_processo,
+                    numero_cnj,
+                    tribunal_cfg,
+                    cpf,
+                    senha,
+                    token_pin=token_pin,
+                )
+            else:
+                fetched = await asyncio.to_thread(
+                    _fetch_mni_mtls,
+                    numero_cnj=numero_cnj,
+                    tribunal_cfg=tribunal_cfg,
+                    cpf=cpf,
+                    senha=senha,
+                    token_pin=token_pin,
+                )
         else:
             auth = PasswordAuth(cpf=cpf, senha=senha)
-            client = get_mni_client(tribunal_id, auth)
-            response = consultar_processo(
-                client=client,
-                id_consultante=cpf,
-                senha_consultante=senha,
-                numero_cnj=numero_cnj,
-                com_documentos=False,
-            )
 
-            sucesso = getattr(response, "sucesso", None)
-            if sucesso is False:
-                msg = getattr(response, "mensagem", "Unknown error")
-                circuit_breaker.record_failure(tribunal_id)
-                return DiffResult(
+            def _fetch_password_mni() -> ProcessoDomain | DiffResult:
+                client = get_mni_client(tribunal_id, auth)
+                response = consultar_processo(
+                    client=client,
+                    id_consultante=cpf,
+                    senha_consultante=senha,
                     numero_cnj=numero_cnj,
-                    tribunal_id=tribunal_id,
-                    error=f"MNI error: {msg}",
+                    com_documentos=False,
                 )
 
-            fetched = parse_processo(response, tribunal_id=tribunal_id)
+                sucesso = getattr(response, "sucesso", None)
+                if sucesso is False:
+                    msg = getattr(response, "mensagem", "Unknown error")
+                    circuit_breaker.record_failure(tribunal_id)
+                    return DiffResult(
+                        numero_cnj=numero_cnj,
+                        tribunal_id=tribunal_id,
+                        error=f"MNI error: {msg}",
+                    )
+
+                return parse_processo(response, tribunal_id=tribunal_id)
+
+            fetched_or_error = await asyncio.to_thread(_fetch_password_mni)
+            if isinstance(fetched_or_error, DiffResult):
+                return fetched_or_error
+            fetched = fetched_or_error
 
         circuit_breaker.record_success(tribunal_id)
 
@@ -134,13 +159,13 @@ async def sync_processo_mni(
             known_doc_ids=known_doc_ids,
         )
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         circuit_breaker.record_failure(tribunal_id)
-        logger.error("sync_processo_error", numero_cnj=numero_cnj, error=str(e))
+        logger.error("sync_processo_error", numero_cnj=numero_cnj, error=safe_error_text(e))
         return DiffResult(
             numero_cnj=numero_cnj,
             tribunal_id=tribunal_id,
-            error=f"{type(e).__name__}: {e}",
+            error=f"{type(e).__name__}: {safe_error_text(e)}",
         )
 
 
@@ -153,10 +178,12 @@ def _fetch_mni_mtls(
 ) -> ProcessoDomain:
     """Fetch a processo from an mTLS tribunal via the A3 token (PKCS#11).
 
-    The token PIN comes from ``token_pin`` (passed by an interactive caller)
-    or, for unattended runs, from ``settings.token_pin``. If neither is set
-    the token can't be unlocked and a clear error is raised so the caller
-    records a per-processo failure rather than crashing.
+    Thin adapter over :func:`juris.mni.fetch.fetch_processo_mni` — the shared
+    helper the demo pipeline also uses, so both paths read mTLS tribunals
+    through the same validated code. The token PIN comes from ``token_pin``
+    (interactive caller) or, unattended, from ``settings.token_pin``; if
+    neither is set the helper raises so the caller records a per-processo
+    failure rather than crashing.
 
     Args:
         numero_cnj: Case number.
@@ -169,48 +196,18 @@ def _fetch_mni_mtls(
         The fetched :class:`ProcessoDomain`.
 
     Raises:
-        RuntimeError: If no token PIN is available.
+        RuntimeError: If no token PIN is available or MNI returns an error.
     """
-    from urllib.parse import urlparse
+    from juris.mni.fetch import fetch_processo_mni
 
-    from juris.config import get_settings
-    from juris.mni.operations.consulta_pkcs11 import consultar_processo_pkcs11
-    from juris.mni.token import build_pkcs11_config, extract_token_material
-
-    settings = get_settings()
-    pin = token_pin or (settings.token_pin.get_secret_value() if settings.token_pin else None)
-    if not pin:
-        msg = "mTLS tribunal requires a token PIN (pass --pin or set TOKEN_PIN)."
-        raise RuntimeError(msg)
-
-    material = extract_token_material(settings.pkcs11_module)
-    pkcs11_config = build_pkcs11_config(material, pin, settings.pkcs11_module)
-
-    service_url = tribunal_cfg.service_url_override or tribunal_cfg.wsdl_url.replace("?wsdl", "")
-    parsed = urlparse(service_url)
-
-    result = consultar_processo_pkcs11(
-        host=parsed.hostname or "",
-        path=parsed.path or "/pje/intercomunicacao",
-        pkcs11_config=pkcs11_config,
-        id_consultante=cpf,
-        senha_consultante=senha,
-        numero_cnj=numero_cnj,
-        mni_version=tribunal_cfg.mni_version,
-        com_documentos=False,
-    )
-    if not result.sucesso:
-        msg = f"MNI error: {result.mensagem}"
-        raise RuntimeError(msg)
-
-    return result.to_processo_domain(tribunal_id=tribunal_cfg.id, numero_cnj=numero_cnj)
+    return fetch_processo_mni(numero_cnj, tribunal_cfg, cpf, senha, token_pin=token_pin)
 
 
 async def sync_processo_datajud(
     numero_cnj: str,
     tribunal_id: str,
     last_sync_at: datetime | None = None,
-    known_movimento_keys: set[tuple] | None = None,
+    known_movimento_keys: set[tuple[datetime | None, int | None, str | None]] | None = None,
     known_doc_ids: set[str] | None = None,
 ) -> DiffResult:
     """Sync a single processo via DataJud (fallback for broken MNI tribunals).
@@ -229,7 +226,7 @@ async def sync_processo_datajud(
     from juris.datajud.parser import parse_datajud_processo
 
     try:
-        source = consultar_processo(numero_cnj, tribunal_id)
+        source = await asyncio.to_thread(consultar_processo, numero_cnj, tribunal_id)
         if source is None:
             return DiffResult(
                 numero_cnj=numero_cnj,
@@ -237,7 +234,7 @@ async def sync_processo_datajud(
                 error="Not found in DataJud",
             )
 
-        fetched = parse_datajud_processo(source)
+        fetched = await asyncio.to_thread(parse_datajud_processo, source)
         return diff_processo(
             fetched=fetched,
             last_sync_at=last_sync_at,
@@ -245,12 +242,12 @@ async def sync_processo_datajud(
             known_doc_ids=known_doc_ids,
         )
 
-    except Exception as e:
-        logger.error("sync_datajud_error", numero_cnj=numero_cnj, error=str(e))
+    except Exception as e:  # noqa: BLE001
+        logger.error("sync_datajud_error", numero_cnj=numero_cnj, error=safe_error_text(e))
         return DiffResult(
             numero_cnj=numero_cnj,
             tribunal_id=tribunal_id,
-            error=f"DataJud: {type(e).__name__}: {e}",
+            error=f"DataJud: {type(e).__name__}: {safe_error_text(e)}",
         )
 
 
@@ -329,7 +326,7 @@ async def run_overnight_sync(
 
     for r in results:
         summary.processos_checked += 1
-        if isinstance(r, Exception):
+        if isinstance(r, BaseException):
             summary.processos_failed += 1
             summary.errors.append(f"Unexpected: {type(r).__name__}: {r}")
             continue

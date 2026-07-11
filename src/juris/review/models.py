@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 
-class ReviewDimension(str, Enum):
+class ReviewDimension(StrEnum):
     COMPLETENESS = "completeness"
     AUTHORITY = "authority"
+    EVIDENCE = "evidence"  # alegação sem prova / pedido sem lastro probatório
     COUNTERARGUMENTS = "counterarguments"
     STRUCTURE = "structure"
     COMPLIANCE = "compliance"
 
 
-class IssueSeverity(str, Enum):
+class IssueSeverity(StrEnum):
     CRITICAL = "critical"
     IMPORTANT = "important"
     SUGGESTION = "suggestion"
@@ -72,7 +73,7 @@ class ReviewReport:
     def to_markdown(self) -> str:
         """Render the review report as structured Markdown."""
         # Build header
-        lines = [f"# Revisao: petição"]
+        lines = ["# Revisao: petição"]
         if self.request.numero_cnj:
             lines[0] += f" — {self.request.numero_cnj}"
 
@@ -120,7 +121,7 @@ class ReviewReport:
             lines.append(f"### [{icon}] {issue.title}")
             lines.append(f"**Dimensao:** {issue.dimension.value}")
             if issue.line_anchor:
-                lines.append(f"**Trecho:** \"{issue.line_anchor}\"")
+                lines.append(f'**Trecho:** "{issue.line_anchor}"')
             lines.append(issue.description)
             if issue.suggestion:
                 lines.append(f"**Sugestao:** {issue.suggestion}")

@@ -42,7 +42,7 @@ class TestCloudFlag:
 
         with patch("juris.llm.claude.ClaudeLLM") as mock_claude:
             mock_claude.return_value = MagicMock()
-            result = runner.invoke(app, ["review", str(petition), "--cloud"])
+            runner.invoke(app, ["review", str(petition), "--cloud"])
 
         mock_claude.assert_called_once_with(api_key="sk-test-key-123")
 

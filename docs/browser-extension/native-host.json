@@ -1,0 +1,7 @@
+{
+  "name": "com.juris.host",
+  "description": "Juris native messaging host — relays completions to the juris local agent",
+  "path": "/usr/local/bin/juris-native-host",
+  "type": "stdio",
+  "allowed_origins": ["chrome-extension://REPLACE_WITH_EXTENSION_ID/"]
+}

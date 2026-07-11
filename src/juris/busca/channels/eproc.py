@@ -11,6 +11,7 @@ from juris.busca.abc import SearchChannel
 from juris.busca.models import FonteOrigem, ResultadoBusca
 from juris.busca.retry import busca_circuit_breaker
 from juris.core.observability import get_logger
+from juris.core.sanitize import safe_error_text
 
 logger = get_logger(__name__)
 
@@ -124,7 +125,7 @@ class EprocChannel(SearchChannel):
 
         except (httpx.HTTPError, httpx.TimeoutException, ConnectionError, OSError) as exc:
             busca_circuit_breaker.record_failure(tribunal_id)
-            logger.warning("eproc_request_failed", tribunal_id=tribunal_id, error=str(exc))
+            logger.warning("eproc_request_failed", tribunal_id=tribunal_id, error=safe_error_text(exc))
             return []
 
     def _parse_trf4_json(
@@ -145,10 +146,10 @@ class EprocChannel(SearchChannel):
                     numero_cnj=str(numero).strip(),
                     tribunal=tribunal_id.upper(),
                     fonte=FonteOrigem.EPROC,
-                    classe=item.get("classeProcessual", item.get("classe", "")),
+                    classe=str(item.get("classeProcessual") or item.get("classe") or ""),
                     assunto=item.get("assunto", ""),
-                    orgao_julgador=item.get("orgaoJulgador", item.get("vara", "")),
-                    data_ajuizamento=item.get("dataAjuizamento", item.get("dataInicio", "")),
+                    orgao_julgador=str(item.get("orgaoJulgador") or item.get("vara") or ""),
+                    data_ajuizamento=str(item.get("dataAjuizamento") or item.get("dataInicio") or ""),
                     grau=item.get("grau", "1"),
                     ultima_atualizacao=item.get("ultimaAtualizacao", ""),
                     polo_ativo=_extract_polo(item, "poloAtivo"),
@@ -191,7 +192,7 @@ class EprocChannel(SearchChannel):
 
         except (httpx.HTTPError, httpx.TimeoutException, ConnectionError, OSError) as exc:
             busca_circuit_breaker.record_failure(tribunal_id)
-            logger.warning("eproc_request_failed", tribunal_id=tribunal_id, error=str(exc))
+            logger.warning("eproc_request_failed", tribunal_id=tribunal_id, error=safe_error_text(exc))
             return []
 
     def _parse_html_results(
@@ -250,7 +251,7 @@ def _extract_polo(item: dict[str, Any], key: str) -> list[str]:
     polo = item.get(key, [])
     if isinstance(polo, list):
         return [
-            p.get("nome", p.get("name", str(p))) if isinstance(p, dict) else str(p)
+            str(p.get("nome") or p.get("name") or p) if isinstance(p, dict) else str(p)
             for p in polo
         ]
     if isinstance(polo, str):

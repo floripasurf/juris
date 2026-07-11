@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 import hashlib
 import re
 from unittest.mock import MagicMock, patch
@@ -188,8 +189,83 @@ class TestRenderPetitionPdf:
         ), pytest.raises(RuntimeError, match="No PDF backend"):
             render_petition_pdf(MINIMAL_MD, "000-test", "inicial")
 
+    def test_oserror_native_libs_falls_back_to_reportlab(self) -> None:
+        """A weasyprint OSError (missing gobject/pango) must ALSO fall back to
+        reportlab, not bubble up as a crash — this is the frozen-bundle case
+        where weasyprint is importable-but-broken (native libs excluded)."""
+        with patch(
+            "juris.signing.pdf_renderer._render_with_weasyprint",
+            side_effect=OSError("cannot load library 'libgobject-2.0-0': error 0x7e"),
+        ), patch(
+            "juris.signing.pdf_renderer._render_with_reportlab",
+            return_value=(b"%PDF-1.4 reportlab-after-oserror", 1),
+        ):
+            result = render_petition_pdf(MINIMAL_MD, "000-test", "inicial")
+        assert result.pdf_bytes == b"%PDF-1.4 reportlab-after-oserror"
+        assert result.page_count == 1
+
+    def test_no_backend_raises_runtime_error_after_oserror(self) -> None:
+        """When weasyprint fails with OSError AND reportlab is also missing,
+        the final RuntimeError must still surface (no silent crash)."""
+        with patch(
+            "juris.signing.pdf_renderer._render_with_weasyprint",
+            side_effect=OSError("cannot load library 'libpango-1.0-0'"),
+        ), patch(
+            "juris.signing.pdf_renderer._render_with_reportlab",
+            side_effect=ImportError("no reportlab"),
+        ), pytest.raises(RuntimeError, match="No PDF backend"):
+            render_petition_pdf(MINIMAL_MD, "000-test", "inicial")
+
     def test_render_result_is_frozen(self) -> None:
         """RenderResult must be immutable (frozen dataclass)."""
         result = RenderResult(pdf_bytes=b"test", page_count=1, pdf_hash="abc")
         with pytest.raises(AttributeError):
             result.page_count = 5  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# Real-reportlab fallback (no mocking of _render_with_reportlab)
+#
+# These simulate the frozen-bundle scenario: weasyprint's native pango/gobject
+# dylibs aren't in the PyInstaller bundle, so `from weasyprint import HTML`
+# fails either as ImportError (module excluded entirely) or OSError (module
+# importable but its native libs are missing). Both must produce a REAL PDF
+# via reportlab, not just a mocked byte string.
+# ---------------------------------------------------------------------------
+
+
+def _patch_weasyprint_import(monkeypatch: pytest.MonkeyPatch, error: Exception) -> None:
+    """Make ``from weasyprint import HTML`` raise ``error`` while leaving
+    every other import untouched."""
+    real_import = builtins.__import__
+
+    def fake_import(name: str, *args: object, **kwargs: object) -> object:
+        if name == "weasyprint":
+            raise error
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+
+class TestRealReportlabFallback:
+    """Exercise the actual reportlab rendering path end to end."""
+
+    def test_import_error_produces_real_pdf(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """weasyprint absent entirely (frozen exclude list) -> real reportlab PDF."""
+        _patch_weasyprint_import(monkeypatch, ImportError("No module named 'weasyprint'"))
+        result = render_petition_pdf(
+            COMPLEX_MD, "0001234-56.2024.8.26.0100", "contestacao"
+        )
+        assert result.pdf_bytes.startswith(b"%PDF")
+        assert result.page_count >= 1
+        assert result.pdf_hash == hashlib.sha256(result.pdf_bytes).hexdigest()
+
+    def test_oserror_native_libs_produces_real_pdf(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """weasyprint importable but native libs missing -> real reportlab PDF."""
+        _patch_weasyprint_import(
+            monkeypatch, OSError("cannot load library 'libgobject-2.0-0': error 0x7e")
+        )
+        result = render_petition_pdf(MINIMAL_MD, "0001234-56.2024.8.26.0100", "inicial")
+        assert result.pdf_bytes.startswith(b"%PDF")
+        assert result.page_count >= 1
+        assert result.pdf_hash == hashlib.sha256(result.pdf_bytes).hexdigest()

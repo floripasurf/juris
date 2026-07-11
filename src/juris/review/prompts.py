@@ -1,4 +1,5 @@
 """Versioned prompt templates for the petition reviewer agent."""
+
 from __future__ import annotations
 
 PROMPT_VERSION = "v1"
@@ -31,7 +32,8 @@ Peticao:
 {petition_text}
 
 Responda com JSON contendo uma lista de "issues" encontradas.
-Cada issue deve ter: severity, title, description, line_anchor (trecho relevante), suggestion, citations (fontes do contexto).
+Cada issue deve ter: severity, title, description, line_anchor (trecho relevante), suggestion,
+citations (fontes do contexto).
 Se nao houver problemas, retorne {{"issues": []}}.
 """
 
@@ -50,7 +52,8 @@ Peticao:
 {petition_text}
 
 Responda com JSON contendo uma lista de "issues" encontradas.
-Cada issue deve ter: severity, title, description, line_anchor (trecho relevante), suggestion, citations (fontes do contexto).
+Cada issue deve ter: severity, title, description, line_anchor (trecho relevante), suggestion,
+citations (fontes do contexto).
 Se nao houver problemas, retorne {{"issues": []}}.
 """
 
@@ -68,7 +71,8 @@ Peticao:
 {petition_text}
 
 Responda com JSON contendo uma lista de "issues" encontradas.
-Cada issue deve ter: severity, title, description, line_anchor (trecho relevante), suggestion (como se preparar), citations (fontes).
+Cada issue deve ter: severity, title, description, line_anchor (trecho relevante),
+suggestion (como se preparar), citations (fontes).
 Se nao houver contra-argumentos relevantes, retorne {{"issues": []}}.
 """
 
@@ -108,15 +112,36 @@ Cada issue deve ter: severity, title, description, line_anchor (trecho relevante
 Se nao houver problemas, retorne {{"issues": []}}.
 """
 
+EVIDENCE_PROMPT = """\
+Analise o LASTRO PROBATORIO da peticao abaixo. Sinalize, como issues:
+- Alegacao de fato sem prova indicada ou sem pedido de producao de prova
+- Pedido sem fundamento juridico ou factico que o sustente
+- Tese que depende de fato controvertido sem prova disponivel
+- Jurisprudencia citada de forma generica (sem tese aplicavel ao caso concreto)
+- Tom excessivamente assertivo diante de prova fraca (firmeza deve ser proporcional a solidez)
+
+Contexto de jurisprudencia relevante:
+{context}
+
+Peticao:
+{petition_text}
+
+Responda com JSON contendo uma lista de "issues" encontradas.
+Cada issue deve ter: severity, title, description, line_anchor (trecho relevante), suggestion,
+citations (fontes do contexto).
+Se nao houver problemas, retorne {{"issues": []}}.
+"""
+
 DIMENSION_PROMPTS: dict[str, str] = {
     "completeness": COMPLETENESS_PROMPT,
     "authority": AUTHORITY_PROMPT,
+    "evidence": EVIDENCE_PROMPT,
     "counterarguments": COUNTERARGUMENTS_PROMPT,
     "structure": STRUCTURE_PROMPT,
     "compliance": COMPLIANCE_PROMPT,
 }
 
-REVIEW_SCHEMA: dict = {
+REVIEW_SCHEMA: dict[str, object] = {
     "type": "object",
     "properties": {
         "issues": {

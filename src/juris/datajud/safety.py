@@ -19,6 +19,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from juris.core.paths import ensure_private_dir, juris_home, restrict_file
 from juris.persistence.audit import AuditLog
 
 ENV_RATE_LIMIT_PER_SECOND = "JURIS_DATAJUD_RATE_LIMIT_PER_SECOND"
@@ -102,7 +103,7 @@ def default_cache_dir() -> Path:
     explicit = os.environ.get(ENV_CACHE_DIR)
     if explicit:
         return Path(explicit).expanduser()
-    return Path.home() / ".juris" / "cache" / "datajud"
+    return juris_home() / "cache" / "datajud"
 
 
 def default_audit_path() -> Path:
@@ -110,7 +111,7 @@ def default_audit_path() -> Path:
     explicit = os.environ.get(ENV_AUDIT_PATH)
     if explicit:
         return Path(explicit).expanduser()
-    return Path.home() / ".juris" / "audit.jsonl"
+    return juris_home() / "audit.jsonl"
 
 
 def query_hash(payload: dict[str, Any]) -> str:
@@ -128,6 +129,7 @@ class DataJudCache:
         *,
         now: Callable[[], datetime] | None = None,
     ) -> None:
+        self._uses_default_root = root is None
         self.root = root or default_cache_dir()
         self._now = now or (lambda: datetime.now(UTC))
 
@@ -155,7 +157,7 @@ class DataJudCache:
     def set(self, meta: DataJudRequestMeta, payload: dict[str, Any]) -> None:
         """Persist a DataJud JSON payload."""
         path = self._path_for(meta)
-        path.parent.mkdir(parents=True, exist_ok=True)
+        ensure_private_dir(path.parent, restrict_existing=self._uses_default_root)
         wrapper = {
             "cached_at": self._now().isoformat(),
             "meta": {
@@ -167,6 +169,7 @@ class DataJudCache:
             "payload": payload,
         }
         path.write_text(json.dumps(wrapper, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+        restrict_file(path)
 
     def purge(self) -> int:
         """Remove cached JSON files and return the number removed."""

@@ -8,7 +8,7 @@ from zeep import Client
 
 from juris.core.observability import get_logger
 from juris.core.types import NumeroCNJ
-from juris.mni.retry import circuit_breaker, mni_retry
+from juris.mni.retry import mni_retry
 
 logger = get_logger(__name__)
 

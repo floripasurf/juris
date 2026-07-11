@@ -126,7 +126,7 @@ class STFRepercussaoGeralFetcher(CorpusIngester):
                 if len(items) < self._page_size:
                     break
                 offset += self._page_size
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.warning(
                 "Could not fetch STF RG themes from %s. "
                 "Use SeedLoader with local JSON files instead.",

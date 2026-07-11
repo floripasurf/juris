@@ -35,30 +35,70 @@ class HybridRetriever:
         self._embedder = embedder
         self._reranker = reranker
 
-    def search(self, query: str, top_k: int = 10) -> list[SearchResult]:
+    def search(
+        self,
+        query: str,
+        top_k: int = 10,
+        *,
+        apply_hierarchy_boost: bool = True,
+        tenant_id: str | None = None,
+        include_estilo: bool = False,
+        tenant_only: bool = False,
+        area: str | None = None,
+    ) -> list[SearchResult]:
         """Hybrid search combining dense and sparse results.
 
         Args:
             query: Search query text.
             top_k: Maximum number of results to return.
+            apply_hierarchy_boost: Boost by authority level. Disable when a
+                downstream composite re-rank (ADR-0017) already accounts for
+                authority, to avoid double-counting it.
+            tenant_id: Restrict results to public seed plus this tenant's own
+                private corpus. ``None`` returns public seed only.
+            include_estilo: If ``False`` (default), exclude ``uso="estilo"``
+                chunks (e.g. modelos de petição) from grounding results.
+            tenant_only: If ``True``, exclude the shared public seed and
+                return only this tenant's own points.
 
         Returns:
-            Ranked list of search results with hierarchy boosting applied.
+            Ranked list of search results.
         """
         # Dense retrieval
         dense_results: list[SearchResult] = []
         query_embedding = self._embedder.embed_single(query)
         if query_embedding is not None:
-            dense_results = self._dense.search(query_embedding, top_k=top_k * 2)
+            dense_results = self._dense.search(
+                query_embedding,
+                top_k=top_k * 2,
+                tenant_id=tenant_id,
+                include_estilo=include_estilo,
+                tenant_only=tenant_only,
+                area=area,
+            )
 
         # Sparse retrieval
         sparse_results: list[SearchResult] = []
         if isinstance(self._sparse, LocalFTSStore):
-            sparse_results = self._sparse.search_text(query, top_k=top_k * 2)
+            sparse_results = self._sparse.search_text(
+                query,
+                top_k=top_k * 2,
+                tenant_id=tenant_id,
+                include_estilo=include_estilo,
+                tenant_only=tenant_only,
+                area=area,
+            )
         else:
             # For non-FTS stores, try embedding search as fallback
             if query_embedding is not None:
-                sparse_results = self._sparse.search(query_embedding, top_k=top_k * 2)
+                sparse_results = self._sparse.search(
+                    query_embedding,
+                    top_k=top_k * 2,
+                    tenant_id=tenant_id,
+                    include_estilo=include_estilo,
+                    tenant_only=tenant_only,
+                    area=area,
+                )
 
         # Merge via RRF
         merged = self.reciprocal_rank_fusion(dense_results, sparse_results)
@@ -67,10 +107,11 @@ class HybridRetriever:
         if self._reranker is not None:
             merged = self._reranker.rerank(query, merged, top_k=min(15, top_k * 2))
 
-        # Apply hierarchy boost
-        boosted = self.hierarchy_boost(merged, HIERARCHY_WEIGHTS)
+        # Apply hierarchy boost (unless a composite re-rank handles authority).
+        if apply_hierarchy_boost:
+            merged = self.hierarchy_boost(merged, HIERARCHY_WEIGHTS)
 
-        return boosted[:top_k]
+        return merged[:top_k]
 
     @staticmethod
     def reciprocal_rank_fusion(
@@ -111,6 +152,8 @@ class HybridRetriever:
                     score=scores[chunk_id],
                     text=original.text,
                     metadata=original.metadata,
+                    source_type=original.source_type,
+                    uso=original.uso,
                 )
             )
         return merged
@@ -144,6 +187,8 @@ class HybridRetriever:
                     score=new_score,
                     text=result.text,
                     metadata=result.metadata,
+                    source_type=result.source_type,
+                    uso=result.uso,
                 )
             )
         boosted.sort(key=lambda r: r.score, reverse=True)

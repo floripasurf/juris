@@ -25,8 +25,12 @@ class TestEaster:
 
 
 class TestFeriadosNacionais:
-    def test_has_12_holidays(self) -> None:
+    def test_has_13_holidays_after_consciencia_negra_law(self) -> None:
         feriados = feriados_nacionais(2026)
+        assert len(feriados) == 13
+
+    def test_has_12_holidays_before_consciencia_negra_law(self) -> None:
+        feriados = feriados_nacionais(2023)
         assert len(feriados) == 12
 
     def test_includes_fixed_dates(self) -> None:
@@ -36,7 +40,13 @@ class TestFeriadosNacionais:
         assert date(2026, 4, 21) in datas  # Tiradentes
         assert date(2026, 5, 1) in datas   # Trabalho
         assert date(2026, 9, 7) in datas   # Independência
+        assert date(2026, 11, 20) in datas # Consciência Negra
         assert date(2026, 12, 25) in datas # Natal
+
+    def test_consciencia_negra_is_national_since_2024(self) -> None:
+        assert date(2023, 11, 20) not in {f.data for f in feriados_nacionais(2023)}
+        assert date(2024, 11, 20) in {f.data for f in feriados_nacionais(2024)}
+        assert date(2025, 11, 20) in {f.data for f in feriados_nacionais(2025)}
 
     def test_includes_easter_dependent(self) -> None:
         feriados = feriados_nacionais(2026)
@@ -79,6 +89,34 @@ class TestFeriadosEstaduais:
         feriados = feriados_estaduais(2026, "xx")
         assert feriados == []
 
+    def test_rj_keeps_consciencia_negra_before_national_law_only(self) -> None:
+        assert date(2023, 11, 20) in {f.data for f in feriados_estaduais(2023, "rj")}
+        assert date(2024, 11, 20) not in {f.data for f in feriados_estaduais(2024, "rj")}
+        # São Jorge (feriado estadual do RJ) permanece.
+        assert date(2024, 4, 23) in {f.data for f in feriados_estaduais(2024, "rj")}
+
+    def test_datas_magnas_estaduais_estatutarias(self) -> None:
+        # Amostra de data magna / criação do estado adicionadas na expansão do #8.
+        casos = {
+            "df": (11, 30),  # Dia do Evangélico
+            "pa": (8, 15),  # Adesão do Grão-Pará
+            "ms": (10, 11),  # Criação do Estado
+            "ce": (3, 25),  # Data Magna do Ceará
+            "am": (9, 5),
+            "se": (7, 8),
+            "ro": (1, 4),
+            "to": (10, 5),
+        }
+        for uf, (mes, dia) in casos.items():
+            datas = {f.data for f in feriados_estaduais(2026, uf)}
+            assert date(2026, mes, dia) in datas, uf
+
+    def test_estados_sem_data_magna_clara_ficam_no_baseline(self) -> None:
+        # ES/MT/GO/RN/SC: sem feriado estadual estatutário claro → direção segura
+        # (tratados como dia útil; nunca estende prazo indevidamente).
+        for uf in ("es", "mt", "go", "rn", "sc"):
+            assert feriados_estaduais(2026, uf) == [], uf
+
 
 class TestJudicialCalendar:
     def test_weekend_not_dia_util(self) -> None:
@@ -96,6 +134,11 @@ class TestJudicialCalendar:
     def test_feriado_not_dia_util(self) -> None:
         cal = JudicialCalendar(uf="mg", include_recesso=False)
         assert not cal.is_dia_util(date(2026, 12, 25))  # Natal
+
+    def test_consciencia_negra_nacional_not_dia_util(self) -> None:
+        cal = JudicialCalendar(uf="mg", include_recesso=False)
+        assert not cal.is_dia_util(date(2026, 11, 20))
+        assert cal.add_dias_uteis(date(2026, 11, 19), 1) == date(2026, 11, 23)
 
     def test_recesso_not_dia_util(self) -> None:
         cal = JudicialCalendar(uf="mg", include_recesso=True)

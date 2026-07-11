@@ -3,19 +3,33 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
+from juris.core.deid import deidentify, ensure_cloud_safe
+
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from juris.config import Settings
 
 
-class LLMProvider(str, Enum):
+class LLMProvider(StrEnum):
     ANTHROPIC = "anthropic"
     OLLAMA = "ollama"
+    BROWSER = "browser"  # lawyer's own subscription (Claude.ai/ChatGPT) via browser extension
 
 
-class LLMTask(str, Enum):
+class PIIMode(StrEnum):
+    """How PII-bearing tasks are handled (ADR-0016)."""
+
+    LOCAL_RAW = "local_raw"  # default — keep on the local model, raw
+    CLOUD_DEID = "cloud_deid"  # de-identify, then use the cloud API
+    CLOUD_RAW = "cloud_raw"  # cloud API, raw — explicit opt-in (consent + DPA)
+    BROWSER_DEID = "browser_deid"  # de-identify, then the lawyer's browser session
+
+
+class LLMTask(StrEnum):
     ANALYZE = "analyze"       # PII — default local
     DRAFT = "draft"           # PII — default local (cloud with de-identified context)
     RESEARCH = "research"     # Public corpus — cloud OK
@@ -45,6 +59,7 @@ class LLMRoute:
     contains_pii: bool
     provider: LLMProvider
     model: str
+    deidentify: bool = False  # caller must de-identify input + re-identify output
 
 
 class LLMRouter:
@@ -54,6 +69,7 @@ class LLMRouter:
     MODELS: dict[LLMProvider, str] = {
         LLMProvider.ANTHROPIC: "claude-sonnet-4-6",
         LLMProvider.OLLAMA: "qwen3:latest",
+        LLMProvider.BROWSER: "browser session",
     }
 
     def __init__(self, settings: Settings) -> None:
@@ -64,26 +80,66 @@ class LLMRouter:
         """Override the default route for a task."""
         self._overrides[task] = provider
 
-    def route(self, task: LLMTask, contains_pii: bool = False) -> LLMRoute:
-        """Resolve which provider and model to use for a given task.
+    def route(
+        self,
+        task: LLMTask,
+        contains_pii: bool = False,
+        pii_mode: PIIMode = PIIMode.LOCAL_RAW,
+    ) -> LLMRoute:
+        """Resolve which provider/model to use, and whether to de-identify.
 
-        If the task contains PII, always route to local (Ollama),
-        regardless of overrides or defaults.
+        PII handling follows ``pii_mode`` (ADR-0016): ``LOCAL_RAW`` keeps it on
+        the local model; ``CLOUD_DEID`` uses the cloud model on de-identified
+        text; ``CLOUD_RAW`` uses the cloud model raw (explicit opt-in).
         """
+        deidentify = False
         if contains_pii:
-            provider = LLMProvider.OLLAMA
+            if pii_mode is PIIMode.CLOUD_DEID:
+                provider = LLMProvider.ANTHROPIC
+                deidentify = True
+            elif pii_mode is PIIMode.CLOUD_RAW:
+                provider = LLMProvider.ANTHROPIC
+            elif pii_mode is PIIMode.BROWSER_DEID:
+                # Lawyer's own subscription, locally via the extension; de-id
+                # stays on as defense in depth (consumer plans may train).
+                provider = LLMProvider.BROWSER
+                deidentify = True
+            else:  # LOCAL_RAW
+                provider = LLMProvider.OLLAMA
         else:
             provider = self._overrides.get(task, _DEFAULT_ROUTES[task])
 
-        # Fallback: if Anthropic key is not configured, route to Ollama
+        # Fallback: no Anthropic key → local (and nothing to de-identify there).
         if provider == LLMProvider.ANTHROPIC and not self._settings.anthropic_api_key:
             provider = LLMProvider.OLLAMA
-
-        model = self.MODELS[provider]
+            deidentify = False
 
         return LLMRoute(
             task=task,
             contains_pii=contains_pii,
             provider=provider,
-            model=model,
+            model=self.MODELS[provider],
+            deidentify=deidentify,
         )
+
+    def prepare_payload(
+        self,
+        route: LLMRoute,
+        prompt: str,
+        *,
+        ner_redactor: Callable[[str], list[str]] | None = None,
+        allow_partial: bool = False,
+    ) -> tuple[str, dict[str, str]]:
+        """De-identify the prompt when the route demands it; gate cloud safety.
+
+        Returns the (possibly de-identified) text and the re-identification map
+        the caller applies to the model's response. When ``route.deidentify`` is
+        False, returns the prompt unchanged with an empty map. Raises if the
+        de-identification is only partial (structured-only, no NER) and the
+        caller didn't explicitly opt in — cloud calls fail closed (ADR-0016).
+        """
+        if not route.deidentify:
+            return prompt, {}
+        result = deidentify(prompt, ner_redactor=ner_redactor)
+        ensure_cloud_safe(result, allow_partial=allow_partial)
+        return result.text, result.mapping

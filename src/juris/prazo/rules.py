@@ -8,12 +8,12 @@ and what action is expected.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 from juris.mni.tpu import CategoriaSemantica
 
 
-class TipoAcao(str, Enum):
+class TipoAcao(StrEnum):
     """Type of action required by a deadline."""
 
     CONTESTAR = "contestar"
@@ -51,7 +51,6 @@ CPC_RULES: list[PrazoRule] = [
         tipo_acao=TipoAcao.CONTESTAR,
         base_legal="Art. 335 CPC",
     ),
-
     # === Réplica ===
     PrazoRule(
         nome="Réplica à contestação",
@@ -61,7 +60,6 @@ CPC_RULES: list[PrazoRule] = [
         tipo_acao=TipoAcao.MANIFESTAR,
         base_legal="Art. 351 CPC",
     ),
-
     # === Apelação ===
     PrazoRule(
         nome="Apelação",
@@ -71,7 +69,6 @@ CPC_RULES: list[PrazoRule] = [
         tipo_acao=TipoAcao.RECORRER,
         base_legal="Art. 1.003 §5º CPC",
     ),
-
     # === Embargos de declaração ===
     PrazoRule(
         nome="Embargos de declaração",
@@ -89,7 +86,6 @@ CPC_RULES: list[PrazoRule] = [
         tipo_acao=TipoAcao.EMBARGAR,
         base_legal="Art. 1.023 CPC",
     ),
-
     # === Agravo de instrumento ===
     PrazoRule(
         nome="Agravo de instrumento",
@@ -99,7 +95,6 @@ CPC_RULES: list[PrazoRule] = [
         tipo_acao=TipoAcao.RECORRER,
         base_legal="Art. 1.015 c/c Art. 1.003 §5º CPC",
     ),
-
     # === Contrarrazões ===
     PrazoRule(
         nome="Contrarrazões de apelação",
@@ -117,7 +112,6 @@ CPC_RULES: list[PrazoRule] = [
         tipo_acao=TipoAcao.MANIFESTAR,
         base_legal="Art. 1.019 II CPC",
     ),
-
     # === Cumprimento de sentença ===
     PrazoRule(
         nome="Pagamento voluntário (cumprimento)",
@@ -135,7 +129,6 @@ CPC_RULES: list[PrazoRule] = [
         tipo_acao=TipoAcao.IMPUGNAR,
         base_legal="Art. 525 CPC",
     ),
-
     # === Tutela / liminar ===
     PrazoRule(
         nome="Cumprimento de tutela antecipada",
@@ -146,7 +139,6 @@ CPC_RULES: list[PrazoRule] = [
         base_legal="Art. 297 CPC",
         fatal=True,
     ),
-
     # === Execução — embargos ===
     PrazoRule(
         nome="Embargos à execução",
@@ -156,7 +148,6 @@ CPC_RULES: list[PrazoRule] = [
         tipo_acao=TipoAcao.EMBARGAR,
         base_legal="Art. 915 CPC",
     ),
-
     # === Manifestação genérica ===
     PrazoRule(
         nome="Manifestação sobre documento",
@@ -174,7 +165,6 @@ CPC_RULES: list[PrazoRule] = [
         tipo_acao=TipoAcao.MANIFESTAR,
         base_legal="Art. 477 §1º CPC",
     ),
-
     # === Prazo genérico (juiz define) ===
     PrazoRule(
         nome="Prazo judicial genérico",
@@ -224,9 +214,7 @@ def _match_rule(
     """Check if a rule matches the given category and TPU code."""
     if rule.categoria_trigger != categoria:
         return False
-    if rule.codigo_tpu is not None and rule.codigo_tpu != codigo_tpu:
-        return False
-    return True
+    return not (rule.codigo_tpu is not None and rule.codigo_tpu != codigo_tpu)
 
 
 def find_applicable_rules(

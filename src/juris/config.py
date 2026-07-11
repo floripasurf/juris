@@ -2,14 +2,30 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Literal
 
-from pydantic import Field, SecretStr
+import structlog
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+log = structlog.get_logger(__name__)
 
-class Environment(str, Enum):
+
+# URLs que existem só como conveniência de dev. Em prod elas indicam env var
+# esquecida; com JURIS_STRICT_PROD_URLS=1 o load falha fechado (deploy docker que
+# realmente usa esses serviços). Sem strict, apenas avisa — o piloto SQLite-first
+# não define essas URLs e não pode ser derrubado por isso.
+_DEV_DEFAULT_URLS = {
+    "database_url": "postgresql+asyncpg://juris:juris_dev@localhost:5432/juris",
+    "database_url_sync": "postgresql+psycopg://juris:juris_dev@localhost:5432/juris",
+    "qdrant_url": "http://localhost:6333",
+    "redis_url": "redis://localhost:6379/0",
+    "ollama_url": "http://localhost:11434",
+}
+
+
+class Environment(StrEnum):
     DEV = "dev"
     PROD = "prod"
 
@@ -36,6 +52,37 @@ class Settings(BaseSettings):
 
     # --- Redis ---
     redis_url: str = "redis://localhost:6379/0"
+
+    # --- Web/API runtime ---
+    api_rate_limit_per_minute: int = Field(
+        120, validation_alias="JURIS_API_RATE_LIMIT_PER_MINUTE", ge=0
+    )
+    api_expensive_rate_limit_per_minute: int = Field(
+        12, validation_alias="JURIS_API_EXPENSIVE_RATE_LIMIT_PER_MINUTE", ge=0
+    )
+    ws_agent_relay_rate_limit_per_minute: int = Field(
+        30, validation_alias="JURIS_WS_AGENT_RELAY_RATE_LIMIT_PER_MINUTE", ge=0
+    )
+    rate_limit_redis_url: str = Field("", validation_alias="JURIS_RATE_LIMIT_REDIS_URL")
+    rate_limit_fail_closed: bool = Field(False, validation_alias="JURIS_RATE_LIMIT_FAIL_CLOSED")
+    trusted_proxy: bool = Field(False, validation_alias="JURIS_TRUSTED_PROXY")
+    connect_timeout_seconds: int = Field(900, validation_alias="JURIS_CONNECT_TIMEOUT_SECONDS", gt=0)
+    tst_inteiro_teor_enabled: bool = Field(False, validation_alias="JURIS_TST_INTEIRO_TEOR_ENABLED")
+    clock_skew_probe_enabled: bool = Field(
+        False,
+        validation_alias="JURIS_CLOCK_SKEW_PROBE",
+        description="Se 1, o preflight de assinatura sonda o header Date do tribunal para medir clock skew (aviso).",
+    )
+    ai_browser_provider: Literal["claude", "chatgpt"] | None = Field(
+        None,
+        validation_alias="JURIS_AI_BROWSER_PROVIDER",
+        description="Fornecedor da sessão de browser declarado pelo advogado (ADR-0018).",
+    )
+    strict_prod_urls: bool = Field(
+        False,
+        validation_alias="JURIS_STRICT_PROD_URLS",
+        description="Em prod, falha fechado se alguma URL de backend ainda for o default localhost de dev.",
+    )
 
     # --- Object Storage ---
     storage_backend: Literal["local", "s3"] = "local"
@@ -70,10 +117,43 @@ class Settings(BaseSettings):
     # PKCS#11 module for A3 hardware tokens (mTLS tribunals like TJMG)
     pkcs11_module: str = "/usr/local/lib/libeTPkcs11.dylib"
     token_pin: SecretStr | None = None  # optional; prompted if absent
+    # Optional trust bundle for OpenSSL s_client in the PKCS#11 mTLS MNI path.
+    # When unset, OpenSSL's default CA paths are used and still verified.
+    mni_server_ca_pem_path: str = ""
 
     @property
     def is_dev(self) -> bool:
         return self.environment == Environment.DEV
+
+    def dev_default_leaks(self) -> list[str]:
+        """Nomes de URLs ainda no default localhost de dev quando ENVIRONMENT=prod.
+
+        Vazio fora de prod, ou quando todas as URLs foram sobrescritas.
+        """
+        if self.environment != Environment.PROD:
+            return []
+        return [
+            name
+            for name, dev_value in _DEV_DEFAULT_URLS.items()
+            if getattr(self, name) == dev_value
+        ]
+
+    @model_validator(mode="after")
+    def _warn_or_reject_dev_defaults_in_prod(self) -> Settings:
+        """Avisa (ou, com strict, rejeita) URLs de backend ainda em default de dev sob prod."""
+        leaked = self.dev_default_leaks()
+        if not leaked:
+            return self
+        if self.strict_prod_urls:
+            joined = ", ".join(sorted(leaked))
+            msg = (
+                f"ENVIRONMENT=prod exige override explícito para: {joined}. "
+                "Defina as env vars correspondentes (ex.: DATABASE_URL=...) "
+                "antes de subir, ou desative JURIS_STRICT_PROD_URLS."
+            )
+            raise ValueError(msg)
+        log.warning("prod_dev_default_urls", leaked=sorted(leaked))
+        return self
 
 
 _settings: Settings | None = None

@@ -25,9 +25,11 @@ uv run juris demo <NUMERO_CNJ> <TIPO_PETICAO> [opções]
 | Opção | Default | Descrição |
 | --- | --- | --- |
 | `--tribunal`, `-t` | `tjmg` | ID do tribunal (ver `juris tribunais`). |
-| `--source` | `datajud` | Origem dos dados: `datajud` (real), `fixture` (DEMO). |
+| `--source` | `datajud` | Origem dos dados: `datajud` (público), `mni` (leitura real via credenciais ICP-Brasil), `fixture` (DEMO). |
 | `--out`, `-o` | `juris-out` | Pasta raiz dos artefatos. |
-| `--cpf` | _(none)_ | CPF do(a) advogado(a) — futuro: MNI. |
+| `--cpf` | _(none)_ | CPF do(a) advogado(a) constituído(a). Obrigatório com `--source mni`. |
+| `--senha`, `-s` | _(none)_ | Senha PJe (MNI); senão Keychain/prompt. |
+| `--pin` | _(none)_ | PIN do token A3 (MNI mTLS, ex.: TJMG); senão `TOKEN_PIN`/prompt. |
 | `--thesis`, `-T` | _(none)_ | Tese explícita (caso queira fixar). |
 | `--instructions`, `-i` | `""` | Instruções extras para o(a) drafter. |
 | `--cloud` | off | Usa Claude (cloud) em vez de Ollama (local). |

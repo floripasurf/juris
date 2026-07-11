@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from juris.mni.tpu import CategoriaSemantica
 from juris.prazo.rules import (
-    CPC_RULES,
     CLT_RULES,
+    CPC_RULES,
     TipoAcao,
     find_applicable_rules,
     shortest_deadline,

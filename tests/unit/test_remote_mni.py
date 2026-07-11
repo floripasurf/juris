@@ -1,0 +1,415 @@
+"""Tests for the Remote MNI read service — split-trust client (ADR-0015, frente B)."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+
+import pytest
+from pydantic import TypeAdapter
+
+from juris.api.ws_schemas import AgentRequest, AgentResponse
+from juris.mni.operations.intimacoes import AvisosResult
+from juris.mni.parsers.processo import Movimento, ProcessoDomain
+from juris.mni.remote import RemoteMNIReadService
+from juris.mni.tribunais import get_tribunal
+
+_LOCAL_AGENT_CPF = "07671039632"
+
+
+class _EchoTransport:
+    """Returns a canned AgentResponse, echoing the request_id; records the request."""
+
+    def __init__(self, payload: dict) -> None:
+        self._payload = payload
+        self.sent: AgentRequest | None = None
+
+    def send(self, request: AgentRequest) -> AgentResponse:
+        self.sent = request
+        return AgentResponse(request_id=request.request_id, success=True, payload=self._payload)
+
+
+class _CaptureLogger:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict[str, object]]] = []
+
+    def warning(self, event: str, **kwargs: object) -> None:
+        self.events.append((event, kwargs))
+
+
+def _processo() -> ProcessoDomain:
+    return ProcessoDomain(
+        numero_cnj="5082351-40.2017.8.13.0024",
+        classe="Apelação Cível",
+        movimentos=[Movimento(data_hora=datetime(2026, 1, 2, tzinfo=UTC), tipo="movimentoNacional")],
+    )
+
+
+def test_consultar_processo_round_trips_domain() -> None:
+    dumped = TypeAdapter(ProcessoDomain).dump_python(_processo(), mode="json")
+    transport = _EchoTransport(dumped)
+    service = RemoteMNIReadService(transport)
+
+    result = service.consultar_processo(
+        "5082351-40.2017.8.13.0024", get_tribunal("tjmg"), "07671039632", "senha", token_pin="9999"  # noqa: S106
+    )
+
+    assert isinstance(result, ProcessoDomain)
+    assert result.classe == "Apelação Cível"
+    assert result.movimentos[0].tipo == "movimentoNacional"
+
+
+def test_credentials_never_forwarded_to_cloud() -> None:
+    """Split-trust: cpf/senha/PIN are resolved at the agent, never sent."""
+    transport = _EchoTransport(TypeAdapter(ProcessoDomain).dump_python(_processo(), mode="json"))
+    RemoteMNIReadService(transport).consultar_processo(
+        "123", get_tribunal("tjmg"), "07671039632", "senha-pje-secreta", token_pin="pin-9999"  # noqa: S106
+    )
+
+    assert transport.sent is not None
+    wire = transport.sent.model_dump_json()
+    assert "senha-pje-secreta" not in wire
+    assert "pin-9999" not in wire
+    assert "07671039632" not in wire
+    # only the operation params travel
+    assert transport.sent.payload["numero_cnj"] == "123"
+    assert transport.sent.payload["tribunal_id"] == "tjmg"
+
+
+def test_consultar_avisos_round_trips() -> None:
+    avisos = AvisosResult(sucesso=True, mensagem="ok", avisos=[])
+    dumped = TypeAdapter(AvisosResult).dump_python(avisos, mode="json")
+    service = RemoteMNIReadService(_EchoTransport(dumped))
+
+    result = service.consultar_avisos(get_tribunal("tjmg"), "07671039632", "senha", token_pin="9999")  # noqa: S106
+
+    assert isinstance(result, AvisosResult)
+    assert result.sucesso is True
+
+
+def test_raises_on_agent_error() -> None:
+    class _ErrTransport:
+        def send(self, request: AgentRequest) -> AgentResponse:
+            return AgentResponse(request_id=request.request_id, success=False, error="token ausente")
+
+    with pytest.raises(RuntimeError, match="token ausente"):
+        RemoteMNIReadService(_ErrTransport()).consultar_avisos(
+            get_tribunal("tjmg"), "07671039632", "senha", token_pin="9999"  # noqa: S106
+        )
+
+
+# --- agent server-side handler (resolves credentials locally) ---
+
+
+class _FakeMNI:
+    def consultar_processo(self, numero_cnj, tribunal_cfg, cpf, senha, *, token_pin=None, com_documentos=False):  # noqa: ANN001, ANN201
+        # credentials must come from the agent's local resolver, not the wire
+        assert (cpf, senha, token_pin) == (_LOCAL_AGENT_CPF, "local-senha", "local-pin")
+        assert tribunal_cfg.id == "tjmg"
+        return _processo()
+
+    def consultar_avisos(self, tribunal_cfg, cpf, senha, *, token_pin=None):  # noqa: ANN001, ANN201
+        return AvisosResult(sucesso=True, mensagem="ok", avisos=[])
+
+
+def _creds() -> tuple[str, str, str]:
+    return (_LOCAL_AGENT_CPF, "local-senha", "local-pin")
+
+
+def test_handle_mni_consultar_processo_resolves_creds_locally() -> None:
+    from juris.api.local_agent import handle_mni_request
+
+    req = AgentRequest(
+        request_id="r1",
+        operation="mni.consultar_processo",
+        payload={"numero_cnj": "123", "tribunal_id": "tjmg"},
+    )
+    resp = handle_mni_request(req, _FakeMNI(), credentials_resolver=_creds, tribunal_resolver=get_tribunal)
+
+    assert resp.success
+    assert resp.request_id == "r1"
+    assert resp.payload["classe"] == "Apelação Cível"
+
+
+def _processo_com_partes() -> ProcessoDomain:
+    from juris.mni.parsers.processo import Parte
+
+    return ProcessoDomain(
+        numero_cnj="5082351-40.2017.8.13.0024",
+        partes=[Parte(nome="João da Silva", tipo="autor", documento="123.456.789-09")],
+        movimentos=[
+            Movimento(data_hora=None, tipo="movimentoNacional", descricao="Intimação de João da Silva")
+        ],
+    )
+
+
+class _PartesMNI:
+    def consultar_processo(self, *args, **kwargs):  # noqa: ANN002, ANN003, ANN201
+        return _processo_com_partes()
+
+    def consultar_avisos(self, *args, **kwargs):  # noqa: ANN002, ANN003, ANN201
+        return AvisosResult(sucesso=True, mensagem="ok", avisos=[])
+
+
+def test_handle_mni_deid_reads_off_returns_raw_by_default(monkeypatch) -> None:
+    from juris.api.local_agent import handle_mni_request
+
+    monkeypatch.delenv("JURIS_AGENT_DEID_READS", raising=False)
+    req = AgentRequest(
+        request_id="rd0",
+        operation="mni.consultar_processo",
+        payload={"numero_cnj": "5082351-40.2017.8.13.0024", "tribunal_id": "tjmg"},
+    )
+    resp = handle_mni_request(req, _PartesMNI(), credentials_resolver=_creds, tribunal_resolver=get_tribunal)
+    assert resp.success
+    assert resp.payload["partes"][0]["nome"] == "João da Silva"  # default: unchanged
+
+
+def test_handle_mni_deid_reads_on_redacts_and_keeps_map_local(monkeypatch, tmp_path) -> None:
+    from juris.api.local_agent import handle_mni_request
+    from juris.api.reid_store import load_reid_map
+    from juris.core.deid import reidentify
+
+    monkeypatch.setenv("JURIS_AGENT_DEID_READS", "1")
+    monkeypatch.setenv("JURIS_HOME", str(tmp_path))
+    req = AgentRequest(
+        request_id="rd1",
+        operation="mni.consultar_processo",
+        payload={"numero_cnj": "5082351-40.2017.8.13.0024", "tribunal_id": "tjmg"},
+    )
+    resp = handle_mni_request(req, _PartesMNI(), credentials_resolver=_creds, tribunal_resolver=get_tribunal)
+    assert resp.success
+    # Raw PII must NOT cross to the cloud.
+    assert "João da Silva" not in resp.payload["partes"][0]["nome"]
+    assert "123.456.789-09" not in (resp.payload["partes"][0]["documento"] or "")
+    assert "João da Silva" not in resp.payload["movimentos"][0]["descricao"]
+    # The re-id map stays LOCAL to the agent and restores the original.
+    mapping = load_reid_map("public", "5082351-40.2017.8.13.0024")
+    assert reidentify(resp.payload["partes"][0]["nome"], mapping) == "João da Silva"
+
+
+def test_handle_mni_unknown_operation_errors() -> None:
+    from juris.api.local_agent import handle_mni_request
+
+    req = AgentRequest(request_id="r2", operation="mni.bogus", payload={"tribunal_id": "tjmg"})
+    resp = handle_mni_request(req, _FakeMNI(), credentials_resolver=_creds, tribunal_resolver=get_tribunal)
+
+    assert resp.success is False
+    assert "bogus" in (resp.error or "")
+
+
+def test_handle_mni_request_does_not_leak_internal_error() -> None:
+    from juris.api.local_agent import handle_mni_request
+
+    class _BoomMNI:
+        def consultar_avisos(self, *args, **kwargs):  # noqa: ANN002, ANN003, ANN201
+            raise RuntimeError("mTLS /var/private/cert senha=abc pin=1234")
+
+    req = AgentRequest(request_id="r3", operation="mni.consultar_avisos", payload={"tribunal_id": "tjmg"})
+    resp = handle_mni_request(req, _BoomMNI(), credentials_resolver=_creds, tribunal_resolver=get_tribunal)
+
+    assert resp.success is False
+    assert "Falha ao consultar MNI" in (resp.error or "")
+    assert "senha=abc" not in (resp.error or "")
+    assert "pin=1234" not in (resp.error or "")
+    assert "/var/private/cert" not in (resp.error or "")
+
+
+def test_handle_mni_request_sanitizes_local_agent_log(monkeypatch) -> None:
+    from juris.api import local_agent
+
+    capture = _CaptureLogger()
+    monkeypatch.setattr(local_agent, "logger", capture)
+
+    class _BoomMNI:
+        def consultar_avisos(self, *args, **kwargs):  # noqa: ANN002, ANN003, ANN201
+            raise RuntimeError("mTLS /Users/adv/token senha=abc pin=1234 07671039632")
+
+    req = AgentRequest(request_id="r-log", operation="mni.consultar_avisos", payload={"tribunal_id": "tjmg"})
+    resp = local_agent.handle_mni_request(
+        req, _BoomMNI(), credentials_resolver=_creds, tribunal_resolver=get_tribunal
+    )
+
+    assert resp.success is False
+    assert capture.events
+    error = str(capture.events[0][1]["error"])
+    assert "senha=abc" not in error
+    assert "pin=1234" not in error
+    assert "07671039632" not in error
+    assert "/Users/adv/token" not in error
+    assert "senha=<redacted>" in error
+    assert "pin=<redacted>" in error
+    assert "<local-path>" in error
+
+
+# --- factory + /ws/mni integration ---
+
+
+def test_factory_inprocess_by_default(monkeypatch) -> None:
+    from juris.mni.factory import get_mni_read_service
+    from juris.mni.service import InProcessMNIReadService
+
+    monkeypatch.delenv("JURIS_AGENT_MODE", raising=False)
+    assert isinstance(get_mni_read_service(), InProcessMNIReadService)
+
+
+def test_factory_remote_when_configured(monkeypatch) -> None:
+    from juris.mni.factory import get_mni_read_service
+
+    monkeypatch.setenv("JURIS_AGENT_MODE", "remote")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_URL", "ws://127.0.0.1:8765")
+    monkeypatch.setenv("JURIS_LOCAL_AGENT_TOKEN", "tok")
+    assert isinstance(get_mni_read_service(), RemoteMNIReadService)
+
+
+def test_factory_uses_relay_transport_for_relay_binding(tmp_path, monkeypatch) -> None:
+    import json
+
+    from juris.api.agent_config import _load_agent_bindings
+    from juris.mni.factory import get_mni_read_service
+    from juris.mni.remote import RelayAgentTransport
+
+    agents = tmp_path / "agents.json"
+    agents.write_text(
+        json.dumps(
+            {
+                "trial-a": {
+                    "url": "wss://app.example/ws/agent-relay",
+                    "token": "tok-a",
+                    "transport": "relay",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("JURIS_AGENT_MODE", "remote")
+    monkeypatch.setenv("JURIS_AGENTS_FILE", str(agents))
+    _load_agent_bindings.cache_clear()
+
+    service = get_mni_read_service("trial-a")
+    assert isinstance(service._transport, RelayAgentTransport)
+
+
+def test_ws_mni_round_trip_with_testclient(monkeypatch) -> None:
+    from fastapi.testclient import TestClient
+
+    from juris.api import local_agent
+
+    monkeypatch.setattr(local_agent, "agent_mni_service", lambda: _FakeMNI())
+    monkeypatch.setenv("JURIS_AGENT_CPF", _LOCAL_AGENT_CPF)
+    monkeypatch.setenv("JURIS_AGENT_SENHA", "local-senha")
+    monkeypatch.setenv("JURIS_AGENT_PIN", "local-pin")
+    client = TestClient(local_agent.app)
+    token = local_agent.get_signing_token()
+
+    with client.websocket_connect("/ws/mni", headers={"x-agent-token": token}) as ws:
+        req = AgentRequest(
+            request_id="m1",
+            operation="mni.consultar_processo",
+            payload={"numero_cnj": "123", "tribunal_id": "tjmg"},
+        )
+        ws.send_text(req.model_dump_json())
+        resp = AgentResponse.model_validate_json(ws.receive_text())
+
+    assert resp.success
+    assert resp.payload["classe"] == "Apelação Cível"
+
+
+def test_demo_load_processo_mni_routes_through_factory(monkeypatch) -> None:
+    """DoD: the demo MNI read goes through get_mni_read_service — config swaps it."""
+    from juris.demo import orchestrator
+    from juris.demo.orchestrator import SourceMode, load_processo
+
+    used = {"flag": False}
+
+    class _Svc:
+        def consultar_processo(self, numero_cnj, tribunal_cfg, cpf, senha, *, token_pin=None, com_documentos=False):  # noqa: ANN001, ANN201
+            used["flag"] = True
+            return _processo()
+
+        def consultar_avisos(self, *a, **k):  # noqa: ANN002, ANN003, ANN201
+            raise AssertionError
+
+    monkeypatch.setattr(orchestrator, "get_mni_read_service", lambda tenant_id="public": _Svc())
+    result = load_processo(
+        "5082351-40.2017.8.13.0024", "tjmg", SourceMode.MNI,
+        cpf="07671039632", senha="x", token_pin="9999",  # noqa: S106
+    )
+
+    assert used["flag"] is True
+    assert result.classe == "Apelação Cível"
+
+
+def test_demo_load_processo_mni_routes_to_tenant_agent_and_remote_needs_no_cpf(monkeypatch) -> None:
+    """Web demo source=mni must route to the tenant's agent and, in remote mode, not
+    require a CPF (the agent resolves it) — closes the multi-tenant remote gap."""
+    from juris.demo import orchestrator
+    from juris.demo.orchestrator import SourceMode, load_processo
+
+    captured: dict[str, object] = {}
+
+    class _Svc:
+        def consultar_processo(self, numero_cnj, tribunal_cfg, cpf, senha, *, token_pin=None, com_documentos=False):  # noqa: ANN001, ANN201
+            captured["cpf"] = cpf
+            return _processo()
+
+        def consultar_avisos(self, *a, **k):  # noqa: ANN002, ANN003, ANN201
+            raise AssertionError
+
+    def _factory(tenant_id: str = "public"):  # noqa: ANN202
+        captured["tenant_id"] = tenant_id
+        return _Svc()
+
+    monkeypatch.setattr(orchestrator, "get_mni_read_service", _factory)
+    monkeypatch.setenv("JURIS_AGENT_MODE", "remote")  # remote: no CPF at the orchestrator
+
+    result = load_processo(
+        "5082351-40.2017.8.13.0024", "tjmg", SourceMode.MNI, tenant_id="escritorio-a"
+    )
+
+    assert captured["tenant_id"] == "escritorio-a"  # routed to the firm's agent
+    assert captured["cpf"] == ""  # the agent resolves the lawyer's own CPF
+    assert result.classe == "Apelação Cível"
+
+
+def test_tenant_id_is_carried_on_mni_requests() -> None:
+    transport = _EchoTransport(TypeAdapter(ProcessoDomain).dump_python(_processo(), mode="json"))
+    service = RemoteMNIReadService(transport, tenant_id="escritorio-b")
+    service.consultar_processo("123", get_tribunal("tjmg"), "cpf", "senha")
+    assert transport.sent is not None
+    assert transport.sent.tenant_id == "escritorio-b"
+
+
+def test_split_trust_end_to_end_no_credentials_cross_the_wire() -> None:
+    """The proof: orchestrator → (wire) → agent handler → fake MNI, and NO token/
+    credential ever crosses. The agent resolves them locally."""
+    from juris.api.local_agent import handle_mni_request
+
+    on_wire: list[str] = []
+
+    class _LoopbackTransport:
+        """Bridges client → agent handler in-process — the full path minus the socket."""
+
+        def send(self, request: AgentRequest) -> AgentResponse:
+            on_wire.append(request.model_dump_json())  # exactly what would cross the WS
+            return handle_mni_request(
+                request,
+                _FakeMNI(),
+                credentials_resolver=_creds,  # the agent's own credentials, resolved locally
+                tribunal_resolver=get_tribunal,
+            )
+
+    service = RemoteMNIReadService(_LoopbackTransport(), tenant_id="escritorio-x")
+    processo = service.consultar_processo(
+        "5082351-40.2017.8.13.0024",
+        get_tribunal("tjmg"),
+        "CLOUD-cpf",
+        "CLOUD-senha",
+        token_pin="CLOUD-pin",  # noqa: S106
+    )
+
+    assert processo.classe == "Apelação Cível"  # the read round-tripped
+    wire = on_wire[0]
+    assert "CLOUD-cpf" not in wire  # no PJe credentials crossed
+    assert "CLOUD-senha" not in wire
+    assert "CLOUD-pin" not in wire  # no token PIN crossed
+    assert "escritorio-x" in wire  # tenant tagged for audit/routing

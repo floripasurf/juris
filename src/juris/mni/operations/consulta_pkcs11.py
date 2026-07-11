@@ -8,6 +8,7 @@ from typing import Any
 from xml.etree import ElementTree as ET
 
 from juris.core.observability import get_logger
+from juris.core.sanitize import safe_error_text
 from juris.core.types import NumeroCNJ
 from juris.mni.parsers.processo import Documento, Movimento, Parte, ProcessoDomain
 from juris.mni.pkcs11_transport import (
@@ -253,21 +254,23 @@ class ConsultaResult:
             valor_causa=self.valor_causa or None,
             orgao_julgador=self.orgao_julgador or None,
             tribunal=tribunal_id,
-            movimentos=sorted(movimentos, key=lambda mv: mv.data_hora),
+            movimentos=sorted(movimentos, key=lambda mv: mv.data_hora.timestamp() if mv.data_hora else 0.0),
             partes=partes,
             documentos=documentos,
         )
 
 
-def _parse_mni_datetime(raw: str) -> datetime:
-    """Parse an MNI timestamp (YYYYMMDDHHMMSS[mmm]) into a datetime.
+def _parse_mni_datetime(raw: str) -> datetime | None:
+    """Parse an MNI timestamp (YYYYMMDDHHMMSS[mmm]) into a datetime, or ``None``.
 
-    Falls back to ``datetime.min`` when the value is missing or malformed,
-    matching the zeep parser so downstream sorting/dedup stays consistent.
+    Returns ``None`` when the value is missing or malformed — mirroring the zeep
+    parser. A ``datetime.min`` fallback here fabricated a phantom year-1 deadline that
+    crashed the prazo engine and silently dropped the whole process's deadlines; ``None``
+    routes the movement to manual review instead (never a wrong/lost prazo).
     """
     digits = "".join(ch for ch in raw if ch.isdigit())
     if len(digits) < 8:
-        return datetime.min
+        return None
     try:
         year = int(digits[0:4])
         month = int(digits[4:6])
@@ -277,7 +280,7 @@ def _parse_mni_datetime(raw: str) -> datetime:
         second = int(digits[12:14]) if len(digits) >= 14 else 0
         return datetime(year, month, day, hour, minute, second)
     except ValueError:
-        return datetime.min
+        return None
 
 
 def _parse_response(response: SOAPResponse, numero_cnj: str) -> ConsultaResult:
@@ -301,10 +304,10 @@ def _parse_response(response: SOAPResponse, numero_cnj: str) -> ConsultaResult:
     try:
         root = ET.fromstring(xml_body)  # noqa: S314 — tribunal-controlled SOAP, not arbitrary input
     except ET.ParseError as e:
-        logger.error("xml_parse_error", error=str(e), body_preview=xml_body[:200])
+        logger.error("xml_parse_error", error=safe_error_text(e), body_preview=safe_error_text(xml_body[:200]))
         return ConsultaResult(
             sucesso=False,
-            mensagem=f"XML parse error: {e}",
+            mensagem=f"XML parse error: {safe_error_text(e)}",
             raw_xml=xml_body,
         )
 

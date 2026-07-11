@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
-from contextlib import suppress
 from typing import Any
 
 import httpx
@@ -70,7 +70,7 @@ class OllamaLLM(AbstractLLM):
         # Try to parse structured output
         structured = None
         if schema and content:
-            with suppress(json.JSONDecodeError):
+            with contextlib.suppress(json.JSONDecodeError):
                 structured = json.loads(content)
 
         # Ollama provides eval_count and prompt_eval_count

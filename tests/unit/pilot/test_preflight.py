@@ -6,18 +6,24 @@ deterministic. Network probes (Ollama) are stubbed via dependency injection.
 
 from __future__ import annotations
 
+import json
 import sqlite3
+from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from juris.pilot.preflight import (
     CheckStatus,
+    check_corpus_depth,
     check_disk_space,
     check_embeddings_cache,
     check_llm_availability,
+    check_ner_model,
     check_output_dir_clean,
     check_repertory,
+    check_token,
     run_preflight,
 )
 from juris.repertory.readiness import (
@@ -124,6 +130,40 @@ def test_check_repertory_warn_when_legacy_present_alongside_canonical(tmp_path, 
 
 
 # ---------------------------------------------------------------------------
+# check_corpus_depth
+# ---------------------------------------------------------------------------
+
+
+def test_check_corpus_depth_skips_when_corpus_missing():
+    result = check_corpus_depth()
+    assert result.status is CheckStatus.SKIP
+
+
+def test_check_corpus_depth_warns_when_only_shallow_sources(tmp_path, monkeypatch):
+    db = tmp_path / "rep.db"
+    monkeypatch.setenv(ENV_REPERTORY_PATH, str(db))
+    rows = [(f"c{i}", f"s{i % 5}", "sumula", "x") for i in range(120)]
+    _seed_chunks(db, rows)
+
+    result = check_corpus_depth(min_full_text_chunks=1)
+
+    assert result.status is CheckStatus.WARN
+    assert "corpus público raso" in result.message
+
+
+def test_check_corpus_depth_passes_with_full_text_sources(tmp_path, monkeypatch):
+    db = tmp_path / "rep.db"
+    monkeypatch.setenv(ENV_REPERTORY_PATH, str(db))
+    rows = [(f"c{i}", f"s{i % 5}", "acordao_publicado", "x") for i in range(30)]
+    _seed_chunks(db, rows)
+
+    result = check_corpus_depth(min_full_text_chunks=25)
+
+    assert result.status is CheckStatus.PASS
+    assert result.details["full_text_chunks"] == 30
+
+
+# ---------------------------------------------------------------------------
 # check_embeddings_cache
 # ---------------------------------------------------------------------------
 
@@ -134,6 +174,27 @@ def test_check_embeddings_cache_warn_when_model_missing(tmp_path, monkeypatch):
     assert result.status is CheckStatus.WARN
     assert "BAAI/bge-m3" in result.message
     assert "pré-aquecer" in (result.remediation or "")
+
+
+def test_check_embeddings_cache_fails_when_required_in_prod(tmp_path, monkeypatch):
+    monkeypatch.setenv("HF_HOME", str(tmp_path / "hf"))
+    monkeypatch.setenv("ENVIRONMENT", "prod")
+    monkeypatch.delenv("JURIS_REQUIRE_EMBEDDINGS", raising=False)
+
+    result = check_embeddings_cache(model_name="BAAI/bge-m3")
+
+    assert result.status is CheckStatus.FAIL
+    assert "falha fechado" in (result.remediation or "")
+
+
+def test_check_embeddings_cache_explicit_override_can_relax_prod(tmp_path, monkeypatch):
+    monkeypatch.setenv("HF_HOME", str(tmp_path / "hf"))
+    monkeypatch.setenv("ENVIRONMENT", "prod")
+    monkeypatch.setenv("JURIS_REQUIRE_EMBEDDINGS", "0")
+
+    result = check_embeddings_cache(model_name="BAAI/bge-m3")
+
+    assert result.status is CheckStatus.WARN
 
 
 def test_check_embeddings_cache_pass_when_snapshot_exists(tmp_path, monkeypatch):
@@ -295,3 +356,79 @@ def test_run_preflight_to_dict_shape(tmp_path, monkeypatch):
     assert isinstance(payload["checks"], list)
     first = payload["checks"][0]
     assert set(first) >= {"name", "status", "message", "remediation", "details"}
+
+
+class TestCheckToken:
+    """Token A3 probe for the live MNI session (gated, no PIN needed)."""
+
+    @staticmethod
+    def _material(not_valid_after: str, label: str = "TOKEN CERTDATA"):
+        return SimpleNamespace(token_label=label, not_valid_after=not_valid_after)
+
+    def test_skip_when_not_probed(self) -> None:
+        assert check_token(probe=False).status is CheckStatus.SKIP
+
+    def test_pass_for_valid_cert(self) -> None:
+        result = check_token(
+            probe=True, reader=lambda: self._material("2099-01-01"), today=date(2026, 6, 25)
+        )
+        assert result.status is CheckStatus.PASS
+
+    def test_warn_when_expiring_soon(self) -> None:
+        result = check_token(
+            probe=True, reader=lambda: self._material("2026-07-05"), today=date(2026, 6, 25)
+        )
+        assert result.status is CheckStatus.WARN
+
+    def test_fail_for_expired_cert(self) -> None:
+        result = check_token(
+            probe=True, reader=lambda: self._material("2020-01-01"), today=date(2026, 6, 25)
+        )
+        assert result.status is CheckStatus.FAIL
+
+    def test_fail_when_token_absent(self) -> None:
+        def _raise() -> SimpleNamespace:
+            raise RuntimeError("no token detected /var/private/pkcs11 token=abc pin=1234")
+
+        result = check_token(probe=True, reader=_raise)
+
+        assert result.status is CheckStatus.FAIL
+        assert result.details == {"error": "token_unavailable"}
+        dumped = json.dumps(result.to_dict())
+        assert "/var/private/pkcs11" not in dumped
+        assert "token=abc" not in dumped
+        assert "pin=1234" not in dumped
+
+    def test_run_preflight_skips_token_by_default(self) -> None:
+        report = run_preflight(real_source_required=False, probe_ollama=False)
+        token = next((c for c in report.checks if c.name == "token_a3"), None)
+        assert token is not None
+        assert token.status is CheckStatus.SKIP
+
+
+class TestCheckNerModel:
+    """LeNER-Br de-id model probe for the cloud/browser session."""
+
+    def test_skip_when_not_probed(self) -> None:
+        assert check_ner_model(probe=False).status is CheckStatus.SKIP
+
+    def test_warn_when_model_missing(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("HF_HOME", str(tmp_path / "hf"))
+        result = check_ner_model(probe=True, model_name="acme/lenerbr")
+        assert result.status is CheckStatus.WARN
+        assert "acme/lenerbr" in result.message
+
+    def test_pass_when_cached(self, tmp_path, monkeypatch) -> None:
+        cache = tmp_path / "hf" / "hub"
+        snap = cache / "models--acme--lenerbr" / "snapshots" / "deadbeef"
+        snap.mkdir(parents=True)
+        (snap / "config.json").write_text("{}")
+        monkeypatch.setenv("HF_HOME", str(tmp_path / "hf"))
+        result = check_ner_model(probe=True, model_name="acme/lenerbr")
+        assert result.status is CheckStatus.PASS
+
+    def test_run_preflight_skips_ner_by_default(self) -> None:
+        report = run_preflight(real_source_required=False, probe_ollama=False)
+        ner = next((c for c in report.checks if c.name == "ner_model"), None)
+        assert ner is not None
+        assert ner.status is CheckStatus.SKIP
