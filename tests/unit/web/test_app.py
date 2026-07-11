@@ -1145,6 +1145,40 @@ def test_api_rate_limit_groups_invalid_keys_by_client(tmp_path, monkeypatch) -> 
     assert blocked.json()["detail"]["code"] == "rate_limited"
 
 
+def test_api_rate_limit_uses_cf_ip_when_trusted_proxy_enabled(tmp_path, monkeypatch) -> None:
+    app_module = importlib.import_module("juris.web.app")
+    from juris.web import auth
+    from juris.web.rate_limit import FixedWindowRateLimiter
+
+    tenants = tmp_path / "tenants.json"
+    tenants.write_text(json.dumps({"escritorio-a": "valid-key"}), encoding="utf-8")
+    monkeypatch.setenv("JURIS_TENANTS_FILE", str(tenants))
+    auth.default_registry.cache_clear()
+    limiter = FixedWindowRateLimiter(limit=1, window_seconds=60)
+    monkeypatch.setattr(app_module, "_api_rate_limiter", lambda: limiter)
+    monkeypatch.setattr(app_module, "get_settings", lambda: SimpleNamespace(trusted_proxy=True))
+
+    try:
+        first_ip = client.get(
+            "/api/prazos",
+            headers={"X-API-Key": "wrong-a", "CF-Connecting-IP": "203.0.113.10"},
+        )
+        other_ip = client.get(
+            "/api/prazos",
+            headers={"X-API-Key": "wrong-b", "CF-Connecting-IP": "203.0.113.11"},
+        )
+        blocked_same_ip = client.get(
+            "/api/prazos",
+            headers={"X-API-Key": "wrong-c", "CF-Connecting-IP": "203.0.113.10"},
+        )
+    finally:
+        auth.default_registry.cache_clear()
+
+    assert first_ip.status_code == 401
+    assert other_ip.status_code == 401
+    assert blocked_same_ip.status_code == 429
+
+
 def test_expensive_api_rate_limit_has_separate_bucket(monkeypatch) -> None:
     app_module = importlib.import_module("juris.web.app")
     from juris.web.rate_limit import FixedWindowRateLimiter

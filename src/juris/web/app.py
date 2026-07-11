@@ -20,6 +20,7 @@ from juris.config import get_settings
 from juris.core.paths import juris_home
 from juris.jobs.connect import run_connect
 from juris.web.auth import Tenant, current_tenant, require_admin, tenant_db_path
+from juris.web.client_ip import client_ip
 from juris.web.connect_jobs import ConnectJobStore
 from juris.web.demo_service import DemoRunError, WebDemoRunRequest, execute_demo_run
 from juris.web.processos_service import get_processo_detail, list_prazos, list_processos
@@ -261,12 +262,12 @@ def _api_rate_limit_key(request: Request) -> str:
     tenant = registry.authenticate(raw_key)
     if tenant is not None:
         return f"tenant:{tenant.tenant_id}:{hash_api_key(raw_key or '')}"
-    client_host = request.client.host if request.client else "unknown"
+    client_host = client_ip(request, trusted_proxy=get_settings().trusted_proxy)
     return f"invalid:{client_host}"
 
 
 def _ws_agent_relay_rate_limit_key(ws: WebSocket, tenant_id: str) -> str:
-    client_host = ws.client.host if ws.client else "unknown"
+    client_host = client_ip(ws, trusted_proxy=get_settings().trusted_proxy)
     return f"tenant:{tenant_id}:host:{client_host}"
 
 
@@ -599,7 +600,7 @@ async def start_trial(request: Request) -> dict[str, object]:
     """Issue an anonymous 30-day trial without collecting personal data."""
     from juris.web.trial_access import TrialCapacityError, create_trial_access, trial_days
 
-    client_host = request.client.host if request.client else "unknown"
+    client_host = client_ip(request, trusted_proxy=get_settings().trusted_proxy)
     decision = _api_expensive_rate_limiter().check(f"trial:{client_host}")
     if not decision.allowed:
         raise HTTPException(status_code=429, detail="Muitas tentativas. Tente novamente em instantes.")
@@ -670,7 +671,7 @@ async def rotate_agent_pairing_command(
     """Rotate and return a one-time relay command for the tenant's local agent."""
     from juris.web.trial_access import rotate_agent_pairing
 
-    client_host = request.client.host if request.client else "unknown"
+    client_host = client_ip(request, trusted_proxy=get_settings().trusted_proxy)
     decision = _api_expensive_rate_limiter().check(f"agent-pairing:{tenant.tenant_id}:{client_host}")
     if not decision.allowed:
         raise HTTPException(status_code=429, detail="Muitas tentativas. Tente novamente em instantes.")
