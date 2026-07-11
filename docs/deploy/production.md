@@ -28,6 +28,9 @@ export JURIS_REQUIRE_EMBEDDINGS=1
 # houver WAF/proxy cobrindo a borda, prefira fail-closed em queda do Redis.
 export JURIS_RATE_LIMIT_REDIS_URL=redis://127.0.0.1:6379/0
 export JURIS_RATE_LIMIT_FAIL_CLOSED=1
+# Só ligue atrás de proxy confiável (ex.: Cloudflare Tunnel) para usar
+# CF-Connecting-IP/X-Forwarded-For nos buckets por IP.
+export JURIS_TRUSTED_PROXY=1
 export JURIS_TRIAL_MAX_ACTIVE=500
 export JURIS_TRIAL_MAX_NEW_PER_DAY=100
 
@@ -242,5 +245,7 @@ rate limit no proxy com `JURIS_RATE_LIMIT_PROXY=1`. O app mantém três buckets:
 `JURIS_API_RATE_LIMIT_PER_MINUTE` por API key para rotas comuns,
 `JURIS_API_EXPENSIVE_RATE_LIMIT_PER_MINUTE` para demo, busca/reingestão de corpus
 e protocolo, e `JURIS_WS_AGENT_RELAY_RATE_LIMIT_PER_MINUTE` por tenant/IP para o
-handshake de `/ws/agent-relay`. `juris doctor` denuncia multi-worker inseguro e
-avisa quando a quota ainda é process-local.
+handshake de `/ws/agent-relay`. Quando o app estiver atrás de Cloudflare/proxy,
+adicione `JURIS_TRUSTED_PROXY=1` para que esses buckets usem o IP real dos
+headers do proxy; sem isso, todos podem colapsar no IP do túnel. `juris doctor`
+denuncia multi-worker inseguro e avisa quando a quota ainda é process-local.
