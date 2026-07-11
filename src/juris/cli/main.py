@@ -1786,6 +1786,53 @@ def repertory_verify() -> None:
         raise typer.Exit(code=1)
 
 
+@repertory_app.command("backfill-embeddings")
+def repertory_backfill_embeddings(
+    batch_size: int = typer.Option(64, "--batch-size", min=1, max=512, help="Chunks por lote de embeddings."),
+    limit: int | None = typer.Option(None, "--limit", min=1, help="Máximo de chunks a atualizar nesta execução."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Apenas informa quantos chunks precisam de embedding."),
+) -> None:
+    """Populate dense embeddings for existing SQLite chunks."""
+    from juris.repertory.embeddings import LegalEmbedder
+    from juris.repertory.readiness import resolve_repertory_path
+    from juris.repertory.vector_store import LocalFTSStore
+
+    db_path = resolve_repertory_path()
+    if not db_path.exists():
+        console.print("[yellow]No corpus ingested yet. Run 'juris repertory ingest' first.[/yellow]")
+        raise typer.Exit(code=1)
+
+    store = LocalFTSStore(db_path=db_path)
+    try:
+        missing = store.missing_embedding_count()
+        if missing == 0:
+            console.print("[green]Todos os chunks já têm embeddings densos.[/green]")
+            return
+        target = min(missing, limit) if limit is not None else missing
+        if dry_run:
+            console.print(f"[yellow]{missing} chunks sem embedding[/yellow] ({target} seriam atualizados).")
+            return
+
+        embedder = LegalEmbedder()
+        updated = 0
+        with console.status("[bold]Gerando embeddings densos para o repertório..."):
+            while updated < target:
+                remaining = target - updated
+                batch = store.fetch_chunks_missing_embeddings(limit=min(batch_size, remaining))
+                if not batch:
+                    break
+                chunk_ids = [chunk_id for chunk_id, _text in batch]
+                texts = [text for _chunk_id, text in batch]
+                embeddings = embedder.embed_texts(texts)
+                if embeddings is None:
+                    console.print("[red]Modelo de embeddings indisponível.[/red]")
+                    raise typer.Exit(code=1)
+                updated += store.update_embeddings(dict(zip(chunk_ids, embeddings, strict=True)))
+        console.print(f"[green]Embeddings atualizados:[/green] {updated} chunks.")
+    finally:
+        store.close()
+
+
 @repertory_app.command("search")
 def repertory_search(
     query: str = typer.Argument(..., help="Search query"),

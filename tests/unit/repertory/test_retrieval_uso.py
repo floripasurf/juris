@@ -17,6 +17,11 @@ class _NoopEmbedder:
         return None
 
 
+class _SemanticEmbedder:
+    def embed_single(self, text: str) -> list[float]:
+        return [1.0, 0.0]
+
+
 def _service(tmp_path: Path) -> RepertoryService:
     store = LocalFTSStore(tmp_path / "repertory.db")
     store.upsert(
@@ -153,6 +158,35 @@ def test_fusao_e_boost_preservam_tipo_e_uso(tmp_path: Path) -> None:
     hit = next(r for r in results if r.source_id == "src-acordao")
     assert hit.source_type == "acordao_publicado"
     assert hit.uso == "fundamento"
+
+
+def test_hybrid_retriever_recupera_resultado_sem_overlap_lexical_via_denso(tmp_path: Path) -> None:
+    """Regressão: o runtime SQLite precisa ter caminho denso real, não só FTS."""
+    store = LocalFTSStore(tmp_path / "repertory.db")
+    store.upsert(
+        [
+            DocumentChunk(
+                chunk_id="alvo",
+                source_id="src-alvo",
+                source_type=TipoFonte.ACORDAO_PUBLICADO,
+                text="honorarios sucumbenciais fazenda publica equidade",
+                metadata={"hierarquia": 5, "tribunal": "stj"},
+            ),
+            DocumentChunk(
+                chunk_id="outro",
+                source_id="src-outro",
+                source_type=TipoFonte.ACORDAO_PUBLICADO,
+                text="prescricao intercorrente execucao fiscal",
+                metadata={"hierarquia": 5, "tribunal": "stj"},
+            ),
+        ],
+        [[1.0, 0.0], [0.0, 1.0]],
+    )
+    retriever = HybridRetriever(dense_store=store, sparse_store=store, embedder=_SemanticEmbedder())
+
+    results = retriever.search("responsabilidade civil hospitalar", top_k=1)
+
+    assert [hit.source_id for hit in results] == ["src-alvo"]
 
 
 class _StubCrossEncoderModel:

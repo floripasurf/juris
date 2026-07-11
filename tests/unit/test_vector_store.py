@@ -61,10 +61,57 @@ class TestLocalFTSStore:
         results = store.search_text("")
         assert results == []
 
-    def test_search_embedding_returns_empty(self) -> None:
+    def test_search_embedding_returns_empty_without_indexed_chunks(self) -> None:
         store = LocalFTSStore()
         results = store.search([0.0] * 10)
         assert results == []
+
+    def test_search_embedding_returns_nearest_chunk(self) -> None:
+        store = LocalFTSStore()
+        chunks = [
+            _make_chunk("c1", "s1", "honorários advocatícios sucumbenciais"),
+            _make_chunk("c2", "s2", "prescrição intercorrente tributária"),
+        ]
+        store.upsert(chunks, [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+
+        results = store.search([0.96, 0.28, 0.0], top_k=1)
+
+        assert len(results) == 1
+        assert results[0].chunk_id == "c1"
+        assert results[0].source_id == "s1"
+        assert results[0].score > 0.9
+
+    def test_search_embedding_respects_tenant_area_and_uso_filters(self) -> None:
+        store = LocalFTSStore()
+        chunks = [
+            _make_chunk("pub", "src-pub", "precedente público", metadata={"area": "geral"}),
+            _make_chunk("trab", "src-trab", "doutrina trabalhista", metadata={"area": "trabalhista"}),
+            _make_chunk("emp", "src-emp", "doutrina empresarial", metadata={"area": "empresarial"}),
+            DocumentChunk(
+                chunk_id="modelo",
+                source_id="src-modelo",
+                source_type=TipoFonte.MODELO_PETICAO,
+                text="modelo de petição",
+                metadata={"area": "trabalhista"},
+            ),
+        ]
+        store.upsert([chunks[0]], [[1.0, 0.0]], tenant_id=None)
+        store.upsert(chunks[1:], [[0.9, 0.1], [0.8, 0.2], [0.99, 0.01]], tenant_id="escritorio-a")
+
+        tenant_hits = store.search([1.0, 0.0], top_k=10, tenant_id="escritorio-a", area="trabalhista")
+        ids = {hit.source_id for hit in tenant_hits}
+        assert {"src-pub", "src-trab"} <= ids
+        assert "src-emp" not in ids
+        assert "src-modelo" not in ids
+
+        style_hits = store.search(
+            [1.0, 0.0],
+            top_k=10,
+            tenant_id="escritorio-a",
+            area="trabalhista",
+            include_estilo=True,
+        )
+        assert "src-modelo" in {hit.source_id for hit in style_hits}
 
     def test_delete(self) -> None:
         store = LocalFTSStore()

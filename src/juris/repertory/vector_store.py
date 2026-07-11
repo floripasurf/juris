@@ -12,6 +12,8 @@ import logging
 import sqlite3
 import uuid
 from abc import ABC, abstractmethod
+from array import array
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -37,6 +39,11 @@ _SELECT_COLUMNS = f"""
             SELECT c.chunk_id, c.source_id, c.text, c.metadata,
                    c.source_type, {_USO_EFETIVO} AS uso_efetivo,
                    rank * -1 AS score"""
+_DENSE_SELECT_COLUMNS = f"""
+            SELECT c.chunk_id, c.source_id, c.text, c.metadata,
+                   c.source_type, {_USO_EFETIVO} AS uso_efetivo,
+                   c.embedding
+            FROM chunks c"""  # noqa: S608 - built only from module constants, never user input
 
 # Fixed FTS5 search statements. Kept as module constants (not built at call time) so
 # the tenant filter can never be confused with an interpolation point: the tenant value
@@ -134,6 +141,20 @@ def _metadata_for_storage(metadata: dict[str, Any]) -> dict[str, Any]:
     if area:
         stored["area"] = area
     return stored
+
+
+def _embedding_to_blob(embedding: list[float]) -> bytes | None:
+    """Serialize a dense vector as compact float32 bytes for SQLite storage."""
+    if not embedding:
+        return None
+    return array("f", (float(value) for value in embedding)).tobytes()
+
+
+def _embedding_from_blob(blob: bytes) -> list[float]:
+    """Deserialize a dense vector stored by ``_embedding_to_blob``."""
+    values = array("f")
+    values.frombytes(blob)
+    return list(values)
 
 
 @dataclass(frozen=True, slots=True)
@@ -499,10 +520,10 @@ class LocalFTSStore(VectorStore):
                 text TEXT NOT NULL,
                 metadata TEXT,
                 position INTEGER DEFAULT 0,
-                tenant_id TEXT
+                tenant_id TEXT,
+                embedding BLOB
             );
             CREATE INDEX IF NOT EXISTS idx_chunks_source ON chunks(source_id);
-            CREATE INDEX IF NOT EXISTS idx_chunks_tenant ON chunks(tenant_id);
             CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
                 text,
                 content=chunks,
@@ -514,18 +535,21 @@ class LocalFTSStore(VectorStore):
         cols = {row[1] for row in self._conn.execute("PRAGMA table_info(chunks)")}
         if "tenant_id" not in cols:
             self._conn.execute("ALTER TABLE chunks ADD COLUMN tenant_id TEXT")
+        if "embedding" not in cols:
+            self._conn.execute("ALTER TABLE chunks ADD COLUMN embedding BLOB")
         with contextlib.suppress(sqlite3.OperationalError):  # coluna já existe
             self._conn.execute("ALTER TABLE chunks ADD COLUMN uso TEXT")
+        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_tenant ON chunks(tenant_id)")
         self._conn.commit()
 
     def upsert(self, chunks: list[DocumentChunk], embeddings: list[list[float]], tenant_id: str | None = None) -> int:
-        """Insert chunks into SQLite FTS (embeddings ignored for FTS).
+        """Insert chunks into SQLite FTS and persist dense embeddings.
 
         ``tenant_id`` scopes tenant-uploaded corpus (tier-2 doutrina / tier-3 petition
         history) to one firm; leave it ``None`` for the shared public seed (tier-1).
         """
         count = 0
-        for chunk in chunks:
+        for chunk, embedding in zip(chunks, embeddings, strict=True):
             # Delete existing if any
             existing = self._conn.execute("SELECT rowid FROM chunks WHERE chunk_id = ?", (chunk.chunk_id,)).fetchone()
             if existing:
@@ -534,9 +558,11 @@ class LocalFTSStore(VectorStore):
 
             uso_val = chunk.uso or resolve_uso(chunk.source_type).value
             metadata = _metadata_for_storage(chunk.metadata)
+            embedding_blob = _embedding_to_blob(embedding)
             self._conn.execute(
-                "INSERT INTO chunks (chunk_id, source_id, source_type, text, metadata, position, tenant_id, uso) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO chunks "
+                "(chunk_id, source_id, source_type, text, metadata, position, tenant_id, uso, embedding) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     chunk.chunk_id,
                     chunk.source_id,
@@ -546,6 +572,7 @@ class LocalFTSStore(VectorStore):
                     chunk.position,
                     tenant_id,
                     uso_val,
+                    embedding_blob,
                 ),
             )
             rowid = self._conn.execute("SELECT rowid FROM chunks WHERE chunk_id = ?", (chunk.chunk_id,)).fetchone()[0]
@@ -567,14 +594,59 @@ class LocalFTSStore(VectorStore):
         tenant_only: bool = False,
         area: str | None = None,
     ) -> list[SearchResult]:
-        """Search using FTS5 (query_embedding is ignored; uses metadata for text query).
+        """Search using persisted dense embeddings.
 
-        For FTS-based search, use search_text() instead.
-        This method returns an empty list since FTS cannot use embeddings.
-        ``include_estilo``/``tenant_only`` accepted for interface parity with
-        ``VectorStore`` but unused (no results are ever returned here).
+        The pilot stores normalized BGE vectors as float32 blobs in SQLite. For
+        normalized vectors, cosine similarity is the dot product.
         """
-        return []
+        if top_k <= 0 or not query_embedding:
+            return []
+
+        query = [float(value) for value in query_embedding]
+        normalized_area = normalize_area(area)
+        where = ["c.embedding IS NOT NULL"]
+        params: list[object] = []
+
+        if tenant_id is None:
+            where.append("c.tenant_id IS NULL")
+        elif tenant_only and normalized_area:
+            where.append(f"c.tenant_id = ? AND {_AREA_MATCH}")
+            params.extend([tenant_id, normalized_area])
+        elif tenant_only:
+            where.append("c.tenant_id = ?")
+            params.append(tenant_id)
+        elif normalized_area:
+            where.append(f"(c.tenant_id IS NULL OR (c.tenant_id = ? AND {_AREA_MATCH}))")
+            params.extend([tenant_id, normalized_area])
+        else:
+            where.append("(c.tenant_id IS NULL OR c.tenant_id = ?)")
+            params.append(tenant_id)
+        if not include_estilo:
+            where.append(f"{_USO_EFETIVO} = 'fundamento'")
+
+        sql = f"{_DENSE_SELECT_COLUMNS} WHERE {' AND '.join(where)} ORDER BY c.chunk_id"
+        rows = self._conn.execute(sql, tuple(params)).fetchall()
+
+        results: list[SearchResult] = []
+        for row in rows:
+            vector = _embedding_from_blob(row[6])
+            if len(vector) != len(query):
+                continue
+            score = sum(left * right for left, right in zip(query, vector, strict=True))
+            meta = json.loads(row[3]) if row[3] else {}
+            results.append(
+                SearchResult(
+                    chunk_id=row[0],
+                    source_id=row[1],
+                    score=float(score),
+                    text=row[2],
+                    metadata=meta,
+                    source_type=row[4] or "",
+                    uso=row[5] or "",
+                )
+            )
+        results.sort(key=lambda result: result.score, reverse=True)
+        return results[:top_k]
 
     def search_text(
         self,
@@ -681,6 +753,40 @@ class LocalFTSStore(VectorStore):
             (tenant_id,),
         ).fetchone()
         return int(row[0] if row else 0)
+
+    def missing_embedding_count(self) -> int:
+        """Return the number of chunks that still need dense embeddings."""
+        row = self._conn.execute("SELECT COUNT(*) FROM chunks WHERE embedding IS NULL").fetchone()
+        return int(row[0] if row else 0)
+
+    def fetch_chunks_missing_embeddings(self, *, limit: int = 100) -> list[tuple[str, str]]:
+        """Return ``(chunk_id, text)`` pairs for dense-embedding backfill."""
+        rows = self._conn.execute(
+            """
+            SELECT chunk_id, text
+            FROM chunks
+            WHERE embedding IS NULL
+            ORDER BY chunk_id
+            LIMIT ?
+            """,
+            (max(1, limit),),
+        ).fetchall()
+        return [(str(row[0]), str(row[1])) for row in rows]
+
+    def update_embeddings(self, embeddings_by_chunk_id: Mapping[str, list[float]]) -> int:
+        """Persist dense embeddings for existing chunks by id."""
+        count = 0
+        for chunk_id, embedding in embeddings_by_chunk_id.items():
+            blob = _embedding_to_blob(embedding)
+            if blob is None:
+                continue
+            cursor = self._conn.execute(
+                "UPDATE chunks SET embedding = ? WHERE chunk_id = ?",
+                (blob, chunk_id),
+            )
+            count += cursor.rowcount
+        self._conn.commit()
+        return count
 
     def delete_by_tenant(self, tenant_id: str) -> int:
         """Delete all private corpus chunks for a tenant.
