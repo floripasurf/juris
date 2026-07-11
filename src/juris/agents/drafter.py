@@ -68,6 +68,7 @@ class DraftRequest:
     thesis: str | None = None
     custom_instructions: str = ""
     use_cloud_llm: bool = False
+    contains_pii: bool = True
     max_revision_rounds: int = 1
 
 
@@ -398,7 +399,7 @@ class DrafterAgent:
             )
 
         # Step 8: Pre-show review (optional)
-        if self._reviewer and verification and verification.all_passed:
+        if self._reviewer and draft_text:
             try:
                 review_req = ReviewRequest(
                     petition_text=draft_text,
@@ -682,6 +683,7 @@ class DrafterAgent:
             system=SYSTEM_PROMPT,
             max_tokens=4096,
             temperature=0.15,
+            contains_pii=request.contains_pii,
         )
         return response.content, response.model
 
@@ -702,6 +704,7 @@ class DrafterAgent:
                 prompt=prompt,
                 temperature=0.1,
                 max_tokens=256,
+                contains_pii=request.contains_pii,
             )
             return response.content.strip(), response.model
         except Exception:  # noqa: BLE001

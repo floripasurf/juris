@@ -109,8 +109,10 @@ class BrowserSessionLLM(AbstractLLM):
         schema: dict[str, Any] | None = None,
         max_tokens: int = 1024,
         temperature: float = 0.0,
+        *,
+        contains_pii: bool = False,
     ) -> LLMResponse:
-        # schema/max_tokens/temperature are part of the interface but not
+        # schema/max_tokens/temperature/contains_pii are part of the interface but not
         # controllable through a chat UI — the prompt carries the desired format.
         reply = await self._transport.send(prompt=prompt, system=system)
         actual = normalize_browser_provider(reply.provider)

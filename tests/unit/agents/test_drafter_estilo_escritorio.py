@@ -32,8 +32,7 @@ class FakeLLM(AbstractLLM):
         system: str | None = None,
         schema: dict[str, Any] | None = None,
         max_tokens: int = 1024,
-        temperature: float = 0.0,
-    ) -> LLMResponse:
+        temperature: float = 0.0, **kwargs) -> LLMResponse:
         return LLMResponse(content=self._content, model=self.model_name)
 
 
@@ -120,8 +119,7 @@ async def test_exemplar_do_escritorio_entra_no_style_text() -> None:
             system: str | None = None,
             schema: dict[str, Any] | None = None,
             max_tokens: int = 1024,
-            temperature: float = 0.0,
-        ) -> LLMResponse:
+            temperature: float = 0.0, **kwargs) -> LLMResponse:
             captured["prompt"] = prompt
             return await super().complete(prompt, system, schema, max_tokens, temperature)
 

@@ -42,10 +42,13 @@ class FallbackLLM(AbstractLLM):
         schema: dict[str, Any] | None = None,
         max_tokens: int = 1024,
         temperature: float = 0.0,
+        *,
+        contains_pii: bool = False,
     ) -> LLMResponse:
         try:
             return await self._primary.complete(
-                prompt, system=system, schema=schema, max_tokens=max_tokens, temperature=temperature
+                prompt, system=system, schema=schema, max_tokens=max_tokens,
+                temperature=temperature, contains_pii=contains_pii,
             )
         except Exception as exc:  # noqa: BLE001 — any primary failure ⇒ degrade to the backup
             logger.warning(
@@ -58,7 +61,8 @@ class FallbackLLM(AbstractLLM):
             if self._on_fallback is not None:
                 self._on_fallback(exc)
             return await self._fallback.complete(
-                prompt, system=system, schema=schema, max_tokens=max_tokens, temperature=temperature
+                prompt, system=system, schema=schema, max_tokens=max_tokens,
+                temperature=temperature, contains_pii=contains_pii,
             )
 
     @property

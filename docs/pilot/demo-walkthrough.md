@@ -33,6 +33,8 @@ uv run juris demo <NUMERO_CNJ> <TIPO_PETICAO> [opções]
 | `--thesis`, `-T` | _(none)_ | Tese explícita (caso queira fixar). |
 | `--instructions`, `-i` | `""` | Instruções extras para o(a) drafter. |
 | `--cloud` | off | Usa Claude (cloud) em vez de Ollama (local). |
+| `--cli-cloud` | _(none)_ | Usa assinatura CLI (`claude` ou `codex`) somente em `--source fixture --modo rascunho-pesquisa`, sem PII. |
+| `--modo` | `minuta-sugerida` | `minuta-sugerida` ou `rascunho-pesquisa`. |
 | `--skip-review` | off | Pula a revisão pós-draft (mais rápido, menos seguro). |
 
 ## Exemplos
@@ -40,13 +42,16 @@ uv run juris demo <NUMERO_CNJ> <TIPO_PETICAO> [opções]
 **Modo demonstração (offline, fixture, sem credenciais):**
 
 ```bash
-uv run juris demo 0000000-00.0000.0.00.0000 contestacao --source fixture
+uv run juris demo 0000000-00.0000.0.00.0000 contestacao \
+  --source fixture \
+  --modo rascunho-pesquisa \
+  --cli-cloud claude
 ```
 
 Saída fica em `juris-out/DEMO-0000000-00.0000.0.00.0000/`. Cada documento
 abre com banner amarelo de DEMO MODE.
 
-**Modo real (DataJud, caso ativo do escritório):**
+**Modo real (DataJud, caso ativo do escritório, sem PII no LLM):**
 
 ```bash
 uv run juris demo 5001234-56.2024.8.13.0024 contestacao \
@@ -55,12 +60,18 @@ uv run juris demo 5001234-56.2024.8.13.0024 contestacao \
   --cloud
 ```
 
+Use esse caminho apenas quando o(a) advogado(a) confirmar que o caso não
+contém dados pessoais/sensíveis no contexto enviado ao LLM ou que o material
+foi devidamente anonimizado. Não use Ollama local como rota de qualidade para
+casos complexos no piloto atual; ele está considerado fraco para esse uso.
+
 ## Artefatos gerados
 
 Em `juris-out/<numero_cnj>/`:
 
 - `draft.md` — minuta principal (com rodapé de IA).
 - `draft.contraponto.md` — argumentos contrários previstos (se aplicável).
+- `rascunho-pesquisa.md` — memorando estruturado quando `--modo rascunho-pesquisa`.
 - `reviewer-report.md` — apontamentos do revisor automático.
 - `prazos.md` — tabela de prazos pendentes com status e base legal.
 - `case-summary.md` — metadados + última movimentação + ações pendentes.
@@ -87,3 +98,11 @@ Sai com código 0 se a cadeia está íntegra, 2 se houver corrupção.
 4. Aplicar correções pessoais conforme estilo do escritório.
 5. Apenas então, assinar com A3 e protocolar — manualmente ou via
    `juris file <caso> draft.md`.
+
+## Regra operacional do piloto atual
+
+- Primeira sessão com Raphael: `--source fixture --modo rascunho-pesquisa --cli-cloud claude|codex`.
+- Caso real com PII: não rodar no LLM até existir anonimização/consentimento
+  explícito e uma rota cloud adequada, ou outro backend local forte o bastante.
+- Ollama local: útil para testes técnicos pequenos; não é critério de aceite
+  para redação jurídica complexa.

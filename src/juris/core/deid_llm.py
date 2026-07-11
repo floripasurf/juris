@@ -47,7 +47,11 @@ class DeidentifyingLLM(AbstractLLM):
         schema: dict[str, Any] | None = None,
         max_tokens: int = 1024,
         temperature: float = 0.0,
+        *,
+        contains_pii: bool = False,
     ) -> LLMResponse:
+        # contains_pii aceito para compat de interface; este wrapper de-identifica
+        # de qualquer forma, então o delegate recebe texto já sem PII.
         deid = deidentify(prompt + _SEP + (system or ""), ner_redactor=self._ner)
         ensure_cloud_safe(deid, allow_partial=self._allow_partial)
         deid_prompt, _, deid_system = deid.text.partition(_SEP)

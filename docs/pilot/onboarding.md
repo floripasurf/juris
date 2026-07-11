@@ -42,6 +42,13 @@ advogado(a) parceiro(a). Prepare estes itens com antecedência — o objetivo
 
 ## 3.5 Sessão de IA (modelo de fronteira via assinatura)
 
+> **Dois trilhos de IA.** Este (§3.5) é o **trilho recomendado** para o fluxo do
+> advogado: agente local + navegador + `JURIS_AI_PREFERENCE=1` + bridge, usando a
+> assinatura Claude/ChatGPT dele(a) (ADR-0018). O **trilho CLI é de contingência
+> técnica**: `juris demo … --source fixture` roda com Ollama local por padrão, e
+> `--cloud` usa a Claude API (com aviso de PII/de-id) — caminho técnico, não o
+> fluxo ideal do(a) advogado(a).
+
 O juris usa a **assinatura de IA do(a) próprio(a) advogado(a)** (Claude ou
 ChatGPT) através de uma extensão de navegador na máquina dele(a) — o modelo de
 fronteira faz a análise/estratégia/minuta, e a sessão **nunca sai do perímetro
@@ -137,8 +144,9 @@ uv run juris audit verify juris-out/<NUMERO_CNJ>/audit.jsonl
 
 Ao final da sessão, o diretório `juris-out/<numero_cnj>/` deve conter:
 
-- `draft.md` (com rodapé de IA)
-- `draft.contraponto.md` (se houver)
+- `rascunho-pesquisa.md` (modo recomendado para a primeira sessão)
+- `draft.md` (apenas se o operador escolher `minuta-sugerida`)
+- `draft.contraponto.md` (se houver, apenas em modo minuta)
 - `reviewer-report.md`
 - `prazos.md`
 - `case-summary.md`

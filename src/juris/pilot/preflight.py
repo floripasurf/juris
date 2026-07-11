@@ -370,6 +370,7 @@ def check_llm_availability(
     *,
     ollama_url: str | None = None,
     anthropic_env_var: str = "ANTHROPIC_API_KEY",
+    cli_cloud_provider: str | None = None,
     probe_ollama: bool = True,
 ) -> CheckResult:
     """Verify at least one LLM provider is reachable.
@@ -382,18 +383,22 @@ def check_llm_availability(
     url = ollama_url or os.environ.get("OLLAMA_URL", "http://localhost:11434")
     anthropic_key = bool(os.environ.get(anthropic_env_var))
     ollama_up = _ollama_reachable(url) if probe_ollama else False
+    cli_cloud_available = bool(cli_cloud_provider and shutil.which(cli_cloud_provider))
+    cloud_available = anthropic_key or cli_cloud_available
 
     details: dict[str, object] = {
         "ollama_url": url,
         "ollama_reachable": ollama_up,
         "anthropic_key_present": anthropic_key,
+        "cli_cloud_provider": cli_cloud_provider,
+        "cli_cloud_available": cli_cloud_available,
     }
 
-    if ollama_up and anthropic_key:
+    if ollama_up and cloud_available:
         return CheckResult(
             name="llm_availability",
             status=CheckStatus.PASS,
-            message="Ollama acessível e ANTHROPIC_API_KEY presente",
+            message="Ollama acessível e provedor cloud presente",
             details=details,
         )
     if ollama_up:
@@ -413,8 +418,21 @@ def check_llm_availability(
             status=CheckStatus.WARN,
             message="ANTHROPIC_API_KEY presente; Ollama indisponível",
             remediation=(
-                "tarefas com PII falharão sem Ollama local; rode `ollama serve` "
-                "e confirme que o modelo padrão está baixado (`ollama pull qwen3`)"
+                "use cloud apenas para fixture, pesquisa pública ou contexto anonimizado; "
+                "casos com PII ficam bloqueados até haver anonimização/consentimento "
+                "ou backend local forte o bastante"
+            ),
+            details=details,
+        )
+    if cli_cloud_available:
+        return CheckResult(
+            name="llm_availability",
+            status=CheckStatus.WARN,
+            message=f"CLI cloud {cli_cloud_provider} disponível; Ollama indisponível",
+            remediation=(
+                "use apenas em sessão fixture/rascunho sem PII; casos com PII "
+                "ficam bloqueados até haver anonimização/consentimento ou backend "
+                "local forte o bastante"
             ),
             details=details,
         )
@@ -424,8 +442,8 @@ def check_llm_availability(
         message="nenhum provedor de LLM disponível",
         remediation=(
             "rode `ollama serve` (PII) e/ou exporte "
-            f"{anthropic_env_var} (pesquisa) — a sessão não pode continuar "
-            "sem ao menos um provedor"
+            f"{anthropic_env_var} (pesquisa) ou informe --cli-cloud claude|codex "
+            "(fixture sem PII) — a sessão não pode continuar sem ao menos um provedor"
         ),
         details=details,
     )
@@ -623,6 +641,7 @@ def run_preflight(
     out_root: Path | None = None,
     real_source_required: bool = True,
     embedding_model: str = "BAAI/bge-m3",
+    cli_cloud_provider: str | None = None,
     probe_ollama: bool = True,
     probe_token: bool = False,
     probe_ner: bool = False,
@@ -643,7 +662,7 @@ def run_preflight(
         check_repertory(real_source_required=real_source_required),
         check_corpus_depth(),
         check_embeddings_cache(model_name=embedding_model, required=embeddings_required),
-        check_llm_availability(probe_ollama=probe_ollama),
+        check_llm_availability(probe_ollama=probe_ollama, cli_cloud_provider=cli_cloud_provider),
         check_token(probe=probe_token),
         check_ner_model(probe=probe_ner),
         check_output_dir_clean(out_root),

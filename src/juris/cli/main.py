@@ -2890,6 +2890,22 @@ def demo(
     thesis: str | None = typer.Option(None, "--thesis", "-T", help="Tese explícita"),
     instructions: str = typer.Option("", "--instructions", "-i", help="Instruções extras"),
     cloud: bool = typer.Option(False, "--cloud", help="Usar Claude (cloud) em vez de Ollama"),
+    cli_cloud: str | None = typer.Option(
+        None,
+        "--cli-cloud",
+        help="Usar assinatura via CLI cloud para rascunho-pesquisa: claude | codex",
+    ),
+    cli_model: str = typer.Option(
+        "haiku",
+        "--cli-model",
+        help="Modelo do --cli-cloud claude (ex.: haiku, sonnet). Default: haiku.",
+    ),
+    anonimizado: bool = typer.Option(
+        False,
+        "--anonimizado",
+        help="Operador confirma que o contexto enviado ao LLM está sem PII/anonimizado. "
+        "Libera --cli-cloud em --source datajud.",
+    ),
     skip_review: bool = typer.Option(False, "--skip-review", help="Pular revisão pós-draft"),
     use_cache: bool = typer.Option(True, "--cache/--no-cache", help="Usar cache local DataJud"),
     modo: str = typer.Option(
@@ -2944,6 +2960,26 @@ def demo(
         raise typer.Exit(code=1) from exc
 
     is_demo_mode = derive_demo_mode(source_mode)
+
+    if cli_cloud is not None:
+        if cli_cloud not in {"claude", "codex"}:
+            console.print("[red]--cli-cloud inválido. Opções: claude, codex.[/red]")
+            raise typer.Exit(code=1)
+        if cloud:
+            console.print("[red]Use apenas um backend cloud: --cloud ou --cli-cloud.[/red]")
+            raise typer.Exit(code=1)
+        if output_mode is not OutputMode.RASCUNHO_PESQUISA:
+            console.print("[red]--cli-cloud exige --modo rascunho-pesquisa.[/red]")
+            raise typer.Exit(code=1)
+        if source_mode is SourceMode.MNI:
+            console.print("[red]--cli-cloud não é permitido com --source mni.[/red]")
+            raise typer.Exit(code=1)
+        if not is_demo_mode and not anonimizado:
+            console.print(
+                "[red]--cli-cloud em source real exige --anonimizado (operador confirma "
+                "contexto sem PII). Sem isso, use --source fixture.[/red]"
+            )
+            raise typer.Exit(code=1)
 
     # Real-source safety gate: refuse to run against a missing/empty corpus
     # when the source is datajud or mni. Fixture mode is allowed through
@@ -3004,7 +3040,22 @@ def demo(
 
     # Set up LLM (mirrors `draft` command)
     llm: AbstractLLM
-    if cloud:
+    if cli_cloud is not None:
+        from typing import cast
+
+        from juris.llm.local_cli import CliCloudProvider, LocalCliLLM
+
+        model = cli_model if cli_cloud == "claude" else None
+        # cli_cloud já validado ∈ {claude, codex} acima; cast satisfaz o Literal do provider.
+        llm = LocalCliLLM(provider=cast(CliCloudProvider, cli_cloud), model=model)
+        contexto = "anonimizado" if anonimizado else "sem PII"
+        console.print(f"[dim]LLM: {llm.model_name} (cloud via CLI; {contexto})[/dim]")
+        if anonimizado and not is_demo_mode:
+            console.print(
+                "[yellow]AVISO: --anonimizado afirma que o contexto enviado ao LLM está "
+                "sem PII. Confirme o gate do(a) advogado(a) antes de prosseguir.[/yellow]"
+            )
+    elif cloud:
         console.print(
             "[yellow]AVISO PII:[/yellow] --cloud envia dados do processo "
             "para API externa. Use apenas se o caso não contiver dados sensíveis."
@@ -3117,9 +3168,10 @@ def demo(
         out_root=out_root_path,
         thesis=thesis,
         instructions=instructions,
-        use_cloud_llm=cloud,
+        use_cloud_llm=cloud or cli_cloud is not None,
         skip_review=skip_review,
         output_mode=output_mode,
+        assume_no_pii=anonimizado,
     )
 
     console.print(
@@ -3312,6 +3364,11 @@ def pilot_preflight(
         "--skip-ollama-probe",
         help="Não tenta conectar ao Ollama (útil em CI/offline).",
     ),
+    cli_cloud: str | None = typer.Option(
+        None,
+        "--cli-cloud",
+        help="Conta uma assinatura CLI cloud como provedor para sessão fixture sem PII: claude | codex.",
+    ),
     live: bool = typer.Option(
         False,
         "--live",
@@ -3333,11 +3390,16 @@ def pilot_preflight(
 
     from juris.pilot.preflight import run_preflight
 
+    if cli_cloud is not None and cli_cloud not in {"claude", "codex"}:
+        console.print("[red]--cli-cloud inválido. Opções: claude, codex.[/red]")
+        raise typer.Exit(code=1)
+
     out_path = FilePath(out_root).expanduser() if out_root else None
     report = run_preflight(
         out_root=out_path,
         real_source_required=not fixture_only,
         embedding_model=embedding_model,
+        cli_cloud_provider=cli_cloud,
         probe_ollama=not skip_ollama_probe,
         probe_token=live,
         probe_ner=live,

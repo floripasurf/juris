@@ -30,8 +30,7 @@ class FakeLLM(AbstractLLM):
         system: str | None = None,
         schema: dict[str, Any] | None = None,
         max_tokens: int = 1024,
-        temperature: float = 0.0,
-    ) -> LLMResponse:
+        temperature: float = 0.0, **kwargs) -> LLMResponse:
         return LLMResponse(content=self._content, model=self.model_name)
 
 
@@ -50,8 +49,7 @@ class SequenceLLM(AbstractLLM):
         system: str | None = None,
         schema: dict[str, Any] | None = None,
         max_tokens: int = 1024,
-        temperature: float = 0.0,
-    ) -> LLMResponse:
+        temperature: float = 0.0, **kwargs) -> LLMResponse:
         self.prompts.append(prompt)
         content = self._contents[min(len(self.prompts) - 1, len(self._contents) - 1)]
         return LLMResponse(content=content, model=self.model_name)

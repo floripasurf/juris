@@ -57,10 +57,15 @@ Juris está sujeito à LGPD (Lei 13.709/2018) e segue estes princípios:
 
 - **Finalidade restrita**: dados são usados exclusivamente para a finalidade
   definida (leitura de processo, geração de minuta, pesquisa correlata).
-- **LLM local para PII**: prompts contendo dados pessoais não anonimizados
-  são roteados para LLM local (Ollama). LLM em nuvem só é usado quando
-  expressamente autorizado pelo(a) advogado(a) (`--cloud`) e o caso permite
-  desidentificação suficiente.
+- **PII não vai para LLM em nuvem sem autorização e preparo**: prompts
+  contendo dados pessoais não anonimizados não devem ser enviados para
+  provedores externos sem autorização expressa, base adequada e/ou
+  anonimização. No piloto atual, Ollama local não é considerado forte o
+  bastante para casos jurídicos complexos; portanto, caso real com PII fica
+  fora do roteiro até haver uma rota aprovada.
+- **Cloud apenas para conteúdo sem PII ou anonimizado**: LLM em nuvem pode
+  ser usado em fixture, pesquisa pública, caso anonimizado ou outro contexto
+  sem dados pessoais/sensíveis, sempre com ciência do(a) advogado(a).
 - **Audit trail**: toda decisão da IA, recuperação de fonte e alteração de
   estado é registrada com hash em cadeia (`audit.jsonl`).
 - **Consentimento do cliente**: o(a) advogado(a) garante que o uso da Juris

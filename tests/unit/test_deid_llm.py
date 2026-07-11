@@ -21,7 +21,7 @@ class _Delegate:
         self.received_prompt: str | None = None
         self.received_system: str | None = None
 
-    async def complete(self, prompt, system=None, schema=None, max_tokens=1024, temperature=0.0):
+    async def complete(self, prompt, system=None, schema=None, max_tokens=1024, temperature=0.0, **kwargs):
         self.received_prompt = prompt
         self.received_system = system
         return _Resp(content=self._reply)

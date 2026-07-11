@@ -69,6 +69,10 @@ class DemoRequest:
     skip_review: bool = False
     use_llm_for_analysis: bool = False
     output_mode: OutputMode = OutputMode.MINUTA_SUGERIDA
+    # Operator asserts the context sent to the LLM is de-identified, so a
+    # real-source run (datajud/mni) may use a cloud backend. The lawyer-facing
+    # PII confirmation gate remains the human control for this assertion.
+    assume_no_pii: bool = False
 
 
 @dataclass(slots=True)
@@ -157,6 +161,7 @@ class DemoOrchestrator:
                 "source": request.source.value,
                 "demo_mode": is_demo_mode,
                 "output_mode": request.output_mode.value,
+                "llm_provider": _llm_provider_name(self._llm),
                 "out_dir": out_dir.name,
             },
         )
@@ -293,6 +298,7 @@ class DemoOrchestrator:
             thesis=request.thesis,
             custom_instructions=request.instructions,
             use_cloud_llm=request.use_cloud_llm,
+            contains_pii=request.source is not SourceMode.FIXTURE and not request.assume_no_pii,
         )
         return await agent.draft(draft_req, context)
 
@@ -329,6 +335,10 @@ def _can_degrade_to_deterministic_rascunho(request: DemoRequest, exc: Exception)
     if request.use_cloud_llm:
         return False
     return _is_local_ollama_connection_error(exc)
+
+
+def _llm_provider_name(llm: AbstractLLM) -> str:
+    return str(getattr(llm, "llm_provider", llm.model_name))
 
 
 def _is_local_ollama_connection_error(exc: Exception) -> bool:

@@ -32,7 +32,10 @@ class OllamaLLM(AbstractLLM):
         schema: dict[str, Any] | None = None,
         max_tokens: int = 1024,
         temperature: float = 0.0,
+        *,
+        contains_pii: bool = False,
     ) -> LLMResponse:
+        _ = contains_pii
         messages = []
         if system:
             messages.append({"role": "system", "content": system})

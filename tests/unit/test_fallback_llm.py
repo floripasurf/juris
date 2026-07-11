@@ -13,7 +13,7 @@ class _StubLLM(AbstractLLM):
         self._name = name
         self._fail = fail
 
-    async def complete(self, prompt, system=None, schema=None, max_tokens=1024, temperature=0.0):
+    async def complete(self, prompt, system=None, schema=None, max_tokens=1024, temperature=0.0, **kwargs):
         if self._fail:
             raise RuntimeError("sessão do browser indisponível")
         return LLMResponse(content=f"{self._name}:{prompt}", model=self._name)
@@ -48,7 +48,7 @@ async def test_ai_of_preference_deidentifies_before_the_browser_and_falls_back()
     seen = {}
 
     class _CapturingBrowser(AbstractLLM):
-        async def complete(self, prompt, system=None, schema=None, max_tokens=1024, temperature=0.0):
+        async def complete(self, prompt, system=None, schema=None, max_tokens=1024, temperature=0.0, **kwargs):
             seen["prompt"] = prompt
             return LLMResponse(content="ok", model="browser")
 
@@ -80,7 +80,7 @@ async def test_fallback_path_is_also_deidentified_by_default() -> None:
     seen = {}
 
     class _CapturingFallback(AbstractLLM):
-        async def complete(self, prompt, system=None, schema=None, max_tokens=1024, temperature=0.0):
+        async def complete(self, prompt, system=None, schema=None, max_tokens=1024, temperature=0.0, **kwargs):
             seen["prompt"] = prompt
             return LLMResponse(content="fb", model="cloud")
 
@@ -101,7 +101,7 @@ async def test_local_fallback_opts_out_of_deid() -> None:
     seen = {}
 
     class _CapturingLocal(AbstractLLM):
-        async def complete(self, prompt, system=None, schema=None, max_tokens=1024, temperature=0.0):
+        async def complete(self, prompt, system=None, schema=None, max_tokens=1024, temperature=0.0, **kwargs):
             seen["prompt"] = prompt
             return LLMResponse(content="local", model="ollama")
 
