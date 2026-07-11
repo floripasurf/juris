@@ -355,21 +355,28 @@ def _locked_json(path: Path) -> Iterator[MutableMapping[str, object]]:
     import fcntl
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a+", encoding="utf-8") as fh:
-        fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
-        fh.seek(0)
-        raw = fh.read().strip()
-        data: dict[str, object] = json.loads(raw) if raw else {}
-        if not isinstance(data, dict):
-            msg = f"{path} deve conter um objeto JSON."
-            raise ValueError(msg)
-        yield data
-        fh.seek(0)
-        fh.truncate()
-        json.dump(data, fh, ensure_ascii=False, indent=2, sort_keys=True)
-        fh.write("\n")
-        fh.flush()
-        os.fsync(fh.fileno())
+    fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        restrict_file(path)
+        with os.fdopen(fd, "r+", encoding="utf-8") as fh:
+            fd = -1
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+            fh.seek(0)
+            raw = fh.read().strip()
+            data: dict[str, object] = json.loads(raw) if raw else {}
+            if not isinstance(data, dict):
+                msg = f"{path} deve conter um objeto JSON."
+                raise ValueError(msg)
+            yield data
+            fh.seek(0)
+            fh.truncate()
+            json.dump(data, fh, ensure_ascii=False, indent=2, sort_keys=True)
+            fh.write("\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+    finally:
+        if fd >= 0:
+            os.close(fd)
 
 
 def _clear_auth_caches() -> None:

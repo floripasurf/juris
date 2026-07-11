@@ -54,6 +54,30 @@ def test_start_trial_creates_anonymous_30_day_access(trial_env) -> None:
     assert authed.status_code == 200, authed.text
 
 
+def test_locked_json_creates_owner_only_file(tmp_path) -> None:
+    from juris.web.trial_access import _locked_json
+
+    path = tmp_path / "tenants.json"
+
+    with _locked_json(path) as data:
+        data["tenant"] = {"kind": "trial"}
+
+    assert (path.stat().st_mode & 0o777) == 0o600
+
+
+def test_locked_json_tightens_existing_file_permissions(tmp_path) -> None:
+    from juris.web.trial_access import _locked_json
+
+    path = tmp_path / "agents.json"
+    path.write_text("{}", encoding="utf-8")
+    path.chmod(0o644)
+
+    with _locked_json(path) as data:
+        data["tenant"] = {"token": "raw-relay-token"}
+
+    assert (path.stat().st_mode & 0o777) == 0o600
+
+
 def test_trial_relay_url_defaults_to_public_causia_domain(monkeypatch) -> None:
     from juris.web.trial_access import trial_relay_url
 
