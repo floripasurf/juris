@@ -55,6 +55,30 @@ def test_workbench_reads_persistent_manifests(tmp_path) -> None:
     assert workbench["recent_artifacts"][0]["files"] == []
 
 
+def test_workbench_degraded_run_carries_reason_for_honest_card(tmp_path) -> None:
+    case_dir = tmp_path / "CASE-DEG"
+    case_dir.mkdir()
+    (case_dir / "run-manifest.json").write_text(
+        json.dumps(
+            {
+                "finished_at": "2026-07-12T12:00:00",
+                "succeeded": False,
+                "degraded": True,
+                "degradation_reason": "IA local indisponível — rascunho estrutural gerado",
+                "request": {"numero_cnj": "0009999-99.2026.8.13.0001", "tribunal": "tjmg", "source": "fixture"},
+                "artifacts": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    workbench = build_workbench(processos=[], prazos=[], out_root=tmp_path)
+
+    run = workbench["recent_artifacts"][0]
+    assert run["degraded"] is True
+    assert run["degradation_reason"] == "IA local indisponível — rascunho estrutural gerado"
+
+
 def test_workbench_recent_artifacts_expose_reopenable_files(tmp_path) -> None:
     """Task 5: the Mesa's card can reopen the run's actual draft, never a server path."""
     import hashlib

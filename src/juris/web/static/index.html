@@ -19,7 +19,7 @@
       --panel-soft: #FBFAF7;
       --ink: #23252B;
       --ink-2: #4B4E57;
-      --muted: #7A7D85;
+      --muted: #5F6169;
       --line: #E5E3DC;
       --line-2: #CFCCC3;
       --brand: #7A2334;
@@ -35,6 +35,17 @@
       --focus: 0 0 0 3px rgba(122, 35, 52, 0.16);
     }
     * { box-sizing: border-box; }
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
     body {
       margin: 0;
       background: var(--paper);
@@ -1212,6 +1223,11 @@
           <p>O Causia recebe os dados necessários para organizar processos e prazos, sem receber suas senhas.</p>
         </div>
       </div>
+      <div class="landing-tech-point">
+        <strong>Tribunais atendidos hoje</strong>
+        <p>Tribunal Superior do Trabalho (TST), TRT 1ª Região (RJ), TRT 2ª Região (SP), TRT 15ª Região (Campinas), TRF 3ª Região (SP/MS), TRF 5ª Região, TJ de Minas Gerais (TJMG), TJ do Rio de Janeiro (TJRJ), TJ do Distrito Federal e Territórios (TJDFT), TJ do Espírito Santo (TJES), TJ de Mato Grosso (TJMT), TJ do Pará (TJPA) e TJ de Pernambuco (TJPE).</p>
+        <p class="field-note">Cobertura em expansão. Seu tribunal não está aqui? Fale com a equipe.</p>
+      </div>
     </div>
     <div class="landing-band">
       <h2>Uma mesa de trabalho para usar antes de contratar qualquer plano.</h2>
@@ -1339,7 +1355,9 @@
       </form>
       <p id="connect-note" class="field-note">O PIN é usado só para assinar no seu computador e não é armazenado.</p>
       <div class="list-tools">
+        <label class="visually-hidden" for="processos-filter">Filtrar processos</label>
         <input id="processos-filter" placeholder="Filtrar CNJ, classe ou assunto" autocomplete="off" />
+        <label class="visually-hidden" for="processos-sort">Ordenar processos</label>
         <select id="processos-sort">
           <option value="prazo">ordenar por prazo</option>
           <option value="sync">ordenar por última atualização</option>
@@ -1353,7 +1371,9 @@
       <h1>Agenda de prazos</h1>
       <p class="lede">Prazos pendentes do acervo, mais próximos primeiro.</p>
       <div class="list-tools">
+        <label class="visually-hidden" for="prazos-filter">Filtrar agenda</label>
         <input id="prazos-filter" placeholder="Filtrar CNJ ou prazo" autocomplete="off" />
+        <label class="visually-hidden" for="prazos-urgency">Filtrar urgência</label>
         <select id="prazos-urgency">
           <option value="">todas urgências</option>
           <option value="alta">alta</option>
@@ -1384,6 +1404,7 @@
           <option value="recurso">recurso</option>
           <option value="parecer">parecer</option>
         </select>
+        <label class="visually-hidden" for="library-area">Área de atuação</label>
         <input id="library-area" placeholder="área (ex.: cível)" required />
         <label class="check"><input id="library-copyright-ack" type="checkbox" /> Declaro responsabilidade pelo direito de uso da doutrina enviada</label>
         <button type="submit">Enviar para a biblioteca</button>
@@ -1392,7 +1413,9 @@
       <div id="library-coverage" class="proc-empty">Carregando…</div>
       <div id="library-list" class="proc-empty">Carregando…</div>
       <form id="library-search-form" class="connect-bar">
+        <label class="visually-hidden" for="library-search-q">Buscar na biblioteca</label>
         <input id="library-search-q" placeholder="Buscar na biblioteca e no corpus" />
+        <label class="visually-hidden" for="library-search-area">Área da busca</label>
         <input id="library-search-area" placeholder="área da busca (ex.: cível)" />
         <button type="submit">Buscar</button>
       </form>
@@ -1409,6 +1432,7 @@
       <p class="lede">Gere uma chave para estagiário ou colega advogado acessar o mesmo acervo durante o período do teste.</p>
       <div id="my-key-box" class="trial-welcome" hidden></div>
       <form id="access-key-form" class="connect-bar">
+        <label class="visually-hidden" for="access-key-label">Nome do acesso</label>
         <input id="access-key-label" placeholder="Nome do acesso (ex.: estagiário)" autocomplete="off" />
         <button id="access-key-submit" type="submit">Gerar chave</button>
         <span id="access-key-status"></span>
@@ -1424,7 +1448,7 @@
         <div class="row">
           <div>
             <label for="pf_cnj">Número CNJ</label>
-            <input id="pf_cnj" autocomplete="off" />
+            <input id="pf_cnj" placeholder="0000000-00.0000.0.00.0000" pattern="\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}" title="Número CNJ completo, ex.: 0001234-56.2026.8.13.0001" autocomplete="off" />
           </div>
           <div>
             <label for="pf_output_dir">Documentos gerados (pasta)</label>
@@ -1549,7 +1573,7 @@
         <div class="row">
           <div>
             <label for="fl_cnj">Número CNJ</label>
-            <input id="fl_cnj" autocomplete="off" />
+            <input id="fl_cnj" placeholder="0000000-00.0000.0.00.0000" pattern="\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}" title="Número CNJ completo, ex.: 0001234-56.2026.8.13.0001" autocomplete="off" />
           </div>
           <div>
             <label for="fl_tribunal">Tribunal</label>
@@ -1574,12 +1598,13 @@
               <option value="contestacao">Contestação</option>
               <option value="recurso">Recurso</option>
             </select>
+            <p class="field-note">Documento = o que vai no sistema do tribunal; Petição = a natureza jurídica da peça. Na dúvida, use o mesmo valor.</p>
           </div>
         </div>
         <div id="filing-secret-row" class="row">
           <div>
             <label for="fl_cpf">CPF</label>
-            <input id="fl_cpf" autocomplete="off" />
+            <input id="fl_cpf" autocomplete="username" />
           </div>
           <div>
             <label for="fl_pin">PIN token A3</label>
@@ -1588,7 +1613,7 @@
         </div>
         <div id="filing-senha-row">
           <label for="fl_senha">Senha do PJe</label>
-          <input id="fl_senha" type="password" autocomplete="off" />
+          <input id="fl_senha" type="password" autocomplete="current-password" />
           <p class="field-note">Usada só para protocolar no seu computador; não é armazenada.</p>
         </div>
         <label for="fl_artifact">Artefato recente</label>
@@ -1602,7 +1627,7 @@
           <button type="button" class="ghost" id="fl_download_docx">Baixar .docx</button>
           <span id="fl_download_status" class="field-note" hidden></span>
         </div>
-        <label for="fl_prazo_override">Override de prazo</label>
+        <label for="fl_prazo_override">Ajustar prazo manualmente (uso excepcional)</label>
         <input id="fl_prazo_override" autocomplete="off" />
         <div class="checks">
           <label class="check"><input id="fl_review" type="checkbox" /> revisão humana concluída</label>
@@ -1624,7 +1649,7 @@
       <p class="lede">Gere rascunho de pesquisa ou minuta sugerida a partir do pipeline atual.</p>
       <form id="demo-form">
         <label for="numero_cnj">Número CNJ</label>
-        <input id="numero_cnj" value="0001234-56.2026.8.13.0001" autocomplete="off" />
+        <input id="numero_cnj" placeholder="0000000-00.0000.0.00.0000" pattern="\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}" title="Número CNJ completo, ex.: 0001234-56.2026.8.13.0001" autocomplete="off" />
 
         <div class="row">
           <div>
@@ -1639,7 +1664,22 @@
           </div>
           <div>
             <label for="tribunal">Tribunal</label>
-            <input id="tribunal" value="tjmg" />
+            <select id="tribunal">
+              <option value="tjmg">TJ de Minas Gerais (TJMG)</option>
+              <option value="tst">Tribunal Superior do Trabalho (TST)</option>
+              <option value="trt1">TRT 1ª Região (Rio de Janeiro)</option>
+              <option value="trt2">TRT 2ª Região (São Paulo)</option>
+              <option value="trt15">TRT 15ª Região (Campinas)</option>
+              <option value="trf3">TRF 3ª Região (SP/MS)</option>
+              <option value="trf5">TRF 5ª Região</option>
+              <option value="tjdf">TJ do Distrito Federal e Territórios (TJDFT)</option>
+              <option value="tjrj">TJ do Rio de Janeiro (TJRJ)</option>
+              <option value="tjes">TJ do Espírito Santo (TJES)</option>
+              <option value="tjmt">TJ de Mato Grosso (TJMT)</option>
+              <option value="tjpa">TJ do Pará (TJPA)</option>
+              <option value="tjpe">TJ de Pernambuco (TJPE)</option>
+              <option value="outro">Outro tribunal (fale com a equipe)</option>
+            </select>
           </div>
         </div>
 
@@ -2028,7 +2068,7 @@
         titleEl.textContent = "Falha";
         summaryEl.textContent = "A execução não foi concluída.";
         artifactsEl.className = "empty";
-        artifactsEl.textContent = "Ajuste os dados ou o provedor LLM e tente novamente.";
+        artifactsEl.textContent = "Confira o número do processo e tente novamente. Se o erro continuar, verifique a conexão da IA na aba Acessos.";
       }
     }
 
@@ -2040,6 +2080,48 @@
     }
 
     const CONF_LABEL = { alta: "Confiança alta", media: "Confiança média", baixa: "Confiança baixa" };
+    const ARTIFACT_LABELS = {
+      "rascunho-pesquisa.md": "Rascunho de pesquisa",
+      "draft.md": "Minuta",
+      "minuta.md": "Minuta",
+      "prazos.md": "Prazos",
+      "resumo.md": "Resumo do caso",
+      "case-summary.md": "Resumo do caso",
+      "reviewer-report.md": "Revisão",
+      "audit-summary.md": "Auditoria",
+      "run-manifest.json": "Dados técnicos",
+      "audit.jsonl": "Trilha técnica",
+    };
+    const AUDIT_EVENT_LABELS = {
+      "demo.started": "Início da geração",
+      "draft.context_built": "Leitura do processo",
+      "draft.thesis_chosen": "Definição da tese",
+      research: "Pesquisa de jurisprudência",
+      "draft.template_scaffold": "Estrutura da peça",
+      "draft.reviewed": "Revisão automática",
+      "draft.blocked": "Minuta bloqueada",
+      "demo.finished": "Fim da geração",
+    };
+
+    function artifactLabel(name) {
+      return ARTIFACT_LABELS[name] || name || "Artefato";
+    }
+
+    function auditEventLabel(eventType) {
+      const raw = String(eventType || "");
+      const key = raw.toLowerCase();
+      const label = AUDIT_EVENT_LABELS[key];
+      if (label) return escHtml(label);
+      return `<code>${escHtml(raw || "evento")}</code>`;
+    }
+
+    function auditActorLabel(actor) {
+      const raw = String(actor || "");
+      if (raw.startsWith("llm:qwen3")) return "IA local (qwen3)";
+      if (raw.startsWith("llm:")) return `IA local (${raw.slice(4).split(":")[0]})`;
+      if (raw === "system") return "Sistema";
+      return raw || "Sistema";
+    }
 
     function renderEstrategia(est) {
       estrategiaEl.innerHTML = "";
@@ -2090,7 +2172,7 @@
         const alts = est.alternativas
           .map((a) => `<li><span class="badge ordem-${escHtml(a.ordem)}">${escHtml(a.ordem)}</span> ${escHtml(a.tese)} <span class="muted">(${(a.score ?? 0).toFixed(2)})</span></li>`)
           .join("");
-        html += `<details class="estrategia-alts"><summary>Vice-campeãs (${est.alternativas.length})</summary><ul>${alts}</ul></details>`;
+        html += `<details class="estrategia-alts"><summary>Teses alternativas (${est.alternativas.length})</summary><ul>${alts}</ul></details>`;
       }
 
       card.innerHTML = html;
@@ -2102,7 +2184,7 @@
       openProcModal();
       try {
         const r = await apiFetch(`/api/audit?output_dir=${encodeURIComponent(dir)}`);
-        if (!r.ok) throw new Error(r.status === 404 ? "audit.jsonl não encontrado" : "Falha ao verificar");
+        if (!r.ok) throw new Error(r.status === 404 ? "Este caso ainda não tem trilha de auditoria." : "Falha ao verificar");
         renderAudit(await r.json());
       } catch (err) {
         procModalBody.innerHTML = `<p class="notice error" style="position:static">${escHtml(err.message)}</p>`;
@@ -2111,13 +2193,13 @@
 
     function renderAudit(a) {
       const verdict = a.intact
-        ? `<div class="audit-verdict ok">✓ Cadeia íntegra · ${a.total} eventos</div>`
+        ? `<div class="audit-verdict ok">✓ Cadeia íntegra · ${a.total} eventos<br/><span class="muted">Integridade do registro — não indica sucesso da minuta.</span></div>`
         : `<div class="audit-verdict bad">✗ Cadeia adulterada · ${a.corrupted.length} de ${a.total} comprometidos</div>`;
       const rows = (a.entries || [])
         .map((e) => `<li class="${e.corrupted ? "audit-bad" : ""}">
             <span class="mov-date">${e.timestamp ? new Date(e.timestamp).toLocaleString("pt-BR") : "—"}</span>
-            <span class="badge audit-ev">${escHtml(e.event_type)}</span>
-            <span class="mov-desc">${escHtml(e.actor)}${e.processo_cnj ? " · " + escHtml(e.processo_cnj) : ""}</span>
+            <span class="badge audit-ev">${auditEventLabel(e.event_type)}</span>
+            <span class="mov-desc">${escHtml(auditActorLabel(e.actor))}${e.processo_cnj ? " · " + escHtml(e.processo_cnj) : ""}</span>
             ${e.corrupted ? '<span class="badge sev-critical">adulterado</span>' : ""}
           </li>`)
         .join("");
@@ -2145,7 +2227,7 @@
     }
 
     function renderArtifactContent(data) {
-      procModalBody.innerHTML = `<h2>${escHtml(data.artifact_name)}</h2>
+      procModalBody.innerHTML = `<h2>${escHtml(artifactLabel(data.artifact_name))}</h2>
         <div class="preview-body md">${renderMarkdownSafe(data.content || "")}</div>`;
     }
 
@@ -2169,7 +2251,7 @@
       if (failed) refs += `<div>Marcadores inválidos: ${failed}</div>`;
       if (spurious) refs += `<div>Jurisprudência sem fonte verificada: ${spurious}</div>`;
       card.innerHTML = "<span class='g-dot'></span><strong>Minuta bloqueada — sem lastro verificável</strong>" +
-        `<span class='muted'>${escHtml(g.blocked_reason || "grounding falhou")}</span>${refs}`;
+        `<span class='muted'>${escHtml(g.blocked_reason || "citações não confirmadas")}</span>${refs}`;
       groundingEl.appendChild(card);
     }
 
@@ -2206,6 +2288,26 @@
     }
 
     const value = (id) => document.querySelector(`#${id}`).value;
+    const CNJ_PATTERN = /^\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}$/;
+
+    function setTribunalValue(id, tribunal) {
+      const el = document.querySelector(`#${id}`);
+      if (!el) return;
+      const wanted = tribunal || "tjmg";
+      el.value = wanted;
+      if (el.value !== wanted) el.value = "outro";
+    }
+
+    function requireValidCnj(input) {
+      const value = (input.value || "").trim();
+      if (!CNJ_PATTERN.test(value)) {
+        input.setCustomValidity("Número CNJ incompleto — confira os 20 dígitos.");
+        input.reportValidity();
+        return false;
+      }
+      input.setCustomValidity("");
+      return true;
+    }
 
     // Escape untrusted text (LLM output, court/process data) before innerHTML.
     const ESC_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
@@ -2302,6 +2404,36 @@
         row.append(code, copyBtn, dismiss);
         trialWelcomeEl.appendChild(row);
       }
+      const contactForm = document.createElement("form");
+      contactForm.className = "tw-key-row";
+      contactForm.innerHTML = `
+        <label class="visually-hidden" for="trial-contact-email">E-mail opcional para aviso de expiração</label>
+        <input id="trial-contact-email" type="email" placeholder="avisar antes de expirar (e-mail, opcional)" autocomplete="email" />
+        <button type="submit" class="ghost">salvar e-mail opcional</button>
+        <span class="field-note" role="status" aria-live="polite"></span>`;
+      const status = contactForm.querySelector(".field-note");
+      contactForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const input = contactForm.querySelector("#trial-contact-email");
+        const email = (input.value || "").trim();
+        if (!email) {
+          status.textContent = "E-mail opcional não informado.";
+          return;
+        }
+        try {
+          const response = await apiFetch("/api/trial/contact", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email }),
+          });
+          const body = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(apiErrorMessage(body, "Não foi possível salvar o e-mail."));
+          status.textContent = "Aviso solicitado. O teste continua anônimo.";
+        } catch (error) {
+          status.textContent = error.message;
+        }
+      });
+      trialWelcomeEl.appendChild(contactForm);
       trialWelcomeEl.hidden = false;
     }
 
@@ -2364,6 +2496,38 @@
       if (data && typeof data.detail === "string") return data.detail;
       return fallback;
     };
+    const loadFailed = {};
+
+    function markLoadOk(name) {
+      loadFailed[name] = false;
+    }
+
+    function markLoadFailed(name) {
+      loadFailed[name] = true;
+    }
+
+    function renderRetryEmpty(el, message, retryFn) {
+      el.className = "proc-empty";
+      el.innerHTML = "";
+      const text = document.createElement("p");
+      text.textContent = message;
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.className = "ghost";
+      retry.setAttribute("data-retry", "true");
+      retry.textContent = "Tentar novamente";
+      retry.addEventListener("click", retryFn);
+      el.append(text, retry);
+    }
+
+    function retryViewLoad(name) {
+      if (name === "mesa") loadWorkbench();
+      else if (name === "acervo") loadProcessos();
+      else if (name === "agenda") loadPrazos();
+      else if (name === "biblioteca") loadLibrary();
+      else if (name === "acessos") loadAccessSummary();
+      else if (name === "protocolo") loadFilingStatus();
+    }
 
     // View navigation — show one section group at a time.
     function showView(name) {
@@ -2376,6 +2540,7 @@
         if (isActive) b.setAttribute("aria-current", "page");
         else b.removeAttribute("aria-current");
       });
+      if (loadFailed[name]) retryViewLoad(name);
     }
     document.querySelectorAll("#nav button").forEach((b) => {
       b.addEventListener("click", () => {
@@ -2669,6 +2834,8 @@
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
+      const cnjInput = document.querySelector("#numero_cnj");
+      if (!requireValidCnj(cnjInput)) return;
       notice.hidden = true;
       submit.disabled = true;
       submit.textContent = "Gerando...";
@@ -2720,7 +2887,7 @@
           titleEl.textContent = "Falha";
           summaryEl.textContent = "A execução não foi concluída.";
           artifactsEl.className = "empty";
-          artifactsEl.textContent = "Ajuste os dados ou o provedor LLM e tente novamente.";
+          artifactsEl.textContent = "Confira o número do processo e tente novamente. Se o erro continuar, verifique a conexão da IA na aba Acessos.";
           activeRun = { ...activeRun, status: "error", errorMessage: error.message };
         }
       } finally {
@@ -2747,7 +2914,7 @@
         auditBtn.addEventListener("click", () => openAudit(data.output_dir));
         outputDirEl.appendChild(auditBtn);
       }
-      notice.textContent = data.degraded ? `Execução degradada: ${data.degradation_reason}` : "Artefatos gerados.";
+      notice.textContent = data.degraded ? `Minuta não gerada — ${data.degradation_reason || "processo sem informação suficiente"}` : "Artefatos gerados.";
       notice.className = data.succeeded ? "notice" : "notice error";
       notice.hidden = false;
 
@@ -2839,7 +3006,7 @@
         const tab = document.createElement("button");
         tab.type = "button";
         tab.className = `tab${index === 0 ? " active" : ""}`;
-        tab.textContent = artifact.name;
+        tab.textContent = artifactLabel(artifact.name);
         tab.addEventListener("click", () => {
           tabs.querySelectorAll(".tab").forEach((item) => item.classList.remove("active"));
           tab.classList.add("active");
@@ -2863,11 +3030,19 @@
     }
 
     const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString("pt-BR") : "—");
+    const URGENCY_LABELS = { alta: "alta", media: "média", baixa: "baixa" };
+
+    function deadlineBadge(dateIso, urgency) {
+      const level = urgency || "baixa";
+      const label = URGENCY_LABELS[level] || level;
+      const date = fmtDate(dateIso);
+      return `<span class="badge urg-${escHtml(level)}" aria-label="urgência ${escHtml(label)}, vence em ${escHtml(date)}">${escHtml(label)} · ${escHtml(date)}</span>`;
+    }
 
     function useProcesso(cnj, tribunal) {
       showView("caso");
       document.querySelector("#numero_cnj").value = cnj;
-      document.querySelector("#tribunal").value = tribunal;
+      setTribunalValue("tribunal", tribunal || "tjmg");
       document.querySelector("#source").value = "mni";
       const target = document.querySelector("#numero_cnj");
       target.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -2948,6 +3123,10 @@
     }
 
     function runMeta(run) {
+      if (run.degraded) {
+        const reason = run.degradation_reason || "processo sem informação suficiente";
+        return `${sourceLabel(run.source)} · Minuta não gerada — ${reason}`;
+      }
       return `${sourceLabel(run.source)} · ${groundingLabel(run.grounding_status)} · ${reviewSummary(run.review)}`;
     }
 
@@ -3019,6 +3198,8 @@
         return;
       }
       showView("caso");
+      document.querySelector("#numero_cnj").value = "0001234-56.2026.8.13.0001";
+      setTribunalValue("tribunal", "tjmg");
       const source = document.querySelector("#source");
       if (source) { source.value = "fixture"; source.dispatchEvent(new Event("change")); }
       const demoForm = document.querySelector("#demo-form");
@@ -3087,7 +3268,7 @@
         `${a.artifact_count || 0} artefato(s) · ${runMeta(a)} · ${fmtDate(a.finished_at)}`,
         [
           ...(a.files || []).map((f) => ({
-            label: f.name,
+            label: artifactLabel(f.name),
             ghost: true,
             artifactName: f.name,
             run: () => openArtifact(a.output_dir, f.name),
@@ -3116,10 +3297,16 @@
       try {
         const response = await apiFetch("/api/workbench");
         const data = response.ok ? await response.json() : {};
+        markLoadOk("mesa");
         renderWorkbench(data);
       } catch (_) {
+        markLoadFailed("mesa");
         workbenchEl.innerHTML = "";
-        workbenchEl.appendChild(renderQueue("Mesa", [], "Não foi possível carregar a mesa."));
+        const retry = document.createElement("div");
+        retry.className = "queue-column";
+        retry.innerHTML = "<h2>Mesa</h2>";
+        renderRetryEmpty(retry, "Não foi possível carregar a mesa.", loadWorkbench);
+        workbenchEl.appendChild(retry);
       }
     }
 
@@ -3188,7 +3375,7 @@
       ].filter(([, v]) => v).map(([k, v]) => `<div><dt>${k}</dt><dd>${escHtml(v)}</dd></div>`).join("");
 
       const prazos = d.prazos.length
-        ? d.prazos.map((p) => `<li><span class="badge ${p.urgencia ? "urg-" + escHtml(p.urgencia) : "urg-baixa"}">${fmtDate(p.data_limite)}</span> ${escHtml(p.rule_nome || "—")} <span class="muted">${escHtml(p.tipo_acao || "")}</span></li>`).join("")
+        ? d.prazos.map((p) => `<li>${deadlineBadge(p.data_limite, p.urgencia)} ${escHtml(p.rule_nome || "—")} <span class="muted">${escHtml(p.tipo_acao || "")}</span></li>`).join("")
         : "<li class='muted'>Nenhum prazo pendente.</li>";
 
       const movs = d.movimentos.length
@@ -3250,9 +3437,8 @@
       items.forEach((p) => {
         const row = document.createElement("div");
         row.className = "proc-row";
-        const urg = p.proximo_prazo_urgencia ? `urg-${p.proximo_prazo_urgencia}` : "urg-baixa";
         const prazo = p.proximo_prazo
-          ? `<span class="badge ${urg}">${fmtDate(p.proximo_prazo)}</span>`
+          ? deadlineBadge(p.proximo_prazo, p.proximo_prazo_urgencia)
           : '<span class="urg-baixa">sem prazo</span>';
         const left = document.createElement("div");
         left.innerHTML = `<div class="proc-cnj">${escHtml(p.numero_cnj)}</div><div class="proc-meta">${escHtml(p.classe || "—")} · ${escHtml((p.tribunal || "").toUpperCase())}</div>`;
@@ -3284,11 +3470,12 @@
         const response = await apiFetch("/api/processos");
         const data = await response.json();
         processosCache = data.processos || [];
+        markLoadOk("acervo");
         updateFirstAccessGuideVisibility();
         renderProcessos(filteredProcessos());
       } catch (error) {
-        processosEl.className = "proc-empty";
-        processosEl.textContent = "Não foi possível carregar os processos.";
+        markLoadFailed("acervo");
+        renderRetryEmpty(processosEl, "Não foi possível carregar os processos.", loadProcessos);
       }
     }
     function persistFilter(key, val) { try { localStorage.setItem(key, val); } catch (_) { /* private mode */ } }
@@ -3424,7 +3611,15 @@
     function renderPrazos(items) {
       if (!items.length) {
         prazosEl.className = "proc-empty";
-        prazosEl.textContent = prazosCache.length ? "Nenhum prazo encontrado com esses filtros." : "Nenhum prazo pendente.";
+        if (prazosCache.length) {
+          prazosEl.textContent = "Nenhum prazo encontrado com esses filtros.";
+        } else if (!processosCache.length) {
+          prazosEl.innerHTML = 'Sem prazos porque nenhum processo foi conectado ainda. <button type="button" class="ghost" id="agenda-goto-acervo">Conecte seu acervo</button>';
+          const btn = prazosEl.querySelector("#agenda-goto-acervo");
+          if (btn) btn.addEventListener("click", () => showView("acervo"));
+        } else {
+          prazosEl.textContent = "Nenhum prazo pendente — tudo em dia.";
+        }
         return;
       }
       prazosEl.className = "proc-list";
@@ -3432,7 +3627,6 @@
       items.forEach((p) => {
         const row = document.createElement("div");
         row.className = "proc-row";
-        const urg = p.urgencia ? `urg-${escHtml(p.urgencia)}` : "urg-baixa";
         const left = document.createElement("div");
         left.innerHTML = `<div class="proc-cnj">${escHtml(p.numero_cnj)}</div><div class="proc-meta">${escHtml(p.rule_nome || "—")}</div>`;
         const mid = document.createElement("div");
@@ -3440,7 +3634,7 @@
         mid.textContent = p.tipo_acao || "";
         const right = document.createElement("div");
         right.className = "proc-prazo";
-        right.innerHTML = `<span class="badge ${urg}">${fmtDate(p.data_limite)}</span>`;
+        right.innerHTML = deadlineBadge(p.data_limite, p.urgencia);
         const action = document.createElement("div");
         const btn = document.createElement("button");
         btn.type = "button";
@@ -3457,10 +3651,11 @@
         const response = await apiFetch("/api/prazos");
         const data = await response.json();
         prazosCache = data.prazos || [];
+        markLoadOk("agenda");
         renderPrazos(filteredPrazos());
       } catch (error) {
-        prazosEl.className = "proc-empty";
-        prazosEl.textContent = "Não foi possível carregar a agenda.";
+        markLoadFailed("agenda");
+        renderRetryEmpty(prazosEl, "Não foi possível carregar a agenda.", loadPrazos);
       }
     }
     prazosFilter.addEventListener("input", () => renderPrazos(filteredPrazos()));
@@ -3532,10 +3727,11 @@
         const response = await apiFetch("/api/access");
         const data = await response.json();
         if (!response.ok) throw new Error(apiErrorMessage(data, "Falha ao carregar acessos"));
+        markLoadOk("acessos");
         renderAccessSummary(data);
       } catch (error) {
-        accessSummary.className = "proc-empty";
-        accessSummary.textContent = error.message;
+        markLoadFailed("acessos");
+        renderRetryEmpty(accessSummary, error.message, loadAccessSummary);
       }
     }
 
@@ -3573,9 +3769,10 @@
           parts.length ? `Tipo de peça — ${parts.join(" · ")}` : "Tipo de peça: sem classificação ainda",
           areaParts.length ? `Áreas — ${areaParts.join(" · ")}` : "Áreas: nenhuma área enviada ainda",
         ].join(" | ");
+        markLoadOk("biblioteca");
       } catch (error) {
-        box.className = "proc-empty";
-        box.textContent = error.message;
+        markLoadFailed("biblioteca");
+        renderRetryEmpty(box, error.message, loadLibrary);
       }
     }
 
@@ -3760,9 +3957,11 @@
           <p>${escHtml(c.message)}</p>
         </li>`).join("") || "<li class='muted'>Sem itens de checagem.</li>";
       const coc = data.chain_of_custody;
+      const hashNote = "Códigos abaixo são impressões digitais dos arquivos — comprovam que nada foi alterado depois da assinatura.";
       const hashes = coc ? `<div class="queue-item"><strong>Cadeia de custódia</strong>
+          <div class="meta">${hashNote}</div>
           <div class="meta">PDF: ${escHtml(coc.pdf_hash)}</div>
-          <div class="meta">Assinado: ${escHtml(coc.signed_pdf_hash)}</div>
+          <div class="meta">hash do assinado: ${escHtml(coc.signed_pdf_hash)}</div>
           <div class="meta">Payload: ${escHtml(coc.submitted_payload_hash)}</div>
           <div class="meta">Recibo: ${escHtml(coc.receipt_hash)}</div>
         </div>` : "";
@@ -3793,7 +3992,7 @@
         row.className = "queue-item";
         row.innerHTML = `<strong>Pendente: ${escHtml(p.numero_cnj)}</strong>
           <div class="meta">${escHtml(p.receipt_id)} · ${escHtml(p.pending_key || "")}</div>
-          <div class="meta">signed hash: ${escHtml((p.hashes || {}).signed_pdf_hash || "—")}</div>`;
+          <div class="meta">hash do assinado: ${escHtml((p.hashes || {}).signed_pdf_hash || "—")}</div>`;
         const actions = document.createElement("div");
         actions.className = "queue-actions";
         const btn = document.createElement("button");
@@ -3819,10 +4018,11 @@
       try {
         const response = await apiFetch("/api/filing/status");
         const data = response.ok ? await response.json() : {};
+        markLoadOk("protocolo");
         renderFilingStatus(data);
       } catch (_) {
-        filingStatusEl.className = "proc-empty";
-        filingStatusEl.textContent = "Não foi possível carregar status de protocolo.";
+        markLoadFailed("protocolo");
+        renderRetryEmpty(filingStatusEl, "Não foi possível carregar status de protocolo.", loadFilingStatus);
       }
     }
 
@@ -3840,7 +4040,7 @@
       filingRecoveryEl.className = "review-card";
       filingRecoveryEl.innerHTML = `<div class="review-head"><h3>Recuperação de filing pendente</h3>
           <span class="sev-chip sev-important">sem retry automático</span></div>
-        <div class="proc-meta">${escHtml(data.pending_key || "")} · signed hash ${escHtml((data.hashes || {}).signed_pdf_hash || "—")}</div>
+        <div class="proc-meta">${escHtml(data.pending_key || "")} · hash do assinado: ${escHtml((data.hashes || {}).signed_pdf_hash || "—")}</div>
         ${retryState}
         <p>${escHtml(data.retry_note || "")}</p>
         <h4>Checklist</h4><ul class="detail-prazos">${checks}</ul>
@@ -3983,6 +4183,8 @@
     }
 
     async function runFiling(endpoint, button) {
+      const cnjInput = document.querySelector("#fl_cnj");
+      if (!requireValidCnj(cnjInput)) return;
       button.disabled = true;
       const oldText = button.textContent;
       button.textContent = endpoint.endsWith("submit") ? "Protocolando…" : "Verificando…";

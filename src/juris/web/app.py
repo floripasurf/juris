@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from juris import __version__
 from juris.config import get_settings
@@ -106,6 +106,7 @@ _PUBLIC_HTTPS_HOSTS = frozenset(
 )
 _EXPENSIVE_API_PREFIXES = (
     "/api/demo-runs",
+    "/api/trial/contact",
     "/api/corpus/search",
     "/api/corpus/reingest",
     "/api/corpus/upload",
@@ -595,6 +596,17 @@ class AccessKeyPayload(BaseModel):
     label: str = Field(default="equipe", max_length=80)
 
 
+class TrialContactPayload(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+
+    @field_validator("email")
+    @classmethod
+    def _valid_email(cls, value: str) -> str:
+        from juris.web.trial_access import normalize_contact_email
+
+        return normalize_contact_email(value)
+
+
 @app.post("/api/trial/start", status_code=201)
 async def start_trial(request: Request) -> dict[str, object]:
     """Issue an anonymous 30-day trial without collecting personal data."""
@@ -638,6 +650,23 @@ async def get_agent_latest() -> dict[str, object]:
     if manifest is None:
         raise HTTPException(status_code=404, detail="Nenhuma versão do agente publicada.")
     return manifest
+
+
+@app.post("/api/trial/contact")
+async def update_trial_contact(
+    payload: TrialContactPayload,
+    tenant: Tenant = Depends(current_tenant),
+) -> dict[str, object]:
+    """Store an optional trial e-mail for expiry notice/recovery; never required for trial start."""
+    from juris.web.trial_access import update_trial_contact_email
+
+    try:
+        contact_email = await asyncio.to_thread(update_trial_contact_email, tenant.tenant_id, payload.email)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="tenant não encontrado") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "contact_email": contact_email}
 
 
 @app.get("/api/access")

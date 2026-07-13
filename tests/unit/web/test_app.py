@@ -116,6 +116,74 @@ def test_index_acervo_guide_leads_with_download() -> None:
     assert "first-access-guide" in text
 
 
+def test_index_mesa_card_is_honest_about_degraded_runs() -> None:
+    text = client.get("/").text
+    assert "Minuta não gerada — " in text
+    assert "run.degraded" in text
+
+
+def test_index_audit_labels_are_human_readable() -> None:
+    text = client.get("/").text
+
+    assert "AUDIT_EVENT_LABELS" in text
+    assert "Início da geração" in text
+    assert "Integridade do registro" in text
+    assert "não indica sucesso da minuta" in text
+    assert "IA local (qwen3)" in text
+    assert "DEMO.STARTED" not in text
+
+
+def test_index_declares_supported_tribunals_and_uses_select() -> None:
+    text = client.get("/").text
+
+    assert "Tribunais atendidos hoje" in text
+    assert "Tribunal Superior do Trabalho (TST)" in text
+    assert '<select id="tribunal"' in text
+    assert '<option value="tjmg">TJ de Minas Gerais (TJMG)</option>' in text
+    assert "Cobertura em expansão" in text
+
+    onboarding = Path("docs/pilot/onboarding.md").read_text(encoding="utf-8")
+    assert "tjsp" not in onboarding.lower()
+
+
+def test_index_trial_contact_and_retry_empty_states() -> None:
+    text = client.get("/").text
+
+    assert "/api/trial/contact" in text
+    assert "avisar antes de expirar" in text
+    assert "opcional" in text
+    assert "data-retry" in text
+    assert "Tentar novamente" in text
+    assert "Conecte seu acervo" in text
+
+
+def test_index_dejargon_forms_and_accessibility_pins() -> None:
+    text = client.get("/").text
+
+    assert "ARTIFACT_LABELS" in text
+    assert "Rascunho de pesquisa" in text
+    assert "Dados técnicos" in text
+    assert "Ajustar prazo manualmente (uso excepcional)" in text
+    assert "Confira o número do processo e tente novamente" in text
+    assert "Este caso ainda não tem trilha de auditoria." in text
+    assert "citações não confirmadas" in text
+    assert "hash do assinado:" in text
+    assert "Códigos abaixo são impressões digitais dos arquivos" in text
+    assert "Teses alternativas" in text
+    assert 'placeholder="0000000-00.0000.0.00.0000"' in text
+    assert 'pattern="\\d{7}-\\d{2}\\.\\d{4}\\.\\d\\.\\d{2}\\.\\d{4}"' in text
+    assert 'autocomplete="current-password"' in text
+    assert 'class="visually-hidden"' in text
+    assert "--muted: #5F6169" in text
+    assert "aria-label=\"urgência" in text
+    assert "Número CNJ incompleto" in text
+    assert "Documento = o que vai no sistema do tribunal" in text
+    assert "Ajuste os dados ou o provedor LLM" not in text
+    assert "Override de prazo" not in text
+    assert "Vice-campeãs" not in text
+    assert "signed hash:" not in text
+
+
 def test_list_processos_endpoint_returns_views(monkeypatch) -> None:
     import juris.web.processos_service as ps
     from juris.web.processos_service import ProcessoView

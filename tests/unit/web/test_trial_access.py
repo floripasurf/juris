@@ -110,6 +110,40 @@ def test_access_key_endpoint_issues_team_key_for_same_tenant(trial_env) -> None:
     assert any(item["label"] == "estagiário" for item in summary["keys"])
 
 
+def test_trial_contact_endpoint_stores_optional_email(trial_env) -> None:
+    tenants, _agents = trial_env
+    client = TestClient(app)
+    trial = client.post("/api/trial/start").json()
+
+    response = client.post(
+        "/api/trial/contact",
+        headers={"X-API-Key": trial["api_key"]},
+        json={"email": "advogada@example.com"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"ok": True, "contact_email": "advogada@example.com"}
+    tenant_data = json.loads(tenants.read_text(encoding="utf-8"))
+    assert tenant_data[trial["tenant_id"]]["contact_email"] == "advogada@example.com"
+    summary = client.get("/api/access", headers={"X-API-Key": trial["api_key"]}).json()
+    assert summary["contact_email"] == "advogada@example.com"
+
+
+def test_trial_contact_endpoint_requires_auth_and_valid_email(trial_env) -> None:
+    client = TestClient(app)
+    trial = client.post("/api/trial/start").json()
+
+    no_auth = client.post("/api/trial/contact", json={"email": "advogada@example.com"})
+    invalid = client.post(
+        "/api/trial/contact",
+        headers={"X-API-Key": trial["api_key"]},
+        json={"email": "sem-arroba"},
+    )
+
+    assert no_auth.status_code == 401
+    assert invalid.status_code == 422
+
+
 def test_agent_pairing_endpoint_rotates_relay_command(trial_env) -> None:
     _tenants, agents = trial_env
     client = TestClient(app)

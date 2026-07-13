@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 from collections.abc import Iterator, Mapping, MutableMapping
 from contextlib import contextmanager
@@ -56,6 +57,9 @@ class AgentPairing:
             f"JURIS_AGENT_TOKEN={self.agent_token} "
             f"juris agent connect-relay {self.relay_url} --tenant {self.tenant_id}"
         )
+
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def tenants_file_path() -> Path:
@@ -531,6 +535,38 @@ def rotate_agent_pairing(
     return AgentPairing(tenant_id=tenant_id, agent_token=agent_token, relay_url=relay_url)
 
 
+def normalize_contact_email(email: str) -> str:
+    """Normalize and validate an optional trial contact e-mail."""
+    normalized = email.strip().lower()
+    if len(normalized) > 254 or not _EMAIL_RE.fullmatch(normalized):
+        msg = "e-mail inválido."
+        raise ValueError(msg)
+    return normalized
+
+
+def update_trial_contact_email(
+    tenant_id: str,
+    email: str,
+    *,
+    tenants_path: Path | None = None,
+) -> str:
+    """Store an optional contact e-mail for trial expiry/recovery assistance."""
+    tenant_id = validate_tenant_id(tenant_id)
+    contact_email = normalize_contact_email(email)
+    tenants_path = tenants_path or tenants_file_path()
+    with _locked_json(tenants_path) as tenants:
+        if tenant_id not in tenants:
+            msg = f"tenant não encontrado: {tenant_id}"
+            raise KeyError(msg)
+        entry = _structured_tenant_entry(tenants[tenant_id], now=_utc_now())
+        if entry.get("kind") != "trial":
+            msg = "e-mail opcional está disponível apenas para testes anônimos."
+            raise ValueError(msg)
+        entry["contact_email"] = contact_email
+        tenants[tenant_id] = entry
+    return contact_email
+
+
 def read_tenant_access_summary(tenant_id: str, *, tenants_path: Path | None = None) -> dict[str, object]:
     tenant_id = validate_tenant_id(tenant_id)
     tenants_path = tenants_path or tenants_file_path()
@@ -551,6 +587,7 @@ def read_tenant_access_summary(tenant_id: str, *, tenants_path: Path | None = No
         "tenant_id": tenant_id,
         "trial": raw.get("kind") == "trial",
         "expires_at": raw.get("trial_expires_at") or raw.get("expires_at"),
+        "contact_email": raw.get("contact_email") if isinstance(raw.get("contact_email"), str) else None,
         "keys": [
             {"id": key_id, "label": entry.get("label", key_id) if isinstance(entry, dict) else key_id}
             for key_id, entry in keys.items()

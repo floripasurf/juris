@@ -15,7 +15,7 @@ advogado(a) parceiro(a). Prepare estes itens com antecedência — o objetivo
 
 ## 2. Tribunal e MNI
 
-- [ ] Tribunal alvo definido (`tjmg`, `tjsp`, `trf3`, ...).
+- [ ] Tribunal alvo definido (`tjmg`, `tst`, `trf3`, ...).
   - Comando para listar disponíveis: `uv run juris tribunais`
 - [ ] Cadastro MNI/PJe ativo do(a) advogado(a) no tribunal.
 - [ ] Pelo menos **1 processo ativo** selecionado pelo(a) advogado(a):

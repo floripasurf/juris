@@ -167,6 +167,7 @@ def _run_payload(manifest: dict[str, Any], case_dir: Path, root: Path) -> dict[s
         },
         "succeeded": manifest.get("succeeded"),
         "degraded": manifest.get("degraded"),
+        "degradation_reason": manifest.get("degradation_reason"),
     }
 
 
