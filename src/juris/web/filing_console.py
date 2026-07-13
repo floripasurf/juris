@@ -111,6 +111,29 @@ def filing_artifacts(out_root: Path, *, max_items: int = 20) -> dict[str, object
     return {"artifacts": artifacts}
 
 
+def run_artifact_files(case_dir: Path, root: Path, artifacts: list[Any]) -> list[dict[str, object]]:
+    """Primary draft names for one run that the console can safely reopen.
+
+    Same verification as ``filing_artifacts``' inner loop (confined path + sha256
+    match against the manifest), but scoped to a single already-known run
+    directory. Returns only ``name`` — never an absolute filesystem path.
+    """
+    files: list[dict[str, object]] = []
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            continue
+        name = _primary_artifact_name(str(artifact.get("name") or ""))
+        if name is None:
+            continue
+        path = (case_dir / name).resolve()
+        if not _is_regular_file_under(path, root):
+            continue
+        if not _sha256_matches(path, str(artifact.get("sha256") or "")):
+            continue
+        files.append({"name": name})
+    return files
+
+
 def read_filing_artifact(out_root: Path, *, output_dir: str, artifact_name: str) -> dict[str, object]:
     """Read one primary draft artifact, confined to the tenant output root."""
     name = _primary_artifact_name(artifact_name)

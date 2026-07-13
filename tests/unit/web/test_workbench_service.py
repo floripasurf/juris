@@ -50,6 +50,39 @@ def test_workbench_reads_persistent_manifests(tmp_path) -> None:
     assert workbench["recent_artifacts"][0]["output_dir"] == "CASE-1"
     assert str(tmp_path) not in json.dumps(workbench)
     assert workbench["recent_artifacts"][0]["review"]["critical"] == 1
+    # Neither listed name backs a real, hash-matching file here (no rascunho-pesquisa.md
+    # was written, and run-manifest.json is never its own primary draft) — no false opens.
+    assert workbench["recent_artifacts"][0]["files"] == []
+
+
+def test_workbench_recent_artifacts_expose_reopenable_files(tmp_path) -> None:
+    """Task 5: the Mesa's card can reopen the run's actual draft, never a server path."""
+    import hashlib
+
+    case_dir = tmp_path / "CASE-2"
+    case_dir.mkdir()
+    draft = "# Minuta pronta"
+    digest = hashlib.sha256(draft.encode("utf-8")).hexdigest()
+    (case_dir / "draft.md").write_text(draft, encoding="utf-8")
+    (case_dir / "run-manifest.json").write_text(
+        json.dumps(
+            {
+                "finished_at": "2026-07-01T09:00:00",
+                "output_mode": "minuta-sugerida",
+                "request": {"numero_cnj": "0009999-11.2026.8.13.0001", "tribunal": "tjmg"},
+                "draft": {"grounding_status": "verified"},
+                "artifacts": [{"name": "draft.md", "sha256": digest}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    workbench = build_workbench(processos=[], prazos=[], out_root=tmp_path)
+
+    files = workbench["recent_artifacts"][0]["files"]
+    assert files == [{"name": "draft.md"}]
+    assert str(tmp_path) not in json.dumps(workbench)
+    assert str(case_dir) not in json.dumps(workbench)
 
 
 def test_workbench_ignores_manifest_symlink_escape(tmp_path) -> None:

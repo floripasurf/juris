@@ -95,6 +95,9 @@ def test_index_renders_local_ui() -> None:
     assert "Tom da minuta" in response.text
     assert "apiErrorMessage" in response.text
     assert "escHtml" in response.text  # untrusted data escaped before innerHTML (XSS)
+    assert "data-artifact-open" in response.text  # Mesa: recent artifacts reopen in-browser
+    assert "openArtifact" in response.text
+    assert "copiar caminho" not in response.text  # server filesystem path is useless in-browser
 
 
 def test_index_acervo_guide_leads_with_download() -> None:
@@ -765,6 +768,52 @@ def test_workbench_endpoint_returns_daily_queues(monkeypatch, tmp_path) -> None:
     assert response.status_code == 200
     assert response.json()["blocked_cases"][0]["numero_cnj"] == "A"
     assert response.json()["sync_status"]["total_runs"] == 0
+
+
+def test_workbench_recent_artifacts_expose_reopenable_files(monkeypatch, tmp_path) -> None:
+    """Task 5: the Mesa's recent-artifacts card must list openable files, never a server path."""
+    app_module = importlib.import_module("juris.web.app")
+    db = SimpleNamespace(get_sync_overview=lambda: {"last_run": None, "total_runs": 0})
+
+    case_dir = tmp_path / "CASE-1"
+    case_dir.mkdir()
+    minuta = "# Minuta"
+    rascunho = "# Rascunho"
+    (case_dir / "draft.md").write_text(minuta, encoding="utf-8")
+    (case_dir / "rascunho-pesquisa.md").write_text(rascunho, encoding="utf-8")
+    (case_dir / "run-manifest.json").write_text(
+        json.dumps(
+            {
+                "finished_at": "2026-07-01T09:00:00",
+                "output_mode": "minuta-sugerida",
+                "request": {"numero_cnj": "0001234-56.2026.8.13.0001", "tribunal": "tjmg"},
+                "draft": {"grounding_status": "verified"},
+                "artifacts": [
+                    {"name": "draft.md", "sha256": hashlib.sha256(minuta.encode("utf-8")).hexdigest()},
+                    {
+                        "name": "rascunho-pesquisa.md",
+                        "sha256": hashlib.sha256(rascunho.encode("utf-8")).hexdigest(),
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(app_module, "_tenant_db", lambda tenant: db)
+    monkeypatch.setattr(app_module, "_out_root", lambda: tmp_path)
+    monkeypatch.setattr(app_module, "list_processos", lambda db=None: [])
+    monkeypatch.setattr(app_module, "list_prazos", lambda db=None: [])
+
+    response = client.get("/api/workbench")
+
+    assert response.status_code == 200
+    artifact = response.json()["recent_artifacts"][0]
+    names = {f["name"] for f in artifact["files"]}
+    assert names == {"draft.md", "rascunho-pesquisa.md"}
+    assert all(set(f.keys()) == {"name"} for f in artifact["files"])
+    assert str(tmp_path) not in response.text
+    assert str(case_dir) not in response.text
 
 
 def test_pilot_feedback_endpoints_are_tenant_scoped(monkeypatch, tmp_path) -> None:

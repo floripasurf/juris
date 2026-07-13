@@ -141,6 +141,8 @@ def _recent_run_manifests(out_root: Path, *, max_items: int) -> list[dict[str, o
 
 
 def _run_payload(manifest: dict[str, Any], case_dir: Path, root: Path) -> dict[str, object]:
+    from juris.web.filing_console import run_artifact_files
+
     request = ensure_dict(manifest.get("request"))
     draft = ensure_dict(manifest.get("draft"))
     reviewer = ensure_dict(manifest.get("reviewer"))
@@ -155,6 +157,7 @@ def _run_payload(manifest: dict[str, Any], case_dir: Path, root: Path) -> dict[s
         "output_dir": case_dir.resolve().relative_to(root).as_posix(),
         "artifact_count": len(artifacts),
         "artifacts": artifacts,
+        "files": run_artifact_files(case_dir, root, artifacts),
         "grounding_status": draft.get("grounding_status"),
         "grounding_blocked_reason": draft.get("grounding_blocked_reason"),
         "review": {
