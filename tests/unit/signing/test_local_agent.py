@@ -172,6 +172,19 @@ def test_local_setup_page_is_served_only_on_loopback() -> None:
     assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
 
 
+def test_setup_page_prefill_token_first() -> None:
+    """Setup page consults /token-info and pre-fills CPF when a token is connected."""
+    client = _local_client()
+
+    html = client.get("/setup").text
+
+    assert "token-status" in html  # área de status do token
+    assert "/token-info" in html  # JS consulta o agente
+    assert "Token detectado" in html  # copy de sucesso
+    assert "Conecte o token A3 nesta máquina" in html  # copy de ausência
+    assert 'name="cpf"' in html  # campo continua existindo (readonly qdo detectado)
+
+
 def test_local_credentials_are_stored_from_causia_page(monkeypatch) -> None:
     import juris.core.credentials as credentials
 

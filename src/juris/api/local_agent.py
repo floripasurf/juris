@@ -296,8 +296,10 @@ def _local_setup_html() -> str:
       cursor: pointer;
     }
     #status { min-height: 22px; font-weight: 650; }
+    #token-status { min-height: 22px; font-weight: 650; }
     .ok { color: #1f6b3a; }
     .err { color: #9b1c1c; }
+    .warn { color: #92400e; }
   </style>
 </head>
 <body>
@@ -306,14 +308,15 @@ def _local_setup_html() -> str:
     <p>Use o agente local para se conectar com o PJe. Suas senhas e o PIN do token
     ficam neste computador e não são enviados aos servidores do Causia.</p>
     <form id="credentials-form">
-      <label>CPF do advogado
-        <input name="cpf" inputmode="numeric" autocomplete="username" required />
+      <p id="token-status" role="status" aria-live="polite">Verificando token...</p>
+      <label>PIN do token A3
+        <input name="pin" type="password" autocomplete="off" required />
       </label>
       <label>Senha PJe
         <input name="senha" type="password" autocomplete="current-password" required />
       </label>
-      <label>PIN do token A3
-        <input name="pin" type="password" autocomplete="off" required />
+      <label>CPF do advogado
+        <input name="cpf" inputmode="numeric" autocomplete="username" required />
       </label>
       <label>Tribunal
         <input name="tribunal" value="tjmg" autocomplete="off" required />
@@ -326,6 +329,43 @@ def _local_setup_html() -> str:
   <script>
     const form = document.querySelector("#credentials-form");
     const status = document.querySelector("#status");
+    const tokenStatus = document.querySelector("#token-status");
+    const cpfInput = form.cpf;
+    const pinInput = form.pin;
+    const TOKEN_ABSENT_MESSAGE =
+      "Conecte o token A3 nesta máquina e recarregue a página. Sem o token, informe o CPF manualmente.";
+
+    async function loadTokenInfo() {
+      try {
+        const response = await fetch("/token-info");
+        if (!response.ok) throw new Error("token-info indisponível");
+        const data = await response.json();
+        if (data.connected) {
+          if (data.cpf) {
+            cpfInput.value = data.cpf;
+            cpfInput.defaultValue = data.cpf;
+          }
+          cpfInput.readOnly = true;
+          const validade = data.cert_valid_until
+            ? ` · certificado válido até ${data.cert_valid_until}`
+            : "";
+          tokenStatus.className = "ok";
+          tokenStatus.textContent = `Token detectado: ${data.titular || "titular não identificado"}${validade}`;
+          pinInput.focus();
+        } else {
+          cpfInput.readOnly = false;
+          tokenStatus.className = "warn";
+          tokenStatus.textContent = TOKEN_ABSENT_MESSAGE;
+        }
+      } catch (error) {
+        cpfInput.readOnly = false;
+        tokenStatus.className = "warn";
+        tokenStatus.textContent = TOKEN_ABSENT_MESSAGE;
+      }
+    }
+
+    loadTokenInfo();
+
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       status.className = "";
