@@ -44,6 +44,11 @@ class _CaptureLogger:
         self.events.append((event, kwargs))
 
 
+def _local_client() -> TestClient:
+    """TestClient wired for loopback-only agent endpoints (host + client both 127.0.0.1)."""
+    return TestClient(app, client=("127.0.0.1", 50000), headers={"host": "127.0.0.1:8765"})
+
+
 def test_health_endpoint():
     """Health returns ok status."""
     client = TestClient(app)
@@ -484,6 +489,50 @@ def test_validate_local_agent_host_rejects_non_loopback() -> None:
     """Non-loopback host bindings are rejected."""
     with pytest.raises(ValueError, match="must bind to 127.0.0.1"):
         validate_local_agent_host("192.168.1.10")
+
+
+def test_token_info_retorna_cpf_do_certificado(monkeypatch) -> None:
+    """The setup page pre-fills CPF/titular from the connected e-CPF token."""
+
+    class FakeStatus:
+        connected = True
+        cert_valid_until = "2027-01-01"
+        subject = "CN=FULANO DE TAL:12345678900,OU=e-CPF"
+        cpf = "12345678900"
+
+    client = _local_client()
+    monkeypatch.setattr(local_agent, "_default_token_probe", lambda: FakeStatus())
+    resp = client.get("/token-info")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["connected"] is True
+    assert body["cpf"] == "12345678900"
+    assert body["titular"] == "FULANO DE TAL"
+    assert "pin" not in {k.lower() for k in body}
+
+
+def test_token_info_sem_token_conectado(monkeypatch) -> None:
+    """No token connected — everything reports absent, not an error."""
+
+    class FakeStatus:
+        connected = False
+        cert_valid_until = None
+        subject = None
+        cpf = None
+
+    client = _local_client()
+    monkeypatch.setattr(local_agent, "_default_token_probe", lambda: FakeStatus())
+    body = client.get("/token-info").json()
+    assert body == {"connected": False, "cpf": None, "titular": None, "cert_valid_until": None}
+
+
+def test_token_info_rejects_foreign_origin() -> None:
+    """Like /setup, /token-info is loopback-only and never answers a cloud origin."""
+    client = _local_client()
+
+    response = client.get("/token-info", headers={"origin": "https://causia.com.br"})
+
+    assert response.status_code == 403
 
 
 def test_agent_health_reports_token_readiness() -> None:

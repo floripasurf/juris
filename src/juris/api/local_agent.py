@@ -429,6 +429,45 @@ async def credentials_status_options(request: Request) -> Response:
     return Response(status_code=204, headers=_cors_headers(origin))
 
 
+def _titular_from_subject(subject: str | None, cpf: str | None) -> str | None:
+    """Extract the e-CPF holder's name from the certificate subject's CN.
+
+    Args:
+        subject: RFC4514 certificate subject (e.g. ``"CN=NOME:CPF,OU=e-CPF"``).
+        cpf: CPF parsed from the same subject, used to strip the ``:CPF`` suffix.
+
+    Returns:
+        The holder's name, or ``None`` if no CN is present.
+    """
+    if not subject:
+        return None
+    for part in subject.split(","):
+        part = part.strip()
+        if part.upper().startswith("CN="):
+            cn = part[3:]
+            if cpf and cn.endswith(f":{cpf}"):
+                cn = cn[: -(len(cpf) + 1)]
+            return cn.strip() or None
+    return None
+
+
+@app.get("/token-info")
+def token_info(request: Request) -> dict[str, object]:
+    """CPF/titular read from the connected e-CPF — used to pre-fill ``/setup``.
+
+    Loopback-only, same guard as ``/setup``. Never returns the PIN or any secret.
+    """
+    _assert_local_setup_request(request)
+    status = _default_token_probe()
+    cpf = status.cpf
+    return {
+        "connected": bool(status.connected),
+        "cpf": cpf,
+        "titular": _titular_from_subject(status.subject, cpf),
+        "cert_valid_until": status.cert_valid_until,
+    }
+
+
 def _default_pin_resolver() -> str:
     """Resolve the A3 PIN locally at the agent — never sent by the orchestrator.
 
@@ -597,6 +636,8 @@ class TokenStatus:
 
     connected: bool
     cert_valid_until: date | None
+    subject: str | None = None
+    cpf: str | None = None
 
 
 def _default_token_probe() -> TokenStatus:
@@ -607,7 +648,12 @@ def _default_token_probe() -> TokenStatus:
 
         material = extract_token_material(get_settings().pkcs11_module)
         until = date.fromisoformat(material.not_valid_after) if material.not_valid_after else None
-        return TokenStatus(connected=True, cert_valid_until=until)
+        return TokenStatus(
+            connected=True,
+            cert_valid_until=until,
+            subject=material.subject,
+            cpf=material.cpf,
+        )
     except Exception:  # noqa: BLE001 — no token / unreadable ⇒ report not-ready, never crash /health
         return TokenStatus(connected=False, cert_valid_until=None)
 
