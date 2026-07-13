@@ -12,6 +12,7 @@ orchestrator. ``/ws/mni`` (read operations) is the next endpoint on this contrac
 from __future__ import annotations
 
 import base64
+import json
 import os
 import random
 import secrets
@@ -79,6 +80,8 @@ app = FastAPI(
 _RELAY_THREADS: dict[str, threading.Thread] = {}
 _RELAY_STOP_EVENTS: dict[str, threading.Event] = {}
 _RELAY_STATES: dict[str, str] = {}
+_DEFAULT_CONSOLE_ORIGIN = "https://causia.com.br"
+_LAST_PAIRING_ORIGIN: str | None = None
 
 
 class RelayPairingPayload(BaseModel):
@@ -179,8 +182,34 @@ def _assert_credentials_request(request: Request) -> str | None:
         raise HTTPException(status_code=403, detail="origem não autorizada para credenciais locais") from exc
 
 
+def _origin_from_relay_url(relay_url: str) -> str | None:
+    """Derive the console's browser origin (``https://host[:port]``) from a relay URL.
+
+    ``relay_url`` is ``wss://host/ws/agent-relay`` (or ``ws://`` in dev) — same host as
+    the console the lawyer paired from, just a different scheme/path.
+    """
+    from urllib.parse import urlparse
+
+    parsed = urlparse(relay_url)
+    if not parsed.hostname:
+        return None
+    scheme = "https" if parsed.scheme == "wss" else "http"
+    netloc = parsed.hostname if parsed.port is None else f"{parsed.hostname}:{parsed.port}"
+    return f"{scheme}://{netloc}"
+
+
+def _console_origin() -> str:
+    """Console origin for the setup page's post-save link — last paired, else the default."""
+    return _LAST_PAIRING_ORIGIN or _DEFAULT_CONSOLE_ORIGIN
+
+
 def _start_relay_pairing(payload: RelayPairingPayload) -> None:
     from juris.web.auth import validate_tenant_id
+
+    global _LAST_PAIRING_ORIGIN  # noqa: PLW0603 - single-agent process, mirrors _RELAY_* module dicts
+    origin = _origin_from_relay_url(payload.relay_url)
+    if origin is not None:
+        _LAST_PAIRING_ORIGIN = origin
 
     tenant_id = validate_tenant_id(payload.tenant_id)
     previous_stop = _RELAY_STOP_EVENTS.get(tenant_id)
@@ -230,8 +259,12 @@ def _require_non_blank_secret(value: str, label: str) -> str:
     return value
 
 
-def configure_local_credentials(payload: AgentCredentialsPayload) -> None:
-    """Persist local credentials in the agent's secure local store."""
+def configure_local_credentials(payload: AgentCredentialsPayload) -> str:
+    """Persist local credentials in the agent's secure local store.
+
+    Returns:
+        The normalized CPF that was just saved.
+    """
     from juris.core.credentials import store_credential
 
     cpf = _normalize_cpf_for_storage(payload.cpf)
@@ -243,6 +276,53 @@ def configure_local_credentials(payload: AgentCredentialsPayload) -> None:
     store_credential(f"mni_{tribunal}_{cpf}", senha)
     store_credential("token_pin", pin)
     logger.info("agent_credentials_configured", tribunal=tribunal)
+    return cpf
+
+
+def _trigger_first_sync(cpf: str) -> bool:
+    """Fire off the agent's first sync right after credentials are saved.
+
+    Reuses the exact path ``juris connect`` / ``POST /api/connect`` already use —
+    :func:`juris.jobs.connect.run_connect` — with no ``mni_service`` override, so it
+    resolves in-process here at the agent (co-located: this machine holds the token).
+
+    Runs in a daemon thread: the credentials POST must never wait on, or fail
+    because of, the sync. Returns whether the background sync was actually
+    started; ``False`` (never an exception) means the lawyer still has the
+    console's "Conectar / sincronizar" to retry manually.
+    """
+    from juris.core.credentials import get_credential
+    from juris.mni.tribunais import get_tribunal
+
+    try:
+        tribunal = _normalize_tribunal_for_storage(get_credential("agent_tribunal") or "tjmg")
+        tribunal_cfg = get_tribunal(tribunal)
+    except (ValueError, KeyError):
+        return False
+    if not tribunal_cfg.requires_mtls:
+        return False
+    senha = get_credential(f"mni_{tribunal}_{cpf}")
+    pin = get_credential("token_pin")
+    if not senha or not pin:
+        return False
+
+    def _run_first_sync() -> None:
+        import asyncio
+
+        from juris.jobs.connect import run_connect
+
+        try:
+            asyncio.run(run_connect(tribunal_cfg, cpf, senha, token_pin=pin, do_sync=True))
+        except Exception as exc:  # noqa: BLE001 - best-effort first sync; a failure here must never surface to the save
+            logger.warning(
+                "agent_first_sync_failed",
+                tribunal=tribunal,
+                error=safe_error_text(exc),
+                exception_type=exc.__class__.__name__,
+            )
+
+    threading.Thread(target=_run_first_sync, name="causia-first-sync", daemon=True).start()
+    return True
 
 
 def local_credentials_configured() -> bool:
@@ -268,8 +348,14 @@ async def _credentials_payload_from_request(request: Request) -> AgentCredential
         raise HTTPException(status_code=400, detail="Informe CPF, senha PJe e PIN do token.") from exc
 
 
-def _local_setup_html() -> str:
-    return """<!doctype html>
+def _local_setup_html(console_origin: str = _DEFAULT_CONSOLE_ORIGIN) -> str:
+    # A plain (non-f) template: the CSS block below is full of literal `{`/`}`, so a
+    # single placeholder token is substituted afterwards instead of f-string-escaping
+    # every brace in the stylesheet.
+    return _LOCAL_SETUP_HTML_TEMPLATE.replace("__CONSOLE_ORIGIN_JSON__", json.dumps(console_origin))
+
+
+_LOCAL_SETUP_HTML_TEMPLATE = """<!doctype html>
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
@@ -328,6 +414,7 @@ def _local_setup_html() -> str:
     <p><a href="https://causia.com.br/">Voltar ao Causia</a></p>
   </main>
   <script>
+    const CONSOLE_ORIGIN = __CONSOLE_ORIGIN_JSON__;
     const form = document.querySelector("#credentials-form");
     const status = document.querySelector("#status");
     const tokenStatus = document.querySelector("#token-status");
@@ -397,10 +484,19 @@ def _local_setup_html() -> str:
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || "Falha ao salvar.");
-        form.reset();
-        form.tribunal.value = body.tribunal || "tjmg";
-        status.className = "ok";
-        status.textContent = data.message || "Credenciais salvas neste computador.";
+        const done = document.createElement("div");
+        const doneMessage = document.createElement("p");
+        doneMessage.className = "ok";
+        doneMessage.textContent =
+          "Credenciais salvas. Sincronizando seus processos — acompanhe no Causia (aba Acervo).";
+        const doneLink = document.createElement("p");
+        const consoleAnchor = document.createElement("a");
+        consoleAnchor.href = CONSOLE_ORIGIN;
+        consoleAnchor.textContent = "Abrir o Causia";
+        doneLink.appendChild(consoleAnchor);
+        done.appendChild(doneMessage);
+        done.appendChild(doneLink);
+        form.replaceWith(done);
       } catch (error) {
         status.className = "err";
         status.textContent = error.message;
@@ -435,7 +531,7 @@ async def local_setup_page(request: Request) -> HTMLResponse:
     """Local-only setup page for lawyer credentials."""
     _assert_local_setup_request(request)
     return HTMLResponse(
-        _local_setup_html(),
+        _local_setup_html(_console_origin()),
         headers={
             "Content-Security-Policy": (
                 "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; "
@@ -449,18 +545,36 @@ async def local_setup_page(request: Request) -> HTMLResponse:
 
 @app.post("/credentials")
 async def save_local_credentials(request: Request) -> Response:
-    """Save CPF/PJe/PIN locally through the local agent's browser page."""
+    """Save CPF/PJe/PIN locally through the local agent's browser page.
+
+    On success, fires the first sync automatically (best-effort) — the lawyer no
+    longer needs to go back to the console and click "Conectar / sincronizar".
+    """
     origin = _assert_credentials_request(request)
     payload = await _credentials_payload_from_request(request)
     try:
-        configure_local_credentials(payload)
+        cpf = configure_local_credentials(payload)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return Response(
-        '{"status":"ok","message":"Credenciais salvas no agente local."}',
-        media_type="application/json",
-        headers=_cors_headers(origin),
+
+    try:
+        sync_started = _trigger_first_sync(cpf)
+    except Exception as exc:  # noqa: BLE001 - the trigger call itself must never fail the already-persisted save
+        logger.warning(
+            "agent_first_sync_failed",
+            error=safe_error_text(exc),
+            exception_type=exc.__class__.__name__,
+        )
+        sync_started = False
+
+    body = json.dumps(
+        {
+            "status": "ok",
+            "message": "Credenciais salvas no agente local.",
+            "sync": "started" if sync_started else "skipped",
+        }
     )
+    return Response(body, media_type="application/json", headers=_cors_headers(origin))
 
 
 @app.options("/credentials")

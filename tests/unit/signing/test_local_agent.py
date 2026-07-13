@@ -222,6 +222,7 @@ def test_local_credentials_are_stored_from_causia_page(monkeypatch) -> None:
 
     stored: dict[str, str] = {}
     monkeypatch.setattr(credentials, "store_credential", lambda key, value: stored.__setitem__(key, value))
+    monkeypatch.setattr(local_agent, "_trigger_first_sync", lambda cpf: True)  # unrelated to storage
     client = TestClient(app, client=("127.0.0.1", 50000))
 
     response = client.post(
@@ -647,3 +648,169 @@ def test_ws_sign_allows_loopback_origin(monkeypatch):
         req = SignRequest(request_id="lo-1", pdf_bytes_b64=base64.b64encode(b"PDF").decode())
         ws.send_text(req.model_dump_json())
         assert SignResponse.model_validate_json(ws.receive_text()).success is True
+
+
+# --- First sync after credentials save (task 3, onboarding token-first) ---
+
+
+def test_credentials_post_triggers_first_sync(monkeypatch) -> None:
+    """Saving credentials fires the first sync automatically — no console click needed."""
+    import juris.core.credentials as credentials
+
+    monkeypatch.setattr(credentials, "store_credential", lambda key, value: None)
+    calls: list[str] = []
+    monkeypatch.setattr(local_agent, "_trigger_first_sync", lambda cpf: calls.append(cpf) or True)
+    client = _local_client()
+
+    response = client.post(
+        "/credentials",
+        headers={"origin": "https://causia.com.br"},
+        json={"cpf": "076.710.396-32", "senha": "senha-pje", "pin": "1234", "tribunal": "TJMG"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["sync"] == "started"
+    assert calls == ["07671039632"]  # called once, with the normalized CPF that was just saved
+
+
+def test_credentials_post_first_sync_failure_does_not_fail_save(monkeypatch) -> None:
+    """A broken sync trigger must never take down the (already persisted) credentials save."""
+    import juris.core.credentials as credentials
+
+    stored: dict[str, str] = {}
+    monkeypatch.setattr(credentials, "store_credential", lambda key, value: stored.__setitem__(key, value))
+
+    def _boom(cpf: str) -> bool:
+        msg = "sync trigger blew up"
+        raise RuntimeError(msg)
+
+    monkeypatch.setattr(local_agent, "_trigger_first_sync", _boom)
+    client = _local_client()
+
+    response = client.post(
+        "/credentials",
+        headers={"origin": "https://causia.com.br"},
+        json={"cpf": "076.710.396-32", "senha": "senha-pje", "pin": "1234", "tribunal": "TJMG"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    assert response.json()["sync"] == "skipped"
+    assert stored["agent_cpf"] == "07671039632"  # credentials persisted despite the trigger failure
+
+
+def test_trigger_first_sync_runs_connect_in_background(monkeypatch) -> None:
+    """``_trigger_first_sync`` reuses ``run_connect`` — the same path as ``juris connect``."""
+    import juris.core.credentials as credentials
+
+    values = {
+        "agent_tribunal": "tjmg",
+        "mni_tjmg_07671039632": "senha-pje",
+        "token_pin": "1234",
+    }
+    monkeypatch.setattr(credentials, "get_credential", lambda key: values.get(key))
+
+    called = threading.Event()
+    seen: dict[str, object] = {}
+
+    async def fake_run_connect(tribunal_cfg, cpf, senha, *, token_pin=None, **kwargs):  # noqa: ANN001, ANN003, ANN201
+        seen.update({"tribunal": tribunal_cfg.id, "cpf": cpf, "senha": senha, "pin": token_pin})
+        called.set()
+
+    monkeypatch.setattr("juris.jobs.connect.run_connect", fake_run_connect)
+
+    started = local_agent._trigger_first_sync("07671039632")
+
+    assert started is True
+    assert called.wait(timeout=1)
+    assert seen == {"tribunal": "tjmg", "cpf": "07671039632", "senha": "senha-pje", "pin": "1234"}
+
+
+def test_trigger_first_sync_skips_when_secrets_not_yet_stored(monkeypatch) -> None:
+    import juris.core.credentials as credentials
+
+    monkeypatch.setattr(credentials, "get_credential", lambda key: None)
+
+    assert local_agent._trigger_first_sync("07671039632") is False
+
+
+def test_trigger_first_sync_skips_for_non_mtls_tribunal(monkeypatch) -> None:
+    import juris.core.credentials as credentials
+
+    values = {"agent_tribunal": "tst", "mni_tst_07671039632": "senha-pje", "token_pin": "1234"}
+    monkeypatch.setattr(credentials, "get_credential", lambda key: values.get(key))
+
+    assert local_agent._trigger_first_sync("07671039632") is False
+
+
+def test_trigger_first_sync_logs_and_swallows_run_connect_failure(monkeypatch) -> None:
+    """A failing sync never propagates — it's logged as ``agent_first_sync_failed``."""
+    import juris.core.credentials as credentials
+
+    values = {
+        "agent_tribunal": "tjmg",
+        "mni_tjmg_07671039632": "senha-pje",
+        "token_pin": "1234",
+    }
+    monkeypatch.setattr(credentials, "get_credential", lambda key: values.get(key))
+    capture = _CaptureLogger()
+    monkeypatch.setattr(local_agent, "logger", capture)
+    done = threading.Event()
+
+    async def fake_run_connect(*args, **kwargs):  # noqa: ANN002, ANN003, ANN201
+        raise RuntimeError("MNI indisponível")
+
+    monkeypatch.setattr("juris.jobs.connect.run_connect", fake_run_connect)
+    original_thread = threading.Thread
+
+    def _tracking_thread(*args, **kwargs):  # noqa: ANN002, ANN003, ANN201
+        target = kwargs.get("target")
+
+        def _wrapped() -> None:
+            target()
+            done.set()
+
+        kwargs["target"] = _wrapped
+        return original_thread(*args, **kwargs)
+
+    monkeypatch.setattr(threading, "Thread", _tracking_thread)
+
+    started = local_agent._trigger_first_sync("07671039632")
+
+    assert started is True
+    assert done.wait(timeout=1)
+    assert capture.events
+    event, kwargs = capture.events[0]
+    assert event == "agent_first_sync_failed"
+    assert kwargs["tribunal"] == "tjmg"
+
+
+def test_setup_page_defaults_console_link_to_causia(monkeypatch) -> None:
+    monkeypatch.setattr(local_agent, "_LAST_PAIRING_ORIGIN", None)
+    client = _local_client()
+
+    html = client.get("/setup").text
+
+    assert '"https://causia.com.br"' in html
+
+
+def test_setup_page_links_to_paired_console_origin(monkeypatch) -> None:
+    """After the browser pairs the agent, the post-save link points at that same console."""
+    monkeypatch.setattr(local_agent, "_LAST_PAIRING_ORIGIN", None)
+    monkeypatch.setattr(local_agent, "run_relay_agent_forever", lambda *a, **k: None)  # noqa: ANN002, ANN003
+    client = TestClient(app, client=("127.0.0.1", 50000))
+
+    pair_response = client.post(
+        "/pair-relay",
+        headers={"origin": "https://causia.com.br", "host": "127.0.0.1:8765"},
+        json={
+            "relay_url": "wss://trial-abc.causia.com.br/ws/agent-relay",
+            "tenant_id": "trial_abc123",
+            "agent_token": "relay-token",
+        },
+    )
+    assert pair_response.status_code == 202
+
+    html = client.get("/setup", headers={"host": "127.0.0.1:8765"}).text
+
+    assert '"https://trial-abc.causia.com.br"' in html
