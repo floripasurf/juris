@@ -116,6 +116,18 @@ def test_index_acervo_guide_leads_with_download() -> None:
     assert "first-access-guide" in text
 
 
+def test_index_contratar_modal_pricing_and_whatsapp() -> None:
+    text = client.get("/").text
+    assert 'id="contratar-modal"' in text
+    assert "R$ 200/mês" in text
+    assert "sem cartão de" in text
+    assert "OAB" in text
+    assert "wa.me/5531983660586" in text
+    # o chip Contratar deixa de ser mailto direto: vira botão que abre o modal
+    assert '<button type="button" id="trial-status"' in text
+    assert "Falar com a equipe (WhatsApp)" in text
+
+
 def test_index_mesa_card_is_honest_about_degraded_runs() -> None:
     text = client.get("/").text
     assert "Minuta não gerada — " in text

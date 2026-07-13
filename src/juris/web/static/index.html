@@ -35,6 +35,10 @@
       --focus: 0 0 0 3px rgba(122, 35, 52, 0.16);
     }
     * { box-sizing: border-box; }
+    .contratar-actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+    .contratar-actions a { display: inline-block; padding: 11px 16px; border-radius: 6px; text-decoration: none; font-weight: 700; }
+    .contratar-actions .primary { background: var(--brand); color: #fff; }
+    .contratar-actions .secondary { border: 1px solid var(--line-2); color: var(--ink); }
     .visually-hidden {
       position: absolute;
       width: 1px;
@@ -1242,6 +1246,11 @@
           <p>Tempo suficiente para testar com rotina real, revisar minutas e medir ganho operacional.</p>
         </div>
         <div class="landing-feature">
+          <strong>Depois do teste: R$ 200/mês</strong>
+          <p>Por escritório, com tudo incluído. O primeiro mês é o teste grátis — sem cartão de crédito;
+            a elegibilidade é conferida pela OAB na contratação.</p>
+        </div>
+        <div class="landing-feature">
           <strong>Privacidade por desenho</strong>
           <p>Credenciais nunca ficam armazenadas em nossos servidores. Dados de processo ficam isolados por escritório e são apagados automaticamente, com certificado, ao fim do teste — ou antes, a seu pedido.</p>
         </div>
@@ -1253,7 +1262,7 @@
         <p>IA jurídica privada para escritórios brasileiros.</p>
       </div>
       <nav class="landing-footer-links" aria-label="Contato e documentos">
-        <a href="mailto:lages.raphael@gmail.com?subject=Contato%20Causia">Falar com a equipe</a>
+        <a href="https://wa.me/5531983660586?text=Ol%C3%A1%2C%20quero%20falar%20sobre%20o%20Causia." target="_blank" rel="noopener">Falar com a equipe (WhatsApp)</a>
         <a href="/static/termos.html">Termos de uso</a>
         <a href="/static/privacidade.html">Privacidade</a>
       </nav>
@@ -1286,8 +1295,7 @@
       <button type="button" data-nav="acessos">Acessos</button>
     </nav>
     <div class="header-actions">
-      <a id="trial-status" class="trial-pill" role="status" aria-live="polite" hidden
-         href="mailto:lages.raphael@gmail.com?subject=Quero%20contratar%20o%20Causia&body=Ol%C3%A1%2C%20estou%20testando%20o%20Causia%20e%20gostaria%20de%20conversar%20sobre%20contratar."></a>
+      <button type="button" id="trial-status" class="trial-pill" role="status" aria-live="polite" hidden></button>
       <button type="button" id="run-indicator" class="run-indicator" role="status" aria-live="polite" hidden></button>
       <div class="status" id="ai-session" role="status" aria-live="polite" title="Modo de IA e proteção de dados">IA: …</div>
       <button type="button" id="logout-button" class="header-logout">Sair</button>
@@ -1757,6 +1765,24 @@
     </div>
   </div>
 
+  <div id="contratar-modal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="contratar-title">
+    <div class="modal-card">
+      <button type="button" class="modal-close" id="contratar-close" aria-label="Fechar">×</button>
+      <h2 id="contratar-title">Contratar o Causia</h2>
+      <p class="lede"><strong>R$ 200/mês por escritório.</strong> O primeiro mês é o teste grátis — sem cartão de
+        crédito. A elegibilidade do mês grátis é conferida pela OAB do(a) advogado(a) na contratação.</p>
+      <ul class="detail-prazos">
+        <li>Mesa de trabalho com acervo, prazos e agenda sempre atualizados</li>
+        <li>Minutas com citações verificadas contra o corpus</li>
+        <li>Protocolo controlado, com revisão e consentimento explícitos</li>
+      </ul>
+      <div class="contratar-actions">
+        <a class="primary" id="contratar-whatsapp" href="https://wa.me/5531983660586?text=Ol%C3%A1%2C%20quero%20contratar%20o%20Causia." target="_blank" rel="noopener">Chamar no WhatsApp</a>
+        <a class="secondary" id="contratar-email" href="mailto:lages.raphael@gmail.com?subject=Quero%20contratar%20o%20Causia&body=Ol%C3%A1%2C%20estou%20testando%20o%20Causia%20e%20gostaria%20de%20conversar%20sobre%20contratar.">Enviar e-mail</a>
+      </div>
+    </div>
+  </div>
+
   <div id="proc-modal" class="modal" hidden role="dialog" aria-modal="true" aria-label="Detalhe do processo">
     <div class="modal-card">
       <button type="button" class="modal-close" aria-label="Fechar">×</button>
@@ -1783,6 +1809,22 @@
     const agentCredentialsForm = document.querySelector("#agent-credentials-form");
     const agentCredentialsStatus = document.querySelector("#agent-credentials-status");
     const agentCredentialsCancel = document.querySelector("#agent-credentials-cancel");
+    const contratarModal = document.querySelector("#contratar-modal");
+    const trialPillEl = document.querySelector("#trial-status");
+    if (trialPillEl && contratarModal) {
+      const contratarClose = contratarModal.querySelector("#contratar-close");
+      trialPillEl.addEventListener("click", () => {
+        contratarModal.hidden = false;
+        contratarClose.focus();
+      });
+      contratarClose.addEventListener("click", () => { contratarModal.hidden = true; });
+      contratarModal.addEventListener("click", (event) => {
+        if (event.target === contratarModal) contratarModal.hidden = true;
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && !contratarModal.hidden) contratarModal.hidden = true;
+      });
+    }
     const loginOverlay = document.querySelector("#login-overlay");
     const loginForm = document.querySelector("#login-form");
     const loginInput = document.querySelector("#login-api-key");
