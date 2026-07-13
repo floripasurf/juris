@@ -448,6 +448,28 @@
     .trial-pill:hover { border-color: var(--brand); }
     .trial-pill.urgent { background: var(--warn-bg); border-color: var(--warn-line); color: var(--warn); }
     .trial-pill[hidden] { display: none; }
+    .run-indicator {
+      width: auto;
+      margin: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 11px;
+      border-radius: 999px;
+      border: 1px solid var(--line-2);
+      background: var(--panel);
+      color: var(--ink-2);
+      font-family: var(--sans);
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .run-indicator:hover { border-color: var(--brand); background: var(--panel-soft); }
+    .run-indicator.running { background: var(--brand-tint); border-color: var(--brand); color: var(--brand-dark); cursor: default; }
+    .run-indicator.done { background: var(--ok-bg); border-color: var(--ok-line); color: var(--ok); }
+    .run-indicator.error { background: var(--danger-bg); border-color: var(--danger-line); color: var(--danger); }
+    .run-indicator[hidden] { display: none; }
     .header-actions {
       margin-left: auto;
       display: flex;
@@ -1248,6 +1270,7 @@
     <div class="header-actions">
       <a id="trial-status" class="trial-pill" role="status" aria-live="polite" hidden
          href="mailto:lages.raphael@gmail.com?subject=Quero%20contratar%20o%20Causia&body=Ol%C3%A1%2C%20estou%20testando%20o%20Causia%20e%20gostaria%20de%20conversar%20sobre%20contratar."></a>
+      <button type="button" id="run-indicator" class="run-indicator" role="status" aria-live="polite" hidden></button>
       <div class="status" id="ai-session" role="status" aria-live="polite" title="Modo de IA e proteção de dados">IA: …</div>
       <button type="button" id="logout-button" class="header-logout">Sair</button>
     </div>
@@ -1940,6 +1963,76 @@
     const estrategiaEl = document.querySelector("#estrategia");
     const workbenchEl = document.querySelector("#workbench");
 
+    // Run persistente entre abas: guardado só em memória (variável de módulo) —
+    // morre com o reload/fechamento da aba de propósito, não usa sessionStorage.
+    const runIndicatorEl = document.querySelector("#run-indicator");
+    let activeRun = null; // { status: 'running'|'done'|'error', startedAt, cnj, resultData, errorMessage }
+    let runIndicatorTimerId = null;
+
+    function formatElapsed(ms) {
+      const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+      const m = Math.floor(totalSeconds / 60);
+      const s = totalSeconds % 60;
+      return `${m}:${String(s).padStart(2, "0")}`;
+    }
+
+    function renderRunIndicator() {
+      if (!runIndicatorEl) return;
+      if (!activeRun) {
+        runIndicatorEl.hidden = true;
+        runIndicatorEl.className = "run-indicator";
+        return;
+      }
+      runIndicatorEl.hidden = false;
+      runIndicatorEl.className = `run-indicator ${activeRun.status}`;
+      if (activeRun.status === "running") {
+        runIndicatorEl.textContent = `⏳ Gerando (${formatElapsed(Date.now() - activeRun.startedAt)})`;
+        runIndicatorEl.title = "Gerando minuta — pode levar alguns minutos";
+      } else if (activeRun.status === "done") {
+        runIndicatorEl.textContent = "✓ Resultado pronto — Ver resultado";
+        runIndicatorEl.title = "Clique para ver o resultado";
+      } else if (activeRun.status === "error") {
+        runIndicatorEl.textContent = "⚠ Falha na geração — Ver detalhes";
+        runIndicatorEl.title = "Clique para ver os detalhes da falha";
+      }
+    }
+
+    function stopRunIndicatorTimer() {
+      if (runIndicatorTimerId) {
+        clearInterval(runIndicatorTimerId);
+        runIndicatorTimerId = null;
+      }
+    }
+
+    function startRunIndicatorTimer() {
+      stopRunIndicatorTimer();
+      runIndicatorTimerId = setInterval(renderRunIndicator, 1000);
+    }
+
+    // Re-renderiza o painel de resultado a partir do cache de activeRun — nunca
+    // re-dispara o POST (que já rodou uma vez, de forma síncrona, no submit).
+    function restoreRunPanelFromCache() {
+      if (!activeRun) return;
+      if (activeRun.status === "done" && activeRun.resultData) {
+        renderRun(activeRun.resultData);
+      } else if (activeRun.status === "error") {
+        notice.textContent = activeRun.errorMessage || "A execução não foi concluída.";
+        notice.className = "notice error";
+        notice.hidden = false;
+        titleEl.textContent = "Falha";
+        summaryEl.textContent = "A execução não foi concluída.";
+        artifactsEl.className = "empty";
+        artifactsEl.textContent = "Ajuste os dados ou o provedor LLM e tente novamente.";
+      }
+    }
+
+    if (runIndicatorEl) {
+      runIndicatorEl.addEventListener("click", () => {
+        showView("caso");
+        restoreRunPanelFromCache();
+      });
+    }
+
     const CONF_LABEL = { alta: "Confiança alta", media: "Confiança média", baixa: "Confiança baixa" };
 
     function renderEstrategia(est) {
@@ -2279,7 +2372,12 @@
       });
     }
     document.querySelectorAll("#nav button").forEach((b) => {
-      b.addEventListener("click", () => showView(b.dataset.nav));
+      b.addEventListener("click", () => {
+        showView(b.dataset.nav);
+        // Reentrar em "Novo caso" repinta o painel a partir do cache do run —
+        // nunca re-dispara o POST.
+        if (b.dataset.nav === "caso") restoreRunPanelFromCache();
+      });
     });
     // Internal telemetry ("Registro do piloto") stays out of the lawyer's task menu.
     // Reveal it only for the team: ?admin=1 (persisted) exposes the tab.
@@ -2568,7 +2666,7 @@
       notice.hidden = true;
       submit.disabled = true;
       submit.textContent = "Gerando...";
-      summaryEl.textContent = "Executando pipeline local.";
+      summaryEl.textContent = "Gerando minuta — pode levar alguns minutos.";
       artifactsEl.className = "empty";
       artifactsEl.textContent = "Processando...";
 
@@ -2588,6 +2686,10 @@
         payload.cpf = document.querySelector("#nc_cpf").value.trim() || null;
       }
 
+      activeRun = { status: "running", startedAt: Date.now(), cnj: payload.numero_cnj, resultData: null, errorMessage: null };
+      renderRunIndicator();
+      startRunIndicatorTimer();
+
       try {
         const response = await apiFetch("/api/demo-runs", {
           method: "POST",
@@ -2597,6 +2699,7 @@
         const data = await response.json();
         if (!response.ok) throw new Error(apiErrorMessage(data, "Falha desconhecida"));
         renderRun(data);
+        activeRun = { ...activeRun, status: "done", resultData: data };
       } catch (error) {
         notice.textContent = error.message;
         notice.className = "notice error";
@@ -2605,9 +2708,14 @@
         summaryEl.textContent = "A execução não foi concluída.";
         artifactsEl.className = "empty";
         artifactsEl.textContent = "Ajuste os dados ou o provedor LLM e tente novamente.";
+        activeRun = { ...activeRun, status: "error", errorMessage: error.message };
       } finally {
         submit.disabled = false;
         submit.textContent = "Gerar artefatos";
+        // Atualiza o chip mesmo se o usuário estiver noutra aba (o finally roda
+        // independente da view visível — o chip vive no header, sempre no DOM).
+        stopRunIndicatorTimer();
+        renderRunIndicator();
       }
     });
 

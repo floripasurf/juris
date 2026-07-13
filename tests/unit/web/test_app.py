@@ -1379,6 +1379,13 @@ def test_index_renders_ai_session_badge() -> None:
     assert "loadAiSession" in text
 
 
+def test_index_renders_run_indicator_chip() -> None:
+    text = client.get("/").text
+    assert 'id="run-indicator"' in text
+    assert "Gerando minuta — pode levar alguns minutos" in text
+    assert "Ver resultado" in text
+
+
 def test_connect_remote_mode_accepts_no_pin_or_senha(monkeypatch) -> None:
     app_module = importlib.import_module("juris.web.app")
     from juris.jobs.connect import ConnectResult
