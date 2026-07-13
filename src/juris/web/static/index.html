@@ -1247,8 +1247,8 @@
         </div>
         <div class="landing-feature">
           <strong>Depois do teste: R$ 200/mês</strong>
-          <p>Por escritório, com tudo incluído. O primeiro mês é o teste grátis — sem cartão de crédito;
-            a elegibilidade é conferida pela OAB na contratação.</p>
+          <p>Por escritório, com tudo incluído. O primeiro mês — os 30 dias do teste — é grátis, sem cartão
+            de crédito; a elegibilidade é conferida pela OAB na contratação.</p>
         </div>
         <div class="landing-feature">
           <strong>Privacidade por desenho</strong>
@@ -1769,7 +1769,7 @@
     <div class="modal-card">
       <button type="button" class="modal-close" id="contratar-close" aria-label="Fechar">×</button>
       <h2 id="contratar-title">Contratar o Causia</h2>
-      <p class="lede"><strong>R$ 200/mês por escritório.</strong> O primeiro mês é o teste grátis — sem cartão de
+      <p class="lede"><strong>R$ 200/mês por escritório.</strong> O primeiro mês — os 30 dias do teste — é grátis, sem cartão de
         crédito. A elegibilidade do mês grátis é conferida pela OAB do(a) advogado(a) na contratação.</p>
       <ul class="detail-prazos">
         <li>Mesa de trabalho com acervo, prazos e agenda sempre atualizados</li>
@@ -1822,7 +1822,15 @@
         if (event.target === contratarModal) contratarModal.hidden = true;
       });
       document.addEventListener("keydown", (event) => {
-        if (event.key === "Escape" && !contratarModal.hidden) contratarModal.hidden = true;
+        if (contratarModal.hidden) return;
+        if (event.key === "Escape") { contratarModal.hidden = true; return; }
+        if (event.key !== "Tab") return;
+        const focusables = contratarModal.querySelectorAll('button, a[href], [tabindex]:not([tabindex="-1"])');
+        if (!focusables.length) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
       });
     }
     const loginOverlay = document.querySelector("#login-overlay");
@@ -2970,7 +2978,8 @@
 
       renderGrounding(data.grounding);
       renderEstrategia(data.estrategia);
-      renderReview(data.review);
+      if (data.degraded) reviewEl.innerHTML = "";
+      else renderReview(data.review);
       loadWorkbench();
 
       if (!data.artifacts.length) {
