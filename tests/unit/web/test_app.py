@@ -97,6 +97,22 @@ def test_index_renders_local_ui() -> None:
     assert "escHtml" in response.text  # untrusted data escaped before innerHTML (XSS)
 
 
+def test_index_acervo_guide_leads_with_download() -> None:
+    response = client.get("/")
+
+    assert response.status_code == 200
+    text = response.text
+    assert 'id="agent-cta"' in text
+    assert "Baixar o Causia Agent" in text
+    assert "Ainda não instalou?" not in text  # download moved into step 1, no longer buried
+    # Step 1 (download) must precede step 2 (credentials) in document order.
+    step1 = text.index("Baixar e abrir o Causia Agent")
+    step2 = text.index("Espete o token")
+    assert step1 < step2
+    assert "processosCache.length" in text
+    assert "first-access-guide" in text
+
+
 def test_list_processos_endpoint_returns_views(monkeypatch) -> None:
     import juris.web.processos_service as ps
     from juris.web.processos_service import ProcessoView

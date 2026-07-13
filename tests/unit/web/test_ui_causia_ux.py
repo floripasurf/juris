@@ -118,8 +118,8 @@ class TestConversionAndPromise:
         assert 'id="first-access-connect"' in _INDEX_HTML
         assert 'id="c_seed"' in _INDEX_HTML
         assert "Primeiro acesso: siga nesta ordem" in _INDEX_HTML
-        assert "Abra o Causia Agent" in _INDEX_HTML
-        assert "Informe CPF, senha PJe e PIN" in _INDEX_HTML
+        assert "Baixar e abrir o Causia Agent" in _INDEX_HTML
+        assert "Espete o token e abra o agente" in _INDEX_HTML
         assert "Sincronize seus processos" in _INDEX_HTML
         assert "Salvar e sincronizar" in _INDEX_HTML
         assert "Atualizar credenciais" in _INDEX_HTML
@@ -156,7 +156,7 @@ class TestConversionAndPromise:
         assert pin_tag is not None and "hidden" in pin_tag.group(0), pin_tag
 
     def test_console_offers_agent_download(self) -> None:
-        assert "Baixar o agente" in _INDEX_HTML
+        assert "Baixar o Causia Agent" in _INDEX_HTML
         assert "CausiaAgente.dmg" in _INDEX_HTML or "agent/download" in _INDEX_HTML
 
 

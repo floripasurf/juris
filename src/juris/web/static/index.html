@@ -832,6 +832,20 @@
     .first-access-step strong { display: block; color: var(--ink); font-size: 13px; }
     .first-access-step p { margin: 4px 0 10px; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
     .first-access-step button { width: auto; margin: 0; padding: 7px 11px; font-size: 12.5px; }
+    .primary-cta {
+      display: inline-block;
+      border: 1px solid var(--brand);
+      border-radius: 4px;
+      background: var(--brand);
+      color: #fff;
+      font-family: var(--sans);
+      font-weight: 600;
+      font-size: 12.5px;
+      text-decoration: none;
+      padding: 7px 11px;
+    }
+    .primary-cta:hover { background: var(--brand-dark); border-color: var(--brand-dark); }
+    .first-access-step .field-note { margin: 8px 0 0; }
     .connect-seed {
       flex: 1 0 100%;
       margin-top: 4px;
@@ -1257,15 +1271,21 @@
           <li class="first-access-step">
             <span class="step-number" aria-hidden="true">1</span>
             <div>
-              <strong>Abra o Causia Agent</strong>
-              <p>Deixe o aplicativo local aberto e o token A3 conectado antes de sincronizar.</p>
+              <strong>Baixar e abrir o Causia Agent</strong>
+              <p>Instale o aplicativo local e deixe-o aberto com o token A3 conectado.</p>
+              <a id="agent-cta" class="primary-cta" href="#" target="_blank" rel="noopener">Baixar o Causia Agent</a>
+              <p class="field-note">
+                <a id="agent-download-mac" href="#" target="_blank" rel="noopener">macOS</a>
+                · <a id="agent-download-win" href="#" target="_blank" rel="noopener">Windows</a>
+                <span id="agent-latest-version" class="muted"></span>
+              </p>
             </div>
           </li>
           <li class="first-access-step">
             <span class="step-number" aria-hidden="true">2</span>
             <div>
-              <strong>Informe CPF, senha PJe e PIN</strong>
-              <p>Essas credenciais são salvas no agente local deste computador para conectar com o PJe.</p>
+              <strong>Espete o token e abra o agente</strong>
+              <p>O CPF é lido do certificado — você só informa PIN do token e senha do PJe, ali no agente local.</p>
               <button id="first-access-credentials" class="ghost" type="button">Atualizar credenciais</button>
             </div>
           </li>
@@ -1273,8 +1293,8 @@
             <span class="step-number" aria-hidden="true">3</span>
             <div>
               <strong>Sincronize seus processos</strong>
-              <p>Depois importe avisos pendentes ou informe CNJs para acompanhar processos específicos.</p>
-              <button id="first-access-connect" type="button">Conectar / sincronizar</button>
+              <p>A primeira sincronização acontece sozinha ao salvar as credenciais no agente. Depois, use este botão quando quiser atualizar de novo.</p>
+              <button id="first-access-connect" type="button">Sincronizar novamente</button>
             </div>
           </li>
         </ol>
@@ -1293,11 +1313,6 @@
         </details>
       </form>
       <p id="connect-note" class="field-note">O PIN é usado só para assinar no seu computador e não é armazenado.</p>
-      <p class="field-note">
-        Ainda não instalou? <a id="agent-download-mac" href="#" target="_blank" rel="noopener">Baixar o agente (macOS)</a>
-        · <a id="agent-download-win" href="#" target="_blank" rel="noopener">Windows</a>
-        <span id="agent-latest-version" class="muted"></span>
-      </p>
       <div class="list-tools">
         <input id="processos-filter" placeholder="Filtrar CNJ, classe ou assunto" autocomplete="off" />
         <select id="processos-sort">
@@ -2510,8 +2525,11 @@
     }
     async function loadAgentDownload() {
       const REL = "https://github.com/floripasurf/juris/releases/latest/download";
+      const cta = document.querySelector("#agent-cta");
       const mac = document.querySelector("#agent-download-mac");
       const win = document.querySelector("#agent-download-win");
+      const isMac = /Mac|iPhone|iPod|iPad/i.test(navigator.platform || navigator.userAgent || "");
+      if (cta) cta.href = `${REL}/${isMac ? "CausiaAgente.dmg" : "CausiaAgente-win.zip"}`;
       if (mac) mac.href = `${REL}/CausiaAgente.dmg`;
       if (win) win.href = `${REL}/CausiaAgente-win.zip`;
       try {
@@ -2688,7 +2706,13 @@
     const processosEl = document.querySelector("#processos");
     const processosFilter = document.querySelector("#processos-filter");
     const processosSort = document.querySelector("#processos-sort");
+    const firstAccessGuide = document.querySelector(".first-access-guide");
     let processosCache = [];
+
+    // The guide only helps first-time setup; once the acervo has processes, hide it.
+    function updateFirstAccessGuideVisibility() {
+      if (firstAccessGuide) firstAccessGuide.hidden = processosCache.length > 0;
+    }
 
     const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString("pt-BR") : "—");
 
@@ -3095,6 +3119,7 @@
         const response = await apiFetch("/api/processos");
         const data = await response.json();
         processosCache = data.processos || [];
+        updateFirstAccessGuideVisibility();
         renderProcessos(filteredProcessos());
       } catch (error) {
         processosEl.className = "proc-empty";
