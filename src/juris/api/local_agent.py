@@ -425,6 +425,12 @@ _LOCAL_SETUP_HTML_TEMPLATE = """<!doctype html>
       "Conecte o token A3 nesta máquina e recarregue a página. Sem o token, informe o CPF manualmente.";
     const CPF_UNREADABLE_MESSAGE =
       "Token detectado, mas não foi possível ler o CPF do certificado — informe manualmente.";
+    const SYNC_STARTED_MESSAGE =
+      "Credenciais salvas. Sincronizando seus processos — acompanhe no Causia (aba Acervo).";
+    const SYNC_SKIPPED_MESSAGE =
+      "Credenciais salvas. A sincronização automática não está disponível para este tribunal " +
+      "— use 'Conectar / sincronizar' na aba Acervo do Causia.";
+    const submitButton = form.querySelector("button");
 
     function hideCpfWarning() {
       cpfWarning.hidden = true;
@@ -475,6 +481,7 @@ _LOCAL_SETUP_HTML_TEMPLATE = """<!doctype html>
       event.preventDefault();
       status.className = "";
       status.textContent = "Salvando...";
+      submitButton.disabled = true;
       const body = Object.fromEntries(new FormData(form).entries());
       try {
         const response = await fetch("/credentials", {
@@ -488,7 +495,7 @@ _LOCAL_SETUP_HTML_TEMPLATE = """<!doctype html>
         const doneMessage = document.createElement("p");
         doneMessage.className = "ok";
         doneMessage.textContent =
-          "Credenciais salvas. Sincronizando seus processos — acompanhe no Causia (aba Acervo).";
+          data.sync === "started" ? SYNC_STARTED_MESSAGE : SYNC_SKIPPED_MESSAGE;
         const doneLink = document.createElement("p");
         const consoleAnchor = document.createElement("a");
         consoleAnchor.href = CONSOLE_ORIGIN;
@@ -500,6 +507,7 @@ _LOCAL_SETUP_HTML_TEMPLATE = """<!doctype html>
       } catch (error) {
         status.className = "err";
         status.textContent = error.message;
+        submitButton.disabled = false;
       }
     });
   </script>

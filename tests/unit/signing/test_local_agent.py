@@ -814,3 +814,19 @@ def test_setup_page_links_to_paired_console_origin(monkeypatch) -> None:
     html = client.get("/setup", headers={"host": "127.0.0.1:8765"}).text
 
     assert '"https://trial-abc.causia.com.br"' in html
+
+
+def test_setup_page_branches_success_message_on_sync_status() -> None:
+    """The post-save copy must not claim "sincronizando" when the sync was skipped.
+
+    ``/credentials`` reports ``data.sync`` as either "started" or "skipped" (e.g. every
+    non-mTLS tribunal always skips). The setup page's JS must read that field and show
+    the matching copy instead of unconditionally claiming a sync is underway.
+    """
+    client = _local_client()
+
+    html = client.get("/setup").text
+
+    assert "Sincronizando seus processos" in html  # copy for data.sync === "started"
+    assert "não está disponível para este tribunal" in html  # copy for skipped/absent
+    assert 'data.sync === "started" ? SYNC_STARTED_MESSAGE : SYNC_SKIPPED_MESSAGE' in html
