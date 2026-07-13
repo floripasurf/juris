@@ -185,6 +185,38 @@ def test_setup_page_prefill_token_first() -> None:
     assert 'name="cpf"' in html  # campo continua existindo (readonly qdo detectado)
 
 
+def test_setup_page_keeps_cpf_editable_when_token_connected_without_cpf(monkeypatch) -> None:
+    """e-CNPJ or an unrecognized subject: token connects but CPF can't be parsed.
+
+    The page must not lock the (empty) CPF field read-only — that would combine
+    with the ``required`` attribute to make the form unsubmittable. The client-side
+    JS isn't executed by TestClient, so the pin here is that the guarded branch
+    and its new warning copy are present in the served markup/script.
+    """
+
+    class FakeStatus:
+        connected = True
+        cert_valid_until = "2027-01-01"
+        subject = "CN=EMPRESA LTDA,OU=e-CNPJ"
+        cpf = None
+
+    client = _local_client()
+    monkeypatch.setattr(local_agent, "_default_token_probe", lambda: FakeStatus())
+
+    token_info = client.get("/token-info").json()
+    assert token_info == {
+        "connected": True,
+        "cpf": None,
+        "titular": "EMPRESA LTDA",  # CN still parses; only the CPF suffix is absent
+        "cert_valid_until": "2027-01-01",
+    }
+
+    html = client.get("/setup").text
+    assert "não foi possível ler o CPF do certificado" in html  # new banner copy
+    assert "if (data.cpf)" in html  # readOnly only set when CPF was actually read
+    assert 'id="cpf-warning"' in html
+
+
 def test_local_credentials_are_stored_from_causia_page(monkeypatch) -> None:
     import juris.core.credentials as credentials
 

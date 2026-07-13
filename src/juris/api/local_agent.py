@@ -318,6 +318,7 @@ def _local_setup_html() -> str:
       <label>CPF do advogado
         <input name="cpf" inputmode="numeric" autocomplete="username" required />
       </label>
+      <p id="cpf-warning" class="warn" role="status" aria-live="polite" hidden></p>
       <label>Tribunal
         <input name="tribunal" value="tjmg" autocomplete="off" required />
       </label>
@@ -332,8 +333,16 @@ def _local_setup_html() -> str:
     const tokenStatus = document.querySelector("#token-status");
     const cpfInput = form.cpf;
     const pinInput = form.pin;
+    const cpfWarning = document.querySelector("#cpf-warning");
     const TOKEN_ABSENT_MESSAGE =
       "Conecte o token A3 nesta máquina e recarregue a página. Sem o token, informe o CPF manualmente.";
+    const CPF_UNREADABLE_MESSAGE =
+      "Token detectado, mas não foi possível ler o CPF do certificado — informe manualmente.";
+
+    function hideCpfWarning() {
+      cpfWarning.hidden = true;
+      cpfWarning.textContent = "";
+    }
 
     async function loadTokenInfo() {
       try {
@@ -344,8 +353,15 @@ def _local_setup_html() -> str:
           if (data.cpf) {
             cpfInput.value = data.cpf;
             cpfInput.defaultValue = data.cpf;
+            cpfInput.readOnly = true;
+            hideCpfWarning();
+          } else {
+            // e-CNPJ or an unrecognized certificate subject — CPF could not be
+            // parsed from the token, so the field must stay editable.
+            cpfInput.readOnly = false;
+            cpfWarning.hidden = false;
+            cpfWarning.textContent = CPF_UNREADABLE_MESSAGE;
           }
-          cpfInput.readOnly = true;
           const validade = data.cert_valid_until
             ? ` · certificado válido até ${data.cert_valid_until}`
             : "";
@@ -354,11 +370,13 @@ def _local_setup_html() -> str:
           pinInput.focus();
         } else {
           cpfInput.readOnly = false;
+          hideCpfWarning();
           tokenStatus.className = "warn";
           tokenStatus.textContent = TOKEN_ABSENT_MESSAGE;
         }
       } catch (error) {
         cpfInput.readOnly = false;
+        hideCpfWarning();
         tokenStatus.className = "warn";
         tokenStatus.textContent = TOKEN_ABSENT_MESSAGE;
       }
