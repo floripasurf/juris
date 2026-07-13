@@ -55,6 +55,33 @@ def new_tenant(
     console.print(f'  "{tid}": "{hash_api_key(raw)}"')
 
 
+@tenant_app.command("promote")
+def promote_tenant(
+    tenant_id: str = typer.Argument(..., help="Identificador do teste anônimo a promover (pagamento confirmado)."),
+) -> None:
+    """Promote a paid trial to a permanent account (post-payment activation).
+
+    Keeps keys, data and optional contact e-mail; removes the trial expiry so
+    the automatic purge never touches the tenant. Run after confirming the
+    R$ 200/month payment; a billing webhook can call the same function later.
+    """
+    from juris.web.trial_access import promote_trial_to_account
+
+    try:
+        entry = promote_trial_to_account(tenant_id)
+    except KeyError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from None
+    except ValueError as exc:
+        console.print(f"[yellow]{exc}[/yellow]")
+        raise typer.Exit(code=1) from None
+
+    contact = entry.get("contact_email") or "—"
+    console.print(f"[green]Tenant '{tenant_id}' promovido a conta permanente.[/green]")
+    console.print(f"  contato: {contact} · promovido em: {entry.get('promoted_at')}")
+    console.print("  A chave existente continua válida; o purge automático não toca mais este tenant.")
+
+
 @tenant_app.command("erase-data")
 def erase_data(
     tenant_id: str = typer.Argument(..., help="Tenant/escritório cujos dados serão apagados."),

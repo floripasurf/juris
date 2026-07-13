@@ -144,6 +144,38 @@ def test_trial_contact_endpoint_requires_auth_and_valid_email(trial_env) -> None
     assert invalid.status_code == 422
 
 
+def test_promote_trial_to_account_makes_tenant_permanent(trial_env) -> None:
+    tenants, _agents = trial_env
+    client = TestClient(app)
+    trial = client.post("/api/trial/start").json()
+
+    from juris.web.trial_access import promote_trial_to_account
+
+    entry = promote_trial_to_account(trial["tenant_id"])
+
+    assert entry["kind"] == "account"
+    assert "trial_expires_at" not in entry
+    data = json.loads(tenants.read_text(encoding="utf-8"))
+    assert data[trial["tenant_id"]]["kind"] == "account"
+    # a chave existente continua autenticando
+    summary = client.get("/api/access", headers={"X-API-Key": trial["api_key"]})
+    assert summary.status_code == 200
+    assert summary.json()["trial"] is False
+
+
+def test_promote_trial_rejects_unknown_and_non_trial(trial_env) -> None:
+    from juris.web.trial_access import promote_trial_to_account
+
+    with pytest.raises(KeyError):
+        promote_trial_to_account("nao-existe")
+
+    client = TestClient(app)
+    trial = client.post("/api/trial/start").json()
+    promote_trial_to_account(trial["tenant_id"])
+    with pytest.raises(ValueError):
+        promote_trial_to_account(trial["tenant_id"])  # já é conta
+
+
 def test_agent_pairing_endpoint_rotates_relay_command(trial_env) -> None:
     _tenants, agents = trial_env
     client = TestClient(app)

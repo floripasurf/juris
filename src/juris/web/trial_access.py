@@ -567,6 +567,42 @@ def update_trial_contact_email(
     return contact_email
 
 
+def promote_trial_to_account(
+    tenant_id: str,
+    *,
+    tenants_path: Path | None = None,
+) -> dict[str, object]:
+    """Promote a paid trial to a permanent account (post-payment activation).
+
+    Keeps keys, data and contact e-mail; removes the trial expiry so the
+    automatic purge never touches the tenant. Provider-agnostic on purpose:
+    called manually today (operator confirms payment) and by a billing
+    webhook later.
+    """
+    tenant_id = validate_tenant_id(tenant_id)
+    tenants_path = tenants_path or tenants_file_path()
+    if not tenants_path.is_file():
+        # não usar _locked_json aqui: o O_CREAT criaria um tenants.json vazio
+        # que quebra leitores baseados em json.loads(read_text()).
+        msg = f"tenant não encontrado: {tenant_id}"
+        raise KeyError(msg)
+    with _locked_json(tenants_path) as tenants:
+        if tenant_id not in tenants:
+            msg = f"tenant não encontrado: {tenant_id}"
+            raise KeyError(msg)
+        entry = _structured_tenant_entry(tenants[tenant_id], now=_utc_now())
+        if entry.get("kind") != "trial":
+            msg = "tenant já é conta permanente."
+            raise ValueError(msg)
+        entry["kind"] = "account"
+        entry.pop("trial_expires_at", None)
+        entry.pop("expires_at", None)
+        entry["promoted_at"] = _iso(_utc_now())
+        tenants[tenant_id] = entry
+    _clear_auth_caches()
+    return entry
+
+
 def read_tenant_access_summary(tenant_id: str, *, tenants_path: Path | None = None) -> dict[str, object]:
     tenant_id = validate_tenant_id(tenant_id)
     tenants_path = tenants_path or tenants_file_path()

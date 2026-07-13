@@ -258,3 +258,24 @@ def test_purge_expired_exits_zero_with_nothing_pending(tmp_path, monkeypatch) ->
     assert result.exit_code == 0, result.output
     body = json.loads(result.output)
     assert body["erased"] == body["stale"] == body["failed"] == body["errors"] == []
+
+
+def test_promote_command_activates_paid_trial(tmp_path, monkeypatch) -> None:
+    from typer.testing import CliRunner
+
+    from juris.cli.main import app as cli_app
+    from juris.web.trial_access import create_trial_access
+
+    tenants = tmp_path / "tenants.json"
+    monkeypatch.setenv("JURIS_TENANTS_FILE", str(tenants))
+    trial = create_trial_access()
+
+    runner = CliRunner()
+    result = runner.invoke(cli_app, ["tenant", "promote", trial.tenant_id])
+
+    assert result.exit_code == 0, result.output
+    assert "promovido a conta permanente" in result.output
+    again = runner.invoke(cli_app, ["tenant", "promote", trial.tenant_id])
+    assert again.exit_code == 1
+    missing = runner.invoke(cli_app, ["tenant", "promote", "nao-existe"])
+    assert missing.exit_code == 2
