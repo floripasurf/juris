@@ -674,7 +674,9 @@ async def get_access_summary(tenant: Tenant = Depends(current_tenant)) -> dict[s
     """Current tenant access metadata, excluding raw API keys."""
     from juris.web.trial_access import read_tenant_access_summary
 
-    return await asyncio.to_thread(read_tenant_access_summary, tenant.tenant_id)
+    summary = await asyncio.to_thread(read_tenant_access_summary, tenant.tenant_id)
+    summary["billing"] = {"pix_link": get_settings().billing_pix_link or None}
+    return summary
 
 
 @app.post("/api/access-keys", status_code=201)

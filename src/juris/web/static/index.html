@@ -1776,7 +1776,10 @@
         <li>Minutas com citações verificadas contra o corpus</li>
         <li>Protocolo controlado, com revisão e consentimento explícitos</li>
       </ul>
+      <p id="contratar-pix-note" class="field-note">Assinatura via <strong>Pix Automático</strong>: você autoriza uma vez no app do seu banco e a mensalidade cai sozinha — cancele quando quiser no próprio banco.</p>
+      <p id="contratar-ref" class="field-note" hidden></p>
       <div class="contratar-actions">
+        <a class="primary" id="contratar-pix" href="#" target="_blank" rel="noopener" hidden>Assinar com Pix Automático — R$ 200/mês</a>
         <a class="primary" id="contratar-whatsapp" href="https://wa.me/5531983660586?text=Ol%C3%A1%2C%20quero%20contratar%20o%20Causia." target="_blank" rel="noopener">Chamar no WhatsApp</a>
         <a class="secondary" id="contratar-email" href="mailto:lages.raphael@gmail.com?subject=Quero%20contratar%20o%20Causia&body=Ol%C3%A1%2C%20estou%20testando%20o%20Causia%20e%20gostaria%20de%20conversar%20sobre%20contratar.">Enviar e-mail</a>
       </div>
@@ -3750,9 +3753,32 @@
       box.hidden = false;
     }
 
+    function renderContratarBilling(data) {
+      const pixBtn = document.querySelector("#contratar-pix");
+      const waBtn = document.querySelector("#contratar-whatsapp");
+      const pixNote = document.querySelector("#contratar-pix-note");
+      const refEl = document.querySelector("#contratar-ref");
+      if (!pixBtn || !waBtn) return;
+      const pixLink = data.billing && data.billing.pix_link;
+      if (pixLink) {
+        pixBtn.href = pixLink;
+        pixBtn.hidden = false;
+        waBtn.textContent = "Dúvidas? Chamar no WhatsApp";
+        waBtn.classList.remove("primary");
+        waBtn.classList.add("secondary");
+        if (data.tenant_id && refEl) {
+          refEl.textContent = `No pagamento, informe este código como referência: ${data.tenant_id}`;
+          refEl.hidden = false;
+        }
+      } else if (pixNote) {
+        pixNote.textContent = "Assinatura via Pix Automático em ativação — por enquanto, chame no WhatsApp que ativamos na hora.";
+      }
+    }
+
     function renderAccessSummary(data) {
       renderTrialStatus(data);
       renderMyKey(data);
+      renderContratarBilling(data);
       const keys = data.keys || [];
       accessSummary.className = keys.length ? "proc-list" : "proc-empty";
       accessSummary.innerHTML = "";

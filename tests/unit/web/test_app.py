@@ -116,6 +116,14 @@ def test_index_acervo_guide_leads_with_download() -> None:
     assert "first-access-guide" in text
 
 
+def test_index_contratar_supports_pix_automatico_config_driven() -> None:
+    text = client.get("/").text
+    assert 'id="contratar-pix"' in text
+    assert "Pix Automático" in text
+    assert "billing.pix_link" in text or "billing && data.billing.pix_link" in text
+    assert "informe este código como referência" in text
+
+
 def test_index_contratar_modal_pricing_and_whatsapp() -> None:
     text = client.get("/").text
     assert 'id="contratar-modal"' in text

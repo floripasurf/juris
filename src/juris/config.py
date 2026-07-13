@@ -65,6 +65,7 @@ class Settings(BaseSettings):
     )
     rate_limit_redis_url: str = Field("", validation_alias="JURIS_RATE_LIMIT_REDIS_URL")
     rate_limit_fail_closed: bool = Field(False, validation_alias="JURIS_RATE_LIMIT_FAIL_CLOSED")
+    billing_pix_link: str = Field("", validation_alias="JURIS_BILLING_PIX_LINK")
     trusted_proxy: bool = Field(False, validation_alias="JURIS_TRUSTED_PROXY")
     connect_timeout_seconds: int = Field(900, validation_alias="JURIS_CONNECT_TIMEOUT_SECONDS", gt=0)
     tst_inteiro_teor_enabled: bool = Field(False, validation_alias="JURIS_TST_INTEIRO_TEOR_ENABLED")

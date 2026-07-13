@@ -176,6 +176,21 @@ def test_promote_trial_rejects_unknown_and_non_trial(trial_env) -> None:
         promote_trial_to_account(trial["tenant_id"])  # já é conta
 
 
+def test_access_summary_exposes_pix_billing_link_when_configured(trial_env, monkeypatch) -> None:
+    client = TestClient(app)
+    trial = client.post("/api/trial/start").json()
+
+    sem_link = client.get("/api/access", headers={"X-API-Key": trial["api_key"]}).json()
+    assert sem_link["billing"] == {"pix_link": None}
+
+    monkeypatch.setenv("JURIS_BILLING_PIX_LINK", "https://pix.example/assinatura-causia")
+    import juris.config as config
+
+    config._settings = None  # noqa: SLF001 - test isolation
+    com_link = client.get("/api/access", headers={"X-API-Key": trial["api_key"]}).json()
+    assert com_link["billing"]["pix_link"] == "https://pix.example/assinatura-causia"
+
+
 def test_agent_pairing_endpoint_rotates_relay_command(trial_env) -> None:
     _tenants, agents = trial_env
     client = TestClient(app)
