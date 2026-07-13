@@ -466,7 +466,9 @@
       cursor: pointer;
     }
     .run-indicator:hover { border-color: var(--brand); background: var(--panel-soft); }
-    .run-indicator.running { background: var(--brand-tint); border-color: var(--brand); color: var(--brand-dark); cursor: default; }
+    /* cursor: pointer (herdado de .run-indicator) mesmo rodando — o clique
+       sempre navega para "Novo caso" e é inofensivo mesmo com um run em voo. */
+    .run-indicator.running { background: var(--brand-tint); border-color: var(--brand); color: var(--brand-dark); }
     .run-indicator.done { background: var(--ok-bg); border-color: var(--ok-line); color: var(--ok); }
     .run-indicator.error { background: var(--danger-bg); border-color: var(--danger-line); color: var(--danger); }
     .run-indicator[hidden] { display: none; }
@@ -1966,8 +1968,12 @@
     // Run persistente entre abas: guardado só em memória (variável de módulo) —
     // morre com o reload/fechamento da aba de propósito, não usa sessionStorage.
     const runIndicatorEl = document.querySelector("#run-indicator");
-    let activeRun = null; // { status: 'running'|'done'|'error', startedAt, cnj, resultData, errorMessage }
+    let activeRun = null; // { id, status: 'running'|'done'|'error', startedAt, cnj, resultData, errorMessage }
     let runIndicatorTimerId = null;
+    // Token de identidade: cada submit ganha um id novo. Se dois runs ficarem em
+    // voo ao mesmo tempo, só o que corresponde ao activeRun.id vigente pode
+    // escrever no painel/chip depois do await — o outro é descartado em silêncio.
+    let runSeq = 0;
 
     function formatElapsed(ms) {
       const totalSeconds = Math.max(0, Math.floor(ms / 1000));
@@ -2686,7 +2692,8 @@
         payload.cpf = document.querySelector("#nc_cpf").value.trim() || null;
       }
 
-      activeRun = { status: "running", startedAt: Date.now(), cnj: payload.numero_cnj, resultData: null, errorMessage: null };
+      const runId = ++runSeq;
+      activeRun = { id: runId, status: "running", startedAt: Date.now(), cnj: payload.numero_cnj, resultData: null, errorMessage: null };
       renderRunIndicator();
       startRunIndicatorTimer();
 
@@ -2698,24 +2705,33 @@
         });
         const data = await response.json();
         if (!response.ok) throw new Error(apiErrorMessage(data, "Falha desconhecida"));
-        renderRun(data);
-        activeRun = { ...activeRun, status: "done", resultData: data };
+        // Um run mais novo pode ter assumido o activeRun enquanto este fetch
+        // estava em voo — resultado obsoleto é descartado em silêncio, nunca
+        // sobrescreve o painel/chip do run vigente.
+        if (activeRun && activeRun.id === runId) {
+          renderRun(data);
+          activeRun = { ...activeRun, status: "done", resultData: data };
+        }
       } catch (error) {
-        notice.textContent = error.message;
-        notice.className = "notice error";
-        notice.hidden = false;
-        titleEl.textContent = "Falha";
-        summaryEl.textContent = "A execução não foi concluída.";
-        artifactsEl.className = "empty";
-        artifactsEl.textContent = "Ajuste os dados ou o provedor LLM e tente novamente.";
-        activeRun = { ...activeRun, status: "error", errorMessage: error.message };
+        if (activeRun && activeRun.id === runId) {
+          notice.textContent = error.message;
+          notice.className = "notice error";
+          notice.hidden = false;
+          titleEl.textContent = "Falha";
+          summaryEl.textContent = "A execução não foi concluída.";
+          artifactsEl.className = "empty";
+          artifactsEl.textContent = "Ajuste os dados ou o provedor LLM e tente novamente.";
+          activeRun = { ...activeRun, status: "error", errorMessage: error.message };
+        }
       } finally {
-        submit.disabled = false;
-        submit.textContent = "Gerar artefatos";
-        // Atualiza o chip mesmo se o usuário estiver noutra aba (o finally roda
-        // independente da view visível — o chip vive no header, sempre no DOM).
-        stopRunIndicatorTimer();
-        renderRunIndicator();
+        if (activeRun && activeRun.id === runId) {
+          submit.disabled = false;
+          submit.textContent = "Gerar artefatos";
+          // Atualiza o chip mesmo se o usuário estiver noutra aba (o finally roda
+          // independente da view visível — o chip vive no header, sempre no DOM).
+          stopRunIndicatorTimer();
+          renderRunIndicator();
+        }
       }
     });
 
@@ -2991,6 +3007,17 @@
       // "Explorar" tem que explorar: pré-preenche E executa. Antes só abria o
       // formulário técnico e parava — o advogado do teste anônimo não sabe o que
       // é "modo de saída" e desistia antes de ver o produto.
+      // Cinto e suspensório: form.requestSubmit() dispara o evento "submit" mesmo
+      // com o botão #submit desabilitado, então um clique aqui durante um run em
+      // andamento poderia abrir um segundo run concorrente. O token de identidade
+      // no handler de submit já neutraliza a corrida, mas evitamos o disparo
+      // duplicado na origem e levamos o usuário ao chip do run já em voo.
+      if (activeRun && activeRun.status === "running") {
+        showView("caso");
+        renderRunIndicator();
+        if (runIndicatorEl) runIndicatorEl.focus();
+        return;
+      }
       showView("caso");
       const source = document.querySelector("#source");
       if (source) { source.value = "fixture"; source.dispatchEvent(new Event("change")); }

@@ -1386,6 +1386,23 @@ def test_index_renders_run_indicator_chip() -> None:
     assert "Ver resultado" in text
 
 
+def test_index_submit_handler_guards_against_concurrent_runs() -> None:
+    # Token de identidade por run: exploreWithSampleData() chama
+    # form.requestSubmit(), que dispara "submit" mesmo com #submit desabilitado,
+    # então dois runs podem ficar em voo ao mesmo tempo. Só a resolução cujo
+    # runId bate com o activeRun.id vigente pode escrever no painel/chip/botão
+    # depois do await; a outra é descartada em silêncio.
+    text = client.get("/").text
+    assert "let runSeq = 0;" in text
+    assert "const runId = ++runSeq;" in text
+    assert text.count("activeRun && activeRun.id === runId") == 3
+
+    explore_start = text.index("function exploreWithSampleData")
+    guard_idx = text.index('activeRun.status === "running"', explore_start)
+    submit_idx = text.index("demoForm.requestSubmit()", explore_start)
+    assert explore_start < guard_idx < submit_idx
+
+
 def test_connect_remote_mode_accepts_no_pin_or_senha(monkeypatch) -> None:
     app_module = importlib.import_module("juris.web.app")
     from juris.jobs.connect import ConnectResult
