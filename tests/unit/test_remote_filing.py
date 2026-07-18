@@ -11,6 +11,14 @@ from juris.signing.filing import ChainOfCustody, FilingRequest, FilingResult, Gr
 from juris.signing.filing_service import FilingService, RemoteFilingService, handle_file_request
 
 
+class _CaptureLogger:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict[str, object]]] = []
+
+    def warning(self, event: str, **kwargs: object) -> None:
+        self.events.append((event, kwargs))
+
+
 def _req(**kw: object) -> FilingRequest:
     base: dict[str, object] = {
         "numero_cnj": "5082351-40.2017.8.13.0024",
@@ -168,6 +176,107 @@ async def test_handle_file_request_reidentifies_draft_locally(monkeypatch, tmp_p
     assert "123.456.789-09" in fake.seen_draft_markdown
     assert "[NOME_1]" not in fake.seen_draft_markdown
     assert "[CPF_1]" not in fake.seen_draft_markdown
+
+
+def test_reidentify_agent_draft_downgrades_grounding_to_unknown_and_warns(monkeypatch, tmp_path) -> None:
+    """Task 3 follow-up: the grounding evidence's draft_sha256 is computed
+    SaaS-side over the de-identified markdown; reidentification here rewrites
+    the draft AFTER that hash was taken, so it can never match again. Letting
+    that surface only as an incidental hash-mismatch block hides *why* — this
+    downgrade makes the degradation explicit and observable instead."""
+    import juris.signing.filing_service as filing_service_module
+    from juris.api.reid_store import save_reid_map
+
+    monkeypatch.setenv("JURIS_AGENT_DEID_READS", "1")
+    monkeypatch.setenv("JURIS_HOME", str(tmp_path))
+    numero_cnj = "5082351-40.2017.8.13.0024"
+    save_reid_map("escritorio-x", numero_cnj, {"[NOME_1]": "João da Silva"})
+    capture = _CaptureLogger()
+    monkeypatch.setattr(filing_service_module, "logger", capture)
+
+    payload = {
+        "numero_cnj": numero_cnj,
+        "draft_markdown": "# Peça\nAutor: [NOME_1]",
+        "grounding": {"status": "verified", "draft_sha256": "a" * 64, "revisao_humana_obrigatoria": False},
+    }
+
+    restored = filing_service_module._reidentify_agent_draft(payload, tenant_id="escritorio-x")
+
+    assert "João da Silva" in restored["draft_markdown"]
+    assert restored["grounding"]["status"] == "unknown"
+    assert restored["grounding"]["draft_sha256"] == "a" * 64  # untouched — only the status is downgraded
+    events = [e for e in capture.events if e[0] == "grounding_evidence_invalidated_by_deid_reads"]
+    assert len(events) == 1
+    assert events[0][1]["tenant_id"] == "escritorio-x"
+    assert events[0][1]["numero_cnj"] == numero_cnj
+
+
+def test_reidentify_agent_draft_skips_downgrade_without_reidentification(monkeypatch, tmp_path) -> None:
+    """No mapping found (or deid-reads off) → the draft is never rewritten, so
+    the evidence is still valid for it — no warning, no downgrade."""
+    import juris.signing.filing_service as filing_service_module
+
+    monkeypatch.setenv("JURIS_AGENT_DEID_READS", "1")
+    monkeypatch.setenv("JURIS_HOME", str(tmp_path))
+    capture = _CaptureLogger()
+    monkeypatch.setattr(filing_service_module, "logger", capture)
+
+    payload = {
+        "numero_cnj": "5082351-40.2017.8.13.0024",  # no reid map saved for this cnj
+        "draft_markdown": "# Peça",
+        "grounding": {"status": "verified", "draft_sha256": "a" * 64, "revisao_humana_obrigatoria": False},
+    }
+
+    restored = filing_service_module._reidentify_agent_draft(payload, tenant_id="escritorio-x")
+
+    assert restored["grounding"]["status"] == "verified"  # unchanged
+    assert capture.events == []
+
+
+@pytest.mark.asyncio
+async def test_handle_file_request_blocks_grounding_when_deid_reads_reidentifies(monkeypatch, tmp_path) -> None:
+    """End-to-end: deid-reads on + a verified evidence for the (pre-reid) draft
+    still ends up grounding_required through the REAL orchestrator gate —
+    nothing gets rendered, signed, or filed."""
+    import hashlib
+
+    from juris.api.reid_store import save_reid_map
+    from juris.signing.filing_service import InProcessFilingService
+
+    monkeypatch.setenv("JURIS_AGENT_DEID_READS", "1")
+    monkeypatch.setenv("JURIS_HOME", str(tmp_path))
+    numero_cnj = "5082351-40.2017.8.13.0024"
+    save_reid_map("escritorio-x", numero_cnj, {"[NOME_1]": "João da Silva"})
+    draft_markdown = "# Peça\nAutor: [NOME_1]"
+    draft_sha256 = hashlib.sha256(draft_markdown.encode("utf-8")).hexdigest()
+
+    req = AgentRequest(
+        request_id="f-deid-grounding",
+        tenant_id="escritorio-x",
+        operation="file",
+        payload={
+            "numero_cnj": numero_cnj,
+            "tribunal": "tjmg",
+            "tipo_documento": "manifestacao",
+            "draft_markdown": draft_markdown,
+            "tipo_peticao": "contestacao",
+            # dry_run+skip_preflight so run_filing() uses its mock signer path —
+            # the gate must block regardless, and this keeps the test from
+            # needing a real A3 token to reach it.
+            "dry_run": True,
+            "skip_preflight": True,
+            "grounding": {"status": "verified", "draft_sha256": draft_sha256, "revisao_humana_obrigatoria": False},
+        },
+    )
+    service = InProcessFilingService(storage_root=tmp_path / "juris-storage")
+
+    resp = await handle_file_request(
+        req, service, credentials_resolver=lambda: ("agent-cpf", "agent-senha", "agent-pin")
+    )
+
+    assert resp.success is True  # the wire call itself succeeded
+    assert resp.payload["success"] is False  # but the FilingResult inside is blocked
+    assert resp.payload["error_code"] == "grounding_required"
 
 
 @pytest.mark.asyncio

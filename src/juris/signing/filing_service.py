@@ -23,11 +23,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 from juris.api.ws_schemas import AgentRequest, AgentResponse
+from juris.core.observability import get_logger
 from juris.core.paths import juris_home
 from juris.signing.filing import ChainOfCustody, FilingRequest, FilingResult, GroundingEvidence
 
 if TYPE_CHECKING:
     from juris.mni.operations.peticionamento import FilingReceipt
+
+logger = get_logger(__name__)
 
 _REMOTE_FILING_AGENT_ERROR = "Falha ao protocolar no agente local. Verifique credenciais, token e tribunal no agente."
 
@@ -315,6 +318,40 @@ def build_filing_request(payload: dict[str, object], *, cpf: str, senha: str) ->
     )
 
 
+def _invalidate_grounding_for_reidentification(
+    payload: dict[str, object], *, tenant_id: str, numero_cnj: str
+) -> dict[str, object]:
+    """Downgrade grounding evidence to ``"unknown"`` when the draft it describes
+    was just rewritten by reidentification.
+
+    The evidence's ``draft_sha256`` was computed server-side over the
+    de-identified markdown (ADR-0016) — reidentification here rewrites
+    ``draft_markdown`` to the real, PII-bearing text *after* that hash was
+    taken, so it can never match again. The gate already fails closed on that
+    mismatch, but leaving the evidence's ``status`` as ``"verified"`` would let
+    a real hash-mismatch block look like a coincidence instead of an expected
+    consequence of this flag — this makes the degradation explicit and
+    observable (a structured warning + an honest ``status``) instead of an
+    implicit side effect.
+
+    TODO(design follow-up, out of scope for this branch): carry a second hash
+    computed over the reidentified/final text in the evidence itself, so
+    grounding can still be verified end-to-end when
+    ``JURIS_AGENT_DEID_READS=1`` instead of always requiring a manual override.
+    """
+    grounding = payload.get("grounding")
+    if not isinstance(grounding, dict) or grounding.get("status") == "unknown":
+        return payload
+    logger.warning(
+        "grounding_evidence_invalidated_by_deid_reads",
+        tenant_id=tenant_id,
+        numero_cnj=numero_cnj,
+    )
+    downgraded = dict(payload)
+    downgraded["grounding"] = {**grounding, "status": "unknown"}
+    return downgraded
+
+
 def _reidentify_agent_draft(payload: dict[str, object], *, tenant_id: str) -> dict[str, object]:
     """Restore placeholders in draft markdown using the agent-local re-id map.
 
@@ -338,7 +375,7 @@ def _reidentify_agent_draft(payload: dict[str, object], *, tenant_id: str) -> di
         return payload
     restored = dict(payload)
     restored["draft_markdown"] = reidentify(draft_markdown, mapping)
-    return restored
+    return _invalidate_grounding_for_reidentification(restored, tenant_id=tenant_id, numero_cnj=str(numero_cnj))
 
 
 async def handle_file_request(
