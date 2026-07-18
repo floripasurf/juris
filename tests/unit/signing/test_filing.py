@@ -16,9 +16,22 @@ from juris.persistence.filing_receipt import FilingReceiptStore
 from juris.signing.filing import (
     FilingOrchestrator,
     FilingRequest,
+    GroundingEvidence,
     _count_citations,
 )
 from juris.signing.pades import CertStatus, SigningResult
+
+
+def _verified_grounding(draft_markdown: str) -> GroundingEvidence:
+    """Grounding evidence that passes the Task 3 gate for this exact draft.
+
+    These tests exercise behavior downstream of the gate (render, preflight,
+    sign, submit) — not the gate itself, so they need evidence that trivially
+    passes it.
+    """
+    import hashlib
+
+    return GroundingEvidence(status="verified", draft_sha256=hashlib.sha256(draft_markdown.encode("utf-8")).hexdigest())
 
 # --- Fixtures ---
 
@@ -106,14 +119,16 @@ def mock_mni_auth() -> MagicMock:
 
 @pytest.fixture()
 def filing_request() -> FilingRequest:
+    draft_markdown = "# Contestação\n\nTexto da contestação conforme art. 335 do CPC."
     return FilingRequest(
         numero_cnj="0001234-56.2024.8.13.0001",
         tribunal="tjmg",
         tipo_documento="contestacao",
-        draft_markdown="# Contestação\n\nTexto da contestação conforme art. 335 do CPC.",
+        draft_markdown=draft_markdown,
         tipo_peticao="contestacao",
         cpf="12345678901",
         senha="senha123",
+        grounding=_verified_grounding(draft_markdown),
     )
 
 
@@ -154,6 +169,7 @@ def test_dry_run_does_not_sign_or_submit(
         cpf=filing_request.cpf,
         senha=filing_request.senha,
         dry_run=True,
+        grounding=filing_request.grounding,
     )
     orch = _make_orchestrator(mock_signer, audit_log, receipt_store, mock_mni_client_factory, mock_mni_auth)
 
@@ -194,6 +210,7 @@ def test_dry_run_emits_dryrun_not_submit(
         cpf=filing_request.cpf,
         senha=filing_request.senha,
         dry_run=True,
+        grounding=filing_request.grounding,
     )
     orch = _make_orchestrator(mock_signer, audit_log, receipt_store, mock_mni_client_factory, mock_mni_auth)
 
@@ -218,14 +235,16 @@ def test_preflight_blocker_aborts_filing(
     mock_mni_auth: MagicMock,
 ) -> None:
     """Filing aborts when preflight finds a blocker."""
+    draft_markdown = "# Test\n\nSome content."
     request = FilingRequest(
         numero_cnj="0001234-56.2024.8.13.0001",
         tribunal="tjmg",
         tipo_documento="INVALID_TYPE",
-        draft_markdown="# Test\n\nSome content.",
+        draft_markdown=draft_markdown,
         tipo_peticao="contestacao",
         cpf="12345678901",
         senha="senha123",
+        grounding=_verified_grounding(draft_markdown),
     )
     orch = _make_orchestrator(mock_signer, audit_log, receipt_store, mock_mni_client_factory, mock_mni_auth)
 
@@ -359,15 +378,17 @@ def test_skip_preflight(
     mock_mni_auth: MagicMock,
 ) -> None:
     """skip_preflight=True skips preflight checks."""
+    draft_markdown = "# Test\n\nContent."
     request = FilingRequest(
         numero_cnj="0001234-56.2024.8.13.0001",
         tribunal="tjmg",
         tipo_documento="contestacao",
-        draft_markdown="# Test\n\nContent.",
+        draft_markdown=draft_markdown,
         tipo_peticao="contestacao",
         cpf="12345678901",
         senha="senha123",
         skip_preflight=True,
+        grounding=_verified_grounding(draft_markdown),
     )
     mock_factory = _make_mni_factory()
     orch = _make_orchestrator(mock_signer, audit_log, receipt_store, mock_factory, mock_mni_auth)

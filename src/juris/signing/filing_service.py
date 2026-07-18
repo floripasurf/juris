@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from juris.api.ws_schemas import AgentRequest, AgentResponse
 from juris.core.paths import juris_home
-from juris.signing.filing import ChainOfCustody, FilingRequest, FilingResult
+from juris.signing.filing import ChainOfCustody, FilingRequest, FilingResult, GroundingEvidence
 
 if TYPE_CHECKING:
     from juris.mni.operations.peticionamento import FilingReceipt
@@ -226,6 +226,19 @@ def _receipt_from_payload(data: object) -> FilingReceipt | None:
     )
 
 
+def _grounding_to_payload(grounding: GroundingEvidence | None) -> dict[str, object] | None:
+    """Serialize the grounding veredict for the wire — the agent's orchestrator
+    runs the same gate (that's where signing happens), so it needs this evidence
+    exactly as resolved server-side; the agent must never re-derive it itself."""
+    if grounding is None:
+        return None
+    return {
+        "status": grounding.status,
+        "draft_sha256": grounding.draft_sha256,
+        "revisao_humana_obrigatoria": grounding.revisao_humana_obrigatoria,
+    }
+
+
 class FilingTransport(Protocol):
     def send(self, request: AgentRequest) -> AgentResponse: ...
 
@@ -248,6 +261,9 @@ class RemoteFilingService(FilingService):
             "skip_preflight": request.skip_preflight,
             "dry_run": request.dry_run,
             "prazo_override": request.prazo_override,
+            "grounding": _grounding_to_payload(request.grounding),
+            "grounding_override": request.grounding_override,
+            "grounding_override_reason": request.grounding_override_reason,
         }
         agent_request = AgentRequest(
             request_id=uuid.uuid4().hex, tenant_id=self._tenant_id, operation="file", payload=payload
@@ -263,6 +279,23 @@ class RemoteFilingService(FilingService):
         return _payload_to_result(response.payload or {})
 
 
+def _grounding_from_payload(data: object) -> GroundingEvidence | None:
+    """Rebuild the grounding veredict at the agent. Missing/malformed data (an
+    older orchestrator, a relay not yet upgraded) becomes ``None`` — the gate
+    then requires an explicit override rather than silently trusting anything."""
+    if not isinstance(data, dict):
+        return None
+    status = data.get("status")
+    draft_sha256 = data.get("draft_sha256")
+    if not isinstance(status, str) or not isinstance(draft_sha256, str):
+        return None
+    return GroundingEvidence(
+        status=status,
+        draft_sha256=draft_sha256,
+        revisao_humana_obrigatoria=bool(data.get("revisao_humana_obrigatoria", False)),
+    )
+
+
 def build_filing_request(payload: dict[str, object], *, cpf: str, senha: str) -> FilingRequest:
     """Rebuild a FilingRequest at the agent, injecting the locally-resolved credentials."""
     return FilingRequest(
@@ -276,6 +309,9 @@ def build_filing_request(payload: dict[str, object], *, cpf: str, senha: str) ->
         skip_preflight=bool(payload.get("skip_preflight", False)),
         dry_run=bool(payload.get("dry_run", False)),
         prazo_override=payload.get("prazo_override"),  # type: ignore[arg-type]
+        grounding=_grounding_from_payload(payload.get("grounding")),
+        grounding_override=bool(payload.get("grounding_override", False)),
+        grounding_override_reason=str(payload.get("grounding_override_reason") or ""),
     )
 
 

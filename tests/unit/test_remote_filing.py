@@ -7,7 +7,7 @@ import asyncio
 import pytest
 
 from juris.api.ws_schemas import AgentRequest, AgentResponse
-from juris.signing.filing import ChainOfCustody, FilingRequest, FilingResult
+from juris.signing.filing import ChainOfCustody, FilingRequest, FilingResult, GroundingEvidence
 from juris.signing.filing_service import FilingService, RemoteFilingService, handle_file_request
 
 
@@ -287,6 +287,98 @@ def test_remote_filing_round_trips_delivery_uncertain_error_code() -> None:
     rebuilt = _payload_to_result(payload)
     assert rebuilt.error_code == "delivery_uncertain"
     assert rebuilt.success is False
+
+
+def test_remote_filing_forwards_grounding_evidence_over_the_wire() -> None:
+    """The grounding gate runs at the agent (where signing happens) — the SaaS-side
+    evidence resolved from the manifest must cross the wire or every remote filing
+    would be blocked with grounding_required regardless of local verification."""
+    on_wire: list[str] = []
+
+    class _Transport:
+        def send(self, agent_request: AgentRequest) -> AgentResponse:
+            on_wire.append(agent_request.model_dump_json())
+            return AgentResponse(request_id=agent_request.request_id, success=True, payload={"success": True})
+
+    service = RemoteFilingService(_Transport())
+    grounding = GroundingEvidence(status="verified", draft_sha256="a" * 64, revisao_humana_obrigatoria=False)
+    asyncio.run(
+        service.file(
+            _req(
+                grounding=grounding,
+                grounding_override=True,
+                grounding_override_reason="Justificativa do advogado com mais de vinte caracteres.",
+            )
+        )
+    )
+
+    payload = AgentRequest.model_validate_json(on_wire[0]).payload
+    assert payload["grounding"] == {
+        "status": "verified",
+        "draft_sha256": "a" * 64,
+        "revisao_humana_obrigatoria": False,
+    }
+    assert payload["grounding_override"] is True
+    assert payload["grounding_override_reason"] == "Justificativa do advogado com mais de vinte caracteres."
+
+
+def test_remote_filing_forwards_none_grounding_as_null() -> None:
+    on_wire: list[str] = []
+
+    class _Transport:
+        def send(self, agent_request: AgentRequest) -> AgentResponse:
+            on_wire.append(agent_request.model_dump_json())
+            return AgentResponse(request_id=agent_request.request_id, success=True, payload={"success": True})
+
+    service = RemoteFilingService(_Transport())
+    asyncio.run(service.file(_req(grounding=None)))
+
+    payload = AgentRequest.model_validate_json(on_wire[0]).payload
+    assert payload["grounding"] is None
+    assert payload["grounding_override"] is False
+
+
+def test_build_filing_request_reconstructs_grounding_evidence() -> None:
+    from juris.signing.filing_service import build_filing_request
+
+    payload = {
+        "numero_cnj": "123",
+        "tribunal": "tjmg",
+        "tipo_documento": "manifestacao",
+        "draft_markdown": "# P",
+        "tipo_peticao": "contestacao",
+        "grounding": {"status": "verified", "draft_sha256": "b" * 64, "revisao_humana_obrigatoria": True},
+        "grounding_override": True,
+        "grounding_override_reason": "Justificativa registrada pelo advogado no agente.",
+    }
+
+    request = build_filing_request(payload, cpf="cpf", senha="senha")
+
+    assert request.grounding == GroundingEvidence(
+        status="verified", draft_sha256="b" * 64, revisao_humana_obrigatoria=True
+    )
+    assert request.grounding_override is True
+    assert request.grounding_override_reason == "Justificativa registrada pelo advogado no agente."
+
+
+def test_build_filing_request_defaults_grounding_to_none_when_absent() -> None:
+    """Backward compatible with a relay/agent that hasn't been upgraded yet — absent
+    keys must not crash, and default to the safe (blocked-unless-overridden) state."""
+    from juris.signing.filing_service import build_filing_request
+
+    payload = {
+        "numero_cnj": "123",
+        "tribunal": "tjmg",
+        "tipo_documento": "manifestacao",
+        "draft_markdown": "# P",
+        "tipo_peticao": "contestacao",
+    }
+
+    request = build_filing_request(payload, cpf="cpf", senha="senha")
+
+    assert request.grounding is None
+    assert request.grounding_override is False
+    assert request.grounding_override_reason == ""
 
 
 def test_remote_filing_runs_blocking_transport_off_the_event_loop() -> None:

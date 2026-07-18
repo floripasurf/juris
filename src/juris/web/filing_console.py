@@ -16,7 +16,7 @@ from juris.core.sanitize import safe_error_text
 from juris.mni.operations.peticionamento import FilingReceipt
 from juris.persistence.audit import AuditLog
 from juris.persistence.filing_receipt import FilingReceiptStore
-from juris.signing.filing import FilingResult
+from juris.signing.filing import FilingResult, GroundingEvidence
 from juris.web.jsonutil import ensure_dict, ensure_list
 
 _PRIMARY_DRAFTS = frozenset({"draft.md", "rascunho-pesquisa.md"})
@@ -163,6 +163,53 @@ def read_filing_artifact(out_root: Path, *, output_dir: str, artifact_name: str)
         "sha256_verified": True,
         "content": text,
     }
+
+
+def grounding_evidence_from_manifest(
+    out_root: Path, output_dir: str, artifact_name: str
+) -> GroundingEvidence | None:
+    """Load the grounding veredict recorded in the case's run-manifest.
+
+    Confined to ``out_root`` with the same scheme as ``read_filing_artifact``.
+    Returns ``None`` when the manifest, the artifact entry, or its sha256 can't
+    be found — the caller (the filing gate) treats ``None`` as ungrounded.
+    Manifests predating grounding tracking have no ``draft.grounding_status``;
+    those come back with ``status="unknown"`` rather than ``None``, so an old
+    manifest requires an override just like an explicitly blocked one.
+    """
+    name = _primary_artifact_name(artifact_name)
+    if name is None:
+        return None
+
+    base = out_root.resolve()
+    raw = Path(output_dir)
+    case_dir = (raw if raw.is_absolute() else base / raw).resolve()
+    if not case_dir.is_relative_to(base):
+        return None
+
+    manifest_path = case_dir / "run-manifest.json"
+    if not _is_regular_file_under(manifest_path, base):
+        return None
+    manifest = ensure_dict(_read_json(manifest_path))
+
+    draft_sha256: str | None = None
+    for artifact in ensure_list(manifest.get("artifacts")):
+        if isinstance(artifact, dict) and artifact.get("name") == name:
+            candidate = str(artifact.get("sha256") or "")
+            if _SHA256_RE.fullmatch(candidate):
+                draft_sha256 = candidate
+            break
+    if draft_sha256 is None:
+        return None
+
+    draft = ensure_dict(manifest.get("draft"))
+    status = str(draft.get("grounding_status") or "unknown")
+    revisao_humana_obrigatoria = bool(draft.get("revisao_humana_obrigatoria", False))
+    return GroundingEvidence(
+        status=status,
+        draft_sha256=draft_sha256,
+        revisao_humana_obrigatoria=revisao_humana_obrigatoria,
+    )
 
 
 def serialize_filing_result(result: FilingResult) -> dict[str, object]:

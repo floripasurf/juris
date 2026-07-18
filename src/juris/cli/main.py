@@ -2701,6 +2701,14 @@ def file_petition(
     prazo_override: str | None = typer.Option(None, "--prazo-override", help="Justificativa for filing past deadline"),
     senha: str | None = typer.Option(None, "--senha", "-s", help="Senha PJe (prompted + saved if omitted)"),
     pin: str | None = typer.Option(None, "--pin", help="Token PIN (prompted + saved if omitted)"),
+    override_grounding: bool = typer.Option(
+        False,
+        "--override-grounding",
+        help="Protocola mesmo sem grounding verificado (exige --reason; fica em auditoria)",
+    ),
+    reason: str | None = typer.Option(
+        None, "--reason", help="Justificativa (mín. 20 caracteres) para --override-grounding"
+    ),
 ) -> None:
     """Sign and file a petition via MNI.
 
@@ -2716,12 +2724,20 @@ def file_petition(
     from juris.core.credentials import get_credential, store_credential
     from juris.core.paths import juris_home
     from juris.signing.filing import FilingRequest
+    from juris.web.filing_console import grounding_evidence_from_manifest
 
-    # 1. Load draft markdown
+    # 1. Load draft markdown. Whichever directory it came from (an explicit
+    # path, or the most recent ~/.juris/drafts/<cnj> match) is also where its
+    # run-manifest.json (if any) lives — that's what the grounding gate below
+    # resolves evidence from.
     draft_path = FilePath(draft_path_or_tipo)
+    grounding_case_dir: FilePath | None = None
+    grounding_artifact_name: str | None = None
     if draft_path.exists() and draft_path.is_file():
         draft_markdown = draft_path.read_text(encoding="utf-8")
         tipo_peticao = draft_path.stem
+        grounding_case_dir = draft_path.parent
+        grounding_artifact_name = draft_path.name
         console.print(f"[dim]Loaded draft from {draft_path} ({len(draft_markdown)} chars)[/dim]")
     else:
         # Treat as tipo_peticao, look for most recent draft in ~/.juris/drafts/
@@ -2731,6 +2747,8 @@ def file_petition(
             drafts = sorted(drafts_dir.glob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True)
             if drafts:
                 draft_markdown = drafts[0].read_text(encoding="utf-8")
+                grounding_case_dir = drafts_dir
+                grounding_artifact_name = drafts[0].name
                 console.print(f"[dim]Loaded most recent draft: {drafts[0].name}[/dim]")
             else:
                 console.print(f"[red]No drafts found in {drafts_dir}[/red]")
@@ -2739,6 +2757,17 @@ def file_petition(
             console.print(f"[red]'{draft_path_or_tipo}' is not a file and no drafts found.[/red]")
             console.print("[dim]Provide a path to a markdown file or run 'juris draft' first.[/dim]")
             raise typer.Exit(code=1)
+
+    # 1b. Resolve the grounding veredict for this exact draft (Task 3: nothing
+    # reverified citation grounding before signing/filing until now). A custom
+    # filename or a drafts/ fallback with no manifest resolves to None —
+    # "documento externo" — and the orchestrator's gate then requires
+    # --override-grounding/--reason instead of silently trusting it.
+    grounding_evidence = None
+    if grounding_case_dir is not None and grounding_artifact_name is not None:
+        grounding_evidence = grounding_evidence_from_manifest(
+            grounding_case_dir, output_dir=".", artifact_name=grounding_artifact_name
+        )
 
     # 2-3. Resolve PIN + senha — ONLY when co-located. In remote (split-trust) mode
     # the agent resolves the lawyer's own secrets; the orchestrator must never ask
@@ -2784,6 +2813,9 @@ def file_petition(
         skip_preflight=skip_preflight,
         dry_run=dry_run,
         prazo_override=prazo_override,
+        grounding=grounding_evidence,
+        grounding_override=override_grounding,
+        grounding_override_reason=(reason or "").strip(),
     )
 
     from juris.signing.filing_service import get_filing_service
@@ -2811,7 +2843,10 @@ def file_petition(
             icon = "[green]✓[/green]" if check.passed else "[red]✗[/red]"
             console.print(f"  {icon} {check.name}: {check.message}")
 
-    if dry_run:
+    # A blocked dry-run (grounding gate or preflight) must NOT hit the reassuring
+    # "nothing happened" message below without explanation — it falls through to
+    # the normal success/failure reporting instead.
+    if dry_run and result.success:
         console.print("\n[bold yellow]DRY-RUN:[/bold yellow] Nenhuma assinatura ou protocolo realizado.")
         console.print(f"  Processo: {numero_cnj}")
         console.print(f"  Tribunal: {tribunal}")
@@ -2835,6 +2870,11 @@ def file_petition(
     else:
         console.print("\n[bold red]Falha no protocolo.[/bold red]")
         console.print(f"  Erro: {result.error}")
+        if result.error_code in {"grounding_required", "revisao_humana_obrigatoria"}:
+            console.print(
+                "  [dim]Use --override-grounding --reason \"...\" (mín. 20 caracteres) para "
+                "protocolar mesmo assim — fica registrado em auditoria.[/dim]"
+            )
         if result.audit_entry_ids:
             console.print(f"  [dim]Audit entries: {len(result.audit_entry_ids)}[/dim]")
         raise typer.Exit(code=1)

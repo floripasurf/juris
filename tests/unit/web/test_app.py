@@ -97,6 +97,12 @@ def test_index_renders_local_ui() -> None:
     assert "escHtml" in response.text  # untrusted data escaped before innerHTML (XSS)
     assert "data-artifact-open" in response.text  # Mesa: recent artifacts reopen in-browser
     assert "openArtifact" in response.text
+    # Task 3: grounding gate 409 → override panel (not a plain error toast)
+    assert "renderGroundingBlocked" in response.text
+    assert "grounding-blocked-notice" in response.text
+    assert "Documento externo (não gerado pela Causia)" in response.text
+    assert "fl_override_reason" in response.text
+    assert "filingSelectedArtifact" in response.text
     assert "copiar caminho" not in response.text  # server filesystem path is useless in-browser
 
 
@@ -440,6 +446,31 @@ class _FailingFilingService:
         raise RuntimeError("falha interna em /var/private/juris-token com token=abc123 e pin=1234")
 
 
+class _GroundingBlockedFilingService:
+    """Fake mirroring what FilingOrchestrator.file() returns when its grounding
+    gate blocks — used to prove the endpoint's 409 wiring without a real
+    orchestrator (the gate itself is covered by test_filing_grounding_gate.py)."""
+
+    def __init__(self, error_code: str, message: str) -> None:
+        self._error_code = error_code
+        self._message = message
+        self.calls: list[tuple[object, str | None]] = []
+
+    async def file(self, request, *, pin=None):
+        from juris.signing.filing import FilingResult
+
+        self.calls.append((request, pin))
+        return FilingResult(
+            success=False,
+            receipt=None,
+            signing_result=None,
+            preflight=None,
+            audit_entry_ids=["audit-blocked"],
+            error=self._message,
+            error_code=self._error_code,
+        )
+
+
 def test_filing_status_endpoint(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("JURIS_HOME", str(tmp_path))  # public tenant → <home>/filings
     (tmp_path / "filings" / "cnj" / "20260630_pending").mkdir(parents=True)
@@ -653,11 +684,23 @@ def test_filing_flow_uses_loaded_artifact_for_dry_run_and_submit(monkeypatch, tm
     loaded_draft = loaded.json()["content"]
     dry_run = client.post(
         "/api/filing/dry-run",
-        json=_filing_payload(draft_markdown=loaded_draft, review_confirmed=False, consent=False),
+        json=_filing_payload(
+            draft_markdown=loaded_draft,
+            output_dir=artifact["output_dir"],
+            artifact_name=artifact["artifact_name"],
+            review_confirmed=False,
+            consent=False,
+        ),
     )
     submit = client.post(
         "/api/filing/submit",
-        json=_filing_payload(draft_markdown=loaded_draft, review_confirmed=True, consent=True),
+        json=_filing_payload(
+            draft_markdown=loaded_draft,
+            output_dir=artifact["output_dir"],
+            artifact_name=artifact["artifact_name"],
+            review_confirmed=True,
+            consent=True,
+        ),
     )
 
     assert listed.status_code == 200
@@ -675,6 +718,78 @@ def test_filing_flow_uses_loaded_artifact_for_dry_run_and_submit(monkeypatch, tm
     assert dry_request.draft_markdown == draft
     assert submit_request.draft_markdown == draft
     assert submit_pin == "1234"
+    # The gate's evidence is resolved server-side from the manifest the artifact
+    # came from — not trusted from the client — for both dry-run and submit.
+    assert dry_request.grounding is not None
+    assert dry_request.grounding.status == "verified"
+    assert dry_request.grounding.draft_sha256 == digest
+    assert submit_request.grounding == dry_request.grounding
+
+
+def test_filing_submit_without_artifact_selection_has_no_grounding_evidence(monkeypatch) -> None:
+    """Freeform pasted markdown (no output_dir/artifact_name) is 'documento externo' —
+    the endpoint must not fabricate evidence for it."""
+    import juris.signing.filing_service as filing_service
+
+    service = _FakeFilingService()
+    monkeypatch.setattr(filing_service, "get_filing_service", lambda tenant_id="public", **kwargs: service)
+
+    response = client.post("/api/filing/submit", json=_filing_payload())
+
+    assert response.status_code == 200, response.text
+    request, _pin = service.calls[0]
+    assert request.grounding is None
+
+
+def test_filing_submit_forwards_override_fields(monkeypatch) -> None:
+    import juris.signing.filing_service as filing_service
+
+    service = _FakeFilingService()
+    monkeypatch.setattr(filing_service, "get_filing_service", lambda tenant_id="public", **kwargs: service)
+
+    response = client.post(
+        "/api/filing/submit",
+        json=_filing_payload(
+            override_grounding=True,
+            override_reason="Documento externo revisado manualmente pelo advogado.",
+        ),
+    )
+
+    assert response.status_code == 200, response.text
+    request, _pin = service.calls[0]
+    assert request.grounding_override is True
+    assert request.grounding_override_reason == "Documento externo revisado manualmente pelo advogado."
+
+
+def test_filing_submit_returns_409_with_structured_detail_when_grounding_blocked(monkeypatch) -> None:
+    import juris.signing.filing_service as filing_service
+
+    service = _GroundingBlockedFilingService(
+        "grounding_required", "Protocolo bloqueado: grounding não verificado."
+    )
+    monkeypatch.setattr(filing_service, "get_filing_service", lambda tenant_id="public", **kwargs: service)
+
+    response = client.post("/api/filing/submit", json=_filing_payload())
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "grounding_required"
+    assert "grounding" in response.json()["detail"]["message"].lower()
+
+
+def test_filing_dry_run_returns_409_when_revisao_humana_obrigatoria(monkeypatch) -> None:
+    import juris.signing.filing_service as filing_service
+
+    service = _GroundingBlockedFilingService(
+        "revisao_humana_obrigatoria", "Revisão humana obrigatória antes de protocolar."
+    )
+    monkeypatch.setattr(filing_service, "get_filing_service", lambda tenant_id="public", **kwargs: service)
+
+    response = client.post(
+        "/api/filing/dry-run", json=_filing_payload(review_confirmed=False, consent=False)
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "revisao_humana_obrigatoria"
 
 
 def test_filing_dry_run_uses_service_without_consent_requirement(monkeypatch) -> None:

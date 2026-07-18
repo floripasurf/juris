@@ -8,13 +8,14 @@ import stat
 from datetime import UTC, datetime
 
 from juris.mni.operations.peticionamento import FilingReceipt
-from juris.signing.filing import ChainOfCustody, FilingResult
+from juris.signing.filing import ChainOfCustody, FilingResult, GroundingEvidence
 from juris.signing.pades import SigningResult
 from juris.web.filing_console import (
     archive_pending,
     default_filing_root,
     filing_artifacts,
     filing_status,
+    grounding_evidence_from_manifest,
     pending_recovery,
     read_filing_artifact,
     retry_pending_submission,
@@ -421,6 +422,80 @@ def test_read_filing_artifact_rejects_symlink_escape(tmp_path) -> None:
             raise AssertionError("symlink para fora do root deveria falhar")
     finally:
         outside.unlink(missing_ok=True)
+
+
+def test_grounding_evidence_from_manifest_reads_verified_status(tmp_path) -> None:
+    case_dir = tmp_path / "CASE-1"
+    case_dir.mkdir()
+    draft = "# Minuta"
+    (case_dir / "draft.md").write_text(draft, encoding="utf-8")
+    (case_dir / "run-manifest.json").write_text(
+        json.dumps(
+            {
+                "draft": {"grounding_status": "verified"},
+                "artifacts": [{"name": "draft.md", "sha256": _sha256_text(draft)}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    evidence = grounding_evidence_from_manifest(tmp_path, output_dir="CASE-1", artifact_name="draft.md")
+
+    assert evidence == GroundingEvidence(
+        status="verified", draft_sha256=_sha256_text(draft), revisao_humana_obrigatoria=False
+    )
+
+
+def test_grounding_evidence_from_manifest_propagates_revisao_humana_obrigatoria(tmp_path) -> None:
+    case_dir = tmp_path / "CASE-1"
+    case_dir.mkdir()
+    draft = "# Minuta"
+    (case_dir / "draft.md").write_text(draft, encoding="utf-8")
+    (case_dir / "run-manifest.json").write_text(
+        json.dumps(
+            {
+                "draft": {"grounding_status": "verified", "revisao_humana_obrigatoria": True},
+                "artifacts": [{"name": "draft.md", "sha256": _sha256_text(draft)}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    evidence = grounding_evidence_from_manifest(tmp_path, output_dir="CASE-1", artifact_name="draft.md")
+
+    assert evidence is not None
+    assert evidence.revisao_humana_obrigatoria is True
+
+
+def test_grounding_evidence_from_manifest_defaults_to_unknown_for_old_manifest(tmp_path) -> None:
+    """Manifests written before grounding tracking existed have no 'draft.grounding_status' —
+    those default to status='unknown', which the orchestrator gate treats as unverified."""
+    case_dir = tmp_path / "CASE-1"
+    case_dir.mkdir()
+    draft = "# Minuta antiga"
+    (case_dir / "draft.md").write_text(draft, encoding="utf-8")
+    (case_dir / "run-manifest.json").write_text(
+        json.dumps({"artifacts": [{"name": "draft.md", "sha256": _sha256_text(draft)}]}),
+        encoding="utf-8",
+    )
+
+    evidence = grounding_evidence_from_manifest(tmp_path, output_dir="CASE-1", artifact_name="draft.md")
+
+    assert evidence is not None
+    assert evidence.status == "unknown"
+    assert evidence.revisao_humana_obrigatoria is False
+
+
+def test_grounding_evidence_from_manifest_returns_none_without_manifest(tmp_path) -> None:
+    case_dir = tmp_path / "CASE-1"
+    case_dir.mkdir()
+    (case_dir / "draft.md").write_text("# Minuta", encoding="utf-8")
+
+    assert grounding_evidence_from_manifest(tmp_path, output_dir="CASE-1", artifact_name="draft.md") is None
+
+
+def test_grounding_evidence_from_manifest_is_confined_to_root(tmp_path) -> None:
+    assert grounding_evidence_from_manifest(tmp_path, output_dir="../", artifact_name="draft.md") is None
 
 
 def test_archive_pending_recovery_json_is_private(tmp_path) -> None:

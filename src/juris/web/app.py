@@ -30,6 +30,7 @@ from juris.web.workbench_service import build_workbench
 if TYPE_CHECKING:
     from juris.mni.tribunais import TribunalConfig
     from juris.persistence.local_db import LocalDB
+    from juris.signing.filing import FilingResult, GroundingEvidence
 
 
 @lru_cache(maxsize=128)
@@ -428,6 +429,10 @@ class FilingPayload(BaseModel):
     prazo_override: str | None = Field(default=None, max_length=64)
     review_confirmed: bool = False
     consent: bool = False
+    output_dir: str | None = Field(default=None, max_length=_MAX_PATH_TEXT)
+    artifact_name: str | None = Field(default=None, max_length=128)
+    override_grounding: bool = False
+    override_reason: str = Field(default="", max_length=_MAX_SHORT_TEXT)
 
 
 class FilingArtifactPayload(BaseModel):
@@ -1505,6 +1510,40 @@ async def retry_pending_filing(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+def _resolve_grounding_evidence(tenant: Tenant, payload: FilingPayload) -> GroundingEvidence | None:
+    """Grounding evidence for the artifact the lawyer picked, if any.
+
+    Freeform pasted markdown (no ``output_dir``/``artifact_name``) resolves to
+    ``None`` — "documento externo" — same as an artifact whose manifest lacks a
+    grounding veredict; either way the orchestrator's gate requires an override.
+    """
+    if not payload.output_dir or not payload.artifact_name:
+        return None
+    from juris.web.auth import tenant_scoped_dir
+    from juris.web.filing_console import grounding_evidence_from_manifest
+
+    return grounding_evidence_from_manifest(
+        tenant_scoped_dir(tenant, _out_root()),
+        output_dir=payload.output_dir,
+        artifact_name=payload.artifact_name,
+    )
+
+
+def _grounding_blocked_http_error(result: FilingResult) -> HTTPException | None:
+    """A structured 409 when the orchestrator's grounding gate blocked filing.
+
+    ``None`` for every other outcome (including other error_codes such as
+    ``delivery_uncertain``), which the endpoint returns as a normal 200 body —
+    the lawyer still needs the full preflight/receipt payload for those.
+    """
+    if result.error_code in {"grounding_required", "revisao_humana_obrigatoria"}:
+        return HTTPException(
+            status_code=409,
+            detail={"code": result.error_code, "message": result.error or "Protocolo bloqueado."},
+        )
+    return None
+
+
 @app.post("/api/filing/dry-run")
 async def dry_run_filing(payload: FilingPayload, tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
     """Render and preflight a filing without signing or contacting the tribunal."""
@@ -1524,6 +1563,9 @@ async def dry_run_filing(payload: FilingPayload, tenant: Tenant = Depends(curren
         senha="" if remote else payload.senha or "",
         dry_run=True,
         prazo_override=payload.prazo_override,
+        grounding=_resolve_grounding_evidence(tenant, payload),
+        grounding_override=payload.override_grounding,
+        grounding_override_reason=payload.override_reason,
     )
     try:
         result = await get_filing_service(tenant.tenant_id, storage_root=_tenant_juris_home(tenant)).file(
@@ -1536,6 +1578,8 @@ async def dry_run_filing(payload: FilingPayload, tenant: Tenant = Depends(curren
             message="Falha operacional no protocolo. Verifique agente, token e tribunal.",
             exc=exc,
         ) from exc
+    if (blocked := _grounding_blocked_http_error(result)) is not None:
+        raise blocked
     return serialize_filing_result(result)
 
 
@@ -1563,6 +1607,9 @@ async def submit_filing(payload: FilingPayload, tenant: Tenant = Depends(current
         senha="" if remote else payload.senha or "",
         dry_run=False,
         prazo_override=payload.prazo_override,
+        grounding=_resolve_grounding_evidence(tenant, payload),
+        grounding_override=payload.override_grounding,
+        grounding_override_reason=payload.override_reason,
     )
     try:
         result = await get_filing_service(tenant.tenant_id, storage_root=_tenant_juris_home(tenant)).file(
@@ -1575,6 +1622,8 @@ async def submit_filing(payload: FilingPayload, tenant: Tenant = Depends(current
             message="Falha operacional no protocolo. Verifique agente, token e tribunal.",
             exc=exc,
         ) from exc
+    if (blocked := _grounding_blocked_http_error(result)) is not None:
+        raise blocked
     return serialize_filing_result(result)
 
 

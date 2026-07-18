@@ -30,6 +30,17 @@ _DELIVERY_UNCERTAIN_ERROR = (
     "Falha na entrega ao tribunal. ATENÇÃO: a petição PODE ter sido protocolada — "
     "confira o processo no tribunal antes de tentar novamente."
 )
+_GROUNDING_REQUIRED_ERROR = (
+    "Protocolo bloqueado: o grounding das citações desta minuta não foi verificado "
+    "(ou o texto mudou desde a verificação). Gere um artefato verificado ou registre "
+    "uma justificativa para protocolar mesmo assim — fica em auditoria."
+)
+_REVISAO_HUMANA_OBRIGATORIA_ERROR = (
+    "Protocolo bloqueado: esta minuta exige revisão humana obrigatória antes de "
+    "protocolar. Revise o rascunho ou registre uma justificativa para protocolar "
+    "mesmo assim — fica em auditoria."
+)
+_MIN_OVERRIDE_REASON_LEN = 20
 
 
 def _clock_skew_probe_url(tribunal: str) -> str | None:
@@ -52,6 +63,15 @@ def _clock_skew_probe_url(tribunal: str) -> str | None:
 
 
 @dataclass(frozen=True, slots=True)
+class GroundingEvidence:
+    """Veredito de grounding transportado até o ato de protocolo."""
+
+    status: str
+    draft_sha256: str
+    revisao_humana_obrigatoria: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class FilingRequest:
     """Input for a filing operation."""
 
@@ -65,6 +85,9 @@ class FilingRequest:
     skip_preflight: bool = False
     dry_run: bool = False
     prazo_override: str | None = None
+    grounding: GroundingEvidence | None = None
+    grounding_override: bool = False
+    grounding_override_reason: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,6 +170,23 @@ def _public_error_for_step(step: str) -> str:
     }[step]
 
 
+def _grounding_failure_code(grounding: GroundingEvidence | None, draft_markdown: str) -> str | None:
+    """``None`` when grounding is satisfied; otherwise the blocking error_code.
+
+    Passes only when the evidence is ``"verified"``, its ``draft_sha256`` matches
+    the markdown actually being filed (any edit since verification invalidates
+    it), and human review isn't mandatory. ``revisao_humana_obrigatoria`` gets its
+    own error_code only when it's the sole problem — any other failure (missing
+    evidence, wrong status, hash mismatch) reports as the generic
+    ``"grounding_required"``.
+    """
+    if grounding is None:
+        return "grounding_required"
+    if grounding.status == "verified" and grounding.draft_sha256 == _sha256_hex(draft_markdown):
+        return "revisao_humana_obrigatoria" if grounding.revisao_humana_obrigatoria else None
+    return "grounding_required"
+
+
 class FilingOrchestrator:
     """Orchestrates the full filing pipeline.
 
@@ -177,6 +217,50 @@ class FilingOrchestrator:
             FilingResult with success status, receipt, and audit trail.
         """
         audit_ids: list[str] = []
+
+        # 0. Grounding gate — mandatory on every path (dry-run included);
+        # skip_preflight does NOT skip this. Reusing a stale or unverified
+        # draft requires an explicit, audited lawyer override.
+        failure_code = _grounding_failure_code(request.grounding, request.draft_markdown)
+        if failure_code is not None:
+            override_reason = request.grounding_override_reason.strip()
+            if request.grounding_override and len(override_reason) >= _MIN_OVERRIDE_REASON_LEN:
+                entry = self._audit.log(
+                    "filing.grounding_override",
+                    actor="lawyer",
+                    details={
+                        "reason": override_reason,
+                        "blocked_reason": failure_code,
+                        "grounding_status": request.grounding.status if request.grounding else None,
+                    },
+                    processo_cnj=request.numero_cnj,
+                )
+                audit_ids.append(entry.entry_id)
+            else:
+                public_error = (
+                    _REVISAO_HUMANA_OBRIGATORIA_ERROR
+                    if failure_code == "revisao_humana_obrigatoria"
+                    else _GROUNDING_REQUIRED_ERROR
+                )
+                entry = self._audit.log(
+                    "filing.blocked_ungrounded",
+                    actor=f"user:{request.cpf}",
+                    details={
+                        "error_code": failure_code,
+                        "grounding_status": request.grounding.status if request.grounding else None,
+                        "override_attempted": request.grounding_override,
+                    },
+                    processo_cnj=request.numero_cnj,
+                )
+                return FilingResult(
+                    success=False,
+                    receipt=None,
+                    signing_result=None,
+                    preflight=None,
+                    audit_entry_ids=[entry.entry_id],
+                    error=public_error,
+                    error_code=failure_code,
+                )
 
         # 1. Render Markdown → PDF
         try:
