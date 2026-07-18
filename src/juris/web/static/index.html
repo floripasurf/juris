@@ -4045,10 +4045,16 @@
       const receipt = data.receipt ? `<div class="queue-item"><strong>Recibo ${escHtml(data.receipt.protocolo || "sem protocolo")}</strong>
           <div class="meta">${escHtml(data.receipt.mensagem || "")}</div>
         </div>` : "";
+      const deliveryUncertain = data.error_code === "delivery_uncertain";
+      const statusLabel = data.success ? "ok" : deliveryUncertain ? "verificar no tribunal" : "falha";
+      const statusChipClass = data.success ? "sev-suggestion" : deliveryUncertain ? "sev-important" : "sev-critical";
+      const errorNotice = data.error
+        ? `<p class="notice error" style="position:static" data-testid="${deliveryUncertain ? "delivery-uncertain-notice" : "filing-error-notice"}">${deliveryUncertain ? "<strong>Não reenvie sem verificar no tribunal:</strong> " : ""}${escHtml(data.error)}</p>`
+        : "";
       filingResultEl.className = "review-card";
       filingResultEl.innerHTML = `<div class="review-head"><h3>${data.success ? "Operação concluída" : "Operação bloqueada"}</h3>
-          <span class="sev-chip ${data.success ? "sev-suggestion" : "sev-critical"}">${data.success ? "ok" : "falha"}</span></div>
-        ${data.error ? `<p class="notice error" style="position:static">${escHtml(data.error)}</p>` : ""}
+          <span class="sev-chip ${statusChipClass}">${statusLabel}</span></div>
+        ${errorNotice}
         <div class="proc-meta">Prazo: ${escHtml(pf.prazo_status || "—")} · checagem ${pf.passed === false ? "bloqueada" : "ok"}</div>
         <ul class="review-issues">${checks}</ul>
         ${hashes}${receipt}`;

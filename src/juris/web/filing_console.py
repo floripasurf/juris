@@ -170,6 +170,7 @@ def serialize_filing_result(result: FilingResult) -> dict[str, object]:
     return {
         "success": result.success,
         "error": result.error,
+        "error_code": result.error_code,
         "audit_entry_ids": list(result.audit_entry_ids),
         "preflight": _preflight_payload(result.preflight),
         "receipt": _receipt_metadata(result.receipt),

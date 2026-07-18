@@ -289,9 +289,30 @@ def test_serialize_filing_result_does_not_expose_pdf_bytes() -> None:
 
     assert payload["receipt"]["protocolo"] == "P1"
     assert payload["chain_of_custody"]["receipt_hash"] == "receipt"
+    assert payload["error_code"] is None
     dumped = json.dumps(payload)
     assert "%PDF sensitive" not in dumped
     assert '"signed_pdf":' not in dumped
+
+
+def test_serialize_filing_result_exposes_delivery_uncertain_error_code() -> None:
+    """The UI must be able to tell 'não foi' from 'pode ter ido' — serialization
+    exposes error_code so it can withhold the immediate-resend option."""
+    result = FilingResult(
+        success=False,
+        receipt=None,
+        signing_result=None,
+        preflight=None,
+        audit_entry_ids=["a1"],
+        error="Falha na entrega ao tribunal. ATENÇÃO: a petição PODE ter sido protocolada — "
+        "confira o processo no tribunal antes de tentar novamente.",
+        error_code="delivery_uncertain",
+    )
+
+    payload = serialize_filing_result(result)
+
+    assert payload["error_code"] == "delivery_uncertain"
+    assert "PODE ter sido protocolada" in (payload["error"] or "")
 
 
 def test_filing_artifacts_lists_primary_drafts(tmp_path) -> None:

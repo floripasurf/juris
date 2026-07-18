@@ -268,6 +268,27 @@ def test_remote_filing_carries_protocol_metadata_not_artifacts() -> None:
     assert rebuilt.signing_result is None  # the signed PDF never crosses
 
 
+def test_remote_filing_round_trips_delivery_uncertain_error_code() -> None:
+    """The agent may hit an indeterminate MNI delivery too — error_code must cross
+    the wire so the console can withhold the immediate-resend option there as well."""
+    from juris.signing.filing_service import _custody_to_payload, _payload_to_result
+
+    result = FilingResult(
+        success=False, receipt=None, signing_result=None, preflight=None,
+        audit_entry_ids=["a1"],
+        error="Falha na entrega ao tribunal. ATENÇÃO: a petição PODE ter sido protocolada — "
+        "confira o processo no tribunal antes de tentar novamente.",
+        error_code="delivery_uncertain",
+    )
+
+    payload = _custody_to_payload(result)
+    assert payload["error_code"] == "delivery_uncertain"
+
+    rebuilt = _payload_to_result(payload)
+    assert rebuilt.error_code == "delivery_uncertain"
+    assert rebuilt.success is False
+
+
 def test_remote_filing_runs_blocking_transport_off_the_event_loop() -> None:
     import threading
 

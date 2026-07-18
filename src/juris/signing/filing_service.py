@@ -159,6 +159,7 @@ def _custody_to_payload(result: FilingResult) -> dict[str, object]:
     return {
         "success": result.success,
         "error": result.error,
+        "error_code": result.error_code,
         "audit_entry_ids": list(result.audit_entry_ids),
         "chain_of_custody": (
             {
@@ -191,6 +192,7 @@ def _payload_to_result(payload: dict[str, object]) -> FilingResult:
     coc = payload.get("chain_of_custody")
     ids = payload.get("audit_entry_ids")
     error = payload.get("error")
+    error_code = payload.get("error_code")
     return FilingResult(
         success=bool(payload.get("success")),
         receipt=_receipt_from_payload(payload.get("receipt")),  # protocol metadata only
@@ -199,6 +201,7 @@ def _payload_to_result(payload: dict[str, object]) -> FilingResult:
         audit_entry_ids=list(ids) if isinstance(ids, list) else [],
         chain_of_custody=ChainOfCustody(**coc) if isinstance(coc, dict) else None,
         error=error if isinstance(error, str) else None,
+        error_code=error_code if isinstance(error_code, str) else None,
     )
 
 

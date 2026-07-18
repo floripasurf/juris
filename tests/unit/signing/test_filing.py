@@ -462,7 +462,7 @@ def test_signing_failure_returns_error(
     assert "exc_info" not in capture.events[0][1]
 
 
-def test_submit_failure_returns_sanitized_error(
+def test_submit_failure_returns_delivery_uncertain(
     mock_signer: MagicMock,
     audit_log: AuditLog,
     receipt_store: FilingReceiptStore,
@@ -470,7 +470,9 @@ def test_submit_failure_returns_sanitized_error(
     filing_request: FilingRequest,
     monkeypatch,
 ) -> None:
-    """MNI submit failures do not expose local paths or secrets in result/audit."""
+    """MNI submit failures are reported as delivery_uncertain (not a plain retryable
+    error) and never expose local paths or secrets in result/audit — the entrega may
+    already have reached the tribunal, so success/failure is genuinely unknown."""
     import juris.signing.filing as filing_module
 
     capture = _CaptureLogger()
@@ -489,16 +491,20 @@ def test_submit_failure_returns_sanitized_error(
             result = asyncio.run(orch.file(filing_request))
 
     assert result.success is False
-    assert "MNI filing failed" in (result.error or "")
+    assert result.error_code == "delivery_uncertain"
+    assert "PODE ter sido protocolada" in (result.error or "")
     entries = audit_log.read_all()
-    submit_errors = [e for e in entries if e.event_type == "filing.submit_error"]
-    assert len(submit_errors) == 1
-    assert submit_errors[0].details == {
-        "error": "MNI filing failed: falha operacional ao protocolar no MNI.",
+    delivery_uncertain_entries = [e for e in entries if e.event_type == "filing.delivery_uncertain"]
+    assert len(delivery_uncertain_entries) == 1
+    assert delivery_uncertain_entries[0].details == {
+        "error": (
+            "Falha na entrega ao tribunal. ATENÇÃO: a petição PODE ter sido protocolada — "
+            "confira o processo no tribunal antes de tentar novamente."
+        ),
         "pending_receipt": True,
     }
     dumped = json.dumps({"error": result.error, "audit": [e.details for e in entries]})
-    assert "falha operacional" in dumped
+    assert "confira o processo no tribunal" in dumped
     assert "/var/private/mni" not in dumped
     assert "token=abc" not in dumped
     assert "pin=1234" not in dumped

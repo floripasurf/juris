@@ -26,7 +26,10 @@ logger = get_logger(__name__)
 
 _PUBLIC_RENDER_ERROR = "Render failed: falha operacional ao gerar o PDF."
 _PUBLIC_SIGNING_ERROR = "Signing failed: falha operacional ao assinar o PDF."
-_PUBLIC_SUBMIT_ERROR = "MNI filing failed: falha operacional ao protocolar no MNI."
+_DELIVERY_UNCERTAIN_ERROR = (
+    "Falha na entrega ao tribunal. ATENÇÃO: a petição PODE ter sido protocolada — "
+    "confira o processo no tribunal antes de tentar novamente."
+)
 
 
 def _clock_skew_probe_url(tribunal: str) -> str | None:
@@ -94,7 +97,13 @@ class ConsentSummary:
 
 @dataclass(frozen=True, slots=True)
 class FilingResult:
-    """Result of a filing operation."""
+    """Result of a filing operation.
+
+    ``error_code`` is ``None`` for every step except the MNI delivery step: when
+    the entrega itself raises after the submit began, ``error_code`` is set to
+    ``"delivery_uncertain"`` because the tribunal may already have received the
+    petition — the UI must not offer an immediate resend in that case.
+    """
 
     success: bool
     receipt: FilingReceipt | None
@@ -103,6 +112,7 @@ class FilingResult:
     audit_entry_ids: list[str]
     chain_of_custody: ChainOfCustody | None = None
     error: str | None = None
+    error_code: str | None = None
 
 
 def _sha256_hex(data: bytes | str) -> str:
@@ -134,7 +144,6 @@ def _public_error_for_step(step: str) -> str:
     return {
         "render": _PUBLIC_RENDER_ERROR,
         "sign": _PUBLIC_SIGNING_ERROR,
-        "submit": _PUBLIC_SUBMIT_ERROR,
     }[step]
 
 
@@ -403,19 +412,18 @@ class FilingOrchestrator:
                 signed_pdf_bytes=signing_result.signed_pdf,
                 tipo_documento=request.tipo_documento,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 — after submit begins, outcome is indeterminate
             logger.warning(
-                "filing_submit_error",
+                "filing_delivery_uncertain",
                 numero_cnj=request.numero_cnj,
                 tribunal=request.tribunal,
                 error=safe_error_text(exc),
                 exception_type=exc.__class__.__name__,
             )
-            public_error = _public_error_for_step("submit")
             entry = self._audit.log(
-                "filing.submit_error",
+                "filing.delivery_uncertain",
                 actor=f"user:{request.cpf}",
-                details={"error": public_error, "pending_receipt": True},
+                details={"error": _DELIVERY_UNCERTAIN_ERROR, "pending_receipt": True},
                 processo_cnj=request.numero_cnj,
             )
             audit_ids.append(entry.entry_id)
@@ -425,7 +433,8 @@ class FilingOrchestrator:
                 signing_result=signing_result,
                 preflight=preflight,
                 audit_entry_ids=audit_ids,
-                error=public_error,
+                error=_DELIVERY_UNCERTAIN_ERROR,
+                error_code="delivery_uncertain",
             )
 
         entry = self._audit.log(
