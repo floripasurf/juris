@@ -63,6 +63,22 @@ _REOPENED_APPEAL_AFTER_ED_RULE = PrazoRule(
     # elegível à dobra (admite_dobro=True, o default).
 )
 
+# Escopo ESTREITO (revisão jurídica externa): só a interlocutória agravável
+# (TPU 385 — decisão interlocutória, art. 1.015 CPC) tem regra própria de
+# reabertura. Qualquer outra DECISAO_RECORRIVEL com ED vai para revisão manual
+# em vez de reabrir este recurso — ver `_handle_embargos_interruption`.
+_REOPENED_AGRAVO_AFTER_ED_RULE = PrazoRule(
+    nome="Agravo de instrumento (reaberto após embargos de declaração)",
+    categoria_trigger=CategoriaSemantica.DECISAO_RECORRIVEL,
+    codigo_tpu=None,
+    dias_uteis=15,
+    tipo_acao=TipoAcao.RECORRER,
+    base_legal="Art. 1.015 c/c Art. 1.026 CPC",
+    # Reabertura do prazo recursal do agravo — mesma lógica da apelação
+    # reaberta: não é prazo próprio, permanece elegível à dobra (admite_dobro
+    # =True, o default).
+)
+
 # Prazo em dobro (arts. 180/183/186 CPC): base legal citada na anotação da regra
 # quando a dobra é aplicada.
 _DOBRO_BASE_LEGAL: dict[str, str] = {
@@ -327,53 +343,54 @@ def compute_prazos(
             )
             continue
 
-        # CPC art. 1.026: embargos de declaração interrupt the appeal period.
-        # Do not keep showing the original sentence appeal as VENCIDO after EDs
-        # were filed; calculate the full reopened appeal period from the ED
-        # judgment/publication when present, or surface manual review while pending.
+        # CPC art. 1.026: embargos de declaração interrompem o prazo recursal.
+        # Não deixar o recurso original aparecer como VENCIDO enquanto os
+        # embargos estiverem pendentes; ao julgamento, recalcular o prazo
+        # recursal integral a partir da intimação. Acórdão/RE/REsp sem
+        # categoria própria no CategoriaSemantica ficam fora do escopo — art.
+        # 1.026 interrompe apenas prazos recursais (TipoAcao.RECORRER).
         if analysis.categoria == CategoriaSemantica.SENTENCA:
-            interruption = _embargos_interruption_for_sentence(analysis, dated_analyses)
-            if interruption is not None:
-                if interruption.resolution is None:
-                    revisao_manual.append(
-                        RevisaoManual(
-                            analysis.movimento_id,
-                            analysis.categoria,
-                            "prazo_interrompido_embargos_pendentes",
-                            (
-                                "Prazo recursal interrompido por embargos de declaração; "
-                                "aguarde/registre a publicação do julgamento dos embargos."
-                            ),
-                        )
-                    )
-                    continue
-                resolution = interruption.resolution
-                # CPC art. 1.003 §5º c/c art. 1.026: the reopened appeal runs from
-                # the intimação of the ED judgment, not the raw judgment timestamp.
-                # Reuse the same marco-legal logic so a DJe/publicação date carried
-                # by the resolution movement is honoured; fall back to the resolution
-                # date when the movement gives no explicit milestone.
-                reopened_start = _legal_start_date(resolution, calendar)
-                reopened = replace(
-                    analysis,
-                    movimento_id=f"{analysis.movimento_id}:reabertura-apelacao-ed",
-                    data_hora=resolution.data_hora,
-                    descricao=(
-                        "Prazo de apelação reaberto após intimação do julgamento dos "
-                        "embargos de declaração."
-                    ),
-                )
-                reopened_rule = _rule_em_dobro(_REOPENED_APPEAL_AFTER_ED_RULE, parte_representada)
-                prazos.append(
-                    compute_prazo(
-                        reopened,
-                        reopened_rule,
-                        calendar,
-                        today,
-                        numero_cnj,
-                        data_inicio=reopened_start,
-                    )
-                )
+            handled = _handle_embargos_interruption(
+                analysis,
+                dated_analyses,
+                calendar,
+                today,
+                numero_cnj,
+                parte_representada,
+                prazos,
+                revisao_manual,
+                reopened_rule=_REOPENED_APPEAL_AFTER_ED_RULE,
+                reopened_suffix="reabertura-apelacao-ed",
+                reopened_descricao=(
+                    "Prazo de apelação reaberto após intimação do julgamento dos "
+                    "embargos de declaração."
+                ),
+            )
+            if handled:
+                continue
+        elif analysis.categoria == CategoriaSemantica.DECISAO_RECORRIVEL:
+            # Escopo ESTREITO: só a interlocutória agravável (TPU 385) reabre
+            # o agravo. Qualquer outra decisão recorrível (TPU 193/60/458/459
+            # etc.) com ED detectados vai para revisão manual — nunca
+            # fabricar recurso sem regra própria de reabertura.
+            reopened_rule = _REOPENED_AGRAVO_AFTER_ED_RULE if analysis.codigo_tpu == 385 else None
+            handled = _handle_embargos_interruption(
+                analysis,
+                dated_analyses,
+                calendar,
+                today,
+                numero_cnj,
+                parte_representada,
+                prazos,
+                revisao_manual,
+                reopened_rule=reopened_rule,
+                reopened_suffix="reabertura-agravo-ed",
+                reopened_descricao=(
+                    "Prazo de agravo de instrumento reaberto após intimação do "
+                    "julgamento dos embargos de declaração."
+                ),
+            )
+            if handled:
                 continue
 
         # The ED filing/resolution movements are evidence of interruption/reopening,
@@ -584,30 +601,147 @@ def _movement_ordering_key(analysis: AnalysisResult) -> datetime:
     return analysis.data_hora
 
 
-def _embargos_interruption_for_sentence(
-    sentence: AnalysisResult,
+def _embargos_interruption_for(
+    decision: AnalysisResult,
     analyses: list[AnalysisResult],
 ) -> _EmbargosInterruption | None:
-    if sentence.data_hora is None:
+    """Pair a recursável decision with the embargos de declaração filed against it.
+
+    Detection of the filing/resolution movements themselves (TPU 199/463-465 or
+    regex on the descrição) is categoria-agnostic — an ED is always logged
+    under ``CategoriaSemantica.RECURSO`` regardless of what it targets. The
+    pairing is what needs to be categoria-aware: the ED filing considered must
+    be posterior to ``decision`` and anterior to the next decision of the
+    *same* categoria (SENTENCA or DECISAO_RECORRIVEL). Without that window, an
+    ED filed only after a later decision of the same categoria (e.g. a second
+    interlocutória in the same processo) would incorrectly be attributed to
+    this earlier one. Once the correct filing is identified, its resolution is
+    searched unbounded — it may legitimately be published after a later,
+    unrelated decision in the processo.
+    """
+    if decision.data_hora is None:
         return None
-    after_sentence = [
-        analysis
-        for analysis in analyses
-        if analysis.data_hora is not None and analysis.data_hora > sentence.data_hora
+    decision_dt = decision.data_hora
+    after_decision = [
+        analysis for analysis in analyses if analysis.data_hora is not None and analysis.data_hora > decision_dt
     ]
-    filings = [analysis for analysis in after_sentence if _is_embargos_declaracao_filing(analysis)]
+    next_same_categoria_dates = [
+        analysis.data_hora
+        for analysis in after_decision
+        if analysis.data_hora is not None and analysis.categoria == decision.categoria
+    ]
+    window_end = min(next_same_categoria_dates) if next_same_categoria_dates else None
+    window = [
+        analysis
+        for analysis in after_decision
+        if window_end is None or (analysis.data_hora is not None and analysis.data_hora < window_end)
+    ]
+    filings = [analysis for analysis in window if _is_embargos_declaracao_filing(analysis)]
     if not filings:
         return None
     filing = min(filings, key=_movement_ordering_key)
     filing_dt = filing.data_hora
-    if filing_dt is None:  # unreachable: after_sentence already excludes undated movements
+    if filing_dt is None:  # unreachable: window already excludes undated movements
         return None
     resolutions = [
         analysis
-        for analysis in after_sentence
+        for analysis in after_decision
         if analysis.data_hora is not None
         and analysis.data_hora > filing_dt
         and _is_embargos_declaracao_resolution(analysis)
     ]
     resolution = min(resolutions, key=_movement_ordering_key) if resolutions else None
     return _EmbargosInterruption(filing=filing, resolution=resolution)
+
+
+def _handle_embargos_interruption(
+    analysis: AnalysisResult,
+    dated_analyses: list[AnalysisResult],
+    calendar: JudicialCalendar,
+    today: date,
+    numero_cnj: str,
+    parte_representada: str,
+    prazos: list[Prazo],
+    revisao_manual: list[RevisaoManual],
+    *,
+    reopened_rule: PrazoRule | None,
+    reopened_suffix: str,
+    reopened_descricao: str,
+) -> bool:
+    """Detect and handle a CPC art. 1.026 embargos-de-declaração interruption.
+
+    Applies to SENTENCA (apelação) and to DECISAO_RECORRIVEL decisions whose
+    TPU code maps to a known reopening rule (currently only TPU 385 —
+    interlocutória agravável, art. 1.015 CPC). Acórdão/RE/REsp sem categoria
+    própria no CategoriaSemantica — fora do escopo; art. 1.026 interrompe
+    apenas prazos recursais.
+
+    When ``reopened_rule`` is None, this decision has no known recursal rule
+    to reopen: embargos detected against it are suppressed and routed to
+    manual review instead of risking a fabricated recurso.
+
+    Returns:
+        True when embargos de declaração were detected against ``analysis``
+        — the caller should skip normal rule-matching for this movement,
+        since the deadline was suppressed, routed to manual review, or
+        reopened as a new ``Prazo``. False when no embargos were filed, so
+        normal rule-matching should proceed.
+    """
+    interruption = _embargos_interruption_for(analysis, dated_analyses)
+    if interruption is None:
+        return False
+
+    if reopened_rule is None:
+        revisao_manual.append(
+            RevisaoManual(
+                analysis.movimento_id,
+                analysis.categoria,
+                "ed_sobre_decisao_recurso_incerto",
+                (
+                    "Embargos de declaração opostos contra decisão sem regra de "
+                    "reabertura de recurso conhecida; revise manualmente o prazo "
+                    "recursal aplicável (art. 1.026 CPC)."
+                ),
+            )
+        )
+        return True
+
+    if interruption.resolution is None:
+        revisao_manual.append(
+            RevisaoManual(
+                analysis.movimento_id,
+                analysis.categoria,
+                "prazo_interrompido_embargos_pendentes",
+                (
+                    "Prazo recursal interrompido por embargos de declaração; "
+                    "aguarde/registre a publicação do julgamento dos embargos."
+                ),
+            )
+        )
+        return True
+
+    resolution = interruption.resolution
+    # CPC art. 1.003 §5º c/c art. 1.026: the reopened period runs from the
+    # intimação of the ED judgment, not the raw judgment timestamp. Reuse the
+    # same marco-legal logic so a DJe/publicação date carried by the
+    # resolution movement is honoured; fall back to the resolution date when
+    # the movement gives no explicit milestone.
+    reopened_start = _legal_start_date(resolution, calendar)
+    reopened = replace(
+        analysis,
+        movimento_id=f"{analysis.movimento_id}:{reopened_suffix}",
+        data_hora=resolution.data_hora,
+        descricao=reopened_descricao,
+    )
+    reopened_rule_efetiva = _rule_em_dobro(reopened_rule, parte_representada)
+    prazos.append(
+        compute_prazo(
+            reopened,
+            reopened_rule_efetiva,
+            calendar,
+            today,
+            numero_cnj,
+            data_inicio=reopened_start,
+        )
+    )
+    return True
