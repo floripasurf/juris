@@ -500,3 +500,28 @@ Commit: `feat(draft): cadeia por CLI de assinatura gated (flag off, allowlist, c
 - Os 4 bloqueios do Codex têm resposta: base origin/main + revisão do delta (Task P); Task 2 gated (flag off, allowlist, semáforo 1, cwd vazio, ToS = gate humano); gate de grounding movido para `FilingOrchestrator` com evidência transportável e override auditado no domínio; prazo em dobro por regra (`admite_dobro`) + por chamada, com exceções legais explícitas. ✓
 - Correções de contrato verificadas no código real: manifest reusa `grounding_status` existente (`demo/artifacts.py:370`); `Prazo.rule.base_legal` via `dataclasses.replace`; `SearchResult`/resultado sem `titulo` (match por `source_id`/`texto`); `HTTPException(detail={"code",...})`; `alerts send` sem db incluído na Task 7; entrada legada string testada; `/health` público no smoke; bootout/bootstrap no runbook; dry-run do backfill não muta; medição de keepalive por delta. ✓
 - Fora de escopo explícito: WhatsApp, auto-update onedir, ADR-0017, dobro CLT (DL 779), acórdão/RE/REsp em embargos, billing (já existe em origin/main, não implantado). ✓
+
+## Errata pós-revisão — 2026-07-19
+
+Esta seção substitui os trechos conflitantes acima; os checkboxes anteriores
+registram a execução original e não afirmam estado de produção atual.
+
+- Grounding protocolável agora é vinculado ao hash, CNJ, tribunal, tipo de
+  petição e `output_mode`. `rascunho-pesquisa` nunca passa automaticamente;
+  eventual override continua explícito e auditado.
+- Criação do cliente/WSDL MNI falha como `delivery_not_started`, sem recibo
+  pendente. Apenas exceção dentro de `entregar_manifestacao` produz
+  `delivery_uncertain` e exige consulta ao tribunal antes de reenvio.
+- Prazo em dobro não usa configuração global no runtime multi-tenant. O default
+  vive em `tenants.json`, pode ser sobrescrito no registro do processo e é
+  propagado por chamada. Justiça do Trabalho com ente público vai para revisão
+  manual até o regime específico do DL 779/1969 ser modelado por ato.
+- A resolução de embargos é limitada à janela do recurso e ambiguidades com
+  decisões sobrepostas falham fechado para revisão manual.
+- O backend por assinatura não executa Codex CLI: `read-only` impede escrita,
+  mas não confina leituras do host. O único ramo remoto é Claude CLI com
+  `--safe-mode`, skills/slash commands desabilitados, MCP vazio, settings vazias
+  e lista de ferramentas vazia; depois dele permanece o fallback Ollama local.
+- Nenhuma alteração desta errata autoriza ativação do canário ou deploy em
+  produção. Esses passos continuam dependentes da decisão humana de ToS e do
+  fluxo normal de PR/merge/deploy.
