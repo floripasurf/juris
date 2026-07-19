@@ -297,3 +297,143 @@ class TestRegressaoSentenca:
         assert reopened[0].data_inicio == date(2026, 2, 10)
         assert reopened[0].dias_uteis_total == 15
         assert reopened[0].status != "vencido"
+
+
+class TestJulgamentoAmbiguoEntreDecisoes:
+    """Achado P1 nº 6 (revisão 18/07): a resolução do ED não pode vazar para
+    fora da janela da decisão (a janela antiga buscava a resolução em
+    ``after_decision`` inteiro), e mesmo restrita à janela um julgamento não
+    é atribuído sozinho a uma decisão se outra decisão do processo também
+    tiver ED pendente naquele momento — regra de ouro: na dúvida, revisão
+    manual; nunca dois recursos reabertos pelo mesmo julgamento.
+    """
+
+    def test_julgamento_apos_ed_b_nao_reabre_dois_recursos(self) -> None:
+        # Cenário do achado: decisão A -> ED-A; decisão B -> ED-B; um único
+        # julgamento é publicado DEPOIS da interposição do ED-B (portanto já
+        # fora da janela de A, que termina na publicação de B). A janela nova
+        # já impede que esse julgamento seja escolhido para A; ele só cai
+        # dentro da janela (sem fim) de B. Mas quando B tentaria usá-lo, A
+        # ainda tem um ED interposto antes dele e nunca resolvido dentro da
+        # SUA própria janela — ambíguo o bastante para B não reabrir sozinho.
+        # Resultado observado: NENHUM recurso é reaberto; A fica no motivo
+        # pré-existente ("embargos pendentes") e B vai para o motivo novo
+        # ("ed_julgamento_ambiguo"). Nunca dois recursos reabertos pelo mesmo
+        # julgamento.
+        analyses = [
+            _movement(
+                "dec-a",
+                CategoriaSemantica.DECISAO_RECORRIVEL,
+                385,
+                "Decisão interlocutória A publicada",
+                date(2026, 1, 5),
+            ),
+            _movement(
+                "ed-a",
+                CategoriaSemantica.RECURSO,
+                199,
+                "Embargos de declaração opostos contra decisão A",
+                date(2026, 1, 9),
+            ),
+            _movement(
+                "dec-b",
+                CategoriaSemantica.DECISAO_RECORRIVEL,
+                385,
+                "Decisão interlocutória B publicada",
+                date(2026, 1, 20),
+            ),
+            _movement(
+                "ed-b",
+                CategoriaSemantica.RECURSO,
+                199,
+                "Embargos de declaração opostos contra decisão B",
+                date(2026, 1, 25),
+            ),
+            _movement(
+                "ed-julgado",
+                CategoriaSemantica.RECURSO,
+                464,
+                "Embargos de declaração não providos",
+                date(2026, 2, 10),
+            ),
+        ]
+
+        report = compute_prazos("123", "tjmg", analyses, today=date(2026, 2, 11))
+
+        # Regra de ouro: nunca dois recursos reabertos pelo mesmo julgamento
+        # (e, aqui, nem sequer um é fabricado sem pareamento seguro).
+        reabertos = {"dec-a:reabertura-agravo-ed", "dec-b:reabertura-agravo-ed"}
+        assert all(p.movimento_id not in reabertos for p in report.prazos)
+
+        # A: nenhum julgamento caiu dentro da sua própria janela (que termina
+        # em dec-b) -> segue "pendente", como já era antes desta correção.
+        assert any(
+            r.motivo == "prazo_interrompido_embargos_pendentes" and r.movimento_id == "dec-a"
+            for r in report.revisao_manual
+        )
+        # B: o julgamento caiu dentro da sua janela, mas A também tinha ED
+        # pendente naquele momento -> ambíguo, não reabre sozinho.
+        assert any(
+            r.motivo == "ed_julgamento_ambiguo" and r.movimento_id == "dec-b" for r in report.revisao_manual
+        )
+
+    def test_dois_eds_julgados_em_ordem_cada_decisao_reabre_com_seu_julgamento(self) -> None:
+        # Pareamento inequívoco: o julgamento do ED-A ocorre ANTES de decisão
+        # B sequer existir (dentro da janela de A, sem nenhuma outra decisão
+        # com ED pendente naquele momento), e o julgamento do ED-B ocorre
+        # depois, quando o ED-A já está resolvido — nenhuma ambiguidade em
+        # nenhum dos dois momentos. Cada decisão reabre com o SEU julgamento.
+        analyses = [
+            _movement(
+                "dec-a",
+                CategoriaSemantica.DECISAO_RECORRIVEL,
+                385,
+                "Decisão interlocutória A publicada",
+                date(2026, 1, 5),
+            ),
+            _movement(
+                "ed-a",
+                CategoriaSemantica.RECURSO,
+                199,
+                "Embargos de declaração opostos contra decisão A",
+                date(2026, 1, 9),
+            ),
+            _movement(
+                "ed-a-julgado",
+                CategoriaSemantica.RECURSO,
+                464,
+                "Embargos de declaração da decisão A não providos",
+                date(2026, 1, 15),
+            ),
+            _movement(
+                "dec-b",
+                CategoriaSemantica.DECISAO_RECORRIVEL,
+                385,
+                "Decisão interlocutória B publicada",
+                date(2026, 1, 20),
+            ),
+            _movement(
+                "ed-b",
+                CategoriaSemantica.RECURSO,
+                199,
+                "Embargos de declaração opostos contra decisão B",
+                date(2026, 1, 25),
+            ),
+            _movement(
+                "ed-b-julgado",
+                CategoriaSemantica.RECURSO,
+                464,
+                "Embargos de declaração da decisão B não providos",
+                date(2026, 2, 10),
+            ),
+        ]
+
+        report = compute_prazos("123", "tjmg", analyses, today=date(2026, 2, 11))
+
+        reopened_a = [p for p in report.prazos if p.movimento_id == "dec-a:reabertura-agravo-ed"]
+        reopened_b = [p for p in report.prazos if p.movimento_id == "dec-b:reabertura-agravo-ed"]
+        assert len(reopened_a) == 1
+        assert reopened_a[0].data_inicio == date(2026, 1, 15)
+        assert len(reopened_b) == 1
+        assert reopened_b[0].data_inicio == date(2026, 2, 10)
+        assert not any(r.motivo == "ed_julgamento_ambiguo" for r in report.revisao_manual)

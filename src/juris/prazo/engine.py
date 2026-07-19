@@ -627,9 +627,19 @@ def _embargos_interruption_for(
     them; bounding the window by same-categoria alone let it leak across
     categories, both falsely suppressing the other decision as interrompida
     and, once judged, fabricating a second reopened recurso for the same ED.
-    Once the correct filing is identified, its resolution is searched
-    unbounded — it may legitimately be published after a later, unrelated
-    decision in the processo.
+    Once the correct filing is identified, its resolution (julgamento) is
+    searched within that SAME window — not unbounded. A julgamento published
+    after the next recursável decision has already begun cannot be safely
+    attributed to this decision's ED: it may in fact resolve the ED filed
+    against that *next* decision instead. Since the windows of consecutive
+    recursável decisions are disjoint by construction (each ends exactly
+    where the next begins), bounding the resolution search the same way the
+    filing search already is bounded means a given julgamento movement can
+    ever match at most one decision's window — it can no longer be picked as
+    "the" resolution for two different decisions simultaneously (the bug
+    behind ``ed_julgamento_ambiguo``, see ``_ed_resolution_is_ambiguous``).
+    When no resolution turns up inside the window, the caller correctly
+    treats the ED as still pending rather than fabricating a mismatch.
     """
     if decision.data_hora is None:
         return None
@@ -657,13 +667,56 @@ def _embargos_interruption_for(
         return None
     resolutions = [
         analysis
-        for analysis in after_decision
+        for analysis in window
         if analysis.data_hora is not None
         and analysis.data_hora > filing_dt
         and _is_embargos_declaracao_resolution(analysis)
     ]
     resolution = min(resolutions, key=_movement_ordering_key) if resolutions else None
     return _EmbargosInterruption(filing=filing, resolution=resolution)
+
+
+def _ed_resolution_is_ambiguous(
+    decision: AnalysisResult,
+    resolution_dt: datetime,
+    analyses: list[AnalysisResult],
+) -> bool:
+    """Whether ``resolution_dt`` cannot be safely attributed to ``decision`` alone.
+
+    Bounding the resolution search to the decision's own window (see
+    ``_embargos_interruption_for``) already prevents the SAME julgamento
+    movement from being paired with two different decisions. But that
+    heuristic window boundary — "the next recursável decision" — is only a
+    proxy for how the tribunal actually grouped its rulings; it is not a
+    textual link between a julgamento and the specific ED it resolves. When,
+    at the moment this candidate julgamento appears, some OTHER recursável
+    decision in the processo also has an ED that was filed earlier and is
+    still unresolved, a single combined julgamento covering both pending EDs
+    is a realistic possibility the window cannot rule out. Rather than guess,
+    both stay unresolved for automated purposes: this decision is routed to
+    ``RevisaoManual`` (motivo ``ed_julgamento_ambiguo``) instead of reopening.
+
+    A decision is the ONLY one with an outstanding ED at ``resolution_dt``
+    (nothing else pending) is unambiguous and reopens normally.
+    """
+    for other in analyses:
+        if other.movimento_id == decision.movimento_id or other.categoria not in _RECURSAVEL_CATEGORIAS:
+            continue
+        other_interruption = _embargos_interruption_for(other, analyses)
+        if other_interruption is None:
+            continue
+        other_filing_dt = other_interruption.filing.data_hora
+        if other_filing_dt is None or other_filing_dt >= resolution_dt:
+            continue
+        other_resolution = other_interruption.resolution
+        if (
+            other_resolution is not None
+            and other_resolution.data_hora is not None
+            and other_resolution.data_hora < resolution_dt
+        ):
+            continue  # other decision already paired with its own earlier, disjoint julgamento
+        return True
+    return False
 
 
 def _handle_embargos_interruption(
@@ -691,6 +744,13 @@ def _handle_embargos_interruption(
     When ``reopened_rule`` is None, this decision has no known recursal rule
     to reopen: embargos detected against it are suppressed and routed to
     manual review instead of risking a fabricated recurso.
+
+    When a julgamento is found but ``_ed_resolution_is_ambiguous`` flags it
+    (another decision's ED is also outstanding at that moment), the decision
+    is likewise routed to manual review (motivo ``ed_julgamento_ambiguo``)
+    instead of reopening — a julgamento is never used to reopen two
+    different recursos, and never guessed onto one when it might belong to
+    another (art. 1.026 CPC; regra de ouro: na dúvida, revisão manual).
 
     Returns:
         True when embargos de declaração were detected against ``analysis``
@@ -733,6 +793,21 @@ def _handle_embargos_interruption(
         return True
 
     resolution = interruption.resolution
+    resolution_dt = resolution.data_hora
+    if resolution_dt is not None and _ed_resolution_is_ambiguous(analysis, resolution_dt, dated_analyses):
+        revisao_manual.append(
+            RevisaoManual(
+                analysis.movimento_id,
+                analysis.categoria,
+                "ed_julgamento_ambiguo",
+                (
+                    "Julgamento de embargos de declaração não pôde ser atribuído com "
+                    "segurança a esta decisão; confira qual ED foi julgado (art. 1.026 CPC)."
+                ),
+            )
+        )
+        return True
+
     # CPC art. 1.003 §5º c/c art. 1.026: the reopened period runs from the
     # intimação of the ED judgment, not the raw judgment timestamp. Reuse the
     # same marco-legal logic so a DJe/publicação date carried by the
