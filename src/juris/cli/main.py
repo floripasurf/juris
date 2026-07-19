@@ -3031,7 +3031,7 @@ def demo(
     cli_cloud: str | None = typer.Option(
         None,
         "--cli-cloud",
-        help="Usar assinatura via CLI cloud para rascunho-pesquisa: claude | codex",
+        help="Usar assinatura via Claude CLI para rascunho-pesquisa: claude",
     ),
     cli_model: str = typer.Option(
         "haiku",
@@ -3100,8 +3100,8 @@ def demo(
     is_demo_mode = derive_demo_mode(source_mode)
 
     if cli_cloud is not None:
-        if cli_cloud not in {"claude", "codex"}:
-            console.print("[red]--cli-cloud inválido. Opções: claude, codex.[/red]")
+        if cli_cloud != "claude":
+            console.print("[red]--cli-cloud inválido. Opção segura disponível: claude.[/red]")
             raise typer.Exit(code=1)
         if cloud:
             console.print("[red]Use apenas um backend cloud: --cloud ou --cli-cloud.[/red]")
@@ -3179,13 +3179,9 @@ def demo(
     # Set up LLM (mirrors `draft` command)
     llm: AbstractLLM
     if cli_cloud is not None:
-        from typing import cast
+        from juris.llm.local_cli import LocalCliLLM
 
-        from juris.llm.local_cli import CliCloudProvider, LocalCliLLM
-
-        model = cli_model if cli_cloud == "claude" else None
-        # cli_cloud já validado ∈ {claude, codex} acima; cast satisfaz o Literal do provider.
-        llm = LocalCliLLM(provider=cast(CliCloudProvider, cli_cloud), model=model)
+        llm = LocalCliLLM(provider="claude", model=cli_model)
         contexto = "anonimizado" if anonimizado else "sem PII"
         console.print(f"[dim]LLM: {llm.model_name} (cloud via CLI; {contexto})[/dim]")
         if anonimizado and not is_demo_mode:
@@ -3505,7 +3501,7 @@ def pilot_preflight(
     cli_cloud: str | None = typer.Option(
         None,
         "--cli-cloud",
-        help="Conta uma assinatura CLI cloud como provedor para sessão fixture sem PII: claude | codex.",
+        help="Conta a assinatura Claude CLI como provedor para sessão fixture sem PII.",
     ),
     live: bool = typer.Option(
         False,
@@ -3528,8 +3524,8 @@ def pilot_preflight(
 
     from juris.pilot.preflight import run_preflight
 
-    if cli_cloud is not None and cli_cloud not in {"claude", "codex"}:
-        console.print("[red]--cli-cloud inválido. Opções: claude, codex.[/red]")
+    if cli_cloud is not None and cli_cloud != "claude":
+        console.print("[red]--cli-cloud inválido. Opção segura disponível: claude.[/red]")
         raise typer.Exit(code=1)
 
     out_path = FilePath(out_root).expanduser() if out_root else None

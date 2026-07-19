@@ -116,6 +116,28 @@ def test_demo_cli_cloud_rejects_non_rascunho_mode(tmp_path: Path) -> None:
     assert "--cli-cloud exige --modo rascunho-pesquisa" in result.output
 
 
+def test_demo_cli_cloud_rejects_codex_without_filesystem_confinement(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "demo",
+            CNJ,
+            "contestacao",
+            "--source",
+            "fixture",
+            "--modo",
+            "rascunho-pesquisa",
+            "--cli-cloud",
+            "codex",
+            "--out",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 1, result.output
+    assert "Opção segura disponível: claude" in result.output
+
+
 def test_demo_cli_cloud_rejects_real_source_without_anonimizado(tmp_path: Path) -> None:
     result = runner.invoke(
         app,

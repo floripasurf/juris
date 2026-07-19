@@ -383,7 +383,9 @@ def check_llm_availability(
     url = ollama_url or os.environ.get("OLLAMA_URL", "http://localhost:11434")
     anthropic_key = bool(os.environ.get(anthropic_env_var))
     ollama_up = _ollama_reachable(url) if probe_ollama else False
-    cli_cloud_available = bool(cli_cloud_provider and shutil.which(cli_cloud_provider))
+    cli_cloud_available = bool(
+        cli_cloud_provider == "claude" and shutil.which(cli_cloud_provider)
+    )
     cloud_available = anthropic_key or cli_cloud_available
 
     details: dict[str, object] = {

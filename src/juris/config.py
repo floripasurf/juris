@@ -136,10 +136,7 @@ class Settings(BaseSettings):
     cli_llm_tenants: str = Field(
         "", validation_alias="JURIS_CLI_LLM_TENANTS"
     )  # allowlist CSV; vazia = ninguém
-    cli_llm_model: str = Field("gpt-5.5", validation_alias="JURIS_CLI_LLM_MODEL")
-    cli_llm_effort: str = Field("low", validation_alias="JURIS_CLI_LLM_EFFORT")
-    cli_fallback_model: str = Field("haiku", validation_alias="JURIS_CLI_FALLBACK_MODEL")
-    codex_bin: str = Field("codex", validation_alias="JURIS_CODEX_BIN")
+    cli_llm_model: str = Field("haiku", validation_alias="JURIS_CLI_LLM_MODEL")
     claude_bin: str = Field("claude", validation_alias="JURIS_CLAUDE_BIN")
     ollama_model: str = Field("qwen3:8b", validation_alias="JURIS_OLLAMA_MODEL")
 

@@ -465,14 +465,15 @@ class _SerializedLLM(AbstractLLM):
 
 
 def _build_cli_chain() -> AbstractLLM:
-    """CLI-signature draft canary (Task 2): codex -> haiku -> local Ollama.
+    """CLI-signature draft canary: isolated Claude -> local Ollama.
 
     Both cloud CLI legs sit behind ``DeidentifyingLLM`` (ADR-0016: fail-closed NER,
     names never leave raw) — same requirement as any other cloud LLM. The terminal
     Ollama step runs on-device, so it's exempt from de-id, same rationale as
-    ``fallback_is_local`` in :func:`_build_ai_of_preference_llm`. Each ``LocalCliLLM``
-    gets a fresh, empty tempdir as ``cwd`` so the CLI process has nothing of the case
-    to read off disk.
+    ``fallback_is_local`` in :func:`_build_ai_of_preference_llm`. Claude also runs
+    with customizations/MCP/skills disabled and with an empty tool list; the fresh
+    empty ``cwd`` is defense in depth. Codex is deliberately absent because its
+    read-only sandbox still permits broad filesystem reads.
     """
     from juris.config import get_settings
     from juris.core.deid_llm import DeidentifyingLLM, default_ner_redactor
@@ -483,25 +484,15 @@ def _build_cli_chain() -> AbstractLLM:
     settings = get_settings()
     ner = default_ner_redactor()
 
-    codex = LocalCliLLM(
-        provider="codex",
-        model=settings.cli_llm_model,
-        reasoning_effort=settings.cli_llm_effort,
-        binary=settings.codex_bin,
-        cwd=Path(tempfile.mkdtemp(prefix="juris-cli-llm-")),
-    )
-    haiku = LocalCliLLM(
+    claude = LocalCliLLM(
         provider="claude",
-        model=settings.cli_fallback_model,
+        model=settings.cli_llm_model,
         binary=settings.claude_bin,
         cwd=Path(tempfile.mkdtemp(prefix="juris-cli-llm-")),
     )
     return FallbackLLM(
-        DeidentifyingLLM(codex, ner_redactor=ner, allow_partial=False),
-        FallbackLLM(
-            DeidentifyingLLM(haiku, ner_redactor=ner, allow_partial=False),
-            OllamaLLM(model=settings.ollama_model),
-        ),
+        DeidentifyingLLM(claude, ner_redactor=ner, allow_partial=False),
+        OllamaLLM(model=settings.ollama_model),
     )
 
 

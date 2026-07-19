@@ -29,11 +29,10 @@ def _stub_ner(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_build_cli_chain_composes_codex_then_haiku_then_local_ollama(
+async def test_build_cli_chain_composes_isolated_claude_then_local_ollama(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """(a) DeidentifyingLLM(codex) -> FallbackLLM -> DeidentifyingLLM(haiku) -> local Ollama
-    (no de-id — on-device)."""
+    """DeidentifyingLLM(Claude) -> local Ollama (no de-id — on-device)."""
     _reset_settings(monkeypatch)
     _stub_ner(monkeypatch)
     from juris.core.deid_llm import DeidentifyingLLM
@@ -47,40 +46,29 @@ async def test_build_cli_chain_composes_codex_then_haiku_then_local_ollama(
     assert isinstance(chain, FallbackLLM)
     assert isinstance(chain._primary, DeidentifyingLLM)
     assert isinstance(chain._primary._delegate, LocalCliLLM)
-    assert chain._primary._delegate._provider == "codex"
-    assert chain._primary._ner is not None  # fail-closed NER on the codex leg
+    assert chain._primary._delegate._provider == "claude"
+    assert chain._primary._ner is not None  # fail-closed NER on the cloud leg
     assert chain._primary._allow_partial is False
 
-    inner = chain._fallback
-    assert isinstance(inner, FallbackLLM)
-    assert isinstance(inner._primary, DeidentifyingLLM)
-    assert isinstance(inner._primary._delegate, LocalCliLLM)
-    assert inner._primary._delegate._provider == "claude"
-    assert inner._primary._ner is not None  # fail-closed NER on the haiku leg
-    assert inner._primary._allow_partial is False
-
     # Terminal local step: on-device Ollama, deliberately NOT wrapped in DeidentifyingLLM.
-    assert isinstance(inner._fallback, OllamaLLM)
+    assert isinstance(chain._fallback, OllamaLLM)
 
 
 @pytest.mark.asyncio
 async def test_build_cli_chain_uses_empty_tempdir_cwd_for_cli_legs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """LocalCliLLM legs get an empty tempdir as cwd (codex/claude can't read case files)."""
+    """Claude gets an empty tempdir as defense in depth beyond its empty tool list."""
     _reset_settings(monkeypatch)
     _stub_ner(monkeypatch)
     from juris.web import demo_service
 
     chain = demo_service._build_cli_chain()
-    codex_leg = chain._primary._delegate
-    haiku_leg = chain._fallback._primary._delegate
-
-    for leg in (codex_leg, haiku_leg):
-        cwd = leg._cwd
-        assert cwd is not None
-        assert cwd.exists()
-        assert not any(cwd.iterdir())  # empty
+    claude_leg = chain._primary._delegate
+    cwd = claude_leg._cwd
+    assert cwd is not None
+    assert cwd.exists()
+    assert not any(cwd.iterdir())  # empty
 
 
 def test_build_llm_outside_allowlist_returns_plain_ollama(monkeypatch: pytest.MonkeyPatch) -> None:
