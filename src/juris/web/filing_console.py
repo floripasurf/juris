@@ -176,6 +176,14 @@ def grounding_evidence_from_manifest(
     Manifests predating grounding tracking have no ``draft.grounding_status``;
     those come back with ``status="unknown"`` rather than ``None``, so an old
     manifest requires an override just like an explicitly blocked one.
+
+    ``numero_cnj``/``tribunal``/``tipo_peticao`` come from the manifest's
+    ``request`` block and ``output_mode`` from its top-level field — the same
+    values ``filing_artifacts`` already surfaces to the console. A manifest
+    written before this binding existed has no ``request`` block; those fields
+    default to ``""``, which the orchestrator's gate treats as unverified
+    (same as an "unknown" status) rather than silently trusting the hash
+    match alone.
     """
     name = _primary_artifact_name(artifact_name)
     if name is None:
@@ -203,12 +211,17 @@ def grounding_evidence_from_manifest(
         return None
 
     draft = ensure_dict(manifest.get("draft"))
+    request = ensure_dict(manifest.get("request"))
     status = str(draft.get("grounding_status") or "unknown")
     revisao_humana_obrigatoria = bool(draft.get("revisao_humana_obrigatoria", False))
     return GroundingEvidence(
         status=status,
         draft_sha256=draft_sha256,
         revisao_humana_obrigatoria=revisao_humana_obrigatoria,
+        numero_cnj=str(request.get("numero_cnj") or ""),
+        tribunal=str(request.get("tribunal") or ""),
+        tipo_peticao=str(request.get("tipo_peticao") or ""),
+        output_mode=str(manifest.get("output_mode") or ""),
     )
 
 

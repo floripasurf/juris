@@ -104,6 +104,24 @@ def _base_request(**overrides: object) -> FilingRequest:
     return FilingRequest(**fields)  # type: ignore[arg-type]
 
 
+def _bound_grounding(**overrides: object) -> GroundingEvidence:
+    """Grounding evidence bound to the SAME processo/output_mode as ``_base_request``.
+
+    Trivially passes the Achado 2/3 checks (processo binding + protocolable
+    output_mode) so callers can isolate the one property they're testing
+    (hash, revisao_humana_obrigatoria, ...) by overriding just that field.
+    """
+    fields: dict[str, object] = {
+        "status": "verified",
+        "draft_sha256": _sha256(DRAFT_MARKDOWN),
+        "numero_cnj": "0001234-56.2024.8.13.0001",
+        "tribunal": "tjmg",
+        "output_mode": "minuta-sugerida",
+    }
+    fields.update(overrides)
+    return GroundingEvidence(**fields)  # type: ignore[arg-type]
+
+
 # --- 1. verified + matching hash → pipeline continues (reaches render) ---
 
 
@@ -114,7 +132,8 @@ def test_verified_grounding_with_matching_hash_reaches_render(
     mock_mni_client_factory: MagicMock,
     mock_mni_auth: MagicMock,
 ) -> None:
-    grounding = GroundingEvidence(status="verified", draft_sha256=_sha256(DRAFT_MARKDOWN))
+    """Happy path: verified + matching hash + SAME processo + minuta-sugerida."""
+    grounding = _bound_grounding()
     request = _base_request(grounding=grounding, dry_run=True)
     orch = _make_orchestrator(mock_signer, audit_log, receipt_store, mock_mni_client_factory, mock_mni_auth)
 
@@ -164,11 +183,7 @@ def test_revisao_humana_obrigatoria_blocks_with_specific_code(
     mock_mni_client_factory: MagicMock,
     mock_mni_auth: MagicMock,
 ) -> None:
-    grounding = GroundingEvidence(
-        status="verified",
-        draft_sha256=_sha256(DRAFT_MARKDOWN),
-        revisao_humana_obrigatoria=True,
-    )
+    grounding = _bound_grounding(revisao_humana_obrigatoria=True)
     request = _base_request(grounding=grounding)
     orch = _make_orchestrator(mock_signer, audit_log, receipt_store, mock_mni_client_factory, mock_mni_auth)
 
@@ -178,6 +193,168 @@ def test_revisao_humana_obrigatoria_blocks_with_specific_code(
     assert result.success is False
     assert result.error_code == "revisao_humana_obrigatoria"
     mock_render.assert_not_called()
+
+
+# --- 3b. numero_cnj divergente (evidência de outro processo) → grounding_required ---
+
+
+def test_divergent_numero_cnj_blocks_with_grounding_required(
+    mock_signer: MagicMock,
+    audit_log: AuditLog,
+    receipt_store: FilingReceiptStore,
+    mock_mni_client_factory: MagicMock,
+    mock_mni_auth: MagicMock,
+) -> None:
+    """Achado 2: evidence verified for processo A must not authorize filing into B."""
+    grounding = _bound_grounding(numero_cnj="9999999-99.2024.8.13.0099")
+    request = _base_request(grounding=grounding)
+    orch = _make_orchestrator(mock_signer, audit_log, receipt_store, mock_mni_client_factory, mock_mni_auth)
+
+    with patch("juris.signing.filing.render_petition_pdf") as mock_render:
+        result = asyncio.run(orch.file(request))
+
+    assert result.success is False
+    assert result.error_code == "grounding_required"
+    mock_render.assert_not_called()
+    mock_signer.sign.assert_not_called()
+
+
+# --- 3c. tribunal divergente (evidência de outro tribunal) → grounding_required ---
+
+
+def test_divergent_tribunal_blocks_with_grounding_required(
+    mock_signer: MagicMock,
+    audit_log: AuditLog,
+    receipt_store: FilingReceiptStore,
+    mock_mni_client_factory: MagicMock,
+    mock_mni_auth: MagicMock,
+) -> None:
+    """Same processo number, different tribunal — still an unrelated evidence binding."""
+    grounding = _bound_grounding(tribunal="tjsp")
+    request = _base_request(grounding=grounding)
+    orch = _make_orchestrator(mock_signer, audit_log, receipt_store, mock_mni_client_factory, mock_mni_auth)
+
+    with patch("juris.signing.filing.render_petition_pdf") as mock_render:
+        result = asyncio.run(orch.file(request))
+
+    assert result.success is False
+    assert result.error_code == "grounding_required"
+    mock_render.assert_not_called()
+
+
+def test_numero_cnj_and_tribunal_match_regardless_of_formatting(
+    mock_signer: MagicMock,
+    audit_log: AuditLog,
+    receipt_store: FilingReceiptStore,
+    mock_mni_client_factory: MagicMock,
+    mock_mni_auth: MagicMock,
+) -> None:
+    """CNJ comparison is digits-only and tribunal comparison is casefolded —
+    formatting/case differences between the manifest and the request must not
+    cause a false-positive divergence block."""
+    grounding = _bound_grounding(
+        numero_cnj="00012345620248130001",  # same digits, no punctuation
+        tribunal="TJMG",  # same tribunal, different case
+    )
+    request = _base_request(grounding=grounding, dry_run=True)
+    orch = _make_orchestrator(mock_signer, audit_log, receipt_store, mock_mni_client_factory, mock_mni_auth)
+
+    with patch("juris.signing.filing.render_petition_pdf") as mock_render:
+        mock_render.return_value = MagicMock(pdf_bytes=b"%PDF-1.4 test", page_count=1, pdf_hash="aaa")
+        result = asyncio.run(orch.file(request))
+
+    assert result.success is True
+    assert result.error_code is None
+
+
+# --- 3d. output_mode rascunho-pesquisa (ou ausente) → grounding_required sem override ---
+
+
+def test_rascunho_pesquisa_output_mode_blocks_without_override(
+    mock_signer: MagicMock,
+    audit_log: AuditLog,
+    receipt_store: FilingReceiptStore,
+    mock_mni_client_factory: MagicMock,
+    mock_mni_auth: MagicMock,
+) -> None:
+    """Achado 3: a research memo is never auto-protocolable, even verified+matching."""
+    grounding = _bound_grounding(output_mode="rascunho-pesquisa")
+    request = _base_request(grounding=grounding)
+    orch = _make_orchestrator(mock_signer, audit_log, receipt_store, mock_mni_client_factory, mock_mni_auth)
+
+    with patch("juris.signing.filing.render_petition_pdf") as mock_render:
+        result = asyncio.run(orch.file(request))
+
+    assert result.success is False
+    assert result.error_code == "grounding_required"
+    mock_render.assert_not_called()
+
+
+def test_rascunho_pesquisa_output_mode_passes_with_override(
+    mock_signer: MagicMock,
+    audit_log: AuditLog,
+    receipt_store: FilingReceiptStore,
+    mock_mni_client_factory: MagicMock,
+    mock_mni_auth: MagicMock,
+) -> None:
+    grounding = _bound_grounding(output_mode="rascunho-pesquisa")
+    request = _base_request(
+        grounding=grounding,
+        dry_run=True,
+        grounding_override=True,
+        grounding_override_reason="Rascunho revisado manualmente pelo advogado responsável.",
+    )
+    orch = _make_orchestrator(mock_signer, audit_log, receipt_store, mock_mni_client_factory, mock_mni_auth)
+
+    with patch("juris.signing.filing.render_petition_pdf") as mock_render:
+        mock_render.return_value = MagicMock(pdf_bytes=b"%PDF-1.4 test", page_count=1, pdf_hash="aaa")
+        result = asyncio.run(orch.file(request))
+
+    mock_render.assert_called_once()
+    assert result.success is True
+    entries = audit_log.read_all()
+    override_entries = [e for e in entries if e.event_type == "filing.grounding_override"]
+    assert len(override_entries) == 1
+
+
+def test_missing_output_mode_blocks_without_override(
+    mock_signer: MagicMock,
+    audit_log: AuditLog,
+    receipt_store: FilingReceiptStore,
+    mock_mni_client_factory: MagicMock,
+    mock_mni_auth: MagicMock,
+) -> None:
+    """Empty output_mode (old manifest) is treated the same as a non-protocolable one."""
+    grounding = _bound_grounding(output_mode="")
+    request = _base_request(grounding=grounding)
+    orch = _make_orchestrator(mock_signer, audit_log, receipt_store, mock_mni_client_factory, mock_mni_auth)
+
+    result = asyncio.run(orch.file(request))
+
+    assert result.success is False
+    assert result.error_code == "grounding_required"
+
+
+# --- 3e. manifesto antigo sem numero_cnj/tribunal (campos vazios) → grounding_required ---
+
+
+def test_evidence_without_processo_binding_blocks_as_grounding_required(
+    mock_signer: MagicMock,
+    audit_log: AuditLog,
+    receipt_store: FilingReceiptStore,
+    mock_mni_client_factory: MagicMock,
+    mock_mni_auth: MagicMock,
+) -> None:
+    """A manifest predating the processo binding has numero_cnj=tribunal="" —
+    that must NOT auto-pass just because status/hash happen to match."""
+    grounding = _bound_grounding(numero_cnj="", tribunal="")
+    request = _base_request(grounding=grounding)
+    orch = _make_orchestrator(mock_signer, audit_log, receipt_store, mock_mni_client_factory, mock_mni_auth)
+
+    result = asyncio.run(orch.file(request))
+
+    assert result.success is False
+    assert result.error_code == "grounding_required"
 
 
 # --- 4. grounding=None (manifest antigo / documento externo) → grounding_required ---

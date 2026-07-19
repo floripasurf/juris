@@ -498,6 +498,66 @@ def test_grounding_evidence_from_manifest_is_confined_to_root(tmp_path) -> None:
     assert grounding_evidence_from_manifest(tmp_path, output_dir="../", artifact_name="draft.md") is None
 
 
+def test_grounding_evidence_from_manifest_binds_processo_and_output_mode(tmp_path) -> None:
+    """Achado 2/3: the loader must carry numero_cnj/tribunal/output_mode from the
+    manifest's request block so the orchestrator's gate can bind evidence to the
+    exact processo it was verified for and refuse a non-protocolable output_mode."""
+    case_dir = tmp_path / "CASE-1"
+    case_dir.mkdir()
+    draft = "# Minuta"
+    (case_dir / "draft.md").write_text(draft, encoding="utf-8")
+    (case_dir / "run-manifest.json").write_text(
+        json.dumps(
+            {
+                "output_mode": "minuta-sugerida",
+                "request": {
+                    "numero_cnj": "0001234-56.2024.8.13.0001",
+                    "tribunal": "tjmg",
+                    "tipo_peticao": "contestacao",
+                },
+                "draft": {"grounding_status": "verified"},
+                "artifacts": [{"name": "draft.md", "sha256": _sha256_text(draft)}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    evidence = grounding_evidence_from_manifest(tmp_path, output_dir="CASE-1", artifact_name="draft.md")
+
+    assert evidence is not None
+    assert evidence.numero_cnj == "0001234-56.2024.8.13.0001"
+    assert evidence.tribunal == "tjmg"
+    assert evidence.tipo_peticao == "contestacao"
+    assert evidence.output_mode == "minuta-sugerida"
+
+
+def test_grounding_evidence_from_manifest_defaults_processo_fields_for_old_manifest(tmp_path) -> None:
+    """A manifest predating this binding has no 'request'/'output_mode' — those
+    fields default to an empty string, which the gate treats as unverified
+    rather than silently trusting a hash match across processos."""
+    case_dir = tmp_path / "CASE-1"
+    case_dir.mkdir()
+    draft = "# Minuta antiga"
+    (case_dir / "draft.md").write_text(draft, encoding="utf-8")
+    (case_dir / "run-manifest.json").write_text(
+        json.dumps(
+            {
+                "draft": {"grounding_status": "verified"},
+                "artifacts": [{"name": "draft.md", "sha256": _sha256_text(draft)}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    evidence = grounding_evidence_from_manifest(tmp_path, output_dir="CASE-1", artifact_name="draft.md")
+
+    assert evidence is not None
+    assert evidence.numero_cnj == ""
+    assert evidence.tribunal == ""
+    assert evidence.tipo_peticao == ""
+    assert evidence.output_mode == ""
+
+
 def test_archive_pending_recovery_json_is_private(tmp_path) -> None:
     cnj_dir = tmp_path / "0001234"
     pending = cnj_dir / "20260630_pending"

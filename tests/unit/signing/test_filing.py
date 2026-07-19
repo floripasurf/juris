@@ -22,16 +22,26 @@ from juris.signing.filing import (
 from juris.signing.pades import CertStatus, SigningResult
 
 
-def _verified_grounding(draft_markdown: str) -> GroundingEvidence:
-    """Grounding evidence that passes the Task 3 gate for this exact draft.
+def _verified_grounding(
+    draft_markdown: str, *, numero_cnj: str = "0001234-56.2024.8.13.0001", tribunal: str = "tjmg"
+) -> GroundingEvidence:
+    """Grounding evidence that passes the gate for this exact draft/processo.
 
     These tests exercise behavior downstream of the gate (render, preflight,
     sign, submit) — not the gate itself, so they need evidence that trivially
-    passes it.
+    passes it. ``numero_cnj``/``tribunal`` default to the values every request
+    in this file uses; ``output_mode`` defaults to the protocolable
+    ``"minuta-sugerida"``.
     """
     import hashlib
 
-    return GroundingEvidence(status="verified", draft_sha256=hashlib.sha256(draft_markdown.encode("utf-8")).hexdigest())
+    return GroundingEvidence(
+        status="verified",
+        draft_sha256=hashlib.sha256(draft_markdown.encode("utf-8")).hexdigest(),
+        numero_cnj=numero_cnj,
+        tribunal=tribunal,
+        output_mode="minuta-sugerida",
+    )
 
 # --- Fixtures ---
 

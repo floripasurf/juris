@@ -103,6 +103,8 @@ def test_index_renders_local_ui() -> None:
     assert "Documento externo (não gerado pela Causia)" in response.text
     assert "fl_override_reason" in response.text
     assert "filingSelectedArtifact" in response.text
+    # Fix A: rascunho-pesquisa is never protocolable — override panel says so
+    assert "Rascunho de pesquisa não é minuta protocolável" in response.text
     assert "copiar caminho" not in response.text  # server filesystem path is useless in-browser
 
 

@@ -4289,14 +4289,24 @@
 
     function renderGroundingBlocked(detail, endpoint, button) {
       const isExternal = !filingSelectedArtifact;
+      // rascunho-pesquisa.md is a research memo — never protocolable, regardless
+      // of grounding status, so the override panel says so explicitly instead of
+      // implying the block is only about unverified citations.
+      const isRascunhoPesquisa = filingSelectedArtifact?.artifact_name === "rascunho-pesquisa.md";
       const sourceLabel = isExternal
         ? "Documento externo (não gerado pela Causia)"
-        : "Minuta gerada pela Causia";
+        : isRascunhoPesquisa
+          ? "Rascunho de pesquisa (não é minuta protocolável)"
+          : "Minuta gerada pela Causia";
+      const rascunhoNotice = isRascunhoPesquisa
+        ? `<p class="notice" style="position:static" data-testid="grounding-rascunho-notice">Rascunho de pesquisa não é minuta protocolável; protocolar exige justificativa e registro em auditoria.</p>`
+        : "";
       filingResultEl.className = "review-card";
       filingResultEl.innerHTML = `<div class="review-head"><h3>Protocolo bloqueado</h3>
           <span class="sev-chip sev-critical" data-testid="grounding-blocked-chip">grounding</span></div>
         <p class="notice error" style="position:static" data-testid="grounding-blocked-notice">${escHtml(detail.message || "")}</p>
         <div class="proc-meta">${escHtml(sourceLabel)}</div>
+        ${rascunhoNotice}
         <div class="list-tools">
           <button type="button" class="ghost" id="grounding-back-review">Voltar e revisar</button>
         </div>

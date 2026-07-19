@@ -41,6 +41,7 @@ _REVISAO_HUMANA_OBRIGATORIA_ERROR = (
     "mesmo assim — fica em auditoria."
 )
 _MIN_OVERRIDE_REASON_LEN = 20
+_PROTOCOLABLE_OUTPUT_MODE = "minuta-sugerida"
 
 
 def _clock_skew_probe_url(tribunal: str) -> str | None:
@@ -64,11 +65,27 @@ def _clock_skew_probe_url(tribunal: str) -> str | None:
 
 @dataclass(frozen=True, slots=True)
 class GroundingEvidence:
-    """Veredito de grounding transportado até o ato de protocolo."""
+    """Veredito de grounding transportado até o ato de protocolo.
+
+    ``numero_cnj``/``tribunal`` binds the evidence to the exact processo it was
+    verified for: a verified hash match alone is not enough to authorize
+    filing, because that same markdown/hash could be resubmitted against a
+    different processo. ``output_mode`` records whether the artifact is a
+    protocolable ``"minuta-sugerida"`` or a ``"rascunho-pesquisa"`` research
+    memo (never protocolable, regardless of grounding status). All four extra
+    fields default to ``""`` for compatibility with manifests written before
+    this binding existed — an old manifest fails the gate on those empty
+    fields and requires an explicit override, same as any other unverified
+    evidence.
+    """
 
     status: str
     draft_sha256: str
     revisao_humana_obrigatoria: bool = False
+    numero_cnj: str = ""
+    tribunal: str = ""
+    tipo_peticao: str = ""
+    output_mode: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,21 +187,62 @@ def _public_error_for_step(step: str) -> str:
     }[step]
 
 
-def _grounding_failure_code(grounding: GroundingEvidence | None, draft_markdown: str) -> str | None:
+def _digits_only(value: str) -> str:
+    """Strip everything but digits, for CNJ comparison independent of formatting."""
+    return "".join(ch for ch in value if ch.isdigit())
+
+
+def _grounding_failure_code(grounding: GroundingEvidence | None, request: FilingRequest) -> str | None:
     """``None`` when grounding is satisfied; otherwise the blocking error_code.
 
     Passes only when the evidence is ``"verified"``, its ``draft_sha256`` matches
     the markdown actually being filed (any edit since verification invalidates
-    it), and human review isn't mandatory. ``revisao_humana_obrigatoria`` gets its
-    own error_code only when it's the sole problem — any other failure (missing
-    evidence, wrong status, hash mismatch) reports as the generic
-    ``"grounding_required"``.
+    it), it names the SAME processo as ``request`` (``numero_cnj`` compared
+    digits-only, ``tribunal`` compared casefolded — evidence verified for one
+    processo must never authorize protocol into another), its ``output_mode``
+    is ``"minuta-sugerida"`` (a ``"rascunho-pesquisa"`` research memo is never
+    protocolable, no matter how well-grounded), and human review isn't
+    mandatory. ``revisao_humana_obrigatoria`` gets its own error_code only when
+    it's the sole problem — every other failure (missing evidence, wrong
+    status, hash mismatch, processo mismatch, non-protocolable output_mode)
+    reports as the generic ``"grounding_required"``; only the internal log
+    line distinguishes a processo mismatch (``grounding_processo_divergente``)
+    from a non-protocolable artifact (``grounding_output_mode_nao_protocolavel``).
     """
     if grounding is None:
         return "grounding_required"
-    if grounding.status == "verified" and grounding.draft_sha256 == _sha256_hex(draft_markdown):
-        return "revisao_humana_obrigatoria" if grounding.revisao_humana_obrigatoria else None
-    return "grounding_required"
+    if grounding.status != "verified" or grounding.draft_sha256 != _sha256_hex(request.draft_markdown):
+        return "grounding_required"
+
+    evidence_cnj = _digits_only(grounding.numero_cnj)
+    evidence_tribunal = grounding.tribunal.strip().casefold()
+    request_cnj = _digits_only(request.numero_cnj)
+    request_tribunal = request.tribunal.strip().casefold()
+    processo_diverge = (
+        not evidence_cnj
+        or not evidence_tribunal
+        or evidence_cnj != request_cnj
+        or evidence_tribunal != request_tribunal
+    )
+    if processo_diverge:
+        logger.warning(
+            "grounding_processo_divergente",
+            evidence_numero_cnj=grounding.numero_cnj,
+            evidence_tribunal=grounding.tribunal,
+            request_numero_cnj=request.numero_cnj,
+            request_tribunal=request.tribunal,
+        )
+        return "grounding_required"
+
+    if grounding.output_mode != _PROTOCOLABLE_OUTPUT_MODE:
+        logger.warning(
+            "grounding_output_mode_nao_protocolavel",
+            output_mode=grounding.output_mode or "unknown",
+            numero_cnj=request.numero_cnj,
+        )
+        return "grounding_required"
+
+    return "revisao_humana_obrigatoria" if grounding.revisao_humana_obrigatoria else None
 
 
 class FilingOrchestrator:
@@ -221,7 +279,7 @@ class FilingOrchestrator:
         # 0. Grounding gate — mandatory on every path (dry-run included);
         # skip_preflight does NOT skip this. Reusing a stale or unverified
         # draft requires an explicit, audited lawyer override.
-        failure_code = _grounding_failure_code(request.grounding, request.draft_markdown)
+        failure_code = _grounding_failure_code(request.grounding, request)
         if failure_code is not None:
             override_reason = request.grounding_override_reason.strip()
             if request.grounding_override and len(override_reason) >= _MIN_OVERRIDE_REASON_LEN:

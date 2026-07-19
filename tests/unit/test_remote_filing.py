@@ -426,9 +426,42 @@ def test_remote_filing_forwards_grounding_evidence_over_the_wire() -> None:
         "status": "verified",
         "draft_sha256": "a" * 64,
         "revisao_humana_obrigatoria": False,
+        "numero_cnj": "",
+        "tribunal": "",
+        "tipo_peticao": "",
+        "output_mode": "",
     }
     assert payload["grounding_override"] is True
     assert payload["grounding_override_reason"] == "Justificativa do advogado com mais de vinte caracteres."
+
+
+def test_remote_filing_forwards_processo_binding_and_output_mode_over_the_wire() -> None:
+    """Fix A: numero_cnj/tribunal/output_mode must cross the wire too — the
+    agent-side gate binds evidence to the processo it was verified for and to
+    a protocolable output_mode, same as the co-located gate."""
+    on_wire: list[str] = []
+
+    class _Transport:
+        def send(self, agent_request: AgentRequest) -> AgentResponse:
+            on_wire.append(agent_request.model_dump_json())
+            return AgentResponse(request_id=agent_request.request_id, success=True, payload={"success": True})
+
+    service = RemoteFilingService(_Transport())
+    grounding = GroundingEvidence(
+        status="verified",
+        draft_sha256="a" * 64,
+        numero_cnj="0001234-56.2024.8.13.0001",
+        tribunal="tjmg",
+        tipo_peticao="contestacao",
+        output_mode="minuta-sugerida",
+    )
+    asyncio.run(service.file(_req(grounding=grounding)))
+
+    payload = AgentRequest.model_validate_json(on_wire[0]).payload
+    assert payload["grounding"]["numero_cnj"] == "0001234-56.2024.8.13.0001"
+    assert payload["grounding"]["tribunal"] == "tjmg"
+    assert payload["grounding"]["tipo_peticao"] == "contestacao"
+    assert payload["grounding"]["output_mode"] == "minuta-sugerida"
 
 
 def test_remote_filing_forwards_none_grounding_as_null() -> None:
@@ -468,6 +501,40 @@ def test_build_filing_request_reconstructs_grounding_evidence() -> None:
     )
     assert request.grounding_override is True
     assert request.grounding_override_reason == "Justificativa registrada pelo advogado no agente."
+
+
+def test_build_filing_request_reconstructs_processo_binding_and_output_mode() -> None:
+    """Fix A round-trip: numero_cnj/tribunal/tipo_peticao/output_mode must survive
+    serialization to the agent so its gate can bind evidence to the processo."""
+    from juris.signing.filing_service import build_filing_request
+
+    payload = {
+        "numero_cnj": "123",
+        "tribunal": "tjmg",
+        "tipo_documento": "manifestacao",
+        "draft_markdown": "# P",
+        "tipo_peticao": "contestacao",
+        "grounding": {
+            "status": "verified",
+            "draft_sha256": "b" * 64,
+            "revisao_humana_obrigatoria": False,
+            "numero_cnj": "0001234-56.2024.8.13.0001",
+            "tribunal": "tjmg",
+            "tipo_peticao": "contestacao",
+            "output_mode": "minuta-sugerida",
+        },
+    }
+
+    request = build_filing_request(payload, cpf="cpf", senha="senha")
+
+    assert request.grounding == GroundingEvidence(
+        status="verified",
+        draft_sha256="b" * 64,
+        numero_cnj="0001234-56.2024.8.13.0001",
+        tribunal="tjmg",
+        tipo_peticao="contestacao",
+        output_mode="minuta-sugerida",
+    )
 
 
 def test_build_filing_request_defaults_grounding_to_none_when_absent() -> None:

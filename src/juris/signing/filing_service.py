@@ -232,13 +232,21 @@ def _receipt_from_payload(data: object) -> FilingReceipt | None:
 def _grounding_to_payload(grounding: GroundingEvidence | None) -> dict[str, object] | None:
     """Serialize the grounding veredict for the wire — the agent's orchestrator
     runs the same gate (that's where signing happens), so it needs this evidence
-    exactly as resolved server-side; the agent must never re-derive it itself."""
+    exactly as resolved server-side; the agent must never re-derive it itself.
+
+    ``numero_cnj``/``tribunal``/``output_mode`` travel too — the agent-side
+    gate binds evidence to the processo it was verified for and to a
+    protocolable output_mode, same as the co-located gate."""
     if grounding is None:
         return None
     return {
         "status": grounding.status,
         "draft_sha256": grounding.draft_sha256,
         "revisao_humana_obrigatoria": grounding.revisao_humana_obrigatoria,
+        "numero_cnj": grounding.numero_cnj,
+        "tribunal": grounding.tribunal,
+        "tipo_peticao": grounding.tipo_peticao,
+        "output_mode": grounding.output_mode,
     }
 
 
@@ -296,6 +304,10 @@ def _grounding_from_payload(data: object) -> GroundingEvidence | None:
         status=status,
         draft_sha256=draft_sha256,
         revisao_humana_obrigatoria=bool(data.get("revisao_humana_obrigatoria", False)),
+        numero_cnj=str(data.get("numero_cnj") or ""),
+        tribunal=str(data.get("tribunal") or ""),
+        tipo_peticao=str(data.get("tipo_peticao") or ""),
+        output_mode=str(data.get("output_mode") or ""),
     )
 
 
