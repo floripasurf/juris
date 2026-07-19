@@ -422,7 +422,7 @@ def _build_ai_of_preference_llm(*, use_cloud: bool) -> AbstractLLM:
     # Ollama (which stays on-device via fallback_is_local, so its redaction is skipped).
     return build_ai_of_preference(
         browser,
-        OllamaLLM(),
+        OllamaLLM(model=get_settings().ollama_model),
         ner_redactor=default_ner_redactor(),
         allow_partial=False,
         fallback_is_local=True,
@@ -524,7 +524,7 @@ def _build_llm(*, use_cloud: bool, tenant_id: str | None = None) -> AbstractLLM:
 
     from juris.llm.ollama import OllamaLLM
 
-    return OllamaLLM()
+    return OllamaLLM(model=settings.ollama_model)
 
 
 def _build_repertory(repertory_path: Path) -> RepertoryService:

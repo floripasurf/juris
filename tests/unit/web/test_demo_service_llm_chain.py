@@ -116,6 +116,50 @@ def test_build_llm_in_allowlist_returns_serialized_chain(monkeypatch: pytest.Mon
     assert isinstance(llm._delegate, FallbackLLM)
 
 
+def test_build_llm_plain_ollama_path_honors_ollama_model_setting(monkeypatch: pytest.MonkeyPatch) -> None:
+    """RAM knob (JURIS_OLLAMA_MODEL) must reach the dominant trial/demo path, not just the
+    CLI chain's terminal step — otherwise the documented RAM relief is inert there."""
+    from juris.web import demo_service
+
+    monkeypatch.delenv("JURIS_AI_PREFERENCE", raising=False)
+    monkeypatch.delenv("JURIS_DRAFT_BACKEND", raising=False)
+    monkeypatch.setenv("JURIS_OLLAMA_MODEL", "qwen2.5:3b")
+    _reset_settings(monkeypatch)
+
+    llm = demo_service._build_llm(use_cloud=False)
+
+    assert llm.model_name == "qwen2.5:3b"
+
+
+@pytest.mark.asyncio
+async def test_ai_preference_local_fallback_honors_ollama_model_setting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same knob must reach the AI-of-preference browser-session local fallback."""
+    from juris.api import browser_bridge
+    from juris.web import demo_service
+
+    monkeypatch.setenv("JURIS_AI_PREFERENCE", "1")
+    monkeypatch.setenv("JURIS_BROWSER_BRIDGE_URL", "ws://127.0.0.1:8777")
+    monkeypatch.setenv("JURIS_OLLAMA_MODEL", "qwen2.5:3b")
+    _reset_settings(monkeypatch)
+    _stub_ner(monkeypatch)
+
+    class _StubChannel:
+        async def request(self, message: dict[str, object]) -> dict[str, object]:
+            return {}
+
+    monkeypatch.setattr(
+        browser_bridge.WebSocketBridgeChannel,
+        "to_localhost",
+        classmethod(lambda cls, url, **kw: _StubChannel()),
+    )
+
+    llm = demo_service._build_llm(use_cloud=False)
+    # fallback_is_local=True: the local Ollama fallback is NOT wrapped in DeidentifyingLLM.
+    assert llm._fallback.model_name == "qwen2.5:3b"
+
+
 def test_build_llm_default_backend_never_touches_the_chain(monkeypatch: pytest.MonkeyPatch) -> None:
     """The gate stays inert even inside the allowlist when draft_backend is still 'ollama'."""
     from juris.llm.ollama import OllamaLLM
