@@ -2979,7 +2979,18 @@ def web(
     setup_logging(log_level=os.environ.get("JURIS_LOG_LEVEL", "INFO"))
 
     console.print(f"[green]Juris web:[/green] http://{host}:{port}")
-    uvicorn.run("juris.web.app:app", host=host, port=port, reload=reload, access_log=access_log)
+    # ws_ping_interval/timeout > uvicorn defaults (20s/20s): atrás de Cloudflare Tunnel +
+    # rede residencial, o default derrubava o WS do relay agente↔nuvem ~100x/dia
+    # ("keepalive ping timeout"). Espelha ping_interval/timeout do cliente em local_agent.py.
+    uvicorn.run(
+        "juris.web.app:app",
+        host=host,
+        port=port,
+        reload=reload,
+        access_log=access_log,
+        ws_ping_interval=25.0,
+        ws_ping_timeout=75.0,
+    )
 
 
 # ---------------------------------------------------------------------------

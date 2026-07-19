@@ -1087,7 +1087,12 @@ def run_relay_agent(
     tenant_id = validate_tenant_id(tenant_id)
     sep = "&" if "?" in url else "?"
     full_url = f"{url}{sep}{urlencode({'tenant': tenant_id})}"
-    with connect(full_url, additional_headers={"x-agent-token": token}) as ws:
+    # ping_interval/timeout > websockets defaults (20s/20s): atrás de Cloudflare Tunnel +
+    # rede residencial, o default derrubava este canal ~100x/dia ("keepalive ping
+    # timeout"). Espelha ws_ping_interval/timeout do servidor em cli/main.py `web`.
+    with connect(
+        full_url, additional_headers={"x-agent-token": token}, ping_interval=25, ping_timeout=75
+    ) as ws:
         if on_connected is not None:
             on_connected()
         for raw in ws:  # each message is a forwarded AgentRequest
