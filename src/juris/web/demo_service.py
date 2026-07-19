@@ -2,23 +2,34 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from juris.agents.estrategia import tom_minuta
+from juris.core.observability import get_logger
 from juris.core.types import NumeroCNJ
 from juris.demo import DemoRequest, OutputMode, SourceMode, run_demo
 from juris.demo.artifacts import write_artifacts
 from juris.demo.disclaimer import output_dir_name
 from juris.demo.orchestrator import derive_demo_mode, load_processo
+from juris.llm.base import AbstractLLM, LLMResponse
 from juris.repertory.peticoes.models import TipoPeticao
 from juris.web.jsonutil import ensure_list
 
 if TYPE_CHECKING:
-    from juris.llm.base import AbstractLLM
     from juris.repertory.retrieval.service import RepertoryService
+
+logger = get_logger(__name__)
+
+# Concurrency 1, process-wide, for the CLI-signature draft chain (Task 2 canário): calls
+# drive a human's signed-in subscription CLI, so overlapping invocations would race the
+# same session. A trial run never queues behind the canary — trials aren't allowlisted
+# and never reach this semaphore.
+_CLI_LLM_SEMAPHORE = asyncio.Semaphore(1)
 
 
 class DemoRunError(Exception):
@@ -222,7 +233,7 @@ async def execute_demo_run(request: WebDemoRunRequest) -> WebDemoRun:
     case_dir.mkdir(parents=True, exist_ok=True)
     audit_path = case_dir / "audit.jsonl"
 
-    llm = _build_llm(use_cloud=request.cloud)
+    llm = _build_llm(use_cloud=request.cloud, tenant_id=request.tenant_id)
     repertory = _build_repertory(repertory_path)
 
     try:
@@ -418,11 +429,98 @@ def _build_ai_of_preference_llm(*, use_cloud: bool) -> AbstractLLM:
     )
 
 
-def _build_llm(*, use_cloud: bool) -> AbstractLLM:
+class _SerializedLLM(AbstractLLM):
+    """Serializes calls to ``delegate`` through the module-level CLI semaphore.
+
+    Wraps the CLI-signature draft chain only — global concurrency 1, enforced
+    process-wide regardless of how many demo runs are active concurrently.
+    """
+
+    def __init__(self, delegate: AbstractLLM) -> None:
+        self._delegate = delegate
+
+    async def complete(
+        self,
+        prompt: str,
+        system: str | None = None,
+        schema: dict[str, Any] | None = None,
+        max_tokens: int = 1024,
+        temperature: float = 0.0,
+        *,
+        contains_pii: bool = False,
+    ) -> LLMResponse:
+        async with _CLI_LLM_SEMAPHORE:
+            return await self._delegate.complete(
+                prompt,
+                system=system,
+                schema=schema,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                contains_pii=contains_pii,
+            )
+
+    @property
+    def model_name(self) -> str:
+        return str(self._delegate.model_name)
+
+
+def _build_cli_chain() -> AbstractLLM:
+    """CLI-signature draft canary (Task 2): codex -> haiku -> local Ollama.
+
+    Both cloud CLI legs sit behind ``DeidentifyingLLM`` (ADR-0016: fail-closed NER,
+    names never leave raw) — same requirement as any other cloud LLM. The terminal
+    Ollama step runs on-device, so it's exempt from de-id, same rationale as
+    ``fallback_is_local`` in :func:`_build_ai_of_preference_llm`. Each ``LocalCliLLM``
+    gets a fresh, empty tempdir as ``cwd`` so the CLI process has nothing of the case
+    to read off disk.
+    """
+    from juris.config import get_settings
+    from juris.core.deid_llm import DeidentifyingLLM, default_ner_redactor
+    from juris.core.fallback_llm import FallbackLLM
+    from juris.llm.local_cli import LocalCliLLM
+    from juris.llm.ollama import OllamaLLM
+
+    settings = get_settings()
+    ner = default_ner_redactor()
+
+    codex = LocalCliLLM(
+        provider="codex",
+        model=settings.cli_llm_model,
+        reasoning_effort=settings.cli_llm_effort,
+        binary=settings.codex_bin,
+        cwd=Path(tempfile.mkdtemp(prefix="juris-cli-llm-")),
+    )
+    haiku = LocalCliLLM(
+        provider="claude",
+        model=settings.cli_fallback_model,
+        binary=settings.claude_bin,
+        cwd=Path(tempfile.mkdtemp(prefix="juris-cli-llm-")),
+    )
+    return FallbackLLM(
+        DeidentifyingLLM(codex, ner_redactor=ner, allow_partial=False),
+        FallbackLLM(
+            DeidentifyingLLM(haiku, ner_redactor=ner, allow_partial=False),
+            OllamaLLM(model=settings.ollama_model),
+        ),
+    )
+
+
+def _build_llm(*, use_cloud: bool, tenant_id: str | None = None) -> AbstractLLM:
     if _ai_preference_enabled():
         return _build_ai_of_preference_llm(use_cloud=use_cloud)
     if use_cloud:
         return _build_cloud_llm()
+
+    from juris.config import get_settings
+
+    settings = get_settings()
+    if (
+        settings.draft_backend == "cli"
+        and tenant_id is not None
+        and tenant_id in settings.cli_llm_tenant_allowlist
+    ):
+        logger.warning("cli_llm_canary_used", tenant_id=tenant_id, model=settings.cli_llm_model)
+        return _SerializedLLM(_build_cli_chain())
 
     from juris.llm.ollama import OllamaLLM
 

@@ -1260,7 +1260,7 @@ def test_create_demo_run_executes_real_service_path(monkeypatch, tmp_path: Path)
         artifact_path.write_text("# Rascunho real\n\nConteúdo gerado.", encoding="utf-8")
         return {"rascunho-pesquisa.md": "sha-real"}
 
-    monkeypatch.setattr(demo_service, "_build_llm", lambda *, use_cloud: object())
+    monkeypatch.setattr(demo_service, "_build_llm", lambda *, use_cloud, tenant_id=None: object())
     monkeypatch.setattr(demo_service, "_build_repertory", lambda _path: object())
     monkeypatch.setattr(demo_service, "load_processo", lambda *args, **kwargs: object())
     monkeypatch.setattr(demo_service, "run_demo", fake_run_demo)
@@ -1651,7 +1651,7 @@ def test_demo_run_remote_agent_failure_is_controlled_not_500(monkeypatch, tmp_pa
     def _boom(*a, **k):
         raise RuntimeError("tenant 'x' sem binding de agente próprio (fail-closed)")
 
-    monkeypatch.setattr(demo_service, "_build_llm", lambda *, use_cloud: object())
+    monkeypatch.setattr(demo_service, "_build_llm", lambda *, use_cloud, tenant_id=None: object())
     monkeypatch.setattr(demo_service, "_resolve_repertory_for_source", lambda _is_demo_mode: tmp_path / "repertory.db")
     monkeypatch.setattr(demo_service, "_build_repertory", lambda _p: object())
     monkeypatch.setattr(demo_service, "load_processo", _boom)

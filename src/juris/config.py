@@ -117,6 +117,29 @@ class Settings(BaseSettings):
     # --- LLM Local ---
     ollama_url: str = "http://localhost:11434"
 
+    # --- LLM: cadeia por CLI de assinatura (Task 2 canário) ---
+    # Gated: draft_backend fica "ollama" e cli_llm_tenants fica vazia até uma decisão
+    # humana registrada (risco de ToS) ligar isto em produção — ver .env.example.
+    draft_backend: str = Field("ollama", validation_alias="JURIS_DRAFT_BACKEND")  # ollama | cli
+    cli_llm_tenants: str = Field(
+        "", validation_alias="JURIS_CLI_LLM_TENANTS"
+    )  # allowlist CSV; vazia = ninguém
+    cli_llm_model: str = Field("gpt-5.5", validation_alias="JURIS_CLI_LLM_MODEL")
+    cli_llm_effort: str = Field("low", validation_alias="JURIS_CLI_LLM_EFFORT")
+    cli_fallback_model: str = Field("haiku", validation_alias="JURIS_CLI_FALLBACK_MODEL")
+    codex_bin: str = Field("codex", validation_alias="JURIS_CODEX_BIN")
+    claude_bin: str = Field("claude", validation_alias="JURIS_CLAUDE_BIN")
+    ollama_model: str = Field("qwen3:8b", validation_alias="JURIS_OLLAMA_MODEL")
+
+    @property
+    def cli_llm_tenant_allowlist(self) -> frozenset[str]:
+        """Parsed CSV allowlist for the CLI-signature draft chain (Task 2 canário).
+
+        Empty string (the default) parses to an empty set — nobody is allowlisted, so
+        the chain stays inert regardless of ``draft_backend``.
+        """
+        return frozenset(t.strip() for t in self.cli_llm_tenants.split(",") if t.strip())
+
     # --- Alerts ---
     alert_smtp_host: str = ""
     alert_smtp_port: int = 587
