@@ -537,6 +537,44 @@ def test_submit_failure_returns_delivery_uncertain(
     assert "exc_info" not in capture.events[0][1]
 
 
+def test_mni_rejection_returns_no_error_code(
+    mock_signer: MagicMock,
+    audit_log: AuditLog,
+    receipt_store: FilingReceiptStore,
+    mock_mni_auth: MagicMock,
+    filing_request: FilingRequest,
+) -> None:
+    """When the tribunal itself REJECTS the petition (receipt.sucesso=False, a
+    definitive response — not an exception), error_code must stay None. Unlike
+    delivery_uncertain, this is a known outcome: the UI must not show the
+    'não reenvie sem verificar' notice for a plain rejection."""
+    rejected_receipt = FilingReceipt(
+        sucesso=False,
+        mensagem="Documento fora do padrão exigido",
+        protocolo=None,
+        data_recebimento=None,
+        numero_processo=filing_request.numero_cnj,
+        pdf_hash="def456",
+    )
+    mock_factory = _make_mni_factory()
+    orch = _make_orchestrator(mock_signer, audit_log, receipt_store, mock_factory, mock_mni_auth)
+
+    with patch("juris.signing.filing.render_petition_pdf") as mock_render:
+        mock_render.return_value = MagicMock(
+            pdf_bytes=b"%PDF-1.4 test", page_count=1, pdf_hash="hash"
+        )
+        with patch(
+            "juris.mni.operations.peticionamento.entregar_manifestacao",
+            return_value=rejected_receipt,
+        ):
+            result = asyncio.run(orch.file(filing_request))
+
+    assert result.success is False
+    assert result.error_code is None
+    assert "MNI rejected" in (result.error or "")
+    assert result.receipt is rejected_receipt
+
+
 def test_audit_integrity_after_full_pipeline(
     mock_signer: MagicMock,
     audit_log: AuditLog,

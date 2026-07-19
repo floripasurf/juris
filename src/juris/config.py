@@ -6,10 +6,15 @@ from enum import StrEnum
 from typing import Literal
 
 import structlog
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 log = structlog.get_logger(__name__)
+
+# Mantido em sincronia com juris.prazo.engine._PARTES_REPRESENTADAS_VALIDAS —
+# validado aqui também para falhar no boot (JURIS_PARTE_REPRESENTADA com typo),
+# não só à noite dentro do overnight quando compute_prazos() é chamado.
+_PARTES_REPRESENTADAS_VALIDAS = frozenset({"", "fazenda", "mp", "defensoria"})
 
 
 # URLs que existem só como conveniência de dev. Em prod elas indicam env var
@@ -98,6 +103,15 @@ class Settings(BaseSettings):
             "compute_prazos() já aceita parte_representada por chamada."
         ),
     )
+
+    @field_validator("parte_representada")
+    @classmethod
+    def _valid_parte_representada(cls, value: str) -> str:
+        if value not in _PARTES_REPRESENTADAS_VALIDAS:
+            valores = sorted(_PARTES_REPRESENTADAS_VALIDAS)
+            msg = f"JURIS_PARTE_REPRESENTADA inválido: {value!r}; valores aceitos: {valores}"
+            raise ValueError(msg)
+        return value
 
     # --- Object Storage ---
     storage_backend: Literal["local", "s3"] = "local"

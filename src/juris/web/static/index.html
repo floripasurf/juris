@@ -4347,6 +4347,7 @@
         renderFilingResult(data);
         await loadFilingStatus();
       } catch (err) {
+        filingGroundingOverride = null;
         filingResultEl.className = "proc-empty";
         filingResultEl.innerHTML = `<p class="notice error" style="position:static">${escHtml(err.message)}</p>`;
       } finally {
