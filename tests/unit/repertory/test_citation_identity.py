@@ -24,7 +24,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from juris.repertory.citation_lookup import _extract_citation_ref, resolve_narrative_citation
+from juris.repertory.citation_lookup import (
+    _extract_citation_ref,
+    _extract_oj_subsecao,
+    resolve_narrative_citation,
+)
 from juris.repertory.retrieval.service import RetrievalResult
 
 
@@ -172,3 +176,71 @@ def test_resolve_lookup_failure_com_identidade_valida_ainda_retorna_false() -> N
     repertory = _FakeRepertory(fail=True)
 
     assert resolve_narrative_citation("Súmula 297 do STJ", repertory) == (False, None)  # type: ignore[arg-type]
+
+
+# --- Fix report (revisão): borda de dígito + subseção de OJ ----------------
+#
+# A revisão encontrou colisões reais no seed: matching por substring puro
+# aceitava "18" dentro de "218" (1753 pares em sumulas_tst.json, 326 STF,
+# 201 STJ), e OJs do TST reusam numeração entre SDC/SDI-1/SDI-1-T/SDI-2/
+# TP-OE — 158 dos 421 números de SDI-1 colidem com SDI-2 (medido em
+# data/corpus/ojs_tst.json). Os testes abaixo reproduzem os casos do
+# relatório de revisão.
+
+
+def test_resolve_rejeita_numero_por_colisao_de_substring_sem_borda() -> None:
+    """"Súmula 18" não pode ser confirmada por "sumula_STJ_218" (18 ⊂ 218)."""
+    repertory = _FakeRepertory([_result("sumula_STJ_218", score=0.9)])
+
+    found, sid = resolve_narrative_citation("Súmula 18 do STJ", repertory)  # type: ignore[arg-type]
+
+    assert (found, sid) == (False, None)
+
+
+def test_resolve_oj_rejeita_subsecao_errada_aceita_subsecao_certa() -> None:
+    repertory_errada = _FakeRepertory([_result("jurisprudencia_uniforme_TST_SDI2-104", score=0.9)])
+    repertory_certa = _FakeRepertory([_result("jurisprudencia_uniforme_TST_SDI1-104", score=0.9)])
+
+    found_errada, _ = resolve_narrative_citation(  # type: ignore[arg-type]
+        "OJ 104 da SDI-1 do TST", repertory_errada
+    )
+    found_certa, sid_certa = resolve_narrative_citation(  # type: ignore[arg-type]
+        "OJ 104 da SDI-1 do TST", repertory_certa
+    )
+
+    assert found_errada is False
+    assert (found_certa, sid_certa) == (True, "jurisprudencia_uniforme_TST_SDI1-104")
+
+
+def test_resolve_oj_sem_subsecao_retorna_false_sem_consultar_repertorio() -> None:
+    repertory = _FakeRepertory([_result("jurisprudencia_uniforme_TST_SDI1-104", score=0.9)])
+
+    found, sid = resolve_narrative_citation("OJ 104 do TST", repertory)  # type: ignore[arg-type]
+
+    assert (found, sid) == (False, None)
+    assert repertory.calls == []
+
+
+def test_extract_oj_subsecao_variantes() -> None:
+    assert _extract_oj_subsecao("oj 104 da sdi-1 do tst") == (True, "sdi1")
+    assert _extract_oj_subsecao("oj 104 da sdi1 do tst") == (True, "sdi1")
+    assert _extract_oj_subsecao("oj 104 da sdi-i do tst") == (True, "sdi1")
+    assert _extract_oj_subsecao("oj 5 da sdi-2 do tst") == (True, "sdi2")
+    assert _extract_oj_subsecao("oj 5 da sdi2 do tst") == (True, "sdi2")
+    assert _extract_oj_subsecao("oj 5 da sdi-ii do tst") == (True, "sdi2")
+    assert _extract_oj_subsecao("oj 12 da sdc do tst") == (True, "sdc")
+    assert _extract_oj_subsecao("oj 5 do tp/oe do tst") == (True, "tp/oe")
+    assert _extract_oj_subsecao("oj 5 do tp-oe do tst") == (True, "tp/oe")
+    assert _extract_oj_subsecao("oj 104 do tst") == (True, None)
+    assert _extract_oj_subsecao("sumula 297 do stj") == (False, None)
+
+
+def test_matches_identity_numero_com_borda_via_texto_tambem() -> None:
+    # A mesma colisão (18 ⊂ 218) não pode passar pelo ramo de texto.
+    repertory = _FakeRepertory(
+        [_result("acordao_publicado_stj_000999", score=0.9, texto="Nos termos da Súmula 218 do STJ...")]
+    )
+
+    found, sid = resolve_narrative_citation("Súmula 18 do STJ", repertory)  # type: ignore[arg-type]
+
+    assert (found, sid) == (False, None)
