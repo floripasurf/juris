@@ -163,13 +163,22 @@ def _matches_identity(
     """
     source_id_norm = result.source_id.lower().replace(".", "")
     texto_prefix_norm = result.texto[:200].lower().replace(".", "")
-    numero_hit = _digit_bounded_search(numero, source_id_norm) or _digit_bounded_search(
+    numero_target = source_id_norm
+    if subsecao is not None:
+        anchor = f"_{subsecao}-"
+        if anchor not in source_id_norm:
+            return False
+        # Anchor número to the tail after the subseção: the subseção token
+        # itself ("sdi1"/"sdi2") contains a digit, so a bare digit-bounded
+        # search against the full source_id would let número "1"/"2" match
+        # the token instead of the actual trailing number (e.g. "OJ 2 da
+        # SDI-2" wrongly confirming against SDI2-4).
+        numero_target = source_id_norm.split(anchor, 1)[-1]
+    numero_hit = _digit_bounded_search(numero, numero_target) or _digit_bounded_search(
         numero, texto_prefix_norm
     )
     orgao_hit = orgao in source_id_norm or orgao in texto_prefix_norm
-    if not (numero_hit and orgao_hit):
-        return False
-    return subsecao is None or f"_{subsecao}-" in source_id_norm
+    return numero_hit and orgao_hit
 
 
 def resolve_source_id(

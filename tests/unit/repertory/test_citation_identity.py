@@ -244,3 +244,40 @@ def test_matches_identity_numero_com_borda_via_texto_tambem() -> None:
     found, sid = resolve_narrative_citation("Súmula 18 do STJ", repertory)  # type: ignore[arg-type]
 
     assert (found, sid) == (False, None)
+
+
+# --- Fix report (re-review): dígito do token de subseção não satisfaz o número
+#
+# Residual do mesmo vetor: para número "1" ou "2", _digit_bounded_search batia
+# no próprio dígito do token da subseção ("sdi1"/"sdi2" contém "1"/"2" sem
+# dígito adjacente) — a checagem de número virava no-op quando subsecao não
+# era None, e "OJ 2 da SDI-2" confirmava contra qualquer SDI2-N (81 pares
+# falso-positivos vigentes medidos: toda entrada SDI2-N tem "2" no próprio
+# token). Fix: quando subsecao != None, ancorar a busca de número à cauda de
+# source_id_norm após "_{subsecao}-", não ao source_id inteiro.
+
+
+def test_resolve_oj_numero_ancorado_apos_subsecao_rejeita_falso_positivo_do_token() -> None:
+    """"OJ 2 da SDI-2" não pode ser confirmado por SDI2-4 só porque "sdi2" contém "2"."""
+    repertory = _FakeRepertory([_result("jurisprudencia_uniforme_TST_SDI2-4", score=0.9)])
+
+    found, sid = resolve_narrative_citation("OJ 2 da SDI-2 do TST", repertory)  # type: ignore[arg-type]
+
+    assert (found, sid) == (False, None)
+
+
+def test_resolve_oj_numero_ancorado_apos_subsecao_aceita_numero_certo() -> None:
+    repertory = _FakeRepertory([_result("jurisprudencia_uniforme_TST_SDI2-2", score=0.9)])
+
+    found, sid = resolve_narrative_citation("OJ 2 da SDI-2 do TST", repertory)  # type: ignore[arg-type]
+
+    assert (found, sid) == (True, "jurisprudencia_uniforme_TST_SDI2-2")
+
+
+def test_resolve_oj_numero_ancorado_rejeita_prefixo_dentro_da_cauda() -> None:
+    """"OJ 1 da SDI-1" não pode ser confirmado por SDI1-100 (1 ⊂ 100 na cauda)."""
+    repertory = _FakeRepertory([_result("jurisprudencia_uniforme_TST_SDI1-100", score=0.9)])
+
+    found, sid = resolve_narrative_citation("OJ 1 da SDI-1 do TST", repertory)  # type: ignore[arg-type]
+
+    assert (found, sid) == (False, None)
