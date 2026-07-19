@@ -40,6 +40,7 @@ def _verified_grounding(
         draft_sha256=hashlib.sha256(draft_markdown.encode("utf-8")).hexdigest(),
         numero_cnj=numero_cnj,
         tribunal=tribunal,
+        tipo_peticao="contestacao",
         output_mode="minuta-sugerida",
     )
 
@@ -491,6 +492,49 @@ def test_signing_failure_returns_error(
     assert "token=abc" not in logged
     assert "pin=1234" not in logged
     assert "exc_info" not in capture.events[0][1]
+
+
+def test_mni_client_failure_returns_delivery_not_started(
+    mock_signer: MagicMock,
+    audit_log: AuditLog,
+    receipt_store: FilingReceiptStore,
+    mock_mni_auth: MagicMock,
+    filing_request: FilingRequest,
+    monkeypatch,
+) -> None:
+    """WSDL/client failures happen before submit and are safe to retry."""
+    import juris.signing.filing as filing_module
+
+    capture = _CaptureLogger()
+    monkeypatch.setattr(filing_module, "logger", capture)
+    mock_factory = _make_mni_factory()
+    mock_factory.side_effect = RuntimeError("WSDL /var/private/mni token=abc pin=1234")
+    orch = _make_orchestrator(mock_signer, audit_log, receipt_store, mock_factory, mock_mni_auth)
+
+    with patch("juris.signing.filing.render_petition_pdf") as mock_render:
+        mock_render.return_value = MagicMock(
+            pdf_bytes=b"%PDF-1.4 test", page_count=1, pdf_hash="hash"
+        )
+        with patch("juris.mni.operations.peticionamento.entregar_manifestacao") as submit:
+            result = asyncio.run(orch.file(filing_request))
+
+    assert result.success is False
+    assert result.error_code == "delivery_not_started"
+    assert "nenhuma tentativa de protocolo foi iniciada" in (result.error or "")
+    submit.assert_not_called()
+    assert receipt_store.recover_pending() == []
+    entries = audit_log.read_all()
+    events = [e.event_type for e in entries]
+    assert "filing.delivery_not_started" in events
+    assert "filing.delivery_uncertain" not in events
+    dumped = json.dumps({"error": result.error, "audit": [e.details for e in entries]})
+    assert "/var/private/mni" not in dumped
+    assert "token=abc" not in dumped
+    assert "pin=1234" not in dumped
+    logged = json.dumps([event[1] for event in capture.events], ensure_ascii=False)
+    assert "/var/private/mni" not in logged
+    assert "token=abc" not in logged
+    assert "pin=1234" not in logged
 
 
 def test_submit_failure_returns_delivery_uncertain(

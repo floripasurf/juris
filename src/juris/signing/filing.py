@@ -30,6 +30,9 @@ _DELIVERY_UNCERTAIN_ERROR = (
     "Falha na entrega ao tribunal. ATENÇÃO: a petição PODE ter sido protocolada — "
     "confira o processo no tribunal antes de tentar novamente."
 )
+_DELIVERY_NOT_STARTED_ERROR = (
+    "Falha antes do envio ao tribunal; nenhuma tentativa de protocolo foi iniciada."
+)
 _GROUNDING_REQUIRED_ERROR = (
     "Protocolo bloqueado: o grounding das citações desta minuta não foi verificado "
     "(ou o texto mudou desde a verificação). Gere um artefato verificado ou registre "
@@ -72,7 +75,7 @@ class GroundingEvidence:
     filing, because that same markdown/hash could be resubmitted against a
     different processo. ``output_mode`` records whether the artifact is a
     protocolable ``"minuta-sugerida"`` or a ``"rascunho-pesquisa"`` research
-    memo (never protocolable, regardless of grounding status). All four extra
+    memo (never auto-protocolable, regardless of grounding status). All four extra
     fields default to ``""`` for compatibility with manifests written before
     this binding existed — an old manifest fails the gate on those empty
     fields and requires an explicit override, same as any other unverified
@@ -139,8 +142,9 @@ class ConsentSummary:
 class FilingResult:
     """Result of a filing operation.
 
-    ``error_code`` is ``None`` for every step except the MNI delivery step: when
-    the entrega itself raises after the submit began, ``error_code`` is set to
+    ``error_code`` is ``None`` for every step except MNI preparation/delivery:
+    a failure before the submit call gets ``"delivery_not_started"``; when the
+    entrega itself raises after the submit began, ``error_code`` is set to
     ``"delivery_uncertain"`` because the tribunal may already have received the
     petition — the UI must not offer an immediate resend in that case.
     """
@@ -197,7 +201,7 @@ def _grounding_failure_code(grounding: GroundingEvidence | None, request: Filing
 
     Passes only when the evidence is ``"verified"``, its ``draft_sha256`` matches
     the markdown actually being filed (any edit since verification invalidates
-    it), it names the SAME processo as ``request`` (``numero_cnj`` compared
+    it), it names the SAME processo and petition type as ``request`` (``numero_cnj`` compared
     digits-only, ``tribunal`` compared casefolded — evidence verified for one
     processo must never authorize protocol into another), its ``output_mode``
     is ``"minuta-sugerida"`` (a ``"rascunho-pesquisa"`` research memo is never
@@ -218,19 +222,25 @@ def _grounding_failure_code(grounding: GroundingEvidence | None, request: Filing
     evidence_tribunal = grounding.tribunal.strip().casefold()
     request_cnj = _digits_only(request.numero_cnj)
     request_tribunal = request.tribunal.strip().casefold()
+    evidence_tipo_peticao = grounding.tipo_peticao.strip().casefold()
+    request_tipo_peticao = request.tipo_peticao.strip().casefold()
     processo_diverge = (
         not evidence_cnj
         or not evidence_tribunal
         or evidence_cnj != request_cnj
         or evidence_tribunal != request_tribunal
+        or not evidence_tipo_peticao
+        or evidence_tipo_peticao != request_tipo_peticao
     )
     if processo_diverge:
         logger.warning(
             "grounding_processo_divergente",
             evidence_numero_cnj=grounding.numero_cnj,
             evidence_tribunal=grounding.tribunal,
+            evidence_tipo_peticao=grounding.tipo_peticao,
             request_numero_cnj=request.numero_cnj,
             request_tribunal=request.tribunal,
+            request_tipo_peticao=request.tipo_peticao,
         )
         return "grounding_required"
 
@@ -529,7 +539,39 @@ class FilingOrchestrator:
         )
         audit_ids.append(entry.entry_id)
 
-        # 6. Prepare receipt storage
+        # 6. Prepare MNI client. Client/WSDL construction happens before any
+        # submit call; a failure here is definitively safe to retry and must
+        # never be reported as an indeterminate delivery.
+        try:
+            mni_client = self._mni_client_factory(request.tribunal, self._mni_auth)
+        except Exception as exc:  # noqa: BLE001 — no submit has started
+            logger.warning(
+                "filing_delivery_not_started",
+                numero_cnj=request.numero_cnj,
+                tribunal=request.tribunal,
+                error=safe_error_text(exc),
+                exception_type=exc.__class__.__name__,
+            )
+            entry = self._audit.log(
+                "filing.delivery_not_started",
+                actor=f"user:{request.cpf}",
+                details={"error": _DELIVERY_NOT_STARTED_ERROR, "pending_receipt": False},
+                processo_cnj=request.numero_cnj,
+            )
+            audit_ids.append(entry.entry_id)
+            return FilingResult(
+                success=False,
+                receipt=None,
+                signing_result=signing_result,
+                preflight=preflight,
+                audit_entry_ids=audit_ids,
+                error=_DELIVERY_NOT_STARTED_ERROR,
+                error_code="delivery_not_started",
+            )
+
+        from juris.mni.operations.peticionamento import entregar_manifestacao
+
+        submitted_payload_hash = _sha256_hex(signing_result.signed_pdf)
         pending_path = self._receipt_store.prepare(
             numero_cnj=request.numero_cnj,
             signed_pdf=signing_result.signed_pdf,
@@ -538,14 +580,8 @@ class FilingOrchestrator:
             tipo_documento=request.tipo_documento,
         )
 
-        # 7. File via MNI
+        # 7. Only this call can make delivery indeterminate.
         try:
-            mni_client = self._mni_client_factory(request.tribunal, self._mni_auth)
-            from juris.mni.operations.peticionamento import entregar_manifestacao
-
-            # Compute submitted payload hash before sending
-            submitted_payload_hash = _sha256_hex(signing_result.signed_pdf)
-
             receipt = entregar_manifestacao(
                 client=mni_client,
                 id_manifestante=request.cpf,

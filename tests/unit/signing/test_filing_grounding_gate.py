@@ -116,6 +116,7 @@ def _bound_grounding(**overrides: object) -> GroundingEvidence:
         "draft_sha256": _sha256(DRAFT_MARKDOWN),
         "numero_cnj": "0001234-56.2024.8.13.0001",
         "tribunal": "tjmg",
+        "tipo_peticao": "contestacao",
         "output_mode": "minuta-sugerida",
     }
     fields.update(overrides)
@@ -233,6 +234,28 @@ def test_divergent_tribunal_blocks_with_grounding_required(
     grounding = _bound_grounding(tribunal="tjsp")
     request = _base_request(grounding=grounding)
     orch = _make_orchestrator(mock_signer, audit_log, receipt_store, mock_mni_client_factory, mock_mni_auth)
+
+    with patch("juris.signing.filing.render_petition_pdf") as mock_render:
+        result = asyncio.run(orch.file(request))
+
+    assert result.success is False
+    assert result.error_code == "grounding_required"
+    mock_render.assert_not_called()
+
+
+def test_divergent_tipo_peticao_blocks_with_grounding_required(
+    mock_signer: MagicMock,
+    audit_log: AuditLog,
+    receipt_store: FilingReceiptStore,
+    mock_mni_client_factory: MagicMock,
+    mock_mni_auth: MagicMock,
+) -> None:
+    """Evidence for one procedural artifact cannot authorize another."""
+    grounding = _bound_grounding(tipo_peticao="recurso-especial")
+    request = _base_request(grounding=grounding)
+    orch = _make_orchestrator(
+        mock_signer, audit_log, receipt_store, mock_mni_client_factory, mock_mni_auth
+    )
 
     with patch("juris.signing.filing.render_petition_pdf") as mock_render:
         result = asyncio.run(orch.file(request))
