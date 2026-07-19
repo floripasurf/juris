@@ -88,6 +88,15 @@ _DOBRO_BASE_LEGAL: dict[str, str] = {
 }
 _PARTES_REPRESENTADAS_VALIDAS = frozenset({"", "fazenda", "mp", "defensoria"})
 
+# Categorias de decisão recorrível cujo prazo pode ser interrompido por
+# embargos de declaração (art. 1.026 CPC). Usado para delimitar a janela de
+# pareamento ED↔decisão em `_embargos_interruption_for`: a janela termina na
+# próxima decisão recorrível de QUALQUER uma dessas categorias, não só da
+# mesma — um processo tipicamente tem uma única SENTENCA mas pode ter várias
+# DECISAO_RECORRIVEL, e uma sentença pode vir logo após uma interlocutória (ou
+# vice-versa) sem que o ED de uma vaze para a outra.
+_RECURSAVEL_CATEGORIAS = frozenset({CategoriaSemantica.SENTENCA, CategoriaSemantica.DECISAO_RECORRIVEL})
+
 
 def _validate_parte_representada(parte_representada: str) -> None:
     if parte_representada not in _PARTES_REPRESENTADAS_VALIDAS:
@@ -610,14 +619,17 @@ def _embargos_interruption_for(
     Detection of the filing/resolution movements themselves (TPU 199/463-465 or
     regex on the descrição) is categoria-agnostic — an ED is always logged
     under ``CategoriaSemantica.RECURSO`` regardless of what it targets. The
-    pairing is what needs to be categoria-aware: the ED filing considered must
-    be posterior to ``decision`` and anterior to the next decision of the
-    *same* categoria (SENTENCA or DECISAO_RECORRIVEL). Without that window, an
-    ED filed only after a later decision of the same categoria (e.g. a second
-    interlocutória in the same processo) would incorrectly be attributed to
-    this earlier one. Once the correct filing is identified, its resolution is
-    searched unbounded — it may legitimately be published after a later,
-    unrelated decision in the processo.
+    pairing is what needs to be window-bound: the ED filing considered must be
+    posterior to ``decision`` and anterior to the next recursável decision —
+    SENTENCA *or* DECISAO_RECORRIVEL, whichever comes first, not just another
+    decision of the same categoria. A single ED after an interlocutória
+    followed shortly by a sentença (or vice-versa) must pair with only one of
+    them; bounding the window by same-categoria alone let it leak across
+    categories, both falsely suppressing the other decision as interrompida
+    and, once judged, fabricating a second reopened recurso for the same ED.
+    Once the correct filing is identified, its resolution is searched
+    unbounded — it may legitimately be published after a later, unrelated
+    decision in the processo.
     """
     if decision.data_hora is None:
         return None
@@ -625,12 +637,12 @@ def _embargos_interruption_for(
     after_decision = [
         analysis for analysis in analyses if analysis.data_hora is not None and analysis.data_hora > decision_dt
     ]
-    next_same_categoria_dates = [
+    next_recursavel_dates = [
         analysis.data_hora
         for analysis in after_decision
-        if analysis.data_hora is not None and analysis.categoria == decision.categoria
+        if analysis.data_hora is not None and analysis.categoria in _RECURSAVEL_CATEGORIAS
     ]
-    window_end = min(next_same_categoria_dates) if next_same_categoria_dates else None
+    window_end = min(next_recursavel_dates) if next_recursavel_dates else None
     window = [
         analysis
         for analysis in after_decision

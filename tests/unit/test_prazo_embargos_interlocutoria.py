@@ -191,6 +191,89 @@ class TestPareamentoEdDecisao:
         )
 
 
+class TestPareamentoCrossCategoria:
+    def test_ed_apos_interlocutoria_seguida_de_sentenca_interrompe_so_a_sentenca(self) -> None:
+        # (f) pareamento cross-categoria: interlocutória TPU 385 (05/01) →
+        # sentença (10/01) → único ED (15/01) → julgamento do ED publicado
+        # (20/02). O ED só pode pertencer a UMA decisão — a mais próxima e
+        # anterior a ele (a sentença). Bug corrigido: a janela antiga só
+        # olhava para a próxima decisão da MESMA categoria, então um único ED
+        # marcava as duas como interrompidas (e, julgado, fabricava dois
+        # recursos reabertos para o mesmo ED).
+        analyses = [
+            _movement(
+                "dec",
+                CategoriaSemantica.DECISAO_RECORRIVEL,
+                385,
+                "Decisão interlocutória publicada",
+                date(2026, 1, 5),
+            ),
+            _movement("sent", CategoriaSemantica.SENTENCA, 132, "Sentença publicada", date(2026, 1, 10)),
+            _movement("ed", CategoriaSemantica.RECURSO, 199, "Embargos de declaração opostos", date(2026, 1, 15)),
+            _movement(
+                "ed-julgado",
+                CategoriaSemantica.RECURSO,
+                464,
+                "Embargos de declaração não providos",
+                date(2026, 2, 20),
+            ),
+        ]
+
+        report = compute_prazos("123", "tjmg", analyses, today=date(2026, 2, 21))
+
+        reopened = [
+            p for p in report.prazos if p.movimento_id in {"sent:reabertura-apelacao-ed", "dec:reabertura-agravo-ed"}
+        ]
+        assert len(reopened) == 1
+        assert reopened[0].movimento_id == "sent:reabertura-apelacao-ed"
+        assert reopened[0].data_inicio == date(2026, 2, 20)
+
+        # A interlocutória NÃO foi suprimida/reaberta pelo ED da sentença — o
+        # agravo dela segue o fluxo normal (vencido/aberto conforme as datas).
+        agravo_normal = [p for p in report.prazos if p.movimento_id == "dec"]
+        assert len(agravo_normal) == 1
+        assert agravo_normal[0].rule.nome == "Agravo de instrumento"
+        assert not any(r.movimento_id == "dec" for r in report.revisao_manual)
+
+    def test_ed_apos_sentenca_seguida_de_interlocutoria_interrompe_so_o_agravo(self) -> None:
+        # Espelho de (f): sentença primeiro, depois interlocutória, ED só
+        # após a interlocutória → só o agravo reabre; a sentença segue o
+        # fluxo normal (Apelação + Embargos de declaração, sem interrupção).
+        analyses = [
+            _movement("sent", CategoriaSemantica.SENTENCA, 132, "Sentença publicada", date(2026, 1, 5)),
+            _movement(
+                "dec",
+                CategoriaSemantica.DECISAO_RECORRIVEL,
+                385,
+                "Decisão interlocutória publicada",
+                date(2026, 1, 10),
+            ),
+            _movement("ed", CategoriaSemantica.RECURSO, 199, "Embargos de declaração opostos", date(2026, 1, 15)),
+            _movement(
+                "ed-julgado",
+                CategoriaSemantica.RECURSO,
+                464,
+                "Embargos de declaração não providos",
+                date(2026, 2, 20),
+            ),
+        ]
+
+        report = compute_prazos("123", "tjmg", analyses, today=date(2026, 2, 21))
+
+        reopened = [
+            p for p in report.prazos if p.movimento_id in {"sent:reabertura-apelacao-ed", "dec:reabertura-agravo-ed"}
+        ]
+        assert len(reopened) == 1
+        assert reopened[0].movimento_id == "dec:reabertura-agravo-ed"
+        assert reopened[0].data_inicio == date(2026, 2, 20)
+
+        # A sentença NÃO foi suprimida/reaberta pelo ED da interlocutória — a
+        # apelação segue o fluxo normal.
+        apelacao_normal = [p for p in report.prazos if p.movimento_id == "sent" and p.rule.nome == "Apelação"]
+        assert len(apelacao_normal) == 1
+        assert not any(r.movimento_id == "sent" for r in report.revisao_manual)
+
+
 class TestRegressaoSentenca:
     def test_apelacao_reabre_apos_embargos_continua_intacta(self) -> None:
         # (e) regressão: o cenário de sentença (Task existente) não pode ser
