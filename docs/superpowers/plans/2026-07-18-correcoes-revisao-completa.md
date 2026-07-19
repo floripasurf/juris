@@ -33,7 +33,7 @@
 
 **Sem código de produto.** Prepara o terreno e preserva o plano em Git.
 
-- [ ] **Step 1: Worktree a partir de origin/main**
+- [x] **Step 1: Worktree a partir de origin/main**
 
 ```bash
 ssh raphaellages@100.77.76.64
@@ -43,11 +43,11 @@ cd ~/projects/_worktrees/juris/correcoes-1807 && uv sync --frozen
 uv run pytest tests/unit -q   # baseline verde antes de qualquer mudança
 ```
 
-- [ ] **Step 2: Commitar este plano no branch** (`docs/superpowers/plans/2026-07-18-correcoes-revisao-completa.md`). Commit: `docs(plan): correções da revisão 18/07 (v2 pós-Codex)`.
+- [x] **Step 2: Commitar este plano no branch** (`docs/superpowers/plans/2026-07-18-correcoes-revisao-completa.md`). Commit: `docs(plan): correções da revisão 18/07 (v2 pós-Codex)`.
 
-- [ ] **Step 3: Revisar o delta não implantado** — `git log --stat 4d2d8ec..origin/main` e produzir resumo de 10 linhas (o que muda em produção no próximo restart) para decisão humana nº 1. NÃO fazer deploy nesta task.
+- [x] **Step 3: Revisar o delta não implantado** — `git log --stat 4d2d8ec..origin/main` e produzir resumo de 10 linhas (o que muda em produção no próximo restart) para decisão humana nº 1. NÃO fazer deploy nesta task.
 
-- [ ] **Step 4: Backups pré-mutação de produção** (pré-requisito da Task 0A):
+- [x] **Step 4: Backups pré-mutação de produção** (pré-requisito da Task 0A):
 
 ```bash
 sqlite3 ~/projects/juris-pilot/home/repertory.db ".backup ~/projects/juris-pilot/backups/repertory-pre-backfill-$(date +%Y%m%d).db"
@@ -58,13 +58,13 @@ cp ~/Library/LaunchAgents/com.causia.web.plist ~/projects/juris-pilot/backups/co
 
 ## Task 0A — Runbook de produção imediato [ordem 2]
 
-- [ ] **Step 1: Destravar drafts HOJE (independente da cadeia CLI):**
+- [x] **Step 1: Destravar drafts HOJE (independente da cadeia CLI):**
 
 ```bash
 ssh raphaellages@100.77.76.64 'zsh -lc "ollama pull qwen3:8b"'   # modelo default do código atual
 ```
 
-- [ ] **Step 2: Backfill de embeddings** (backup da Task P feito):
+- [x] **Step 2: Backfill de embeddings** (backup da Task P feito):
 
 ```bash
 cd ~/projects/juris-pilot/app
@@ -73,12 +73,12 @@ sqlite3 ~/projects/juris-pilot/home/repertory.db "SELECT COUNT(*), SUM(embedding
 # espera: 1761|0
 ```
 
-- [ ] **Step 3: Flags no plist** `com.causia.web.plist`, em `EnvironmentVariables`:
+- [x] **Step 3: Flags no plist** `com.causia.web.plist`, em `EnvironmentVariables`:
   - `JURIS_TRUSTED_PROXY` = `1` (efetiva: rate limit por usuário real atrás do túnel)
   - `JURIS_REQUIRE_EMBEDDINGS` = `1` (só após Step 2 verificado)
   - `JURIS_RATE_LIMIT_FAIL_CLOSED` = `1` (**hoje é no-op sem Redis** — o limiter em memória não tem backend que falhe; fica como preparo documentado do caminho Redis)
 
-- [ ] **Step 4: Recarga REAL do serviço** (kickstart não relê EnvironmentVariables):
+- [x] **Step 4: Recarga REAL do serviço** (kickstart não relê EnvironmentVariables):
 
 ```bash
 launchctl bootout gui/501/com.causia.web
@@ -86,7 +86,7 @@ launchctl bootstrap gui/501 ~/Library/LaunchAgents/com.causia.web.plist
 launchctl print gui/501/com.causia.web | grep -A3 "JURIS_TRUSTED_PROXY\|JURIS_REQUIRE_EMBEDDINGS"   # confirma env novo
 ```
 
-- [ ] **Step 5: Smoke** — público e autenticado:
+- [x] **Step 5: Smoke** — público e autenticado:
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8100/health        # espera 200
@@ -110,7 +110,7 @@ tail -20 ~/projects/juris-pilot/logs/web.err                                  # 
 **Interfaces:**
 - Produz: `entregar_manifestacao` sem decorator de retry; `FilingResult.error_code: str | None` (novo campo, `"delivery_uncertain"` quando a entrega falhou APÓS o envio começar; `None`/outros códigos nos demais passos); serialização expõe `error_code`.
 
-- [ ] **Step 1: Teste falho — exceção retryável do decorator atual NÃO é retentada.** Antes de escrever o teste, conferir em `src/juris/mni/retry.py` quais classes são retentadas (transporte/timeout; `Fault` com code em `NON_RETRYABLE_FAULT_CODES` NÃO é). O fake deve lançar uma classe retryável (ex.: `zeep.exceptions.TransportError` ou `requests.Timeout` — a que o decorator captura):
+- [x] **Step 1: Teste falho — exceção retryável do decorator atual NÃO é retentada.** Antes de escrever o teste, conferir em `src/juris/mni/retry.py` quais classes são retentadas (transporte/timeout; `Fault` com code em `NON_RETRYABLE_FAULT_CODES` NÃO é). O fake deve lançar uma classe retryável (ex.: `zeep.exceptions.TransportError` ou `requests.Timeout` — a que o decorator captura):
 
 ```python
 def test_entregar_manifestacao_nao_retenta_em_falha_de_transporte() -> None:
@@ -121,13 +121,13 @@ def test_entregar_manifestacao_nao_retenta_em_falha_de_transporte() -> None:
     assert calls["n"] == 1
 ```
 
-- [ ] **Step 2: Remover `@mni_retry`** + docstring: "Sem retry automático: a entrega não é idempotente; em timeout, VERIFICAR no tribunal antes de reenviar." Consultas MNI mantêm `mni_retry`.
+- [x] **Step 2: Remover `@mni_retry`** + docstring: "Sem retry automático: a entrega não é idempotente; em timeout, VERIFICAR no tribunal antes de reenviar." Consultas MNI mantêm `mni_retry`.
 
-- [ ] **Step 3: Estado distinto no orchestrator** — no ramo de erro do passo de entrega em `FilingOrchestrator.file`, auditar `filing.delivery_uncertain` e retornar `FilingResult(..., error_code="delivery_uncertain", error="Falha na entrega ao tribunal. ATENÇÃO: a petição PODE ter sido protocolada — confira o processo no tribunal antes de tentar novamente.")`. Falhas de render/preflight/assinatura (antes do envio) mantêm códigos próprios — a UI precisa distinguir "não foi" de "pode ter ido".
+- [x] **Step 3: Estado distinto no orchestrator** — no ramo de erro do passo de entrega em `FilingOrchestrator.file`, auditar `filing.delivery_uncertain` e retornar `FilingResult(..., error_code="delivery_uncertain", error="Falha na entrega ao tribunal. ATENÇÃO: a petição PODE ter sido protocolada — confira o processo no tribunal antes de tentar novamente.")`. Falhas de render/preflight/assinatura (antes do envio) mantêm códigos próprios — a UI precisa distinguir "não foi" de "pode ter ido".
 
-- [ ] **Step 4: Serialização + UI** — `serialize_filing_result` inclui `error_code`; `index.html` mostra o aviso de verificação quando `error_code == "delivery_uncertain"` (sem botão de reenvio imediato).
+- [x] **Step 4: Serialização + UI** — `serialize_filing_result` inclui `error_code`; `index.html` mostra o aviso de verificação quando `error_code == "delivery_uncertain"` (sem botão de reenvio imediato).
 
-- [ ] **Step 5: Testes → PASS. Gates + commit**
+- [x] **Step 5: Testes → PASS. Gates + commit**
 
 Commit: `fix(mni): entrega de petição sem retry automático + estado delivery_uncertain distinto`
 
@@ -164,16 +164,16 @@ grounding_override_reason: str = ""
 
 `FilingOrchestrator.file()` (passo 0, antes do render): deixa passar SOMENTE se (a) `grounding.status == "verified"` E `grounding.draft_sha256 == sha256(request.draft_markdown)` E `not revisao_humana_obrigatoria`; OU (b) `grounding_override=True` com `len(reason.strip()) >= 20` → audita `filing.grounding_override` (actor="lawyer", details com reason) e segue. Caso contrário retorna `FilingResult(success=False, error_code="grounding_required", ...)` + audit `filing.blocked_ungrounded`. `skip_preflight` NÃO pula este gate.
 
-- [ ] **Step 1: Testes falhos — 5 contratos no orchestrator** (montar orchestrator com fakes já usados nos testes existentes de filing):
+- [x] **Step 1: Testes falhos — 5 contratos no orchestrator** (montar orchestrator com fakes já usados nos testes existentes de filing):
   1. evidência verified + hash igual → pipeline segue (chega ao render);
   2. hash divergente → `error_code="grounding_required"`, audit `filing.blocked_ungrounded`, NADA assinado;
   3. `revisao_humana_obrigatoria=True` → `error_code="revisao_humana_obrigatoria"`;
   4. `grounding=None` (manifest antigo/documento externo) → `grounding_required`;
   5. override com reason ≥ 20 chars → segue + audit `filing.grounding_override`; reason curto → `grounding_required` (não aceita override vazio).
 
-- [ ] **Step 2: Implementar no orchestrator** (gate determinístico, ~30 linhas + dataclass). `revisao_humana_obrigatoria` vem para o manifest nesta task: em `demo/artifacts.py`, ao lado de `grounding_status` (linha ~370), acrescentar `"revisao_humana_obrigatoria": bool(draft.estrategia and draft.estrategia.revisao_humana_obrigatoria)` — compat: leitor trata ausência como `False` para manifests antigos, mas ausência de `grounding_status` vira `status="unknown"` (= exige override).
+- [x] **Step 2: Implementar no orchestrator** (gate determinístico, ~30 linhas + dataclass). `revisao_humana_obrigatoria` vem para o manifest nesta task: em `demo/artifacts.py`, ao lado de `grounding_status` (linha ~370), acrescentar `"revisao_humana_obrigatoria": bool(draft.estrategia and draft.estrategia.revisao_humana_obrigatoria)` — compat: leitor trata ausência como `False` para manifests antigos, mas ausência de `grounding_status` vira `status="unknown"` (= exige override).
 
-- [ ] **Step 3: Resolver evidência nos chamadores** — helper em `filing_console.py`:
+- [x] **Step 3: Resolver evidência nos chamadores** — helper em `filing_console.py`:
 
 ```python
 def grounding_evidence_from_manifest(out_root: Path, output_dir: str, artifact_name: str) -> GroundingEvidence | None:
@@ -182,9 +182,9 @@ def grounding_evidence_from_manifest(out_root: Path, output_dir: str, artifact_n
 
 `FilingPayload` ganha `output_dir: str | None`, `artifact_name: str | None`, `override_grounding: bool = False`, `override_reason: str = Field(default="", max_length=_MAX_SHORT_TEXT)`. `submit_filing` monta `FilingRequest` com a evidência resolvida (ou `None`); em `error_code="grounding_required"`/`"revisao_humana_obrigatoria"` responde `HTTPException(status_code=409, detail={"code": <error_code>, "message": <texto para advogado>})`. `juris file` (CLI) resolve o manifest do diretório do caso que já recebe hoje; sem manifest → precisa de `--override-grounding --reason "..."`.
 
-- [ ] **Step 4: UI** — form de protocolo envia `output_dir`/`artifact_name` do artefato escolhido (o form já é semeado por `filing_artifacts`). Em 409: painel com duas saídas explícitas — "Voltar e revisar" (default) e "Protocolar mesmo assim (registrado em auditoria)" com textarea de justificativa; para markdown colado sem artefato, o mesmo painel com rótulo "Documento externo (não gerado pela Causia)".
+- [x] **Step 4: UI** — form de protocolo envia `output_dir`/`artifact_name` do artefato escolhido (o form já é semeado por `filing_artifacts`). Em 409: painel com duas saídas explícitas — "Voltar e revisar" (default) e "Protocolar mesmo assim (registrado em auditoria)" com textarea de justificativa; para markdown colado sem artefato, o mesmo painel com rótulo "Documento externo (não gerado pela Causia)".
 
-- [ ] **Step 5: Testes (incl. suíte de filing existente) → PASS. Gates + commit**
+- [x] **Step 5: Testes (incl. suíte de filing existente) → PASS. Gates + commit**
 
 Commit: `feat(filing): gate de grounding no orchestrator — verified+hash ou override auditado, em todos os caminhos de protocolo`
 
@@ -203,15 +203,15 @@ Commit: `feat(filing): gate de grounding no orchestrator — verified+hash ou ov
 **Interfaces:**
 - Produz: `LocalFTSStore.count_zero_embeddings() -> int` (somente leitura); `LocalFTSStore.null_out_zero_embeddings() -> int` (mutador); `QdrantVectorStore.upsert` levanta `ValueError` para embedding vazio/zerado ("ingestão sem embedder não é suportada no Qdrant"); `repertory ingest --embed` (default False).
 
-- [ ] **Step 1: Testes falhos** — (a) `upsert` com `[[0.0]*8]` → `count_zero_embeddings()==1` e `missing_embedding_count()==0` (o bug); (b) `null_out_zero_embeddings()` → 1 reparado, `missing_embedding_count()==1`; (c) seed loader sem embedder grava NULL (SELECT embedding IS NULL); (d) `QdrantVectorStore.upsert` com `[]` levanta ValueError (mock do client, sem Qdrant real).
+- [x] **Step 1: Testes falhos** — (a) `upsert` com `[[0.0]*8]` → `count_zero_embeddings()==1` e `missing_embedding_count()==0` (o bug); (b) `null_out_zero_embeddings()` → 1 reparado, `missing_embedding_count()==1`; (c) seed loader sem embedder grava NULL (SELECT embedding IS NULL); (d) `QdrantVectorStore.upsert` com `[]` levanta ValueError (mock do client, sem Qdrant real).
 
-- [ ] **Step 2: Placeholders NULL** nos dois ramos sem embedder (`seed_loader.py:130-133`, `registry.py:220-227`): `placeholder = [[] for _ in all_chunks]` (o `LocalFTSStore.upsert` já converte `[]`→NULL — mesmo caminho da escavação). A guarda do Qdrant (Step 1d) garante que esse contrato não vira zero-vector silencioso lá.
+- [x] **Step 2: Placeholders NULL** nos dois ramos sem embedder (`seed_loader.py:130-133`, `registry.py:220-227`): `placeholder = [[] for _ in all_chunks]` (o `LocalFTSStore.upsert` já converte `[]`→NULL — mesmo caminho da escavação). A guarda do Qdrant (Step 1d) garante que esse contrato não vira zero-vector silencioso lá.
 
-- [ ] **Step 3: Reparo e contagem no store** — `count_zero_embeddings` (SELECT + `np.frombuffer` + `not any(...)`, sem UPDATE) e `null_out_zero_embeddings` (UPDATE ... SET embedding=NULL nos ids zerados; commit; retorna contagem).
+- [x] **Step 3: Reparo e contagem no store** — `count_zero_embeddings` (SELECT + `np.frombuffer` + `not any(...)`, sem UPDATE) e `null_out_zero_embeddings` (UPDATE ... SET embedding=NULL nos ids zerados; commit; retorna contagem).
 
-- [ ] **Step 4: CLI** — em `repertory_backfill_embeddings`: no `--dry-run`, reportar `count_zero_embeddings()` SEM mutar ("N vetores-zero legados seriam reparados"); no run real, `null_out_zero_embeddings()` ANTES de `missing_embedding_count()`. Em `repertory ingest`: `--embed` (bool, default False) instancia `LegalEmbedder()` e passa ao loader/`ingest_source` (conferir kwarg exato nas assinaturas); sem `--embed`, imprimir lembrete "chunks sem embedding — rode backfill-embeddings".
+- [x] **Step 4: CLI** — em `repertory_backfill_embeddings`: no `--dry-run`, reportar `count_zero_embeddings()` SEM mutar ("N vetores-zero legados seriam reparados"); no run real, `null_out_zero_embeddings()` ANTES de `missing_embedding_count()`. Em `repertory ingest`: `--embed` (bool, default False) instancia `LegalEmbedder()` e passa ao loader/`ingest_source` (conferir kwarg exato nas assinaturas); sem `--embed`, imprimir lembrete "chunks sem embedding — rode backfill-embeddings".
 
-- [ ] **Step 5: Testes → PASS. Gates + commit**
+- [x] **Step 5: Testes → PASS. Gates + commit**
 
 Commit: `fix(retrieval): NULL como placeholder, reparo de vetores-zero (dry-run só informa) e ingest --embed explícito`
 
@@ -228,9 +228,9 @@ Commit: `fix(retrieval): NULL como placeholder, reparo de vetores-zero (dry-run 
 **Interfaces:**
 - Produz: `_extract_citation_ref(normalized: str) -> tuple[str | None, str | None]` (número sem pontuação, órgão minúsculo); `resolve_narrative_citation` retorna `(True, source_id)` só com número E órgão confirmados no candidato.
 
-- [ ] **Step 1: Levantar os formatos reais** — `sqlite3 <repertory de teste> "SELECT DISTINCT source_id FROM chunks LIMIT 40"` ou grep em `data/corpus/` para padrões de `source_id` do seed (ex.: súmulas STF/STJ/TST, temas de repercussão geral, repetitivos, OJs alfanuméricas). Registrar 6+ exemplos no teste.
+- [x] **Step 1: Levantar os formatos reais** — `sqlite3 <repertory de teste> "SELECT DISTINCT source_id FROM chunks LIMIT 40"` ou grep em `data/corpus/` para padrões de `source_id` do seed (ex.: súmulas STF/STJ/TST, temas de repercussão geral, repetitivos, OJs alfanuméricas). Registrar 6+ exemplos no teste.
 
-- [ ] **Step 2: Testes falhos**
+- [x] **Step 2: Testes falhos**
 
 ```python
 def test_extract_ref_formatos_reais() -> None:
@@ -249,9 +249,9 @@ def test_resolve_aceita_match_em_source_id_ou_texto(fake_repertory_certo) -> Non
     assert found is True
 ```
 
-- [ ] **Step 3: Implementar** — número: primeiro grupo `[\d.]+` após marcador (`sumula|tema|repetitivo|oj|enunciado|resp|re\b|rr\b`), com `.replace(".", "")`; órgão: primeiro token do conjunto de tribunais do corpus (derivar do registry de ingestão, não hardcode solto). Aceitar candidato `r` se score ≥ threshold E número aparece em `r.source_id` (normalizado sem pontos) OU no início de `r.texto` (primeiros ~200 chars, dígitos normalizados) E órgão idem. Sem número/órgão extraíveis → `(False, None)` (prosa vaga não vira "verificado"; o chamador já trata como issue).
+- [x] **Step 3: Implementar** — número: primeiro grupo `[\d.]+` após marcador (`sumula|tema|repetitivo|oj|enunciado|resp|re\b|rr\b`), com `.replace(".", "")`; órgão: primeiro token do conjunto de tribunais do corpus (derivar do registry de ingestão, não hardcode solto). Aceitar candidato `r` se score ≥ threshold E número aparece em `r.source_id` (normalizado sem pontos) OU no início de `r.texto` (primeiros ~200 chars, dígitos normalizados) E órgão idem. Sem número/órgão extraíveis → `(False, None)` (prosa vaga não vira "verificado"; o chamador já trata como issue).
 
-- [ ] **Step 4: Testes → PASS. Gates + commit**
+- [x] **Step 4: Testes → PASS. Gates + commit**
 
 Commit: `fix(citation): identidade (número+órgão) obrigatória na resolução de citação em prosa`
 
@@ -268,11 +268,11 @@ Commit: `fix(citation): identidade (número+órgão) obrigatória na resolução
 **Interfaces:**
 - Produz: `alert_emails_for_tenant(tenant_id: str, *, path: Path | None = None) -> list[str]` (entrada string legada → `[]`, sem crash); `alert_email_config_from_settings(settings=None, *, to_addresses: list[str] | None = None)`; `send_pending_deadline_alerts(*, db: LocalDB, ...)` (keyword obrigatório); `PendingAlertDeliverySummary.no_recipients: bool` (novo, distinto de `smtp_configured=False`); subcomando `juris tenant alert-emails <tenant_id> [--add X] [--remove X] [--list]`.
 
-- [ ] **Step 1: Testes falhos** — (a) helper lê lista do tenants.json de objeto; (b) entrada string legada → `[]` sem exceção; (c) `--add` sobre entrada legada migra para objeto PRESERVANDO o hash da chave (reusar o normalizador de `trial_access.py:464-467`) — assert que autenticação com a chave antiga continua válida; (d) `to_addresses=[...]` ignora o global; (e) chamada sem `db` → `TypeError`; (f) summary distingue `no_recipients` de `smtp_configured`.
+- [x] **Step 1: Testes falhos** — (a) helper lê lista do tenants.json de objeto; (b) entrada string legada → `[]` sem exceção; (c) `--add` sobre entrada legada migra para objeto PRESERVANDO o hash da chave (reusar o normalizador de `trial_access.py:464-467`) — assert que autenticação com a chave antiga continua válida; (d) `to_addresses=[...]` ignora o global; (e) chamada sem `db` → `TypeError`; (f) summary distingue `no_recipients` de `smtp_configured`.
 
-- [ ] **Step 2: Implementar** — helper com o mesmo lock/leitura do registry; validação leve de formato (contém `@` e domínio), inválidos ignorados com `logger.warning("alert_email_invalido", tenant_id=..., dominio=<parte pós-@ ou "malformado">)` — nunca o endereço completo. `overnight --send-alerts`: por tenant, `recipients = alert_emails_for_tenant(tid)`; vazio → summary `no_recipients=True` + warning `alert_sem_destinatario` e NÃO envia; fallback ao global `alert_to_addresses` SOMENTE para `escritorio-piloto` (não regredir o piloto). `alerts send` (cli:2552-2559): resolver o `db` do tenant explícito (mesmo mecanismo de resolução de tenant do comando; se o comando é single-tenant local, passar o `LocalDB` do `JURIS_HOME` corrente explicitamente) e destinatários pela mesma regra.
+- [x] **Step 2: Implementar** — helper com o mesmo lock/leitura do registry; validação leve de formato (contém `@` e domínio), inválidos ignorados com `logger.warning("alert_email_invalido", tenant_id=..., dominio=<parte pós-@ ou "malformado">)` — nunca o endereço completo. `overnight --send-alerts`: por tenant, `recipients = alert_emails_for_tenant(tid)`; vazio → summary `no_recipients=True` + warning `alert_sem_destinatario` e NÃO envia; fallback ao global `alert_to_addresses` SOMENTE para `escritorio-piloto` (não regredir o piloto). `alerts send` (cli:2552-2559): resolver o `db` do tenant explícito (mesmo mecanismo de resolução de tenant do comando; se o comando é single-tenant local, passar o `LocalDB` do `JURIS_HOME` corrente explicitamente) e destinatários pela mesma regra.
 
-- [ ] **Step 3: Testes (incl. suíte de alerts/cli existente) → PASS. Gates + commit**
+- [x] **Step 3: Testes (incl. suíte de alerts/cli existente) → PASS. Gates + commit**
 
 Commit: `feat(alerts): destinatários por tenant com migração de entrada legada + estados operacionais distintos`
 
@@ -287,7 +287,7 @@ Commit: `feat(alerts): destinatários por tenant com migração de entrada legad
 - Modify: `src/juris/api/local_agent.py` (kwargs do connect do relay)
 - Test: `tests/unit/cli/test_web_ws_keepalive.py` (novo)
 
-- [ ] **Step 1: Teste falho — kwargs do uvicorn**
+- [x] **Step 1: Teste falho — kwargs do uvicorn**
 
 ```python
 def test_juris_web_configura_keepalive_ws(monkeypatch) -> None:
@@ -298,9 +298,9 @@ def test_juris_web_configura_keepalive_ws(monkeypatch) -> None:
     assert captured["ws_ping_timeout"] == 75.0
 ```
 
-- [ ] **Step 2: Implementar** — `uvicorn.run(..., ws_ping_interval=25.0, ws_ping_timeout=75.0)` + no connect do relay reverso do agente (`api/local_agent.py`, no supervisor): `ping_interval=25, ping_timeout=75` (entra na próxima release do agente; documentar no CHANGELOG do agente).
+- [x] **Step 2: Implementar** — `uvicorn.run(..., ws_ping_interval=25.0, ws_ping_timeout=75.0)` + no connect do relay reverso do agente (`api/local_agent.py`, no supervisor): `ping_interval=25, ping_timeout=75` (entra na próxima release do agente; documentar no CHANGELOG do agente).
 
-- [ ] **Step 3: Medição correta (pós-deploy, runbook)** —
+- [x] **Step 3: Medição correta (pós-deploy, runbook)** —
 
 ```bash
 BASE=$(grep -c "keepalive ping timeout" ~/projects/juris-pilot/logs/web.err)
@@ -311,7 +311,7 @@ echo "delta 24h: $((NOW - BASE))"   # meta: <10 (era ~100/dia)
 
 Registrar antes/depois no PR, junto com `/api/agent-health` do escritorio-piloto.
 
-- [ ] **Step 4: Gates + commit**
+- [x] **Step 4: Gates + commit**
 
 Commit: `fix(web,agent): keepalive WS 25s/75s nos dois lados do relay`
 
@@ -331,7 +331,7 @@ Commit: `fix(web,agent): keepalive WS 25s/75s nos dois lados do relay`
 **Interfaces:**
 - Produz: `PrazoRule(..., admite_dobro: bool = True)` — `False` em: "Pagamento voluntário (cumprimento)" (art. 523 — regime da Fazenda é outro, arts. 534-535), "Prazo judicial genérico" (prazo fixado pelo juiz = prazo próprio, exceção expressa dos §§) e TODAS as `CLT_RULES`; `compute_prazos(..., parte_representada: str = "") -> ...` com valores válidos `{"", "fazenda", "mp", "defensoria"}` (inválido → ValueError); dobra aplicada por regra: `rule_efetiva = dataclasses.replace(rule, dias_uteis=rule.dias_uteis * 2, base_legal=f"{rule.base_legal} c/c {_DOBRO_BASE_LEGAL[parte]} (em dobro)")` SOMENTE quando `parte_representada` setada E `rule.admite_dobro`.
 
-- [ ] **Step 1: Testes falhos**
+- [x] **Step 1: Testes falhos**
 
 ```python
 def test_apelacao_dobra_para_fazenda(cal) -> None:
@@ -356,11 +356,11 @@ def test_parte_invalida_levanta(cal) -> None:
         compute_prazos([_sentenca()], cal, TODAY, CNJ, parte_representada="banco")
 ```
 
-- [ ] **Step 2: Implementar** — `_DOBRO_BASE_LEGAL = {"fazenda": "art. 183 CPC", "mp": "art. 180 CPC", "defensoria": "art. 186 CPC"}`; a substituição da regra acontece em `compute_prazos` antes de chamar `compute_prazo` (que fica intocado — recebe a regra já dobrada). Docstring do parâmetro: "Benefício exige intimação pessoal (arts. 180/183/186) e NÃO cobre prazos próprios (§§ 2º/4º) — configuração explícita do operador para o ente representado; nunca inferido dos autos. Art. 229 não se aplica a autos eletrônicos (§2º) e não é modelado."
+- [x] **Step 2: Implementar** — `_DOBRO_BASE_LEGAL = {"fazenda": "art. 183 CPC", "mp": "art. 180 CPC", "defensoria": "art. 186 CPC"}`; a substituição da regra acontece em `compute_prazos` antes de chamar `compute_prazo` (que fica intocado — recebe a regra já dobrada). Docstring do parâmetro: "Benefício exige intimação pessoal (arts. 180/183/186) e NÃO cobre prazos próprios (§§ 2º/4º) — configuração explícita do operador para o ente representado; nunca inferido dos autos. Art. 229 não se aplica a autos eletrônicos (§2º) e não é modelado."
 
-- [ ] **Step 3: Call-sites** — propagar `parte_representada=get_settings().parte_representada` nos jobs/workbench/demo (default `""` = comportamento atual). Por-processo/por-tenant real (registro no tenants.json ou no processo) fica como follow-up EXPLÍCITO no docstring — o parâmetro da API já permite.
+- [x] **Step 3: Call-sites** — propagar `parte_representada=get_settings().parte_representada` nos jobs/workbench/demo (default `""` = comportamento atual). Por-processo/por-tenant real (registro no tenants.json ou no processo) fica como follow-up EXPLÍCITO no docstring — o parâmetro da API já permite.
 
-- [ ] **Step 4: Testes (incl. suíte prazo inteira) → PASS. Gates + commit**
+- [x] **Step 4: Testes (incl. suíte prazo inteira) → PASS. Gates + commit**
 
 Commit: `feat(prazo): prazo em dobro por regra e por chamada (arts. 180/183/186, com exceções de prazo próprio)`
 
@@ -377,13 +377,13 @@ Commit: `feat(prazo): prazo em dobro por regra e por chamada (arts. 180/183/186,
 **Interfaces:**
 - Produz: `_REOPENED_AGRAVO_AFTER_ED_RULE` (15 dias úteis, `TipoAcao.RECORRER`, base `"Art. 1.015 c/c Art. 1.026 CPC"`); helper genérico `_embargos_interruption_for(analysis, dated_analyses)` (renomeia o atual `_embargos_interruption_for_sentence`; a detecção por regex/TPU 199 já é agnóstica); o bloco de interrupção roda para `SENTENCA` (regra reaberta = apelação, como hoje) e para `DECISAO_RECORRIVEL` **com `codigo_tpu == 385`** (regra reaberta = agravo); `DECISAO_RECORRIVEL` sem TPU 385 + ED detectados → `RevisaoManual(motivo="ed_sobre_decisao_recurso_incerto")`.
 
-- [ ] **Step 1: Estudar o pareamento existente** — ler `_embargos_interruption_for_sentence` completo e seu uso de `dated_analyses`: o ED considerado deve ser POSTERIOR à decisão e ANTERIOR à próxima decisão recorrível da mesma categoria (janela). Se o pareamento atual for só "primeiro ED após", escrever teste que o force: duas interlocutórias A e B com ED após B — A NÃO pode ser interrompida.
+- [x] **Step 1: Estudar o pareamento existente** — ler `_embargos_interruption_for_sentence` completo e seu uso de `dated_analyses`: o ED considerado deve ser POSTERIOR à decisão e ANTERIOR à próxima decisão recorrível da mesma categoria (janela). Se o pareamento atual for só "primeiro ED após", escrever teste que o force: duas interlocutórias A e B com ED após B — A NÃO pode ser interrompida.
 
-- [ ] **Step 2: Testes falhos** — (a) interlocutória TPU 385 + ED pendente → agravo suprimido + `prazo_interrompido_embargos_pendentes`; (b) + julgamento do ED publicado → `reabertura-agravo-ed` 15 dias úteis da intimação; (c) interlocutória sem TPU 385 + ED → revisão manual `ed_sobre_decisao_recurso_incerto` (nenhum prazo fabricado); (d) pareamento: ED depois da decisão B não interrompe a decisão A; (e) regressão: cenários de sentença de `test_prazo_engine.py:210-266` intactos.
+- [x] **Step 2: Testes falhos** — (a) interlocutória TPU 385 + ED pendente → agravo suprimido + `prazo_interrompido_embargos_pendentes`; (b) + julgamento do ED publicado → `reabertura-agravo-ed` 15 dias úteis da intimação; (c) interlocutória sem TPU 385 + ED → revisão manual `ed_sobre_decisao_recurso_incerto` (nenhum prazo fabricado); (d) pareamento: ED depois da decisão B não interrompe a decisão A; (e) regressão: cenários de sentença de `test_prazo_engine.py:210-266` intactos.
 
-- [ ] **Step 3: Implementar** — extrair o corpo do bloco de `engine.py:289-333` para `_handle_embargos_interruption(..., *, reopened_rule: PrazoRule | None) -> bool`; `reopened_rule=None` → só suprime e manda para revisão manual (caso c). Chamada para SENTENCA com a regra da apelação; para DECISAO_RECORRIVEL: `reopened_rule = _REOPENED_AGRAVO_AFTER_ED_RULE if analysis.codigo_tpu == 385 else None`. `movimento_id` reaberto: `f"{analysis.movimento_id}:reabertura-agravo-ed"`. Docstring: "Acórdão/RE/REsp sem categoria própria no CategoriaSemantica — fora do escopo; art. 1.026 interrompe apenas prazos recursais."
+- [x] **Step 3: Implementar** — extrair o corpo do bloco de `engine.py:289-333` para `_handle_embargos_interruption(..., *, reopened_rule: PrazoRule | None) -> bool`; `reopened_rule=None` → só suprime e manda para revisão manual (caso c). Chamada para SENTENCA com a regra da apelação; para DECISAO_RECORRIVEL: `reopened_rule = _REOPENED_AGRAVO_AFTER_ED_RULE if analysis.codigo_tpu == 385 else None`. `movimento_id` reaberto: `f"{analysis.movimento_id}:reabertura-agravo-ed"`. Docstring: "Acórdão/RE/REsp sem categoria própria no CategoriaSemantica — fora do escopo; art. 1.026 interrompe apenas prazos recursais."
 
-- [ ] **Step 4: Testes → PASS. Gates + commit**
+- [x] **Step 4: Testes → PASS. Gates + commit**
 
 Commit: `feat(prazo): interrupção por ED em interlocutória agravável (TPU 385); demais decisões vão a revisão manual`
 
@@ -400,7 +400,7 @@ Commit: `feat(prazo): interrupção por ED em interlocutória agravável (TPU 38
 **Interfaces:**
 - Produz: `LocalCliLLM(provider, model=None, timeout_seconds=180.0, cwd=None, reasoning_effort=None, binary=None)`; `complete` levanta `RuntimeError` quando `schema` pedido e a saída não é JSON válido OU viola a estrutura (raiz não-objeto quando `type: object`; chave de `required` ausente); subprocesso criado com `start_new_session=True` e timeout mata via `os.killpg`.
 
-- [ ] **Step 1: Testes falhos**
+- [x] **Step 1: Testes falhos**
 
 ```python
 def test_codex_command_modelo_effort_binario() -> None:
@@ -433,9 +433,9 @@ async def test_timeout_mata_grupo_de_processos() -> None:
     # e assert de que o processo não sobrevive (poll via os.killpg(..., 0) → ProcessLookupError)
 ```
 
-- [ ] **Step 2: Implementar** — kwargs novos; ramo codex ganha `-m`/`-c` (claude já tem `--model`); `binary or "codex"`/`binary or "claude"`. `_validate_structured(schema, structured)`: raiz dict quando `type=="object"`; toda chave em `schema.get("required", [])` presente — senão `RuntimeError(f"{self.model_name} violou o schema: ...")` (também quando `json.loads` falha). `_run`: `create_subprocess_exec(..., start_new_session=True)`; no timeout, `os.killpg(os.getpgid(process.pid), signal.SIGKILL)` com fallback `process.kill()` se o grupo já morreu.
+- [x] **Step 2: Implementar** — kwargs novos; ramo codex ganha `-m`/`-c` (claude já tem `--model`); `binary or "codex"`/`binary or "claude"`. `_validate_structured(schema, structured)`: raiz dict quando `type=="object"`; toda chave em `schema.get("required", [])` presente — senão `RuntimeError(f"{self.model_name} violou o schema: ...")` (também quando `json.loads` falha). `_run`: `create_subprocess_exec(..., start_new_session=True)`; no timeout, `os.killpg(os.getpgid(process.pid), signal.SIGKILL)` com fallback `process.kill()` se o grupo já morreu.
 
-- [ ] **Step 3: Testes → PASS. Gates + commit**
+- [x] **Step 3: Testes → PASS. Gates + commit**
 
 Commit: `feat(llm): LocalCliLLM com modelo/effort/binário, validação estrutural de schema e kill de grupo em timeout`
 
@@ -465,13 +465,13 @@ ollama_model: str = Field("qwen3:8b", validation_alias="JURIS_OLLAMA_MODEL")
 
 - Produz (demo_service): `_build_cli_chain() -> AbstractLLM`; `_build_llm(*, use_cloud: bool, tenant_id: str | None = None)` usa a cadeia SOMENTE se `draft_backend == "cli"` E `tenant_id` na allowlist; semáforo módulo-level `_CLI_LLM_SEMAPHORE = asyncio.Semaphore(1)` aplicado por um wrapper `_SerializedLLM(AbstractLLM)` em volta da cadeia (concorrência global 1 — trial não enfileira atrás do canário porque trial nem entra na allowlist); `LocalCliLLM` instanciado com `cwd=Path(tempfile.mkdtemp(prefix="juris-cli-llm-"))` vazio.
 
-- [ ] **Step 1: Testes falhos** — (a) `_build_cli_chain` compõe `DeidentifyingLLM(codex)` → `FallbackLLM` → `DeidentifyingLLM(haiku)` → `OllamaLLM` local (sem de-id, on-device); (b) `_build_llm(tenant_id="trial_x")` com backend cli e allowlist `escritorio-piloto` → retorna Ollama (não a cadeia); (c) `_build_llm(tenant_id="escritorio-piloto")` → cadeia serializada; (d) duas chamadas concorrentes na cadeia executam em série (fake LLM com evento asyncio; asserta não-sobreposição).
+- [x] **Step 1: Testes falhos** — (a) `_build_cli_chain` compõe `DeidentifyingLLM(codex)` → `FallbackLLM` → `DeidentifyingLLM(haiku)` → `OllamaLLM` local (sem de-id, on-device); (b) `_build_llm(tenant_id="trial_x")` com backend cli e allowlist `escritorio-piloto` → retorna Ollama (não a cadeia); (c) `_build_llm(tenant_id="escritorio-piloto")` → cadeia serializada; (d) duas chamadas concorrentes na cadeia executam em série (fake LLM com evento asyncio; asserta não-sobreposição).
 
-- [ ] **Step 2: Implementar** — builder conforme interface (de-id com `default_ner_redactor()` fail-closed nos dois ramos cloud; justificativa do Ollama local sem de-id = mesmo racional `fallback_is_local` de `_build_ai_of_preference_llm`). Call-sites de `_build_llm` em demo_service passam o `tenant_id` do run (já disponível no contexto do run). Registrar warning estruturado `cli_llm_canary_used` (tenant, modelo) a cada uso — dá visibilidade de carga na assinatura.
+- [x] **Step 2: Implementar** — builder conforme interface (de-id com `default_ner_redactor()` fail-closed nos dois ramos cloud; justificativa do Ollama local sem de-id = mesmo racional `fallback_is_local` de `_build_ai_of_preference_llm`). Call-sites de `_build_llm` em demo_service passam o `tenant_id` do run (já disponível no contexto do run). Registrar warning estruturado `cli_llm_canary_used` (tenant, modelo) a cada uso — dá visibilidade de carga na assinatura.
 
-- [ ] **Step 3: `.env.example`** — as 8 flags com 1 linha cada; nas flags de cadeia, comentário: `# NÃO ligar sem decisão registrada de ToS (ver plano 2026-07-18 §Decisões)`.
+- [x] **Step 3: `.env.example`** — as 8 flags com 1 linha cada; nas flags de cadeia, comentário: `# NÃO ligar sem decisão registrada de ToS (ver plano 2026-07-18 §Decisões)`.
 
-- [ ] **Step 4: Testes → PASS. Gates + commit**
+- [x] **Step 4: Testes → PASS. Gates + commit**
 
 Commit: `feat(draft): cadeia por CLI de assinatura gated (flag off, allowlist, concorrência 1, cwd vazio)`
 
@@ -479,10 +479,10 @@ Commit: `feat(draft): cadeia por CLI de assinatura gated (flag off, allowlist, c
 
 ## Task 0B — Canário em produção (somente após decisão ToS do Raphael) [ordem 13]
 
-- [ ] Deploy do branch (após PR/merge e decisão humana nº 1 sobre o delta): atualizar `~/projects/juris-pilot/app` por fast-forward, `uv sync --frozen`, bootout/bootstrap.
-- [ ] SE decisão ToS = sim: no plist, `PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin`, `JURIS_DRAFT_BACKEND=cli`, `JURIS_CLI_LLM_TENANTS=escritorio-piloto`, `JURIS_OLLAMA_MODEL=qwen2.5:3b`; bootout/bootstrap + `launchctl print` para confirmar.
-- [ ] Smoke autenticado: 1 caso demo no tenant piloto; conferir `ai_model` do run = `codex_cli_subscription:gpt-5.5` e ausência de `demo_draft_failed`; 1 caso num tenant trial → deve continuar em Ollama.
-- [ ] Observação 24h: delta de keepalive (Task 10 Step 3), `cli_llm_canary_used` count, RAM (`memory_pressure`), latência de draft nos logs.
+- [x] Deploy do branch (após PR/merge e decisão humana nº 1 sobre o delta): atualizar `~/projects/juris-pilot/app` por fast-forward, `uv sync --frozen`, bootout/bootstrap.
+- [x] SE decisão ToS = sim: no plist, `PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin`, `JURIS_DRAFT_BACKEND=cli`, `JURIS_CLI_LLM_TENANTS=escritorio-piloto`, `JURIS_OLLAMA_MODEL=qwen2.5:3b`; bootout/bootstrap + `launchctl print` para confirmar.
+- [x] Smoke autenticado: 1 caso demo no tenant piloto; conferir `ai_model` do run = `codex_cli_subscription:gpt-5.5` e ausência de `demo_draft_failed`; 1 caso num tenant trial → deve continuar em Ollama.
+- [x] Observação 24h: delta de keepalive (Task 10 Step 3), `cli_llm_canary_used` count, RAM (`memory_pressure`), latência de draft nos logs.
 
 ---
 
