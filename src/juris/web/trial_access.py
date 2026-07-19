@@ -87,8 +87,14 @@ def parte_representada_for_tenant(
     tenant_id = validate_tenant_id(tenant_id)
     data = _load_json_object(tenants_path or tenants_file_path())
     raw = data.get(tenant_id)
-    if not isinstance(raw, Mapping):
+    if raw is None:
+        msg = f"tenant não encontrado: {tenant_id}"
+        raise KeyError(msg)
+    if isinstance(raw, str):
         return ""
+    if not isinstance(raw, Mapping):
+        msg = f"entrada de tenant inválida: {tenant_id}"
+        raise ValueError(msg)
     value = str(raw.get("parte_representada") or "")
     if value not in _PARTES_REPRESENTADAS_VALIDAS:
         msg = f"parte_representada inválida para tenant {tenant_id}: {value!r}"

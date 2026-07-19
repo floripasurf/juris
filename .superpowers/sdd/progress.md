@@ -13,3 +13,9 @@ Task 1: complete (commits 625075f+0a8f97d, review clean apos 1 round)
 Task 2: complete (commits 87b8f1e+a684222, review clean apos 1 round)
 Revisao final (fable): PRONTO p/ merge apos retoques (override sticky no catch; teste error_code=None ramo MNI-rejeitou; field_validator parte_representada; docstring keepalive)
 Retoques finais: complete (commit 345444c, gates verdes, 2133 passed). BRANCH PRONTO PARA PR.
+Rodada request-changes PR#9 — Fix A: complete (commit 9a72397, review clean; nit: rotulo grounding_processo_divergente cobre tambem manifest legado; nota: agente remoto NAO atualizado roda gate antigo — mitigado pela co-localizacao Fase 1)
+Rodada request-changes PR#9 — Fix B: complete (commits 09dd368 + follow-up pre-submit; tipo_peticao vinculado; WSDL/client/storage distinguidos de entrega incerta)
+Rodada request-changes PR#9 — Fix C: complete (commit 3f7ae7e; regime de prazo por tenant/processo; CLT com regime especial vai para revisao manual)
+Rodada request-changes PR#9 — Fix D: complete (commit a82613b; janela de ED + ambiguidade fail-closed)
+Rodada request-changes PR#9 — Fix E: complete (commit 7d7ea8e; Claude CLI isolado; Codex CLI desabilitado por falta de confinamento de leitura)
+Gates finais 2026-07-19: just check verde — ruff, mypy 248 arquivos, 2150 testes unitarios; 5 warnings SWIG preexistentes.

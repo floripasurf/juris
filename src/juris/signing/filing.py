@@ -544,6 +544,16 @@ class FilingOrchestrator:
         # never be reported as an indeterminate delivery.
         try:
             mni_client = self._mni_client_factory(request.tribunal, self._mni_auth)
+            from juris.mni.operations.peticionamento import entregar_manifestacao
+
+            submitted_payload_hash = _sha256_hex(signing_result.signed_pdf)
+            pending_path = self._receipt_store.prepare(
+                numero_cnj=request.numero_cnj,
+                signed_pdf=signing_result.signed_pdf,
+                render_hash=render_result.pdf_hash,
+                tribunal=request.tribunal,
+                tipo_documento=request.tipo_documento,
+            )
         except Exception as exc:  # noqa: BLE001 — no submit has started
             logger.warning(
                 "filing_delivery_not_started",
@@ -568,17 +578,6 @@ class FilingOrchestrator:
                 error=_DELIVERY_NOT_STARTED_ERROR,
                 error_code="delivery_not_started",
             )
-
-        from juris.mni.operations.peticionamento import entregar_manifestacao
-
-        submitted_payload_hash = _sha256_hex(signing_result.signed_pdf)
-        pending_path = self._receipt_store.prepare(
-            numero_cnj=request.numero_cnj,
-            signed_pdf=signing_result.signed_pdf,
-            render_hash=render_result.pdf_hash,
-            tribunal=request.tribunal,
-            tipo_documento=request.tipo_documento,
-        )
 
         # 7. Only this call can make delivery indeterminate.
         try:
