@@ -99,3 +99,12 @@ Running the cases needs the physical A3 token and an LLM; choosing the corpus so
 ToS/commercial decision. Fabricating pilot feedback or legal text to satisfy the gate
 would defeat the entire purpose (evidence must be real). So the code is done; these steps
 are yours.
+
+## Observabilidade durante a rodada
+
+Antes de avaliar preço ou qualidade, consulte `GET /api/pilot-observability`: ele reúne o
+gate de valor e falhas operacionais recentes, sempre no escopo do tenant. Para suporte de
+casos específicos, use `GET /api/operational-events`; o ledger persiste apenas mensagem
+sanitizada, código, operação e CNJ, em arquivo privado. O export `juris pilot report` e
+`/api/pilot-feedback/export?format=md` também trazem o resumo dessas falhas. Assim, uma
+falha de agente/MNI ou protocolo não é confundida com problema de corpus ou análise.

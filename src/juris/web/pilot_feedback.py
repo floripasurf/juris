@@ -201,7 +201,10 @@ def compare_feedback_runs(root: Path) -> dict[str, object]:
 
 def export_feedback_report_markdown(root: Path) -> str:
     """Markdown report for pilot review and commercial follow-up."""
+    from juris.web.operational_events import summarize_operational_events
+
     summary = summarize_feedback(root)
+    operational_events = summarize_operational_events(root)
     citations = summary["citations"]
     assert isinstance(citations, dict)
     gaps = summary["prioritized_gaps"]
@@ -243,6 +246,18 @@ def export_feedback_report_markdown(root: Path) -> str:
     else:
         lines.append("- Nenhum caso marcado como aproveitável.")
 
+    lines.extend(["", "## Operação e suporte", ""])
+    lines.append(f"- Falhas operacionais registradas: {operational_events['total_events']}")
+    by_operation = operational_events["by_operation"]
+    assert isinstance(by_operation, dict)
+    if by_operation:
+        lines.append(
+            "- Por operação: "
+            + ", ".join(f"{operation} ({count})" for operation, count in by_operation.items())
+        )
+    else:
+        lines.append("- Nenhuma falha operacional registrada.")
+
     lines.extend(
         [
             "",
@@ -251,6 +266,7 @@ def export_feedback_report_markdown(root: Path) -> str:
             "- Validar se o tempo economizado e a utilidade média sustentam o preço do piloto.",
             "- Priorizar ingestão das lacunas de corpus mais recorrentes.",
             "- Separar problemas de corpus de problemas de UX/análise antes da próxima rodada.",
+            "- Investigar falhas operacionais por código antes de atribuí-las à qualidade jurídica.",
         ]
     )
     return "\n".join(lines) + "\n"

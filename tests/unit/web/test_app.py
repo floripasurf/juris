@@ -1045,6 +1045,8 @@ def test_pilot_feedback_endpoints_are_tenant_scoped(monkeypatch, tmp_path) -> No
     comparison = client.get("/api/pilot-feedback/comparison")
     exported = client.get("/api/pilot-feedback/export", params={"format": "csv"})
     report = client.get("/api/pilot-feedback/export", params={"format": "md"})
+    observability = client.get("/api/pilot-observability")
+    events = client.get("/api/operational-events")
 
     assert created.status_code == 201, created.text
     assert created.json()["feedback"]["time_saved_minutes"] == 30
@@ -1064,6 +1066,44 @@ def test_pilot_feedback_endpoints_are_tenant_scoped(monkeypatch, tmp_path) -> No
     assert str(tmp_path) not in exported.text
     assert report.status_code == 200
     assert "# Relatório do Piloto Juris" in report.text
+    assert observability.status_code == 200
+    assert observability.json()["value_gate"]["real_cases"] == 1
+    assert observability.json()["operational_events"]["total_events"] == 0
+    assert events.status_code == 200
+    assert events.json()["events"] == []
+
+
+def test_demo_operational_error_is_recorded_for_pilot_support(monkeypatch, tmp_path) -> None:
+    app_module = importlib.import_module("juris.web.app")
+    from juris.web.demo_service import DemoRunError
+
+    monkeypatch.setattr(app_module, "_out_root", lambda: tmp_path)
+
+    async def fail_demo(_request):
+        raise DemoRunError(
+            "Falha operacional segura.",
+            code="agent_mni_failed",
+            internal_detail="token=never-expose " + str(tmp_path / "private"),
+        )
+
+    monkeypatch.setattr(app_module, "execute_demo_run", fail_demo)
+    response = client.post(
+        "/api/demo-runs",
+        json={"numero_cnj": "0001234-56.2026.8.13.0001", "tipo": "manifestacao"},
+    )
+    events = client.get("/api/operational-events")
+    observability = client.get("/api/pilot-observability")
+
+    assert response.status_code == 400
+    assert "never-expose" not in response.text
+    assert events.status_code == 200
+    event = events.json()["events"][0]
+    assert event["operation"] == "demo.run"
+    assert event["code"] == "agent_mni_failed"
+    assert event["numero_cnj"] == "0001234-56.2026.8.13.0001"
+    assert "never-expose" not in events.text
+    assert str(tmp_path) not in events.text
+    assert observability.json()["operational_events"]["total_events"] == 1
 
 
 def test_corpus_queue_endpoints(monkeypatch, tmp_path) -> None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import stat
 
+from juris.web.operational_events import append_operational_event
 from juris.web.pilot_feedback import (
     append_feedback,
     compare_feedback_runs,
@@ -52,6 +53,7 @@ def test_append_list_and_export_feedback(tmp_path) -> None:
     report = export_feedback_report_markdown(tmp_path)
     assert "# Relatório do Piloto Juris" in report
     assert "STJ inteiro teor" in report
+    assert "## Operação e suporte" in report
 
     summary = summarize_feedback(tmp_path)
     assert summary["total_cases"] == 1
@@ -60,6 +62,22 @@ def test_append_list_and_export_feedback(tmp_path) -> None:
     assert summary["citations"]["acceptance_rate"] == 0.75
     assert summary["prioritized_gaps"][0]["label"] == "STJ inteiro teor"
     assert summary["corpus_candidates"][0]["numero_cnj"] == "0001234-56.2026.8.13.0001"
+
+
+def test_report_includes_operational_support_summary(tmp_path) -> None:
+    append_operational_event(
+        tmp_path,
+        operation="demo.run",
+        code="agent_mni_failed",
+        message="Falha operacional no demo.",
+        status_code=400,
+        exc=RuntimeError("socket unavailable"),
+    )
+
+    report = export_feedback_report_markdown(tmp_path)
+
+    assert "Falhas operacionais registradas: 1" in report
+    assert "demo.run (1)" in report
 
 
 def test_append_feedback_sanitizes_output_dir_and_internal_metadata(tmp_path) -> None:
