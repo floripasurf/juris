@@ -73,6 +73,12 @@ class LocalCliLLM(AbstractLLM):
 
         Args mirror :class:`AbstractLLM`. ``contains_pii`` is intentionally
         explicit for callers that can label the route; true values fail closed.
+
+        Raises:
+            ValueError: If ``contains_pii`` is True (this adapter is cloud-only).
+            RuntimeError: If ``schema`` was requested and the CLI output is not
+                valid JSON, or the parsed JSON does not conform to ``schema``
+                (wrong root type, or missing ``required`` keys).
         """
         if contains_pii:
             msg = "LocalCliLLM is cloud-only and cannot handle PII-marked prompts."

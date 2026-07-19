@@ -99,6 +99,19 @@ async def test_cli_cloud_adapter_rejects_invalid_structured_json(monkeypatch: py
 
 
 @pytest.mark.asyncio
+async def test_schema_raiz_lista_quando_esperado_objeto_levanta(monkeypatch: pytest.MonkeyPatch) -> None:
+    llm = LocalCliLLM(provider="claude")
+
+    async def fake_run(command: list[str], *, stdin: str | None) -> str:
+        return "[1,2,3]"
+
+    monkeypatch.setattr(llm, "_run", fake_run)
+
+    with pytest.raises(RuntimeError, match="schema"):
+        await llm.complete("p", schema={"type": "object", "required": ["x"]})
+
+
+@pytest.mark.asyncio
 async def test_schema_json_valido_mas_estrutura_errada_levanta(monkeypatch: pytest.MonkeyPatch) -> None:
     llm = LocalCliLLM(provider="claude")
 
