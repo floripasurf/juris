@@ -367,7 +367,13 @@ def _nightly_processos(
     """Normalize tracked entries into the shape expected by ``run_nightly``."""
     if tribunal_filter:
         tracked_list = [p for p in tracked_list if p.get("tribunal") == tribunal_filter]
-    return [{"numero_cnj": p["numero_cnj"], "tribunal": p.get("tribunal", "tjmg")} for p in tracked_list]
+    processos: list[dict[str, str]] = []
+    for tracked in tracked_list:
+        proc = {"numero_cnj": tracked["numero_cnj"], "tribunal": tracked.get("tribunal", "tjmg")}
+        if "parte_representada" in tracked:
+            proc["parte_representada"] = tracked["parte_representada"]
+        processos.append(proc)
+    return processos
 
 
 def _resolve_nightly_senha(cpf: str, senha: str, processos: list[dict[str, str]]) -> str:
@@ -1091,13 +1097,15 @@ def sync(
     if tribunal:
         tracked_list = [p for p in tracked_list if p.get("tribunal") == tribunal]
 
-    processos = [{"numero_cnj": p["numero_cnj"], "tribunal": p.get("tribunal", "tjmg")} for p in tracked_list]
+    processos = _nightly_processos(tracked_list, None)
 
     db = LocalDB()
     console.print(f"[bold]Syncing {len(processos)} processos (full pipeline)...[/bold]")
     console.print(f"[dim]DB: {db.path}[/dim]\n")
 
-    summary = asyncio.run(run_pipeline(processos, db=db))
+    summary = asyncio.run(
+        run_pipeline(processos, db=db, parte_representada=get_settings().parte_representada)
+    )
 
     # Print results
     for r in summary.results:
@@ -1159,6 +1167,7 @@ def overnight(
     from juris.mni.factory import get_mni_read_service
     from juris.persistence.local_db import LocalDB
     from juris.web.auth import Tenant, default_registry, tenant_db_path
+    from juris.web.trial_access import parte_representada_for_tenant
 
     registry = default_registry()
     if all_tenants:
@@ -1187,6 +1196,11 @@ def overnight(
         resolved_senha = _resolve_nightly_senha(resolved_cpf, senha or "", processos)
         resolved_pin = _resolve_nightly_pin(pin, processos, remote_agent=remote_agent)
         mni_service = get_mni_read_service(tenant_id) if all_tenants or remote_agent else None
+        parte_representada = (
+            parte_representada_for_tenant(tenant_id)
+            if all_tenants
+            else get_settings().parte_representada
+        )
 
         heading = f"Nightly pipeline [{tenant_id}]: {len(processos)} processos"
         console.print(f"[bold]{escape(heading)}[/bold]")
@@ -1201,6 +1215,7 @@ def overnight(
                 max_concurrent=max_concurrent,
                 token_pin=resolved_pin,
                 mni_service=mni_service,
+                parte_representada=parte_representada,
             )
         )
 

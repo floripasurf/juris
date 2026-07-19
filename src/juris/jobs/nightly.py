@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, Any
 
 from juris.agents.analyzer import ProcessoAnalysis, analyze_processo
 from juris.alerts.deadline_alerts import AlertBatch, generate_alerts
-from juris.config import get_settings
 from juris.core.observability import get_logger
 from juris.jobs.overnight import (
     _DATAJUD_FALLBACK_TRIBUNALS,
@@ -114,6 +113,7 @@ async def run_nightly_single(
     today: date | None = None,
     token_pin: str | None = None,
     mni_service: MNIReadService | None = None,
+    parte_representada: str = "",
 ) -> NightlyResult:
     """Run the nightly pipeline for a single processo.
 
@@ -235,7 +235,7 @@ async def run_nightly_single(
         tribunal=tribunal,
         analyses=analysis.analyzed,
         today=today,
-        parte_representada=get_settings().parte_representada,
+        parte_representada=parte_representada,
     )
     result.prazo_report = report
     result.prazos_computed = len(report.prazos)
@@ -291,6 +291,7 @@ async def run_nightly(
     today: date | None = None,
     token_pin: str | None = None,
     mni_service: MNIReadService | None = None,
+    parte_representada: str = "",
 ) -> NightlySummary:
     """Run the nightly pipeline for a batch of processos with concurrency control.
 
@@ -320,6 +321,7 @@ async def run_nightly(
                 today=today,
                 token_pin=token_pin,
                 mni_service=mni_service,
+                parte_representada=proc.get("parte_representada", parte_representada),
             )
 
     tasks = [_run_one(proc) for proc in processos]

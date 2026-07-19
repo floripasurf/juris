@@ -88,13 +88,15 @@ class TestPrazoEmDobro:
         tutela = _by_nome(report.prazos, "Cumprimento de tutela antecipada")
         assert tutela.dias_uteis_total == 5
 
-    def test_clt_nao_dobra(self) -> None:
+    def test_clt_ente_publico_vai_para_revisao_manual(self) -> None:
         mov = _movement(CategoriaSemantica.SENTENCA, None, "Sentença trabalhista publicada", date(2026, 4, 1))
         report = compute_prazos(
             CNJ, "trt3", [mov], _cal(), TODAY, justica="trabalho", parte_representada="fazenda"
         )
-        ro = _by_nome(report.prazos, "Recurso ordinário")
-        assert ro.dias_uteis_total == 8
+        assert report.prazos == []
+        assert [item.motivo for item in report.revisao_manual] == [
+            "prazo_trabalhista_ente_publico_revisao_manual"
+        ]
 
     def test_reabertura_pos_ed_dobra(self) -> None:
         analyses = [

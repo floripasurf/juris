@@ -129,6 +129,33 @@ def alert_emails_cmd(
         console.print(f"  {email}")
 
 
+@tenant_app.command("prazo-parte")
+def prazo_parte_cmd(
+    tenant_id: str = typer.Argument(..., help="Tenant cujo regime de prazo será consultado."),
+    set_value: str | None = typer.Option(
+        None,
+        "--set",
+        help="Define nenhuma, fazenda, mp ou defensoria. Sem --set, apenas consulta.",
+    ),
+) -> None:
+    """Manage the tenant default used for CPC deadline multipliers."""
+    from juris.web.trial_access import (
+        parte_representada_for_tenant,
+        set_parte_representada_for_tenant,
+    )
+
+    try:
+        value = (
+            parte_representada_for_tenant(tenant_id)
+            if set_value is None
+            else set_parte_representada_for_tenant(tenant_id, set_value)
+        )
+    except (KeyError, ValueError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from None
+    console.print(f"{tenant_id}: {value or 'nenhuma'}")
+
+
 @tenant_app.command("erase-data")
 def erase_data(
     tenant_id: str = typer.Argument(..., help="Tenant/escritório cujos dados serão apagados."),

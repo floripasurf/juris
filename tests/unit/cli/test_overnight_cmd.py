@@ -32,7 +32,15 @@ def test_overnight_all_tenants_runs_each_tenant_db(monkeypatch, tmp_path) -> Non
     home = tmp_path / "home"
     tenants_file = tmp_path / "tenants.json"
     tenants_file.write_text(
-        json.dumps({"escritorio-a": "key-a", "escritorio-b": "key-b"}),
+        json.dumps(
+            {
+                "escritorio-a": {
+                    "keys": {"owner": {"hash": "key-a"}},
+                    "parte_representada": "fazenda",
+                },
+                "escritorio-b": "key-b",
+            }
+        ),
         encoding="utf-8",
     )
     monkeypatch.setenv("JURIS_HOME", str(home))
@@ -55,6 +63,7 @@ def test_overnight_all_tenants_runs_each_tenant_db(monkeypatch, tmp_path) -> Non
                 "mni_service": kwargs["mni_service"],
                 "cpf": kwargs["cpf"],
                 "senha": kwargs["senha"],
+                "parte_representada": kwargs["parte_representada"],
             }
         )
         return _summary_for(processos[0])
@@ -70,6 +79,7 @@ def test_overnight_all_tenants_runs_each_tenant_db(monkeypatch, tmp_path) -> Non
     assert captured[1]["db_path"] == tenant_db_path(Tenant("escritorio-b"))
     assert captured[0]["processos"] == [{"numero_cnj": "0000001-00.2026.8.13.0001", "tribunal": "tjmg"}]
     assert captured[1]["processos"] == [{"numero_cnj": "0000002-00.2026.8.26.0001", "tribunal": "tjsp"}]
+    assert [call["parte_representada"] for call in captured] == ["fazenda", ""]
     assert "Nightly pipeline [escritorio-a]" in result.output
     assert "Nightly pipeline [escritorio-b]" in result.output
     default_registry.cache_clear()
@@ -83,6 +93,30 @@ def test_overnight_all_tenants_requires_configured_tenants(monkeypatch, tmp_path
 
     assert result.exit_code == 1
     assert "JURIS_TENANTS_FILE" in result.output
+    default_registry.cache_clear()
+
+
+def test_tenant_prazo_parte_sets_and_clears_default(monkeypatch, tmp_path) -> None:
+    tenants_file = tmp_path / "tenants.json"
+    tenants_file.write_text(json.dumps({"escritorio-a": "key-a"}), encoding="utf-8")
+    monkeypatch.setenv("JURIS_TENANTS_FILE", str(tenants_file))
+    default_registry.cache_clear()
+
+    set_result = runner.invoke(
+        app, ["tenant", "prazo-parte", "escritorio-a", "--set", "fazenda"]
+    )
+    assert set_result.exit_code == 0, set_result.output
+    assert "escritorio-a: fazenda" in set_result.output
+    stored = json.loads(tenants_file.read_text(encoding="utf-8"))
+    assert stored["escritorio-a"]["parte_representada"] == "fazenda"
+    assert stored["escritorio-a"]["keys"]["owner"]["hash"] == "key-a"
+
+    clear_result = runner.invoke(
+        app, ["tenant", "prazo-parte", "escritorio-a", "--set", "nenhuma"]
+    )
+    assert clear_result.exit_code == 0, clear_result.output
+    stored = json.loads(tenants_file.read_text(encoding="utf-8"))
+    assert "parte_representada" not in stored["escritorio-a"]
     default_registry.cache_clear()
 
 

@@ -63,6 +63,7 @@ class AgentPairing:
 
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_PARTES_REPRESENTADAS_VALIDAS = frozenset({"", "fazenda", "mp", "defensoria"})
 
 
 def tenants_file_path() -> Path:
@@ -72,6 +73,56 @@ def tenants_file_path() -> Path:
 def agents_file_path() -> Path | None:
     configured = os.environ.get("JURIS_AGENTS_FILE", "").strip()
     return Path(configured) if configured else None
+
+
+def parte_representada_for_tenant(
+    tenant_id: str, *, tenants_path: Path | None = None
+) -> str:
+    """Return the tenant-level prazo regime; missing/legacy entries mean none.
+
+    A tracked-process entry may override this value for one process. Invalid
+    persisted values fail closed instead of silently computing deadlines under
+    another tenant's/global regime.
+    """
+    tenant_id = validate_tenant_id(tenant_id)
+    data = _load_json_object(tenants_path or tenants_file_path())
+    raw = data.get(tenant_id)
+    if not isinstance(raw, Mapping):
+        return ""
+    value = str(raw.get("parte_representada") or "")
+    if value not in _PARTES_REPRESENTADAS_VALIDAS:
+        msg = f"parte_representada inválida para tenant {tenant_id}: {value!r}"
+        raise ValueError(msg)
+    return value
+
+
+def set_parte_representada_for_tenant(
+    tenant_id: str,
+    value: str,
+    *,
+    tenants_path: Path | None = None,
+) -> str:
+    """Persist a tenant-level deadline regime, migrating legacy key entries."""
+    tenant_id = validate_tenant_id(tenant_id)
+    raw_normalized = value.strip().lower()
+    normalized = "" if raw_normalized == "nenhuma" else raw_normalized
+    if normalized not in _PARTES_REPRESENTADAS_VALIDAS:
+        valores = ", ".join(["nenhuma", "fazenda", "mp", "defensoria"])
+        msg = f"parte_representada inválida: {value!r}; use {valores}"
+        raise ValueError(msg)
+    path = tenants_path or tenants_file_path()
+    with _locked_json(path) as tenants:
+        if tenant_id not in tenants:
+            msg = f"tenant não encontrado: {tenant_id}"
+            raise KeyError(msg)
+        entry = _structured_tenant_entry(tenants[tenant_id], now=_utc_now())
+        if normalized:
+            entry["parte_representada"] = normalized
+        else:
+            entry.pop("parte_representada", None)
+        tenants[tenant_id] = entry
+    _clear_auth_caches()
+    return normalized
 
 
 def trial_days() -> int:

@@ -352,6 +352,21 @@ def compute_prazos(
             )
             continue
 
+        # DL 779/1969 establishes a specific procedural regime for public
+        # entities in labor courts. It is not the CPC's blanket multiplier and
+        # varies by act; until those rules are modeled individually, fail closed
+        # instead of emitting a confidently wrong CLT deadline.
+        if justica == "trabalho" and parte_representada:
+            revisao_manual.append(
+                RevisaoManual(
+                    analysis.movimento_id,
+                    analysis.categoria,
+                    "prazo_trabalhista_ente_publico_revisao_manual",
+                    analysis.descricao,
+                )
+            )
+            continue
+
         # CPC art. 1.026: embargos de declaração interrompem o prazo recursal.
         # Não deixar o recurso original aparecer como VENCIDO enquanto os
         # embargos estiverem pendentes; ao julgamento, recalcular o prazo
