@@ -13,8 +13,11 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
+from juris.core.observability import get_logger
 from juris.core.paths import restrict_file
 from juris.web.auth import hash_api_key, validate_tenant_id
+
+logger = get_logger(__name__)
 
 
 class TrialCapacityError(RuntimeError):
@@ -629,3 +632,91 @@ def read_tenant_access_summary(tenant_id: str, *, tenants_path: Path | None = No
             for key_id, entry in keys.items()
         ],
     }
+
+
+def alert_emails_for_tenant(tenant_id: str, *, path: Path | None = None) -> list[str]:
+    """Deadline-alert recipient e-mails configured for one tenant in tenants.json.
+
+    A legacy string entry (bare API-key hash, pre-dating per-tenant alert
+    recipients) has no ``alert_emails`` field to read — returns ``[]`` rather
+    than raising, so an unmigrated tenant simply gets no per-tenant alerts.
+    Malformed addresses are dropped with a warning that logs only the domain
+    (never the full address — PII must never reach the log).
+    """
+    path = path or tenants_file_path()
+    raw = _load_json_object(path).get(tenant_id)
+    if not isinstance(raw, Mapping):
+        return []
+    configured = raw.get("alert_emails")
+    if not isinstance(configured, list):
+        return []
+    valid: list[str] = []
+    for email in configured:
+        normalized = email.strip().lower() if isinstance(email, str) else ""
+        if normalized and _EMAIL_RE.fullmatch(normalized):
+            valid.append(normalized)
+            continue
+        domain = normalized.rsplit("@", 1)[-1] if "@" in normalized else "malformado"
+        logger.warning("alert_email_invalido", tenant_id=tenant_id, dominio=domain)
+    return valid
+
+
+def add_alert_email(
+    tenant_id: str,
+    email: str,
+    *,
+    tenants_path: Path | None = None,
+    now: datetime | None = None,
+) -> list[str]:
+    """Add one recipient to a tenant's deadline-alert list, migrating a legacy
+    string entry to the structured format on the way (preserving its key hash
+    via :func:`_structured_tenant_entry`, so existing API keys keep working).
+    """
+    tenant_id = validate_tenant_id(tenant_id)
+    normalized = normalize_contact_email(email)
+    tenants_path = tenants_path or tenants_file_path()
+    now = now or _utc_now()
+    with _locked_json(tenants_path) as tenants:
+        if tenant_id not in tenants:
+            msg = f"tenant não encontrado: {tenant_id}"
+            raise KeyError(msg)
+        entry = _structured_tenant_entry(tenants[tenant_id], now=now)
+        raw_emails = entry.setdefault("alert_emails", [])
+        if not isinstance(raw_emails, list):
+            msg = "entrada de tenant inválida: alert_emails deve ser lista."
+            raise ValueError(msg)
+        emails: list[str] = [item for item in raw_emails if isinstance(item, str)]
+        if normalized not in emails:
+            emails.append(normalized)
+        entry["alert_emails"] = emails
+        tenants[tenant_id] = entry
+    return emails
+
+
+def remove_alert_email(
+    tenant_id: str,
+    email: str,
+    *,
+    tenants_path: Path | None = None,
+    now: datetime | None = None,
+) -> list[str]:
+    """Remove one recipient from a tenant's deadline-alert list (same legacy
+    migration as :func:`add_alert_email`)."""
+    tenant_id = validate_tenant_id(tenant_id)
+    normalized = email.strip().lower()
+    tenants_path = tenants_path or tenants_file_path()
+    now = now or _utc_now()
+    with _locked_json(tenants_path) as tenants:
+        if tenant_id not in tenants:
+            msg = f"tenant não encontrado: {tenant_id}"
+            raise KeyError(msg)
+        entry = _structured_tenant_entry(tenants[tenant_id], now=now)
+        raw_emails = entry.get("alert_emails")
+        emails: list[str] = (
+            [item for item in raw_emails if isinstance(item, str)] if isinstance(raw_emails, list) else []
+        )
+        if normalized in emails:
+            emails.remove(normalized)
+        entry["alert_emails"] = emails
+        tenants[tenant_id] = entry
+    return emails

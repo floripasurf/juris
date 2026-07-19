@@ -434,19 +434,34 @@ def _print_nightly_summary(summary: Any) -> None:
     console.print(f"  Duration: {summary.duration_seconds:.1f}s")
 
 
-def _deliver_nightly_alerts(db: Any, summary: Any) -> int:
-    """Send pending alerts for one DB; return desired process exit code."""
+def _deliver_nightly_alerts(db: Any, summary: Any, tenant_id: str) -> int:
+    """Send pending alerts for one tenant's DB; return desired process exit code."""
     import asyncio
 
-    from juris.alerts.pending import send_pending_deadline_alerts
+    from juris.alerts.pending import (
+        alert_email_config_from_settings,
+        alert_recipients_for_tenant,
+        send_pending_deadline_alerts,
+    )
 
-    alert_summary = asyncio.run(send_pending_deadline_alerts(db=db))
+    recipients = alert_recipients_for_tenant(tenant_id)
+    config = alert_email_config_from_settings(to_addresses=recipients)
+    alert_summary = asyncio.run(send_pending_deadline_alerts(db=db, config=config))
+
     if not alert_summary.smtp_configured:
         msg = "SMTP not configured; pending alerts were not sent."
         if summary.total_critical_alerts:
             console.print(f"[red]{msg} Set ALERT_SMTP_HOST, ALERT_FROM_ADDRESS, ALERT_TO_ADDRESSES.[/red]")
             return 2
         console.print(f"[yellow]{msg}[/yellow]")
+        return 0
+    if alert_summary.no_recipients:
+        msg = f"No alert recipients configured for tenant '{tenant_id}'; pending alerts were not sent."
+        hint = f"Use 'juris tenant alert-emails {tenant_id} --add <email>'."
+        if summary.total_critical_alerts:
+            console.print(f"[red]{msg} {hint}[/red]")
+            return 2
+        console.print(f"[yellow]{msg} {hint}[/yellow]")
         return 0
     console.print(
         "[bold]Alert delivery:[/bold] "
@@ -1190,7 +1205,7 @@ def overnight(
         _print_nightly_results(summary)
         _print_nightly_summary(summary)
         if send_alerts:
-            exit_code = max(exit_code, _deliver_nightly_alerts(db, summary))
+            exit_code = max(exit_code, _deliver_nightly_alerts(db, summary, tenant_id))
 
     if not ran_any:
         hint = (
@@ -2585,14 +2600,33 @@ def alerts_send() -> None:
     """Send pending deadline alerts via email."""
     import asyncio
 
-    from juris.alerts.pending import alert_email_config_from_settings, send_pending_deadline_alerts
+    from juris.alerts.pending import (
+        alert_email_config_from_settings,
+        alert_recipients_for_tenant,
+        send_pending_deadline_alerts,
+    )
+    from juris.persistence.local_db import LocalDB
+    from juris.web.auth import PUBLIC_TENANT_ID
 
-    smtp_config = alert_email_config_from_settings()
-    if not smtp_config.is_configured:
+    # Single-tenant local command (no --tenant option): the same convention
+    # `overnight` uses without --all-tenants, resolved explicitly here since
+    # `db`/recipients are no longer defaulted inside send_pending_deadline_alerts.
+    tenant_id = PUBLIC_TENANT_ID
+    db = LocalDB()
+    recipients = alert_recipients_for_tenant(tenant_id)
+    smtp_config = alert_email_config_from_settings(to_addresses=recipients)
+
+    if not (smtp_config.smtp_host and smtp_config.from_address):
         console.print("[red]SMTP not configured. Set ALERT_SMTP_HOST, ALERT_FROM_ADDRESS, ALERT_TO_ADDRESSES.[/red]")
         raise typer.Exit(code=1)
+    if not recipients:
+        console.print(
+            f"[yellow]No alert recipients configured for tenant '{tenant_id}'. "
+            f"Use 'juris tenant alert-emails {tenant_id} --add <email>'.[/yellow]"
+        )
+        raise typer.Exit(code=1)
 
-    summary = asyncio.run(send_pending_deadline_alerts(config=smtp_config))
+    summary = asyncio.run(send_pending_deadline_alerts(db=db, config=smtp_config))
     if summary.processos_checked == 0:
         console.print("[yellow]No processos in database.[/yellow]")
         return

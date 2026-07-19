@@ -82,6 +82,43 @@ def promote_tenant(
     console.print("  A chave existente continua válida; o purge automático não toca mais este tenant.")
 
 
+@tenant_app.command("alert-emails")
+def alert_emails_cmd(
+    tenant_id: str = typer.Argument(..., help="Tenant cujos destinatários de alerta de prazo serão geridos."),
+    add: str | None = typer.Option(None, "--add", help="Adiciona um e-mail à lista de destinatários."),
+    remove: str | None = typer.Option(None, "--remove", help="Remove um e-mail da lista de destinatários."),
+    list_only: bool = typer.Option(
+        False, "--list", help="Lista os destinatários atuais (comportamento padrão sem --add/--remove)."
+    ),
+) -> None:
+    """Manage a tenant's deadline-alert e-mail recipients (tenants.json).
+
+    A legacy string entry (bare API-key hash) is migrated to the structured
+    format on ``--add``/``--remove``, preserving the existing key hash so
+    already-issued API keys keep authenticating.
+    """
+    from juris.web.trial_access import add_alert_email, alert_emails_for_tenant, remove_alert_email
+
+    try:
+        if add:
+            emails = add_alert_email(tenant_id, add)
+            console.print(f"[green]Adicionado.[/green] Destinatários de '{tenant_id}': {len(emails)}")
+        elif remove:
+            emails = remove_alert_email(tenant_id, remove)
+            console.print(f"[green]Removido.[/green] Destinatários de '{tenant_id}': {len(emails)}")
+        else:
+            emails = alert_emails_for_tenant(tenant_id)
+    except (KeyError, ValueError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from None
+
+    if not emails:
+        console.print(f"[yellow]Nenhum destinatário configurado para '{tenant_id}'.[/yellow]")
+        return
+    for email in emails:
+        console.print(f"  {email}")
+
+
 @tenant_app.command("erase-data")
 def erase_data(
     tenant_id: str = typer.Argument(..., help="Tenant/escritório cujos dados serão apagados."),

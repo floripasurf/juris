@@ -6,6 +6,7 @@ import hashlib
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, datetime
+from pathlib import Path
 
 from juris.alerts.deadline_alerts import AlertBatch, AlertLevel, DeadlineAlert
 from juris.alerts.delivery import AlertDelivery, AlertEmailConfig
@@ -17,6 +18,11 @@ from juris.prazo.engine import Prazo, StatusPrazo
 from juris.prazo.rules import PrazoRule, TipoAcao
 
 logger = get_logger(__name__)
+
+# The one tenant that pre-dates per-tenant alert recipients: its overnight/alert
+# delivery must keep working off the global ALERT_TO_ADDRESSES until it (or every
+# other tenant) configures its own list via `juris tenant alert-emails`.
+PILOT_TENANT_ID = "escritorio-piloto"
 
 
 @dataclass(slots=True)
@@ -30,20 +36,52 @@ class PendingAlertDeliverySummary:
     sent: int = 0
     failed: int = 0
     smtp_configured: bool = False
+    no_recipients: bool = False
 
 
-def alert_email_config_from_settings(settings: Settings | None = None) -> AlertEmailConfig:
-    """Build the SMTP alert config from Juris settings."""
+def alert_email_config_from_settings(
+    settings: Settings | None = None, *, to_addresses: list[str] | None = None
+) -> AlertEmailConfig:
+    """Build the SMTP alert config from Juris settings.
+
+    ``to_addresses``, when given, overrides the global ``ALERT_TO_ADDRESSES``
+    setting entirely — this is how a per-tenant recipient list (from
+    :func:`alert_recipients_for_tenant`) reaches the SMTP layer.
+    """
     settings = settings or get_settings()
-    to_list = [address.strip() for address in settings.alert_to_addresses.split(",") if address.strip()]
+    resolved_to = (
+        to_addresses
+        if to_addresses is not None
+        else [address.strip() for address in settings.alert_to_addresses.split(",") if address.strip()]
+    )
     return AlertEmailConfig(
         smtp_host=settings.alert_smtp_host,
         smtp_port=settings.alert_smtp_port,
         smtp_user=settings.alert_smtp_user,
         smtp_password=settings.alert_smtp_password.get_secret_value() if settings.alert_smtp_password else "",
         from_address=settings.alert_from_address,
-        to_addresses=to_list,
+        to_addresses=resolved_to,
     )
+
+
+def alert_recipients_for_tenant(
+    tenant_id: str, *, path: Path | None = None, settings: Settings | None = None
+) -> list[str]:
+    """Resolve alert recipients for one tenant.
+
+    Per-tenant list from tenants.json (:func:`~juris.web.trial_access.alert_emails_for_tenant`)
+    takes priority. Only :data:`PILOT_TENANT_ID` falls back to the global
+    ``ALERT_TO_ADDRESSES`` when it has no list configured yet — every other
+    tenant with an empty list simply gets no alerts (no silent broadcast to a
+    global address that isn't theirs).
+    """
+    from juris.web.trial_access import alert_emails_for_tenant
+
+    recipients = alert_emails_for_tenant(tenant_id, path=path)
+    if recipients or tenant_id != PILOT_TENANT_ID:
+        return recipients
+    settings = settings or get_settings()
+    return [address.strip() for address in settings.alert_to_addresses.split(",") if address.strip()]
 
 
 def _as_date(value: date | datetime) -> date:
@@ -178,20 +216,33 @@ def build_pending_alert_batch(
 
 async def send_pending_deadline_alerts(
     *,
-    db: LocalDB | None = None,
+    db: LocalDB,
     delivery: AlertDelivery | None = None,
     config: AlertEmailConfig | None = None,
     today: date | None = None,
 ) -> PendingAlertDeliverySummary:
-    """Send all critical/warning pending prazo alerts via the configured delivery."""
-    db = db or LocalDB()
-    config = config if config is not None else alert_email_config_from_settings()
-    smtp_configured = config.is_configured
-    summary = PendingAlertDeliverySummary(smtp_configured=smtp_configured)
+    """Send all critical/warning pending prazo alerts via the configured delivery.
 
-    if not smtp_configured and delivery is None:
-        logger.warning("pending_alerts_smtp_not_configured")
-        return summary
+    ``db`` is required (no implicit ``LocalDB()`` fallback) so every caller is
+    explicit about which tenant's database it is delivering for — see
+    :func:`alert_recipients_for_tenant` for how the matching recipient list is
+    resolved per tenant.
+    """
+    config = config if config is not None else alert_email_config_from_settings()
+    # "SMTP not configured" and "this tenant has no recipients" are distinct
+    # operational states (one is infra, the other is per-tenant setup) — kept as
+    # separate summary fields rather than collapsed into `config.is_configured`.
+    smtp_configured = bool(config.smtp_host and config.from_address)
+    no_recipients = not config.to_addresses
+    summary = PendingAlertDeliverySummary(smtp_configured=smtp_configured, no_recipients=no_recipients)
+
+    if delivery is None:
+        if not smtp_configured:
+            logger.warning("pending_alerts_smtp_not_configured")
+            return summary
+        if no_recipients:
+            logger.warning("pending_alerts_no_recipients")
+            return summary
 
     delivery = delivery or AlertDelivery(config)
     processos = db.get_all_processos()
