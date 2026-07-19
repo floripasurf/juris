@@ -6,6 +6,7 @@ import json
 
 from typer.testing import CliRunner
 
+from juris.alerts.pending import PendingAlertDeliverySummary
 from juris.cli.main import app
 from juris.jobs.nightly import NightlyResult, NightlySummary
 from juris.persistence.local_db import LocalDB
@@ -82,4 +83,54 @@ def test_overnight_all_tenants_requires_configured_tenants(monkeypatch, tmp_path
 
     assert result.exit_code == 1
     assert "JURIS_TENANTS_FILE" in result.output
+    default_registry.cache_clear()
+
+
+def test_overnight_send_alerts_resolves_recipients_per_tenant(monkeypatch, tmp_path) -> None:
+    """The layer where the original bug lived: each tenant must get ITS OWN
+    recipient list, not the global one — one tenant here has alert_emails
+    configured, the other doesn't, and delivery must diverge accordingly."""
+    home = tmp_path / "home"
+    tenants_file = tmp_path / "tenants.json"
+    tenants_file.write_text(
+        json.dumps(
+            {
+                "escritorio-a": {"keys": {"owner": {"hash": "key-a"}}, "alert_emails": ["adv-a@example.test"]},
+                "escritorio-b": "key-b",
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("JURIS_HOME", str(home))
+    monkeypatch.setenv("JURIS_TENANTS_FILE", str(tenants_file))
+    monkeypatch.setenv("JURIS_AGENT_MODE", "remote")
+    monkeypatch.setenv("ALERT_SMTP_HOST", "smtp.example.test")
+    monkeypatch.setenv("ALERT_FROM_ADDRESS", "juris@example.test")
+    monkeypatch.delenv("ALERT_TO_ADDRESSES", raising=False)
+    default_registry.cache_clear()
+
+    db_a = LocalDB(tenant_db_path(Tenant("escritorio-a")))
+    db_b = LocalDB(tenant_db_path(Tenant("escritorio-b")))
+    db_a.set_tracked_list([{"numero_cnj": "0000001-00.2026.8.13.0001", "tribunal": "tjmg"}])
+    db_b.set_tracked_list([{"numero_cnj": "0000002-00.2026.8.26.0001", "tribunal": "tjsp"}])
+
+    async def fake_run_nightly(processos, **kwargs):  # noqa: ANN001, ANN202
+        return _summary_for(processos[0])
+
+    monkeypatch.setattr("juris.jobs.nightly.run_nightly", fake_run_nightly)
+    monkeypatch.setattr("juris.mni.factory.get_mni_read_service", lambda tenant_id: f"svc:{tenant_id}")
+
+    captured_recipients: list[list[str]] = []
+
+    async def fake_send(*, db, config, **kwargs):  # noqa: ANN001, ANN202
+        captured_recipients.append(list(config.to_addresses))
+        return PendingAlertDeliverySummary(smtp_configured=True, no_recipients=not config.to_addresses)
+
+    monkeypatch.setattr("juris.alerts.pending.send_pending_deadline_alerts", fake_send)
+
+    result = runner.invoke(app, ["overnight", "--all-tenants"])
+
+    assert result.exit_code == 0, result.output
+    assert captured_recipients == [["adv-a@example.test"], []]
+    assert "No alert recipients configured for tenant 'escritorio-b'" in result.output
     default_registry.cache_clear()

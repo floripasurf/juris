@@ -241,7 +241,7 @@ async def send_pending_deadline_alerts(
             logger.warning("pending_alerts_smtp_not_configured")
             return summary
         if no_recipients:
-            logger.warning("pending_alerts_no_recipients")
+            logger.warning("alert_sem_destinatario")
             return summary
 
     delivery = delivery or AlertDelivery(config)

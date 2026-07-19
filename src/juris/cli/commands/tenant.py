@@ -87,8 +87,13 @@ def alert_emails_cmd(
     tenant_id: str = typer.Argument(..., help="Tenant cujos destinatários de alerta de prazo serão geridos."),
     add: str | None = typer.Option(None, "--add", help="Adiciona um e-mail à lista de destinatários."),
     remove: str | None = typer.Option(None, "--remove", help="Remove um e-mail da lista de destinatários."),
-    list_only: bool = typer.Option(
-        False, "--list", help="Lista os destinatários atuais (comportamento padrão sem --add/--remove)."
+    list_recipients: bool = typer.Option(
+        False,
+        "--list",
+        help=(
+            "Lista os destinatários atuais. Implícito quando --add/--remove não são usados; "
+            "combine com --add/--remove para também imprimir a lista completa após a mutação."
+        ),
     ),
 ) -> None:
     """Manage a tenant's deadline-alert e-mail recipients (tenants.json).
@@ -99,6 +104,7 @@ def alert_emails_cmd(
     """
     from juris.web.trial_access import add_alert_email, alert_emails_for_tenant, remove_alert_email
 
+    mutated = add is not None or remove is not None
     try:
         if add:
             emails = add_alert_email(tenant_id, add)
@@ -112,6 +118,10 @@ def alert_emails_cmd(
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=2) from None
 
+    # After a mutation, the terse confirmation above is enough unless --list was
+    # explicitly asked for; a bare (read-only) invocation always lists.
+    if mutated and not list_recipients:
+        return
     if not emails:
         console.print(f"[yellow]Nenhum destinatário configurado para '{tenant_id}'.[/yellow]")
         return

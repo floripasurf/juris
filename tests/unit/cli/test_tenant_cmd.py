@@ -279,3 +279,97 @@ def test_promote_command_activates_paid_trial(tmp_path, monkeypatch) -> None:
     assert again.exit_code == 1
     missing = runner.invoke(cli_app, ["tenant", "promote", "nao-existe"])
     assert missing.exit_code == 2
+
+
+def test_alert_emails_add_prints_terse_confirmation_without_list(tmp_path, monkeypatch) -> None:
+    tenants_path = tmp_path / "tenants.json"
+    tenants_path.write_text(json.dumps({"escritorio-a": "sha256:" + "a" * 64}), encoding="utf-8")
+    monkeypatch.setenv("JURIS_TENANTS_FILE", str(tenants_path))
+
+    result = runner.invoke(app, ["tenant", "alert-emails", "escritorio-a", "--add", "adv@escritorio-a.test"])
+
+    assert result.exit_code == 0, result.output
+    assert "Adicionado." in result.output
+    assert "Destinatários de 'escritorio-a': 1" in result.output
+    assert "adv@escritorio-a.test" not in result.output  # --list not requested: terse only
+
+    stored = json.loads(tenants_path.read_text(encoding="utf-8"))["escritorio-a"]
+    assert stored["alert_emails"] == ["adv@escritorio-a.test"]
+    assert stored["keys"]["owner"]["hash"] == "sha256:" + "a" * 64  # legacy hash preserved
+
+
+def test_alert_emails_add_with_list_flag_prints_full_list(tmp_path, monkeypatch) -> None:
+    tenants_path = tmp_path / "tenants.json"
+    tenants_path.write_text(json.dumps({"escritorio-a": {"keys": {}, "alert_emails": []}}), encoding="utf-8")
+    monkeypatch.setenv("JURIS_TENANTS_FILE", str(tenants_path))
+
+    result = runner.invoke(
+        app, ["tenant", "alert-emails", "escritorio-a", "--add", "adv@escritorio-a.test", "--list"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Adicionado." in result.output
+    assert "adv@escritorio-a.test" in result.output
+
+
+def test_alert_emails_remove_updates_stored_list(tmp_path, monkeypatch) -> None:
+    tenants_path = tmp_path / "tenants.json"
+    tenants_path.write_text(
+        json.dumps(
+            {"escritorio-a": {"keys": {}, "alert_emails": ["a@escritorio-a.test", "b@escritorio-a.test"]}}
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("JURIS_TENANTS_FILE", str(tenants_path))
+
+    result = runner.invoke(app, ["tenant", "alert-emails", "escritorio-a", "--remove", "a@escritorio-a.test"])
+
+    assert result.exit_code == 0, result.output
+    assert "Removido." in result.output
+    stored = json.loads(tenants_path.read_text(encoding="utf-8"))["escritorio-a"]
+    assert stored["alert_emails"] == ["b@escritorio-a.test"]
+
+
+def test_alert_emails_bare_invocation_lists_by_default(tmp_path, monkeypatch) -> None:
+    tenants_path = tmp_path / "tenants.json"
+    tenants_path.write_text(
+        json.dumps({"escritorio-a": {"keys": {}, "alert_emails": ["a@escritorio-a.test"]}}), encoding="utf-8"
+    )
+    monkeypatch.setenv("JURIS_TENANTS_FILE", str(tenants_path))
+
+    result = runner.invoke(app, ["tenant", "alert-emails", "escritorio-a"])
+
+    assert result.exit_code == 0, result.output
+    assert "a@escritorio-a.test" in result.output
+
+
+def test_alert_emails_no_recipients_shows_hint(tmp_path, monkeypatch) -> None:
+    tenants_path = tmp_path / "tenants.json"
+    tenants_path.write_text(json.dumps({"escritorio-a": {"keys": {}}}), encoding="utf-8")
+    monkeypatch.setenv("JURIS_TENANTS_FILE", str(tenants_path))
+
+    result = runner.invoke(app, ["tenant", "alert-emails", "escritorio-a", "--list"])
+
+    assert result.exit_code == 0, result.output
+    assert "Nenhum destinatário configurado" in result.output
+
+
+def test_alert_emails_unknown_tenant_exits_2(tmp_path, monkeypatch) -> None:
+    tenants_path = tmp_path / "tenants.json"
+    tenants_path.write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("JURIS_TENANTS_FILE", str(tenants_path))
+
+    result = runner.invoke(app, ["tenant", "alert-emails", "nao-existe", "--add", "x@example.test"])
+
+    assert result.exit_code == 2
+    assert "tenant não encontrado" in result.output
+
+
+def test_alert_emails_invalid_address_exits_2(tmp_path, monkeypatch) -> None:
+    tenants_path = tmp_path / "tenants.json"
+    tenants_path.write_text(json.dumps({"escritorio-a": {"keys": {}}}), encoding="utf-8")
+    monkeypatch.setenv("JURIS_TENANTS_FILE", str(tenants_path))
+
+    result = runner.invoke(app, ["tenant", "alert-emails", "escritorio-a", "--add", "nao-e-email"])
+
+    assert result.exit_code == 2
