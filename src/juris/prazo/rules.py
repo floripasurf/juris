@@ -146,6 +146,7 @@ CPC_RULES: list[PrazoRule] = [
         tipo_acao=TipoAcao.CUMPRIR,
         base_legal="Art. 297 CPC",
         fatal=True,
+        admite_dobro=False,  # Prazo próprio de cumprimento; dobra não se estende — direção segura
     ),
     # === Execução — embargos ===
     PrazoRule(

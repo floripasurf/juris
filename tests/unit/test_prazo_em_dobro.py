@@ -78,6 +78,16 @@ class TestPrazoEmDobro:
         pagamento = _by_nome(report.prazos, "Pagamento voluntário")
         assert pagamento.dias_uteis_total == 15
 
+    def test_tutela_antecipada_nao_dobra(self) -> None:
+        # Prazo de cumprimento de ordem judicial (tutela) = prazo próprio, mesma
+        # lógica do "Prazo judicial genérico"; a corrente majoritária não estende
+        # a dobra dos arts. 180/183/186 a ele — dobrar aqui infla o prazo e
+        # arrisca astreintes.
+        mov = _movement(CategoriaSemantica.TUTELA, 334, "Concedida tutela antecipada", date(2026, 4, 1))
+        report = compute_prazos(CNJ, "tjmg", [mov], _cal(), TODAY, parte_representada="fazenda")
+        tutela = _by_nome(report.prazos, "Cumprimento de tutela antecipada")
+        assert tutela.dias_uteis_total == 5
+
     def test_clt_nao_dobra(self) -> None:
         mov = _movement(CategoriaSemantica.SENTENCA, None, "Sentença trabalhista publicada", date(2026, 4, 1))
         report = compute_prazos(
