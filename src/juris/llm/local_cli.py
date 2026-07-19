@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import signal
 import tempfile
 from pathlib import Path
 from typing import Any, Literal
@@ -44,6 +46,8 @@ class LocalCliLLM(AbstractLLM):
         model: str | None = None,
         timeout_seconds: float = 180.0,
         cwd: Path | None = None,
+        reasoning_effort: str | None = None,
+        binary: str | None = None,
     ) -> None:
         if provider not in _PROVIDER_MODEL_NAMES:
             msg = f"Unsupported CLI cloud provider: {provider}"
@@ -52,6 +56,8 @@ class LocalCliLLM(AbstractLLM):
         self._model = model
         self._timeout_seconds = timeout_seconds
         self._cwd = cwd
+        self._reasoning_effort = reasoning_effort
+        self._binary = binary
 
     async def complete(
         self,
@@ -84,14 +90,33 @@ class LocalCliLLM(AbstractLLM):
         if schema and output:
             try:
                 structured = json.loads(output)
-            except json.JSONDecodeError:
-                usage["structured_parse_failed"] = 1
+            except json.JSONDecodeError as exc:
+                msg = f"{self.model_name} violou o schema: saída não é JSON válido."
+                raise RuntimeError(msg) from exc
+            self._validate_structured(schema, structured)
         return LLMResponse(
             content=output,
             model=self.model_name,
             usage=usage,
             structured=structured,
         )
+
+    def _validate_structured(self, schema: dict[str, Any], structured: Any) -> None:
+        """Check the parsed JSON against a minimal subset of JSON Schema.
+
+        Only checks the root type (when ``type: object``) and presence of
+        ``required`` keys — enough to catch a malformed structured response
+        without pulling in a jsonschema dependency.
+        """
+        if schema.get("type") == "object" and not isinstance(structured, dict):
+            msg = f"{self.model_name} violou o schema: raiz da resposta não é um objeto."
+            raise RuntimeError(msg)
+        required = schema.get("required", [])
+        if required and isinstance(structured, dict):
+            missing = [key for key in required if key not in structured]
+            if missing:
+                msg = f"{self.model_name} violou o schema: faltam as chaves obrigatórias {missing}."
+                raise RuntimeError(msg)
 
     @property
     def model_name(self) -> str:
@@ -114,7 +139,7 @@ class LocalCliLLM(AbstractLLM):
         full_prompt = _compose_prompt(prompt=prompt, system=system, schema=schema)
         if self._provider == "claude":
             command = [
-                "claude",
+                self._binary or "claude",
                 "--print",
                 "--output-format",
                 "text",
@@ -132,16 +157,18 @@ class LocalCliLLM(AbstractLLM):
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as out:
             output_path = out.name
         command = [
-            "codex",
+            self._binary or "codex",
             "exec",
             "--sandbox",
             "read-only",
             "--skip-git-repo-check",
             "--ephemeral",
-            _CODEX_OUTPUT_FLAG,
-            output_path,
-            "-",
         ]
+        if self._model:
+            command += ["-m", self._model]
+        if self._reasoning_effort:
+            command += ["-c", f'model_reasoning_effort="{self._reasoning_effort}"']
+        command += [_CODEX_OUTPUT_FLAG, output_path, "-"]
         # Codex accepts the prompt on stdin; max_tokens/temperature are not
         # first-class CLI flags here, so the caller-facing values are ignored.
         _ = (max_tokens, temperature)
@@ -156,6 +183,7 @@ class LocalCliLLM(AbstractLLM):
                 stdin=asyncio.subprocess.PIPE if stdin is not None else None,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                start_new_session=True,
             )
             try:
                 stdout, stderr = await asyncio.wait_for(
@@ -163,7 +191,7 @@ class LocalCliLLM(AbstractLLM):
                     timeout=self._timeout_seconds,
                 )
             except TimeoutError as exc:
-                process.kill()
+                _kill_process_group(process)
                 await process.wait()
                 msg = f"{self.model_name} timed out after {self._timeout_seconds:.0f}s"
                 raise TimeoutError(msg) from exc
@@ -198,6 +226,21 @@ def _compose_prompt(
             f"{json.dumps(schema, ensure_ascii=False, sort_keys=True)}"
         )
     return "\n\n".join(parts)
+
+
+def _kill_process_group(process: asyncio.subprocess.Process) -> None:
+    """Kill the whole process group spawned for ``process``.
+
+    ``process`` was started with ``start_new_session=True``, so its pid is
+    also its process group id; this reaches children the CLI may have
+    forked (e.g. the underlying model runner) instead of leaving orphans
+    behind. Falls back to killing just the process if the group is already
+    gone (e.g. it exited between the timeout and this call).
+    """
+    try:
+        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+    except ProcessLookupError:
+        process.kill()
 
 
 def _codex_output_file(command: list[str]) -> Path:
