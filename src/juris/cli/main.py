@@ -1588,11 +1588,18 @@ def repertory_ingest(
     corpus_dir: str = typer.Option(None, "--corpus-dir", help="Path to corpus JSON directory"),
     include_superseded: bool = typer.Option(False, "--include-superseded", help="Include cancelada/superada entries"),
     limit: int = typer.Option(None, "--limit", "-l", help="Max items to ingest (class-based ingesters only)"),
+    embed: bool = typer.Option(
+        False,
+        "--embed",
+        help="Gera embeddings densos durante a ingestão. Default: False (grava NULL; "
+        "rode 'repertory backfill-embeddings' depois). Explícito — não depende de ENVIRONMENT.",
+    ),
 ) -> None:
     """Ingest jurisprudence seed data into the local vector store."""
     from pathlib import Path
 
     from juris.persistence.audit import AuditLog
+    from juris.repertory.embeddings import LegalEmbedder
     from juris.repertory.ingestion.registry import REGISTRY, ingest_source
     from juris.repertory.ingestion.seed_loader import SeedLoader
     from juris.repertory.vector_store import LocalFTSStore
@@ -1607,6 +1614,7 @@ def repertory_ingest(
     fts_path = resolve_repertory_path()
     fts_path.parent.mkdir(parents=True, exist_ok=True)
     store = LocalFTSStore(db_path=fts_path)
+    embedder = LegalEmbedder() if embed else None
 
     label = REGISTRY[source].label if source else "all sources"
     console.print(f"[bold]Ingesting corpus seed data ({label})...[/bold]")
@@ -1619,23 +1627,27 @@ def repertory_ingest(
         # Class-based ingester (e.g., tjdft-modelos, stf-landmark)
         if entry.source_dir or entry.ingester_class:
             base_dir = Path(corpus_dir) if corpus_dir else Path(__file__).resolve().parents[3]
-            result = ingest_source(source, base_dir / "data" / "corpus", store, limit=limit)
+            result = ingest_source(source, base_dir / "data" / "corpus", store, embedder=embedder, limit=limit)
         else:
             seed_dir = Path(corpus_dir) if corpus_dir else None
             loader = SeedLoader(corpus_dir=seed_dir, include_superseded=include_superseded)
             audit_path = fts_path.parent / "audit.jsonl"
             audit = AuditLog(path=audit_path)
-            result = loader.ingest(store, audit_log=audit)
+            result = loader.ingest(store, embedder=embedder, audit_log=audit)
     else:
         seed_dir = Path(corpus_dir) if corpus_dir else None
         loader = SeedLoader(corpus_dir=seed_dir, include_superseded=include_superseded)
         audit_path = fts_path.parent / "audit.jsonl"
         audit = AuditLog(path=audit_path)
-        result = loader.ingest(store, audit_log=audit)
+        result = loader.ingest(store, embedder=embedder, audit_log=audit)
 
     console.print(f"  Fetched: {result.total_fetched} sources")
     console.print(f"  Chunks:  {result.total_chunks}")
     console.print(f"  Stored:  {result.total_embedded}")
+    if not embed:
+        console.print(
+            "[dim]Chunks sem embedding — rode 'juris repertory backfill-embeddings'.[/dim]"
+        )
     console.print("[green]Done.[/green]")
 
 
@@ -1792,7 +1804,14 @@ def repertory_backfill_embeddings(
     limit: int | None = typer.Option(None, "--limit", min=1, help="Máximo de chunks a atualizar nesta execução."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Apenas informa quantos chunks precisam de embedding."),
 ) -> None:
-    """Populate dense embeddings for existing SQLite chunks."""
+    """Populate dense embeddings for existing SQLite chunks.
+
+    Also repairs legacy all-zero embeddings from a past ingestion bug: a zero
+    vector is not NULL, so it silently escaped ``missing_embedding_count()`` and
+    was never backfilled. ``--dry-run`` only counts them via
+    ``count_zero_embeddings()`` (read-only, never mutates); a real run calls
+    ``null_out_zero_embeddings()`` before counting, so they get re-embedded too.
+    """
     from juris.repertory.embeddings import LegalEmbedder
     from juris.repertory.readiness import resolve_repertory_path
     from juris.repertory.vector_store import LocalFTSStore
@@ -1804,14 +1823,31 @@ def repertory_backfill_embeddings(
 
     store = LocalFTSStore(db_path=db_path)
     try:
+        if dry_run:
+            zero_legacy = store.count_zero_embeddings()
+            missing = store.missing_embedding_count()
+            if zero_legacy:
+                console.print(
+                    f"[yellow]{zero_legacy} vetores-zero legados seriam reparados[/yellow] "
+                    "(virariam NULL — nada foi alterado nesta execução)."
+                )
+            total_pending = missing + zero_legacy
+            if total_pending == 0:
+                console.print("[green]Todos os chunks já têm embeddings densos.[/green]")
+                return
+            target = min(total_pending, limit) if limit is not None else total_pending
+            console.print(f"[yellow]{total_pending} chunks sem embedding[/yellow] ({target} seriam atualizados).")
+            return
+
+        repaired = store.null_out_zero_embeddings()
+        if repaired:
+            console.print(f"[yellow]{repaired} vetores-zero legados reparados (NULL).[/yellow]")
+
         missing = store.missing_embedding_count()
         if missing == 0:
             console.print("[green]Todos os chunks já têm embeddings densos.[/green]")
             return
         target = min(missing, limit) if limit is not None else missing
-        if dry_run:
-            console.print(f"[yellow]{missing} chunks sem embedding[/yellow] ({target} seriam atualizados).")
-            return
 
         embedder = LegalEmbedder()
         updated = 0

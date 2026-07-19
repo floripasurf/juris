@@ -218,13 +218,13 @@ def _run_class_ingester(
     if embedder is not None:
         embeddings = embedder.embed_texts(texts)
         if embeddings is None:
-            dim = embedder.dimension
-            embeddings = [[0.0] * dim for _ in all_chunks]
+            # Model unavailable: NULL placeholder, not a zero vector — same
+            # contract as SeedLoader.ingest (see its comment for why).
+            embeddings = [[] for _ in all_chunks]
         stored = store.upsert(all_chunks, embeddings)
     else:
-        dim = 1024
-        zero_embeddings = [[0.0] * dim for _ in all_chunks]
-        stored = store.upsert(all_chunks, zero_embeddings)
+        placeholder: list[list[float]] = [[] for _ in all_chunks]
+        stored = store.upsert(all_chunks, placeholder)
 
     logger.info(
         "Ingested %d fontes -> %d chunks -> %d stored (class-based)",
