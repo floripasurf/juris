@@ -31,3 +31,18 @@ def test_connect_timeout_must_be_positive(monkeypatch: pytest.MonkeyPatch) -> No
 
     with pytest.raises(ValidationError):
         Settings(_env_file=None)
+
+
+def test_parte_representada_rejects_invalid_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A typo in JURIS_PARTE_REPRESENTADA must fail at boot, not silently inside
+    the overnight prazo computation."""
+    monkeypatch.setenv("JURIS_PARTE_REPRESENTADA", "fazendaa")
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+
+def test_parte_representada_accepts_known_values(monkeypatch: pytest.MonkeyPatch) -> None:
+    for value in ("", "fazenda", "mp", "defensoria"):
+        monkeypatch.setenv("JURIS_PARTE_REPRESENTADA", value)
+        assert Settings(_env_file=None).parte_representada == value

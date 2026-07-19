@@ -369,6 +369,9 @@ def _build_manifest(result: DemoResult, artifacts: dict[str, str]) -> dict[str, 
                 "citations_count": len(draft.citations_used),
                 "grounding_status": draft.grounding_report.status.value,
                 "grounding_blocked_reason": draft.blocked_reason,
+                "revisao_humana_obrigatoria": bool(
+                    draft.estrategia and draft.estrategia.revisao_humana_obrigatoria
+                ),
                 "grounding_failed_citation_ids": draft.grounding_report.failed_citation_ids,
                 "grounding_spurious_citations": draft.grounding_report.spurious_citations,
                 "audit_entry_ids": draft.audit_entry_ids,

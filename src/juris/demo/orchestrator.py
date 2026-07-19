@@ -27,6 +27,7 @@ from juris.agents.analyzer import ProcessoAnalysis, analyze_processo
 from juris.agents.citation_verifier import MarkerCitationVerifier
 from juris.agents.drafter import DrafterAgent, DraftRequest, DraftResult
 from juris.agents.researcher import Researcher
+from juris.config import get_settings
 from juris.core.observability import get_logger
 from juris.core.sanitize import safe_error_text
 from juris.defesas.analyzer import DefesaAnalyzer
@@ -181,10 +182,17 @@ class DemoOrchestrator:
         # Step 2: compute prazos (only if analysis succeeded)
         if result.analysis is not None:
             try:
+                if self._tenant_id is None:
+                    parte_representada = get_settings().parte_representada
+                else:
+                    from juris.web.trial_access import parte_representada_for_tenant
+
+                    parte_representada = parte_representada_for_tenant(self._tenant_id)
                 result.prazo_report = compute_prazos(
                     numero_cnj=processo.numero_cnj,
                     tribunal=request.tribunal,
                     analyses=result.analysis.analyzed,
+                    parte_representada=parte_representada,
                 )
             except Exception as exc:  # noqa: BLE001
                 logger.warning("demo_prazos_failed", error=safe_error_text(exc), exception_type=exc.__class__.__name__)

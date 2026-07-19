@@ -14,6 +14,7 @@ from juris.cli.commands.agent import agent_app
 from juris.cli.commands.doctor import doctor
 from juris.cli.commands.tenant import tenant_app
 from juris.cli.console import console
+from juris.config import get_settings
 
 # Tracked-list helpers are shared with the web layer (juris.jobs.tracking).
 from juris.jobs.tracking import get_tracked as _get_tracked_processos
@@ -366,7 +367,13 @@ def _nightly_processos(
     """Normalize tracked entries into the shape expected by ``run_nightly``."""
     if tribunal_filter:
         tracked_list = [p for p in tracked_list if p.get("tribunal") == tribunal_filter]
-    return [{"numero_cnj": p["numero_cnj"], "tribunal": p.get("tribunal", "tjmg")} for p in tracked_list]
+    processos: list[dict[str, str]] = []
+    for tracked in tracked_list:
+        proc = {"numero_cnj": tracked["numero_cnj"], "tribunal": tracked.get("tribunal", "tjmg")}
+        if "parte_representada" in tracked:
+            proc["parte_representada"] = tracked["parte_representada"]
+        processos.append(proc)
+    return processos
 
 
 def _resolve_nightly_senha(cpf: str, senha: str, processos: list[dict[str, str]]) -> str:
@@ -434,19 +441,34 @@ def _print_nightly_summary(summary: Any) -> None:
     console.print(f"  Duration: {summary.duration_seconds:.1f}s")
 
 
-def _deliver_nightly_alerts(db: Any, summary: Any) -> int:
-    """Send pending alerts for one DB; return desired process exit code."""
+def _deliver_nightly_alerts(db: Any, summary: Any, tenant_id: str) -> int:
+    """Send pending alerts for one tenant's DB; return desired process exit code."""
     import asyncio
 
-    from juris.alerts.pending import send_pending_deadline_alerts
+    from juris.alerts.pending import (
+        alert_email_config_from_settings,
+        alert_recipients_for_tenant,
+        send_pending_deadline_alerts,
+    )
 
-    alert_summary = asyncio.run(send_pending_deadline_alerts(db=db))
+    recipients = alert_recipients_for_tenant(tenant_id)
+    config = alert_email_config_from_settings(to_addresses=recipients)
+    alert_summary = asyncio.run(send_pending_deadline_alerts(db=db, config=config))
+
     if not alert_summary.smtp_configured:
         msg = "SMTP not configured; pending alerts were not sent."
         if summary.total_critical_alerts:
             console.print(f"[red]{msg} Set ALERT_SMTP_HOST, ALERT_FROM_ADDRESS, ALERT_TO_ADDRESSES.[/red]")
             return 2
         console.print(f"[yellow]{msg}[/yellow]")
+        return 0
+    if alert_summary.no_recipients:
+        msg = f"No alert recipients configured for tenant '{tenant_id}'; pending alerts were not sent."
+        hint = f"Use 'juris tenant alert-emails {tenant_id} --add <email>'."
+        if summary.total_critical_alerts:
+            console.print(f"[red]{msg} {hint}[/red]")
+            return 2
+        console.print(f"[yellow]{msg} {hint}[/yellow]")
         return 0
     console.print(
         "[bold]Alert delivery:[/bold] "
@@ -1004,6 +1026,7 @@ def prazos(
         numero_cnj=processo.numero_cnj,
         tribunal=tribunal,
         analyses=analysis.analyzed,
+        parte_representada=get_settings().parte_representada,
     )
 
     if not report.prazos:
@@ -1074,13 +1097,15 @@ def sync(
     if tribunal:
         tracked_list = [p for p in tracked_list if p.get("tribunal") == tribunal]
 
-    processos = [{"numero_cnj": p["numero_cnj"], "tribunal": p.get("tribunal", "tjmg")} for p in tracked_list]
+    processos = _nightly_processos(tracked_list, None)
 
     db = LocalDB()
     console.print(f"[bold]Syncing {len(processos)} processos (full pipeline)...[/bold]")
     console.print(f"[dim]DB: {db.path}[/dim]\n")
 
-    summary = asyncio.run(run_pipeline(processos, db=db))
+    summary = asyncio.run(
+        run_pipeline(processos, db=db, parte_representada=get_settings().parte_representada)
+    )
 
     # Print results
     for r in summary.results:
@@ -1142,6 +1167,7 @@ def overnight(
     from juris.mni.factory import get_mni_read_service
     from juris.persistence.local_db import LocalDB
     from juris.web.auth import Tenant, default_registry, tenant_db_path
+    from juris.web.trial_access import parte_representada_for_tenant
 
     registry = default_registry()
     if all_tenants:
@@ -1170,6 +1196,11 @@ def overnight(
         resolved_senha = _resolve_nightly_senha(resolved_cpf, senha or "", processos)
         resolved_pin = _resolve_nightly_pin(pin, processos, remote_agent=remote_agent)
         mni_service = get_mni_read_service(tenant_id) if all_tenants or remote_agent else None
+        parte_representada = (
+            parte_representada_for_tenant(tenant_id)
+            if all_tenants
+            else get_settings().parte_representada
+        )
 
         heading = f"Nightly pipeline [{tenant_id}]: {len(processos)} processos"
         console.print(f"[bold]{escape(heading)}[/bold]")
@@ -1184,13 +1215,14 @@ def overnight(
                 max_concurrent=max_concurrent,
                 token_pin=resolved_pin,
                 mni_service=mni_service,
+                parte_representada=parte_representada,
             )
         )
 
         _print_nightly_results(summary)
         _print_nightly_summary(summary)
         if send_alerts:
-            exit_code = max(exit_code, _deliver_nightly_alerts(db, summary))
+            exit_code = max(exit_code, _deliver_nightly_alerts(db, summary, tenant_id))
 
     if not ran_any:
         hint = (
@@ -1588,11 +1620,18 @@ def repertory_ingest(
     corpus_dir: str = typer.Option(None, "--corpus-dir", help="Path to corpus JSON directory"),
     include_superseded: bool = typer.Option(False, "--include-superseded", help="Include cancelada/superada entries"),
     limit: int = typer.Option(None, "--limit", "-l", help="Max items to ingest (class-based ingesters only)"),
+    embed: bool = typer.Option(
+        False,
+        "--embed",
+        help="Gera embeddings densos durante a ingestão. Default: False (grava NULL; "
+        "rode 'repertory backfill-embeddings' depois). Explícito — não depende de ENVIRONMENT.",
+    ),
 ) -> None:
     """Ingest jurisprudence seed data into the local vector store."""
     from pathlib import Path
 
     from juris.persistence.audit import AuditLog
+    from juris.repertory.embeddings import LegalEmbedder
     from juris.repertory.ingestion.registry import REGISTRY, ingest_source
     from juris.repertory.ingestion.seed_loader import SeedLoader
     from juris.repertory.vector_store import LocalFTSStore
@@ -1607,6 +1646,7 @@ def repertory_ingest(
     fts_path = resolve_repertory_path()
     fts_path.parent.mkdir(parents=True, exist_ok=True)
     store = LocalFTSStore(db_path=fts_path)
+    embedder = LegalEmbedder() if embed else None
 
     label = REGISTRY[source].label if source else "all sources"
     console.print(f"[bold]Ingesting corpus seed data ({label})...[/bold]")
@@ -1619,23 +1659,27 @@ def repertory_ingest(
         # Class-based ingester (e.g., tjdft-modelos, stf-landmark)
         if entry.source_dir or entry.ingester_class:
             base_dir = Path(corpus_dir) if corpus_dir else Path(__file__).resolve().parents[3]
-            result = ingest_source(source, base_dir / "data" / "corpus", store, limit=limit)
+            result = ingest_source(source, base_dir / "data" / "corpus", store, embedder=embedder, limit=limit)
         else:
             seed_dir = Path(corpus_dir) if corpus_dir else None
             loader = SeedLoader(corpus_dir=seed_dir, include_superseded=include_superseded)
             audit_path = fts_path.parent / "audit.jsonl"
             audit = AuditLog(path=audit_path)
-            result = loader.ingest(store, audit_log=audit)
+            result = loader.ingest(store, embedder=embedder, audit_log=audit)
     else:
         seed_dir = Path(corpus_dir) if corpus_dir else None
         loader = SeedLoader(corpus_dir=seed_dir, include_superseded=include_superseded)
         audit_path = fts_path.parent / "audit.jsonl"
         audit = AuditLog(path=audit_path)
-        result = loader.ingest(store, audit_log=audit)
+        result = loader.ingest(store, embedder=embedder, audit_log=audit)
 
     console.print(f"  Fetched: {result.total_fetched} sources")
     console.print(f"  Chunks:  {result.total_chunks}")
     console.print(f"  Stored:  {result.total_embedded}")
+    if not embed:
+        console.print(
+            "[dim]Chunks sem embedding — rode 'juris repertory backfill-embeddings'.[/dim]"
+        )
     console.print("[green]Done.[/green]")
 
 
@@ -1792,7 +1836,14 @@ def repertory_backfill_embeddings(
     limit: int | None = typer.Option(None, "--limit", min=1, help="Máximo de chunks a atualizar nesta execução."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Apenas informa quantos chunks precisam de embedding."),
 ) -> None:
-    """Populate dense embeddings for existing SQLite chunks."""
+    """Populate dense embeddings for existing SQLite chunks.
+
+    Also repairs legacy all-zero embeddings from a past ingestion bug: a zero
+    vector is not NULL, so it silently escaped ``missing_embedding_count()`` and
+    was never backfilled. ``--dry-run`` only counts them via
+    ``count_zero_embeddings()`` (read-only, never mutates); a real run calls
+    ``null_out_zero_embeddings()`` before counting, so they get re-embedded too.
+    """
     from juris.repertory.embeddings import LegalEmbedder
     from juris.repertory.readiness import resolve_repertory_path
     from juris.repertory.vector_store import LocalFTSStore
@@ -1804,14 +1855,31 @@ def repertory_backfill_embeddings(
 
     store = LocalFTSStore(db_path=db_path)
     try:
+        if dry_run:
+            zero_legacy = store.count_zero_embeddings()
+            missing = store.missing_embedding_count()
+            if zero_legacy:
+                console.print(
+                    f"[yellow]{zero_legacy} vetores-zero legados seriam reparados[/yellow] "
+                    "(virariam NULL — nada foi alterado nesta execução)."
+                )
+            total_pending = missing + zero_legacy
+            if total_pending == 0:
+                console.print("[green]Todos os chunks já têm embeddings densos.[/green]")
+                return
+            target = min(total_pending, limit) if limit is not None else total_pending
+            console.print(f"[yellow]{total_pending} chunks sem embedding[/yellow] ({target} seriam atualizados).")
+            return
+
+        repaired = store.null_out_zero_embeddings()
+        if repaired:
+            console.print(f"[yellow]{repaired} vetores-zero legados reparados (NULL).[/yellow]")
+
         missing = store.missing_embedding_count()
         if missing == 0:
             console.print("[green]Todos os chunks já têm embeddings densos.[/green]")
             return
         target = min(missing, limit) if limit is not None else missing
-        if dry_run:
-            console.print(f"[yellow]{missing} chunks sem embedding[/yellow] ({target} seriam atualizados).")
-            return
 
         embedder = LegalEmbedder()
         updated = 0
@@ -2549,14 +2617,33 @@ def alerts_send() -> None:
     """Send pending deadline alerts via email."""
     import asyncio
 
-    from juris.alerts.pending import alert_email_config_from_settings, send_pending_deadline_alerts
+    from juris.alerts.pending import (
+        alert_email_config_from_settings,
+        alert_recipients_for_tenant,
+        send_pending_deadline_alerts,
+    )
+    from juris.persistence.local_db import LocalDB
+    from juris.web.auth import PUBLIC_TENANT_ID
 
-    smtp_config = alert_email_config_from_settings()
-    if not smtp_config.is_configured:
+    # Single-tenant local command (no --tenant option): the same convention
+    # `overnight` uses without --all-tenants, resolved explicitly here since
+    # `db`/recipients are no longer defaulted inside send_pending_deadline_alerts.
+    tenant_id = PUBLIC_TENANT_ID
+    db = LocalDB()
+    recipients = alert_recipients_for_tenant(tenant_id)
+    smtp_config = alert_email_config_from_settings(to_addresses=recipients)
+
+    if not (smtp_config.smtp_host and smtp_config.from_address):
         console.print("[red]SMTP not configured. Set ALERT_SMTP_HOST, ALERT_FROM_ADDRESS, ALERT_TO_ADDRESSES.[/red]")
         raise typer.Exit(code=1)
+    if not recipients:
+        console.print(
+            f"[yellow]No alert recipients configured for tenant '{tenant_id}'. "
+            f"Use 'juris tenant alert-emails {tenant_id} --add <email>'.[/yellow]"
+        )
+        raise typer.Exit(code=1)
 
-    summary = asyncio.run(send_pending_deadline_alerts(config=smtp_config))
+    summary = asyncio.run(send_pending_deadline_alerts(db=db, config=smtp_config))
     if summary.processos_checked == 0:
         console.print("[yellow]No processos in database.[/yellow]")
         return
@@ -2701,6 +2788,14 @@ def file_petition(
     prazo_override: str | None = typer.Option(None, "--prazo-override", help="Justificativa for filing past deadline"),
     senha: str | None = typer.Option(None, "--senha", "-s", help="Senha PJe (prompted + saved if omitted)"),
     pin: str | None = typer.Option(None, "--pin", help="Token PIN (prompted + saved if omitted)"),
+    override_grounding: bool = typer.Option(
+        False,
+        "--override-grounding",
+        help="Protocola mesmo sem grounding verificado (exige --reason; fica em auditoria)",
+    ),
+    reason: str | None = typer.Option(
+        None, "--reason", help="Justificativa (mín. 20 caracteres) para --override-grounding"
+    ),
 ) -> None:
     """Sign and file a petition via MNI.
 
@@ -2716,12 +2811,20 @@ def file_petition(
     from juris.core.credentials import get_credential, store_credential
     from juris.core.paths import juris_home
     from juris.signing.filing import FilingRequest
+    from juris.web.filing_console import grounding_evidence_from_manifest
 
-    # 1. Load draft markdown
+    # 1. Load draft markdown. Whichever directory it came from (an explicit
+    # path, or the most recent ~/.juris/drafts/<cnj> match) is also where its
+    # run-manifest.json (if any) lives — that's what the grounding gate below
+    # resolves evidence from.
     draft_path = FilePath(draft_path_or_tipo)
+    grounding_case_dir: FilePath | None = None
+    grounding_artifact_name: str | None = None
     if draft_path.exists() and draft_path.is_file():
         draft_markdown = draft_path.read_text(encoding="utf-8")
         tipo_peticao = draft_path.stem
+        grounding_case_dir = draft_path.parent
+        grounding_artifact_name = draft_path.name
         console.print(f"[dim]Loaded draft from {draft_path} ({len(draft_markdown)} chars)[/dim]")
     else:
         # Treat as tipo_peticao, look for most recent draft in ~/.juris/drafts/
@@ -2731,6 +2834,8 @@ def file_petition(
             drafts = sorted(drafts_dir.glob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True)
             if drafts:
                 draft_markdown = drafts[0].read_text(encoding="utf-8")
+                grounding_case_dir = drafts_dir
+                grounding_artifact_name = drafts[0].name
                 console.print(f"[dim]Loaded most recent draft: {drafts[0].name}[/dim]")
             else:
                 console.print(f"[red]No drafts found in {drafts_dir}[/red]")
@@ -2739,6 +2844,17 @@ def file_petition(
             console.print(f"[red]'{draft_path_or_tipo}' is not a file and no drafts found.[/red]")
             console.print("[dim]Provide a path to a markdown file or run 'juris draft' first.[/dim]")
             raise typer.Exit(code=1)
+
+    # 1b. Resolve the grounding veredict for this exact draft (Task 3: nothing
+    # reverified citation grounding before signing/filing until now). A custom
+    # filename or a drafts/ fallback with no manifest resolves to None —
+    # "documento externo" — and the orchestrator's gate then requires
+    # --override-grounding/--reason instead of silently trusting it.
+    grounding_evidence = None
+    if grounding_case_dir is not None and grounding_artifact_name is not None:
+        grounding_evidence = grounding_evidence_from_manifest(
+            grounding_case_dir, output_dir=".", artifact_name=grounding_artifact_name
+        )
 
     # 2-3. Resolve PIN + senha — ONLY when co-located. In remote (split-trust) mode
     # the agent resolves the lawyer's own secrets; the orchestrator must never ask
@@ -2784,6 +2900,9 @@ def file_petition(
         skip_preflight=skip_preflight,
         dry_run=dry_run,
         prazo_override=prazo_override,
+        grounding=grounding_evidence,
+        grounding_override=override_grounding,
+        grounding_override_reason=(reason or "").strip(),
     )
 
     from juris.signing.filing_service import get_filing_service
@@ -2811,7 +2930,10 @@ def file_petition(
             icon = "[green]✓[/green]" if check.passed else "[red]✗[/red]"
             console.print(f"  {icon} {check.name}: {check.message}")
 
-    if dry_run:
+    # A blocked dry-run (grounding gate or preflight) must NOT hit the reassuring
+    # "nothing happened" message below without explanation — it falls through to
+    # the normal success/failure reporting instead.
+    if dry_run and result.success:
         console.print("\n[bold yellow]DRY-RUN:[/bold yellow] Nenhuma assinatura ou protocolo realizado.")
         console.print(f"  Processo: {numero_cnj}")
         console.print(f"  Tribunal: {tribunal}")
@@ -2835,6 +2957,11 @@ def file_petition(
     else:
         console.print("\n[bold red]Falha no protocolo.[/bold red]")
         console.print(f"  Erro: {result.error}")
+        if result.error_code in {"grounding_required", "revisao_humana_obrigatoria"}:
+            console.print(
+                "  [dim]Use --override-grounding --reason \"...\" (mín. 20 caracteres) para "
+                "protocolar mesmo assim — fica registrado em auditoria.[/dim]"
+            )
         if result.audit_entry_ids:
             console.print(f"  [dim]Audit entries: {len(result.audit_entry_ids)}[/dim]")
         raise typer.Exit(code=1)
@@ -2869,7 +2996,18 @@ def web(
     setup_logging(log_level=os.environ.get("JURIS_LOG_LEVEL", "INFO"))
 
     console.print(f"[green]Juris web:[/green] http://{host}:{port}")
-    uvicorn.run("juris.web.app:app", host=host, port=port, reload=reload, access_log=access_log)
+    # ws_ping_interval/timeout > uvicorn defaults (20s/20s): atrás de Cloudflare Tunnel +
+    # rede residencial, o default derrubava o WS do relay agente↔nuvem ~100x/dia
+    # ("keepalive ping timeout"). Espelha ping_interval/timeout do cliente em local_agent.py.
+    uvicorn.run(
+        "juris.web.app:app",
+        host=host,
+        port=port,
+        reload=reload,
+        access_log=access_log,
+        ws_ping_interval=25.0,
+        ws_ping_timeout=75.0,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -2893,7 +3031,7 @@ def demo(
     cli_cloud: str | None = typer.Option(
         None,
         "--cli-cloud",
-        help="Usar assinatura via CLI cloud para rascunho-pesquisa: claude | codex",
+        help="Usar assinatura via Claude CLI para rascunho-pesquisa: claude",
     ),
     cli_model: str = typer.Option(
         "haiku",
@@ -2962,8 +3100,8 @@ def demo(
     is_demo_mode = derive_demo_mode(source_mode)
 
     if cli_cloud is not None:
-        if cli_cloud not in {"claude", "codex"}:
-            console.print("[red]--cli-cloud inválido. Opções: claude, codex.[/red]")
+        if cli_cloud != "claude":
+            console.print("[red]--cli-cloud inválido. Opção segura disponível: claude.[/red]")
             raise typer.Exit(code=1)
         if cloud:
             console.print("[red]Use apenas um backend cloud: --cloud ou --cli-cloud.[/red]")
@@ -3041,13 +3179,9 @@ def demo(
     # Set up LLM (mirrors `draft` command)
     llm: AbstractLLM
     if cli_cloud is not None:
-        from typing import cast
+        from juris.llm.local_cli import LocalCliLLM
 
-        from juris.llm.local_cli import CliCloudProvider, LocalCliLLM
-
-        model = cli_model if cli_cloud == "claude" else None
-        # cli_cloud já validado ∈ {claude, codex} acima; cast satisfaz o Literal do provider.
-        llm = LocalCliLLM(provider=cast(CliCloudProvider, cli_cloud), model=model)
+        llm = LocalCliLLM(provider="claude", model=cli_model)
         contexto = "anonimizado" if anonimizado else "sem PII"
         console.print(f"[dim]LLM: {llm.model_name} (cloud via CLI; {contexto})[/dim]")
         if anonimizado and not is_demo_mode:
@@ -3367,7 +3501,7 @@ def pilot_preflight(
     cli_cloud: str | None = typer.Option(
         None,
         "--cli-cloud",
-        help="Conta uma assinatura CLI cloud como provedor para sessão fixture sem PII: claude | codex.",
+        help="Conta a assinatura Claude CLI como provedor para sessão fixture sem PII.",
     ),
     live: bool = typer.Option(
         False,
@@ -3390,8 +3524,8 @@ def pilot_preflight(
 
     from juris.pilot.preflight import run_preflight
 
-    if cli_cloud is not None and cli_cloud not in {"claude", "codex"}:
-        console.print("[red]--cli-cloud inválido. Opções: claude, codex.[/red]")
+    if cli_cloud is not None and cli_cloud != "claude":
+        console.print("[red]--cli-cloud inválido. Opção segura disponível: claude.[/red]")
         raise typer.Exit(code=1)
 
     out_path = FilePath(out_root).expanduser() if out_root else None

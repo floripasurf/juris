@@ -132,6 +132,23 @@ def test_preflight_cli_cloud_provider_can_satisfy_fixture_llm_check(monkeypatch)
     assert "CLI cloud claude disponível" in result.output
 
 
+def test_preflight_rejects_codex_cli(monkeypatch):
+    monkeypatch.setattr("juris.pilot.preflight.shutil.which", lambda command: f"/usr/bin/{command}")
+    result = runner.invoke(
+        app,
+        [
+            "pilot",
+            "preflight",
+            "--fixture-only",
+            "--skip-ollama-probe",
+            "--cli-cloud",
+            "codex",
+        ],
+    )
+    assert result.exit_code == 1, result.output
+    assert "Opção segura disponível: claude" in result.output
+
+
 def test_preflight_json_payload_shape_when_passing(tmp_path, monkeypatch):
     db = tmp_path / "rep.db"
     monkeypatch.setenv(ENV_REPERTORY_PATH, str(db))

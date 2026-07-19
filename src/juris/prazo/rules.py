@@ -38,6 +38,13 @@ class PrazoRule:
     tipo_acao: TipoAcao
     base_legal: str
     fatal: bool = True  # If True, missing this deadline = preclusão
+    # If True, this rule is eligible for prazo em dobro (arts. 180/183/186 CPC)
+    # when the caller declares a parte_representada. False for rules that are
+    # themselves a "prazo próprio" (exception under the §§2º/4º) or governed by
+    # an incompatible regime (e.g. art. 523 cumprimento — Fazenda follows arts.
+    # 534-535 instead) or CLT rules (dobra is a CPC benefit, out of scope for
+    # Justiça do Trabalho).
+    admite_dobro: bool = True
 
 
 # CPC-based deadline rules (most common in cível)
@@ -120,6 +127,7 @@ CPC_RULES: list[PrazoRule] = [
         dias_uteis=15,
         tipo_acao=TipoAcao.PAGAR,
         base_legal="Art. 523 CPC",
+        admite_dobro=False,  # Regime da Fazenda é outro (arts. 534-535 CPC), não este fluxo comum
     ),
     PrazoRule(
         nome="Impugnação ao cumprimento",
@@ -138,6 +146,7 @@ CPC_RULES: list[PrazoRule] = [
         tipo_acao=TipoAcao.CUMPRIR,
         base_legal="Art. 297 CPC",
         fatal=True,
+        admite_dobro=False,  # Prazo próprio de cumprimento; dobra não se estende — direção segura
     ),
     # === Execução — embargos ===
     PrazoRule(
@@ -174,10 +183,12 @@ CPC_RULES: list[PrazoRule] = [
         tipo_acao=TipoAcao.MANIFESTAR,
         base_legal="Art. 218 §3º CPC (prazo mínimo)",
         fatal=True,
+        admite_dobro=False,  # Prazo fixado pelo juiz = prazo próprio, exceção expressa dos §§2º/4º
     ),
 ]
 
-# CLT-specific rules (Justiça do Trabalho)
+# CLT-specific rules (Justiça do Trabalho). Prazo em dobro (arts. 180/183/186 CPC)
+# is a CPC benefit and does not extend to CLT rules — admite_dobro=False on all.
 CLT_RULES: list[PrazoRule] = [
     PrazoRule(
         nome="Contestação trabalhista",
@@ -186,6 +197,7 @@ CLT_RULES: list[PrazoRule] = [
         dias_uteis=15,
         tipo_acao=TipoAcao.CONTESTAR,
         base_legal="Art. 847 CLT c/c Reforma Trabalhista",
+        admite_dobro=False,
     ),
     PrazoRule(
         nome="Recurso ordinário trabalhista",
@@ -194,6 +206,7 @@ CLT_RULES: list[PrazoRule] = [
         dias_uteis=8,
         tipo_acao=TipoAcao.RECORRER,
         base_legal="Art. 895 CLT",
+        admite_dobro=False,
     ),
     PrazoRule(
         nome="Embargos de declaração trabalhista",
@@ -202,6 +215,7 @@ CLT_RULES: list[PrazoRule] = [
         dias_uteis=5,
         tipo_acao=TipoAcao.EMBARGAR,
         base_legal="Art. 897-A CLT",
+        admite_dobro=False,
     ),
 ]
 

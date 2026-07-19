@@ -9,6 +9,7 @@ from pathlib import Path
 from juris.agents.analyzer import AnalysisResult, ProcessoAnalysis
 from juris.agents.citation_verifier import GroundingReport, GroundingStatus
 from juris.agents.drafter import DraftResult
+from juris.agents.estrategia import EstrategiaResult, LinhaArgumentativa
 from juris.demo.artifacts import write_artifacts
 from juris.demo.disclaimer import DEMO_BANNER, DISCLAIMER_FOOTER
 from juris.demo.orchestrator import DemoRequest, DemoResult, SourceMode
@@ -271,6 +272,33 @@ class TestWriteArtifactsHappyPath:
         assert manifest["draft"]["grounding_status"] == "blocked"
         assert manifest["draft"]["grounding_failed_citation_ids"] == ["inventado"]
         assert manifest["draft"]["grounding_spurious_citations"] == ["REsp 123456"]
+
+    def test_run_manifest_defaults_revisao_humana_obrigatoria_to_false(self, tmp_path: Path) -> None:
+        """No estrategia ran (or none was needed) — the filing gate must not require
+        an override for a reason the draft never actually flagged."""
+        result = _build_result(tmp_path)
+        assert result.draft is not None
+        assert result.draft.estrategia is None
+
+        write_artifacts(result)
+        manifest = json.loads((result.out_dir / "run-manifest.json").read_text())
+
+        assert manifest["draft"]["revisao_humana_obrigatoria"] is False
+
+    def test_run_manifest_records_revisao_humana_obrigatoria_from_estrategia(self, tmp_path: Path) -> None:
+        result = _build_result(tmp_path)
+        assert result.draft is not None
+        result.draft.estrategia = EstrategiaResult(
+            escolhida=LinhaArgumentativa(tese="Tese principal", confianca="baixa"),
+            alternativas=[],
+            avisos_deontologicos=[],
+            revisao_humana_obrigatoria=True,
+        )
+
+        write_artifacts(result)
+        manifest = json.loads((result.out_dir / "run-manifest.json").read_text())
+
+        assert manifest["draft"]["revisao_humana_obrigatoria"] is True
 
 
 class TestDemoModeGuards:

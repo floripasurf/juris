@@ -26,7 +26,25 @@ logger = get_logger(__name__)
 
 _PUBLIC_RENDER_ERROR = "Render failed: falha operacional ao gerar o PDF."
 _PUBLIC_SIGNING_ERROR = "Signing failed: falha operacional ao assinar o PDF."
-_PUBLIC_SUBMIT_ERROR = "MNI filing failed: falha operacional ao protocolar no MNI."
+_DELIVERY_UNCERTAIN_ERROR = (
+    "Falha na entrega ao tribunal. ATENÇÃO: a petição PODE ter sido protocolada — "
+    "confira o processo no tribunal antes de tentar novamente."
+)
+_DELIVERY_NOT_STARTED_ERROR = (
+    "Falha antes do envio ao tribunal; nenhuma tentativa de protocolo foi iniciada."
+)
+_GROUNDING_REQUIRED_ERROR = (
+    "Protocolo bloqueado: o grounding das citações desta minuta não foi verificado "
+    "(ou o texto mudou desde a verificação). Gere um artefato verificado ou registre "
+    "uma justificativa para protocolar mesmo assim — fica em auditoria."
+)
+_REVISAO_HUMANA_OBRIGATORIA_ERROR = (
+    "Protocolo bloqueado: esta minuta exige revisão humana obrigatória antes de "
+    "protocolar. Revise o rascunho ou registre uma justificativa para protocolar "
+    "mesmo assim — fica em auditoria."
+)
+_MIN_OVERRIDE_REASON_LEN = 20
+_PROTOCOLABLE_OUTPUT_MODE = "minuta-sugerida"
 
 
 def _clock_skew_probe_url(tribunal: str) -> str | None:
@@ -49,6 +67,31 @@ def _clock_skew_probe_url(tribunal: str) -> str | None:
 
 
 @dataclass(frozen=True, slots=True)
+class GroundingEvidence:
+    """Veredito de grounding transportado até o ato de protocolo.
+
+    ``numero_cnj``/``tribunal`` binds the evidence to the exact processo it was
+    verified for: a verified hash match alone is not enough to authorize
+    filing, because that same markdown/hash could be resubmitted against a
+    different processo. ``output_mode`` records whether the artifact is a
+    protocolable ``"minuta-sugerida"`` or a ``"rascunho-pesquisa"`` research
+    memo (never auto-protocolable, regardless of grounding status). All four extra
+    fields default to ``""`` for compatibility with manifests written before
+    this binding existed — an old manifest fails the gate on those empty
+    fields and requires an explicit override, same as any other unverified
+    evidence.
+    """
+
+    status: str
+    draft_sha256: str
+    revisao_humana_obrigatoria: bool = False
+    numero_cnj: str = ""
+    tribunal: str = ""
+    tipo_peticao: str = ""
+    output_mode: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class FilingRequest:
     """Input for a filing operation."""
 
@@ -62,6 +105,9 @@ class FilingRequest:
     skip_preflight: bool = False
     dry_run: bool = False
     prazo_override: str | None = None
+    grounding: GroundingEvidence | None = None
+    grounding_override: bool = False
+    grounding_override_reason: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,7 +140,14 @@ class ConsentSummary:
 
 @dataclass(frozen=True, slots=True)
 class FilingResult:
-    """Result of a filing operation."""
+    """Result of a filing operation.
+
+    ``error_code`` is ``None`` for every step except MNI preparation/delivery:
+    a failure before the submit call gets ``"delivery_not_started"``; when the
+    entrega itself raises after the submit began, ``error_code`` is set to
+    ``"delivery_uncertain"`` because the tribunal may already have received the
+    petition — the UI must not offer an immediate resend in that case.
+    """
 
     success: bool
     receipt: FilingReceipt | None
@@ -103,6 +156,7 @@ class FilingResult:
     audit_entry_ids: list[str]
     chain_of_custody: ChainOfCustody | None = None
     error: str | None = None
+    error_code: str | None = None
 
 
 def _sha256_hex(data: bytes | str) -> str:
@@ -134,8 +188,71 @@ def _public_error_for_step(step: str) -> str:
     return {
         "render": _PUBLIC_RENDER_ERROR,
         "sign": _PUBLIC_SIGNING_ERROR,
-        "submit": _PUBLIC_SUBMIT_ERROR,
     }[step]
+
+
+def _digits_only(value: str) -> str:
+    """Strip everything but digits, for CNJ comparison independent of formatting."""
+    return "".join(ch for ch in value if ch.isdigit())
+
+
+def _grounding_failure_code(grounding: GroundingEvidence | None, request: FilingRequest) -> str | None:
+    """``None`` when grounding is satisfied; otherwise the blocking error_code.
+
+    Passes only when the evidence is ``"verified"``, its ``draft_sha256`` matches
+    the markdown actually being filed (any edit since verification invalidates
+    it), it names the SAME processo and petition type as ``request`` (``numero_cnj`` compared
+    digits-only, ``tribunal`` compared casefolded — evidence verified for one
+    processo must never authorize protocol into another), its ``output_mode``
+    is ``"minuta-sugerida"`` (a ``"rascunho-pesquisa"`` research memo is never
+    protocolable, no matter how well-grounded), and human review isn't
+    mandatory. ``revisao_humana_obrigatoria`` gets its own error_code only when
+    it's the sole problem — every other failure (missing evidence, wrong
+    status, hash mismatch, processo mismatch, non-protocolable output_mode)
+    reports as the generic ``"grounding_required"``; only the internal log
+    line distinguishes a processo mismatch (``grounding_processo_divergente``)
+    from a non-protocolable artifact (``grounding_output_mode_nao_protocolavel``).
+    """
+    if grounding is None:
+        return "grounding_required"
+    if grounding.status != "verified" or grounding.draft_sha256 != _sha256_hex(request.draft_markdown):
+        return "grounding_required"
+
+    evidence_cnj = _digits_only(grounding.numero_cnj)
+    evidence_tribunal = grounding.tribunal.strip().casefold()
+    request_cnj = _digits_only(request.numero_cnj)
+    request_tribunal = request.tribunal.strip().casefold()
+    evidence_tipo_peticao = grounding.tipo_peticao.strip().casefold()
+    request_tipo_peticao = request.tipo_peticao.strip().casefold()
+    processo_diverge = (
+        not evidence_cnj
+        or not evidence_tribunal
+        or evidence_cnj != request_cnj
+        or evidence_tribunal != request_tribunal
+        or not evidence_tipo_peticao
+        or evidence_tipo_peticao != request_tipo_peticao
+    )
+    if processo_diverge:
+        logger.warning(
+            "grounding_processo_divergente",
+            evidence_numero_cnj=grounding.numero_cnj,
+            evidence_tribunal=grounding.tribunal,
+            evidence_tipo_peticao=grounding.tipo_peticao,
+            request_numero_cnj=request.numero_cnj,
+            request_tribunal=request.tribunal,
+            request_tipo_peticao=request.tipo_peticao,
+        )
+        return "grounding_required"
+
+    if grounding.output_mode != _PROTOCOLABLE_OUTPUT_MODE:
+        logger.warning(
+            "grounding_output_mode_nao_protocolavel",
+            output_mode=grounding.output_mode or "unknown",
+            numero_cnj=request.numero_cnj,
+        )
+        return "grounding_required"
+
+    return "revisao_humana_obrigatoria" if grounding.revisao_humana_obrigatoria else None
 
 
 class FilingOrchestrator:
@@ -168,6 +285,50 @@ class FilingOrchestrator:
             FilingResult with success status, receipt, and audit trail.
         """
         audit_ids: list[str] = []
+
+        # 0. Grounding gate — mandatory on every path (dry-run included);
+        # skip_preflight does NOT skip this. Reusing a stale or unverified
+        # draft requires an explicit, audited lawyer override.
+        failure_code = _grounding_failure_code(request.grounding, request)
+        if failure_code is not None:
+            override_reason = request.grounding_override_reason.strip()
+            if request.grounding_override and len(override_reason) >= _MIN_OVERRIDE_REASON_LEN:
+                entry = self._audit.log(
+                    "filing.grounding_override",
+                    actor="lawyer",
+                    details={
+                        "reason": override_reason,
+                        "blocked_reason": failure_code,
+                        "grounding_status": request.grounding.status if request.grounding else None,
+                    },
+                    processo_cnj=request.numero_cnj,
+                )
+                audit_ids.append(entry.entry_id)
+            else:
+                public_error = (
+                    _REVISAO_HUMANA_OBRIGATORIA_ERROR
+                    if failure_code == "revisao_humana_obrigatoria"
+                    else _GROUNDING_REQUIRED_ERROR
+                )
+                entry = self._audit.log(
+                    "filing.blocked_ungrounded",
+                    actor=f"user:{request.cpf}",
+                    details={
+                        "error_code": failure_code,
+                        "grounding_status": request.grounding.status if request.grounding else None,
+                        "override_attempted": request.grounding_override,
+                    },
+                    processo_cnj=request.numero_cnj,
+                )
+                return FilingResult(
+                    success=False,
+                    receipt=None,
+                    signing_result=None,
+                    preflight=None,
+                    audit_entry_ids=[entry.entry_id],
+                    error=public_error,
+                    error_code=failure_code,
+                )
 
         # 1. Render Markdown → PDF
         try:
@@ -378,44 +539,33 @@ class FilingOrchestrator:
         )
         audit_ids.append(entry.entry_id)
 
-        # 6. Prepare receipt storage
-        pending_path = self._receipt_store.prepare(
-            numero_cnj=request.numero_cnj,
-            signed_pdf=signing_result.signed_pdf,
-            render_hash=render_result.pdf_hash,
-            tribunal=request.tribunal,
-            tipo_documento=request.tipo_documento,
-        )
-
-        # 7. File via MNI
+        # 6. Prepare MNI client. Client/WSDL construction happens before any
+        # submit call; a failure here is definitively safe to retry and must
+        # never be reported as an indeterminate delivery.
         try:
             mni_client = self._mni_client_factory(request.tribunal, self._mni_auth)
             from juris.mni.operations.peticionamento import entregar_manifestacao
 
-            # Compute submitted payload hash before sending
             submitted_payload_hash = _sha256_hex(signing_result.signed_pdf)
-
-            receipt = entregar_manifestacao(
-                client=mni_client,
-                id_manifestante=request.cpf,
-                senha_manifestante=request.senha,
-                numero_processo=request.numero_cnj,
-                signed_pdf_bytes=signing_result.signed_pdf,
+            pending_path = self._receipt_store.prepare(
+                numero_cnj=request.numero_cnj,
+                signed_pdf=signing_result.signed_pdf,
+                render_hash=render_result.pdf_hash,
+                tribunal=request.tribunal,
                 tipo_documento=request.tipo_documento,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 — no submit has started
             logger.warning(
-                "filing_submit_error",
+                "filing_delivery_not_started",
                 numero_cnj=request.numero_cnj,
                 tribunal=request.tribunal,
                 error=safe_error_text(exc),
                 exception_type=exc.__class__.__name__,
             )
-            public_error = _public_error_for_step("submit")
             entry = self._audit.log(
-                "filing.submit_error",
+                "filing.delivery_not_started",
                 actor=f"user:{request.cpf}",
-                details={"error": public_error, "pending_receipt": True},
+                details={"error": _DELIVERY_NOT_STARTED_ERROR, "pending_receipt": False},
                 processo_cnj=request.numero_cnj,
             )
             audit_ids.append(entry.entry_id)
@@ -425,7 +575,43 @@ class FilingOrchestrator:
                 signing_result=signing_result,
                 preflight=preflight,
                 audit_entry_ids=audit_ids,
-                error=public_error,
+                error=_DELIVERY_NOT_STARTED_ERROR,
+                error_code="delivery_not_started",
+            )
+
+        # 7. Only this call can make delivery indeterminate.
+        try:
+            receipt = entregar_manifestacao(
+                client=mni_client,
+                id_manifestante=request.cpf,
+                senha_manifestante=request.senha,
+                numero_processo=request.numero_cnj,
+                signed_pdf_bytes=signing_result.signed_pdf,
+                tipo_documento=request.tipo_documento,
+            )
+        except Exception as exc:  # noqa: BLE001 — after submit begins, outcome is indeterminate
+            logger.warning(
+                "filing_delivery_uncertain",
+                numero_cnj=request.numero_cnj,
+                tribunal=request.tribunal,
+                error=safe_error_text(exc),
+                exception_type=exc.__class__.__name__,
+            )
+            entry = self._audit.log(
+                "filing.delivery_uncertain",
+                actor=f"user:{request.cpf}",
+                details={"error": _DELIVERY_UNCERTAIN_ERROR, "pending_receipt": True},
+                processo_cnj=request.numero_cnj,
+            )
+            audit_ids.append(entry.entry_id)
+            return FilingResult(
+                success=False,
+                receipt=None,
+                signing_result=signing_result,
+                preflight=preflight,
+                audit_entry_ids=audit_ids,
+                error=_DELIVERY_UNCERTAIN_ERROR,
+                error_code="delivery_uncertain",
             )
 
         entry = self._audit.log(

@@ -97,6 +97,14 @@ def test_index_renders_local_ui() -> None:
     assert "escHtml" in response.text  # untrusted data escaped before innerHTML (XSS)
     assert "data-artifact-open" in response.text  # Mesa: recent artifacts reopen in-browser
     assert "openArtifact" in response.text
+    # Task 3: grounding gate 409 → override panel (not a plain error toast)
+    assert "renderGroundingBlocked" in response.text
+    assert "grounding-blocked-notice" in response.text
+    assert "Documento externo (não gerado pela Causia)" in response.text
+    assert "fl_override_reason" in response.text
+    assert "filingSelectedArtifact" in response.text
+    # Fix A: rascunho-pesquisa is never protocolable — override panel says so
+    assert "Rascunho de pesquisa não é minuta protocolável" in response.text
     assert "copiar caminho" not in response.text  # server filesystem path is useless in-browser
 
 
@@ -440,6 +448,31 @@ class _FailingFilingService:
         raise RuntimeError("falha interna em /var/private/juris-token com token=abc123 e pin=1234")
 
 
+class _GroundingBlockedFilingService:
+    """Fake mirroring what FilingOrchestrator.file() returns when its grounding
+    gate blocks — used to prove the endpoint's 409 wiring without a real
+    orchestrator (the gate itself is covered by test_filing_grounding_gate.py)."""
+
+    def __init__(self, error_code: str, message: str) -> None:
+        self._error_code = error_code
+        self._message = message
+        self.calls: list[tuple[object, str | None]] = []
+
+    async def file(self, request, *, pin=None):
+        from juris.signing.filing import FilingResult
+
+        self.calls.append((request, pin))
+        return FilingResult(
+            success=False,
+            receipt=None,
+            signing_result=None,
+            preflight=None,
+            audit_entry_ids=["audit-blocked"],
+            error=self._message,
+            error_code=self._error_code,
+        )
+
+
 def test_filing_status_endpoint(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("JURIS_HOME", str(tmp_path))  # public tenant → <home>/filings
     (tmp_path / "filings" / "cnj" / "20260630_pending").mkdir(parents=True)
@@ -653,11 +686,23 @@ def test_filing_flow_uses_loaded_artifact_for_dry_run_and_submit(monkeypatch, tm
     loaded_draft = loaded.json()["content"]
     dry_run = client.post(
         "/api/filing/dry-run",
-        json=_filing_payload(draft_markdown=loaded_draft, review_confirmed=False, consent=False),
+        json=_filing_payload(
+            draft_markdown=loaded_draft,
+            output_dir=artifact["output_dir"],
+            artifact_name=artifact["artifact_name"],
+            review_confirmed=False,
+            consent=False,
+        ),
     )
     submit = client.post(
         "/api/filing/submit",
-        json=_filing_payload(draft_markdown=loaded_draft, review_confirmed=True, consent=True),
+        json=_filing_payload(
+            draft_markdown=loaded_draft,
+            output_dir=artifact["output_dir"],
+            artifact_name=artifact["artifact_name"],
+            review_confirmed=True,
+            consent=True,
+        ),
     )
 
     assert listed.status_code == 200
@@ -675,6 +720,78 @@ def test_filing_flow_uses_loaded_artifact_for_dry_run_and_submit(monkeypatch, tm
     assert dry_request.draft_markdown == draft
     assert submit_request.draft_markdown == draft
     assert submit_pin == "1234"
+    # The gate's evidence is resolved server-side from the manifest the artifact
+    # came from — not trusted from the client — for both dry-run and submit.
+    assert dry_request.grounding is not None
+    assert dry_request.grounding.status == "verified"
+    assert dry_request.grounding.draft_sha256 == digest
+    assert submit_request.grounding == dry_request.grounding
+
+
+def test_filing_submit_without_artifact_selection_has_no_grounding_evidence(monkeypatch) -> None:
+    """Freeform pasted markdown (no output_dir/artifact_name) is 'documento externo' —
+    the endpoint must not fabricate evidence for it."""
+    import juris.signing.filing_service as filing_service
+
+    service = _FakeFilingService()
+    monkeypatch.setattr(filing_service, "get_filing_service", lambda tenant_id="public", **kwargs: service)
+
+    response = client.post("/api/filing/submit", json=_filing_payload())
+
+    assert response.status_code == 200, response.text
+    request, _pin = service.calls[0]
+    assert request.grounding is None
+
+
+def test_filing_submit_forwards_override_fields(monkeypatch) -> None:
+    import juris.signing.filing_service as filing_service
+
+    service = _FakeFilingService()
+    monkeypatch.setattr(filing_service, "get_filing_service", lambda tenant_id="public", **kwargs: service)
+
+    response = client.post(
+        "/api/filing/submit",
+        json=_filing_payload(
+            override_grounding=True,
+            override_reason="Documento externo revisado manualmente pelo advogado.",
+        ),
+    )
+
+    assert response.status_code == 200, response.text
+    request, _pin = service.calls[0]
+    assert request.grounding_override is True
+    assert request.grounding_override_reason == "Documento externo revisado manualmente pelo advogado."
+
+
+def test_filing_submit_returns_409_with_structured_detail_when_grounding_blocked(monkeypatch) -> None:
+    import juris.signing.filing_service as filing_service
+
+    service = _GroundingBlockedFilingService(
+        "grounding_required", "Protocolo bloqueado: grounding não verificado."
+    )
+    monkeypatch.setattr(filing_service, "get_filing_service", lambda tenant_id="public", **kwargs: service)
+
+    response = client.post("/api/filing/submit", json=_filing_payload())
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "grounding_required"
+    assert "grounding" in response.json()["detail"]["message"].lower()
+
+
+def test_filing_dry_run_returns_409_when_revisao_humana_obrigatoria(monkeypatch) -> None:
+    import juris.signing.filing_service as filing_service
+
+    service = _GroundingBlockedFilingService(
+        "revisao_humana_obrigatoria", "Revisão humana obrigatória antes de protocolar."
+    )
+    monkeypatch.setattr(filing_service, "get_filing_service", lambda tenant_id="public", **kwargs: service)
+
+    response = client.post(
+        "/api/filing/dry-run", json=_filing_payload(review_confirmed=False, consent=False)
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "revisao_humana_obrigatoria"
 
 
 def test_filing_dry_run_uses_service_without_consent_requirement(monkeypatch) -> None:
@@ -928,6 +1045,8 @@ def test_pilot_feedback_endpoints_are_tenant_scoped(monkeypatch, tmp_path) -> No
     comparison = client.get("/api/pilot-feedback/comparison")
     exported = client.get("/api/pilot-feedback/export", params={"format": "csv"})
     report = client.get("/api/pilot-feedback/export", params={"format": "md"})
+    observability = client.get("/api/pilot-observability")
+    events = client.get("/api/operational-events")
 
     assert created.status_code == 201, created.text
     assert created.json()["feedback"]["time_saved_minutes"] == 30
@@ -947,6 +1066,44 @@ def test_pilot_feedback_endpoints_are_tenant_scoped(monkeypatch, tmp_path) -> No
     assert str(tmp_path) not in exported.text
     assert report.status_code == 200
     assert "# Relatório do Piloto Juris" in report.text
+    assert observability.status_code == 200
+    assert observability.json()["value_gate"]["real_cases"] == 1
+    assert observability.json()["operational_events"]["total_events"] == 0
+    assert events.status_code == 200
+    assert events.json()["events"] == []
+
+
+def test_demo_operational_error_is_recorded_for_pilot_support(monkeypatch, tmp_path) -> None:
+    app_module = importlib.import_module("juris.web.app")
+    from juris.web.demo_service import DemoRunError
+
+    monkeypatch.setattr(app_module, "_out_root", lambda: tmp_path)
+
+    async def fail_demo(_request):
+        raise DemoRunError(
+            "Falha operacional segura.",
+            code="agent_mni_failed",
+            internal_detail="token=never-expose " + str(tmp_path / "private"),
+        )
+
+    monkeypatch.setattr(app_module, "execute_demo_run", fail_demo)
+    response = client.post(
+        "/api/demo-runs",
+        json={"numero_cnj": "0001234-56.2026.8.13.0001", "tipo": "manifestacao"},
+    )
+    events = client.get("/api/operational-events")
+    observability = client.get("/api/pilot-observability")
+
+    assert response.status_code == 400
+    assert "never-expose" not in response.text
+    assert events.status_code == 200
+    event = events.json()["events"][0]
+    assert event["operation"] == "demo.run"
+    assert event["code"] == "agent_mni_failed"
+    assert event["numero_cnj"] == "0001234-56.2026.8.13.0001"
+    assert "never-expose" not in events.text
+    assert str(tmp_path) not in events.text
+    assert observability.json()["operational_events"]["total_events"] == 1
 
 
 def test_corpus_queue_endpoints(monkeypatch, tmp_path) -> None:
@@ -1145,7 +1302,7 @@ def test_create_demo_run_executes_real_service_path(monkeypatch, tmp_path: Path)
         artifact_path.write_text("# Rascunho real\n\nConteúdo gerado.", encoding="utf-8")
         return {"rascunho-pesquisa.md": "sha-real"}
 
-    monkeypatch.setattr(demo_service, "_build_llm", lambda *, use_cloud: object())
+    monkeypatch.setattr(demo_service, "_build_llm", lambda *, use_cloud, tenant_id=None: object())
     monkeypatch.setattr(demo_service, "_build_repertory", lambda _path: object())
     monkeypatch.setattr(demo_service, "load_processo", lambda *args, **kwargs: object())
     monkeypatch.setattr(demo_service, "run_demo", fake_run_demo)
@@ -1536,7 +1693,7 @@ def test_demo_run_remote_agent_failure_is_controlled_not_500(monkeypatch, tmp_pa
     def _boom(*a, **k):
         raise RuntimeError("tenant 'x' sem binding de agente próprio (fail-closed)")
 
-    monkeypatch.setattr(demo_service, "_build_llm", lambda *, use_cloud: object())
+    monkeypatch.setattr(demo_service, "_build_llm", lambda *, use_cloud, tenant_id=None: object())
     monkeypatch.setattr(demo_service, "_resolve_repertory_for_source", lambda _is_demo_mode: tmp_path / "repertory.db")
     monkeypatch.setattr(demo_service, "_build_repertory", lambda _p: object())
     monkeypatch.setattr(demo_service, "load_processo", _boom)

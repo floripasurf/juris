@@ -82,6 +82,80 @@ def promote_tenant(
     console.print("  A chave existente continua válida; o purge automático não toca mais este tenant.")
 
 
+@tenant_app.command("alert-emails")
+def alert_emails_cmd(
+    tenant_id: str = typer.Argument(..., help="Tenant cujos destinatários de alerta de prazo serão geridos."),
+    add: str | None = typer.Option(None, "--add", help="Adiciona um e-mail à lista de destinatários."),
+    remove: str | None = typer.Option(None, "--remove", help="Remove um e-mail da lista de destinatários."),
+    list_recipients: bool = typer.Option(
+        False,
+        "--list",
+        help=(
+            "Lista os destinatários atuais. Implícito quando --add/--remove não são usados; "
+            "combine com --add/--remove para também imprimir a lista completa após a mutação."
+        ),
+    ),
+) -> None:
+    """Manage a tenant's deadline-alert e-mail recipients (tenants.json).
+
+    A legacy string entry (bare API-key hash) is migrated to the structured
+    format on ``--add``/``--remove``, preserving the existing key hash so
+    already-issued API keys keep authenticating.
+    """
+    from juris.web.trial_access import add_alert_email, alert_emails_for_tenant, remove_alert_email
+
+    mutated = add is not None or remove is not None
+    try:
+        if add:
+            emails = add_alert_email(tenant_id, add)
+            console.print(f"[green]Adicionado.[/green] Destinatários de '{tenant_id}': {len(emails)}")
+        elif remove:
+            emails = remove_alert_email(tenant_id, remove)
+            console.print(f"[green]Removido.[/green] Destinatários de '{tenant_id}': {len(emails)}")
+        else:
+            emails = alert_emails_for_tenant(tenant_id)
+    except (KeyError, ValueError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from None
+
+    # After a mutation, the terse confirmation above is enough unless --list was
+    # explicitly asked for; a bare (read-only) invocation always lists.
+    if mutated and not list_recipients:
+        return
+    if not emails:
+        console.print(f"[yellow]Nenhum destinatário configurado para '{tenant_id}'.[/yellow]")
+        return
+    for email in emails:
+        console.print(f"  {email}")
+
+
+@tenant_app.command("prazo-parte")
+def prazo_parte_cmd(
+    tenant_id: str = typer.Argument(..., help="Tenant cujo regime de prazo será consultado."),
+    set_value: str | None = typer.Option(
+        None,
+        "--set",
+        help="Define nenhuma, fazenda, mp ou defensoria. Sem --set, apenas consulta.",
+    ),
+) -> None:
+    """Manage the tenant default used for CPC deadline multipliers."""
+    from juris.web.trial_access import (
+        parte_representada_for_tenant,
+        set_parte_representada_for_tenant,
+    )
+
+    try:
+        value = (
+            parte_representada_for_tenant(tenant_id)
+            if set_value is None
+            else set_parte_representada_for_tenant(tenant_id, set_value)
+        )
+    except (KeyError, ValueError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from None
+    console.print(f"{tenant_id}: {value or 'nenhuma'}")
+
+
 @tenant_app.command("erase-data")
 def erase_data(
     tenant_id: str = typer.Argument(..., help="Tenant/escritório cujos dados serão apagados."),

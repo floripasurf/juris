@@ -391,7 +391,20 @@ class QdrantVectorStore(VectorStore):
         Payload gets ``uso`` (explicit ``chunk.uso``, else derived from
         ``source_type`` via ``resolve_uso`` — same fallback as ``LocalFTSStore``)
         and ``source_type`` so ``search()`` can filter on the uso axis (L2).
+
+        Raises:
+            ValueError: If any embedding is empty or an all-zero vector. Qdrant
+                has no NULL-embedding concept — unlike ``LocalFTSStore``, which
+                stores NULL for chunks ingested without an embedder and backfills
+                them later, a zero vector written here would sit silently in the
+                index and never get repaired. Ingestion without a real embedder
+                is therefore not supported on this store.
         """
+        for embedding in embeddings:
+            if not embedding or not any(embedding):
+                msg = "ingestão sem embedder não é suportada no Qdrant"
+                raise ValueError(msg)
+
         from qdrant_client.models import PointStruct
 
         client = self._get_client()
@@ -758,6 +771,45 @@ class LocalFTSStore(VectorStore):
         """Return the number of chunks that still need dense embeddings."""
         row = self._conn.execute("SELECT COUNT(*) FROM chunks WHERE embedding IS NULL").fetchone()
         return int(row[0] if row else 0)
+
+    def count_zero_embeddings(self) -> int:
+        """Count chunks whose stored embedding is a real all-zero vector.
+
+        Read-only — never mutates the database. Detects a legacy ingestion bug:
+        older code paths stored an all-zero vector (not NULL) as a placeholder
+        for "no embedder available", so ``missing_embedding_count()`` never saw
+        them as pending and they were never backfilled.
+
+        Returns:
+            Number of chunks with a non-NULL, all-zero embedding.
+        """
+        rows = self._conn.execute("SELECT embedding FROM chunks WHERE embedding IS NOT NULL").fetchall()
+        return sum(
+            1 for (blob,) in rows
+            if not any(_embedding_from_blob(blob))
+        )
+
+    def null_out_zero_embeddings(self) -> int:
+        """Repair legacy all-zero embeddings by nulling them out.
+
+        Mutates the database: sets ``embedding = NULL`` for every chunk whose
+        stored embedding is a real all-zero vector, so they are picked up by
+        ``missing_embedding_count()`` / ``fetch_chunks_missing_embeddings()`` and
+        get a real dense embedding on the next backfill pass.
+
+        Returns:
+            Number of chunks repaired.
+        """
+        rows = self._conn.execute("SELECT chunk_id, embedding FROM chunks WHERE embedding IS NOT NULL").fetchall()
+        zero_ids = [chunk_id for chunk_id, blob in rows if not any(_embedding_from_blob(blob))]
+        if not zero_ids:
+            return 0
+        self._conn.executemany(
+            "UPDATE chunks SET embedding = NULL WHERE chunk_id = ?",
+            [(chunk_id,) for chunk_id in zero_ids],
+        )
+        self._conn.commit()
+        return len(zero_ids)
 
     def fetch_chunks_missing_embeddings(self, *, limit: int = 100) -> list[tuple[str, str]]:
         """Return ``(chunk_id, text)`` pairs for dense-embedding backfill."""

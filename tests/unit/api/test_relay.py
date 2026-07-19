@@ -251,9 +251,11 @@ def test_run_relay_agent_appends_validated_tenant_query(monkeypatch) -> None:
         def __iter__(self):
             return iter(())
 
-    def fake_connect(url, *, additional_headers):  # noqa: ANN001, ANN202
+    def fake_connect(url, *, additional_headers, ping_interval, ping_timeout):  # noqa: ANN001, ANN202
         captured["url"] = url
         captured["headers"] = additional_headers
+        captured["ping_interval"] = ping_interval
+        captured["ping_timeout"] = ping_timeout
         return _FakeWS()
 
     monkeypatch.setattr("websockets.sync.client.connect", fake_connect)
@@ -262,6 +264,10 @@ def test_run_relay_agent_appends_validated_tenant_query(monkeypatch) -> None:
 
     assert captured["url"] == "wss://juris.example/ws/agent-relay?existing=1&tenant=escritorio-a"
     assert captured["headers"] == {"x-agent-token": "tok"}
+    # keepalive > defaults do websockets (20s/20s): evita "keepalive ping timeout" atrás de
+    # Cloudflare Tunnel + rede residencial (~100 quedas/dia em produção antes desta task).
+    assert captured["ping_interval"] == 25
+    assert captured["ping_timeout"] == 75
 
 
 def test_run_relay_agent_rejects_unsafe_tenant_before_connect(monkeypatch) -> None:

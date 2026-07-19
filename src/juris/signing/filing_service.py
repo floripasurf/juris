@@ -23,11 +23,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 from juris.api.ws_schemas import AgentRequest, AgentResponse
+from juris.core.observability import get_logger
 from juris.core.paths import juris_home
-from juris.signing.filing import ChainOfCustody, FilingRequest, FilingResult
+from juris.signing.filing import ChainOfCustody, FilingRequest, FilingResult, GroundingEvidence
 
 if TYPE_CHECKING:
     from juris.mni.operations.peticionamento import FilingReceipt
+
+logger = get_logger(__name__)
 
 _REMOTE_FILING_AGENT_ERROR = "Falha ao protocolar no agente local. Verifique credenciais, token e tribunal no agente."
 
@@ -159,6 +162,7 @@ def _custody_to_payload(result: FilingResult) -> dict[str, object]:
     return {
         "success": result.success,
         "error": result.error,
+        "error_code": result.error_code,
         "audit_entry_ids": list(result.audit_entry_ids),
         "chain_of_custody": (
             {
@@ -191,6 +195,7 @@ def _payload_to_result(payload: dict[str, object]) -> FilingResult:
     coc = payload.get("chain_of_custody")
     ids = payload.get("audit_entry_ids")
     error = payload.get("error")
+    error_code = payload.get("error_code")
     return FilingResult(
         success=bool(payload.get("success")),
         receipt=_receipt_from_payload(payload.get("receipt")),  # protocol metadata only
@@ -199,6 +204,7 @@ def _payload_to_result(payload: dict[str, object]) -> FilingResult:
         audit_entry_ids=list(ids) if isinstance(ids, list) else [],
         chain_of_custody=ChainOfCustody(**coc) if isinstance(coc, dict) else None,
         error=error if isinstance(error, str) else None,
+        error_code=error_code if isinstance(error_code, str) else None,
     )
 
 
@@ -223,6 +229,27 @@ def _receipt_from_payload(data: object) -> FilingReceipt | None:
     )
 
 
+def _grounding_to_payload(grounding: GroundingEvidence | None) -> dict[str, object] | None:
+    """Serialize the grounding veredict for the wire — the agent's orchestrator
+    runs the same gate (that's where signing happens), so it needs this evidence
+    exactly as resolved server-side; the agent must never re-derive it itself.
+
+    ``numero_cnj``/``tribunal``/``output_mode`` travel too — the agent-side
+    gate binds evidence to the processo it was verified for and to a
+    protocolable output_mode, same as the co-located gate."""
+    if grounding is None:
+        return None
+    return {
+        "status": grounding.status,
+        "draft_sha256": grounding.draft_sha256,
+        "revisao_humana_obrigatoria": grounding.revisao_humana_obrigatoria,
+        "numero_cnj": grounding.numero_cnj,
+        "tribunal": grounding.tribunal,
+        "tipo_peticao": grounding.tipo_peticao,
+        "output_mode": grounding.output_mode,
+    }
+
+
 class FilingTransport(Protocol):
     def send(self, request: AgentRequest) -> AgentResponse: ...
 
@@ -245,6 +272,9 @@ class RemoteFilingService(FilingService):
             "skip_preflight": request.skip_preflight,
             "dry_run": request.dry_run,
             "prazo_override": request.prazo_override,
+            "grounding": _grounding_to_payload(request.grounding),
+            "grounding_override": request.grounding_override,
+            "grounding_override_reason": request.grounding_override_reason,
         }
         agent_request = AgentRequest(
             request_id=uuid.uuid4().hex, tenant_id=self._tenant_id, operation="file", payload=payload
@@ -260,6 +290,27 @@ class RemoteFilingService(FilingService):
         return _payload_to_result(response.payload or {})
 
 
+def _grounding_from_payload(data: object) -> GroundingEvidence | None:
+    """Rebuild the grounding veredict at the agent. Missing/malformed data (an
+    older orchestrator, a relay not yet upgraded) becomes ``None`` — the gate
+    then requires an explicit override rather than silently trusting anything."""
+    if not isinstance(data, dict):
+        return None
+    status = data.get("status")
+    draft_sha256 = data.get("draft_sha256")
+    if not isinstance(status, str) or not isinstance(draft_sha256, str):
+        return None
+    return GroundingEvidence(
+        status=status,
+        draft_sha256=draft_sha256,
+        revisao_humana_obrigatoria=bool(data.get("revisao_humana_obrigatoria", False)),
+        numero_cnj=str(data.get("numero_cnj") or ""),
+        tribunal=str(data.get("tribunal") or ""),
+        tipo_peticao=str(data.get("tipo_peticao") or ""),
+        output_mode=str(data.get("output_mode") or ""),
+    )
+
+
 def build_filing_request(payload: dict[str, object], *, cpf: str, senha: str) -> FilingRequest:
     """Rebuild a FilingRequest at the agent, injecting the locally-resolved credentials."""
     return FilingRequest(
@@ -273,7 +324,44 @@ def build_filing_request(payload: dict[str, object], *, cpf: str, senha: str) ->
         skip_preflight=bool(payload.get("skip_preflight", False)),
         dry_run=bool(payload.get("dry_run", False)),
         prazo_override=payload.get("prazo_override"),  # type: ignore[arg-type]
+        grounding=_grounding_from_payload(payload.get("grounding")),
+        grounding_override=bool(payload.get("grounding_override", False)),
+        grounding_override_reason=str(payload.get("grounding_override_reason") or ""),
     )
+
+
+def _invalidate_grounding_for_reidentification(
+    payload: dict[str, object], *, tenant_id: str, numero_cnj: str
+) -> dict[str, object]:
+    """Downgrade grounding evidence to ``"unknown"`` when the draft it describes
+    was just rewritten by reidentification.
+
+    The evidence's ``draft_sha256`` was computed server-side over the
+    de-identified markdown (ADR-0016) — reidentification here rewrites
+    ``draft_markdown`` to the real, PII-bearing text *after* that hash was
+    taken, so it can never match again. The gate already fails closed on that
+    mismatch, but leaving the evidence's ``status`` as ``"verified"`` would let
+    a real hash-mismatch block look like a coincidence instead of an expected
+    consequence of this flag — this makes the degradation explicit and
+    observable (a structured warning + an honest ``status``) instead of an
+    implicit side effect.
+
+    TODO(design follow-up, out of scope for this branch): carry a second hash
+    computed over the reidentified/final text in the evidence itself, so
+    grounding can still be verified end-to-end when
+    ``JURIS_AGENT_DEID_READS=1`` instead of always requiring a manual override.
+    """
+    grounding = payload.get("grounding")
+    if not isinstance(grounding, dict) or grounding.get("status") == "unknown":
+        return payload
+    logger.warning(
+        "grounding_evidence_invalidated_by_deid_reads",
+        tenant_id=tenant_id,
+        numero_cnj=numero_cnj,
+    )
+    downgraded = dict(payload)
+    downgraded["grounding"] = {**grounding, "status": "unknown"}
+    return downgraded
 
 
 def _reidentify_agent_draft(payload: dict[str, object], *, tenant_id: str) -> dict[str, object]:
@@ -299,7 +387,7 @@ def _reidentify_agent_draft(payload: dict[str, object], *, tenant_id: str) -> di
         return payload
     restored = dict(payload)
     restored["draft_markdown"] = reidentify(draft_markdown, mapping)
-    return restored
+    return _invalidate_grounding_for_reidentification(restored, tenant_id=tenant_id, numero_cnj=str(numero_cnj))
 
 
 async def handle_file_request(

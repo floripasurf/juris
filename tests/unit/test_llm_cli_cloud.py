@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
+import os
 
 import pytest
 
@@ -35,6 +35,12 @@ def test_cli_cloud_adapter_passes_model_flag_when_set() -> None:
     assert command[-1] == "analise"  # prompt stays last
     assert stdin is None
     assert llm.model_name == "claude_cli_subscription:haiku"
+    assert "--safe-mode" in command
+    assert "--disable-slash-commands" in command
+    assert "--strict-mcp-config" in command
+    assert command[command.index("--mcp-config") + 1] == '{"mcpServers":{}}'
+    assert command[command.index("--setting-sources") + 1] == ""
+    assert command[command.index("--tools") + 1] == ""
 
 
 def test_cli_cloud_adapter_omits_model_flag_when_unset() -> None:
@@ -85,7 +91,7 @@ async def test_cli_cloud_adapter_accepts_structured_schema(monkeypatch: pytest.M
 
 
 @pytest.mark.asyncio
-async def test_cli_cloud_adapter_marks_invalid_structured_json(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_cli_cloud_adapter_rejects_invalid_structured_json(monkeypatch: pytest.MonkeyPatch) -> None:
     llm = LocalCliLLM(provider="claude")
 
     async def fake_run(command: list[str], *, stdin: str | None) -> str:
@@ -93,91 +99,88 @@ async def test_cli_cloud_adapter_marks_invalid_structured_json(monkeypatch: pyte
 
     monkeypatch.setattr(llm, "_run", fake_run)
 
-    response = await llm.complete("analise", schema={"type": "object"})
-
-    assert response.content == "not json"
-    assert response.structured is None
-    assert response.usage == {"structured_parse_failed": 1}
+    with pytest.raises(RuntimeError, match="schema"):
+        await llm.complete("analise", schema={"type": "object"})
 
 
 @pytest.mark.asyncio
-async def test_codex_output_file_is_read_and_cleaned_up(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    output_path = tmp_path / "codex-output.txt"
-    output_path.write_text("final answer\n", encoding="utf-8")
-    llm = LocalCliLLM(provider="codex")
+async def test_schema_raiz_lista_quando_esperado_objeto_levanta(monkeypatch: pytest.MonkeyPatch) -> None:
+    llm = LocalCliLLM(provider="claude")
 
-    class FakeProcess:
-        returncode = 0
+    async def fake_run(command: list[str], *, stdin: str | None) -> str:
+        return "[1,2,3]"
 
-        async def communicate(self, stdin: bytes | None) -> tuple[bytes, bytes]:
-            return b"stdout fallback", b""
+    monkeypatch.setattr(llm, "_run", fake_run)
 
-    async def fake_create_subprocess_exec(*command: str, **kwargs: object) -> FakeProcess:
-        return FakeProcess()
-
-    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
-
-    result = await llm._run(
-        ["codex", "exec", "--output-last-message", str(output_path), "-"],
-        stdin="prompt",
-    )
-
-    assert result == "final answer"
-    assert not output_path.exists()
-
-
-def test_codex_command_uses_current_exec_flags() -> None:
-    llm = LocalCliLLM(provider="codex")
-
-    command, stdin = llm._command_and_stdin(
-        prompt="responda ok",
-        system=None,
-        schema=None,
-        max_tokens=128,
-        temperature=0.0,
-    )
-
-    assert command[:4] == ["codex", "exec", "--sandbox", "read-only"]
-    assert "--ask-for-approval" not in command
-    assert "never" not in command
-    assert "--skip-git-repo-check" in command
-    assert "--ephemeral" in command
-    assert command[-1] == "-"
-    assert stdin == "responda ok"
+    with pytest.raises(RuntimeError, match="schema"):
+        await llm.complete("p", schema={"type": "object", "required": ["x"]})
 
 
 @pytest.mark.asyncio
-async def test_codex_output_file_is_cleaned_up_on_failure(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    output_path = tmp_path / "codex-output.txt"
-    output_path.write_text("partial answer\n", encoding="utf-8")
-    llm = LocalCliLLM(provider="codex")
+async def test_schema_json_valido_mas_estrutura_errada_levanta(monkeypatch: pytest.MonkeyPatch) -> None:
+    llm = LocalCliLLM(provider="claude")
 
-    class FakeProcess:
-        returncode = 2
+    async def fake_run(command: list[str], *, stdin: str | None) -> str:
+        return '{"outra_chave": 1}'
 
-        async def communicate(self, stdin: bytes | None) -> tuple[bytes, bytes]:
-            return b"", b"boom"
+    monkeypatch.setattr(llm, "_run", fake_run)
 
-    async def fake_create_subprocess_exec(*command: str, **kwargs: object) -> FakeProcess:
-        return FakeProcess()
-
-    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
-
-    with pytest.raises(RuntimeError, match="boom"):
-        await llm._run(
-            ["codex", "exec", "--output-last-message", str(output_path), "-"],
-            stdin="prompt",
+    with pytest.raises(RuntimeError, match="schema"):
+        await llm.complete(
+            "p",
+            schema={
+                "type": "object",
+                "required": ["tese"],
+                "properties": {"tese": {"type": "string"}},
+            },
         )
 
-    assert not output_path.exists()
+
+def test_claude_command_usa_binario_customizado() -> None:
+    llm = LocalCliLLM(provider="claude", binary="/opt/homebrew/bin/claude")
+
+    command, _ = llm._command_and_stdin(
+        prompt="p", system=None, schema=None, max_tokens=64, temperature=0.0
+    )
+
+    assert command[0] == "/opt/homebrew/bin/claude"
 
 
 def test_cli_cloud_adapter_rejects_unknown_provider() -> None:
     with pytest.raises(ValueError, match="Unsupported CLI cloud provider"):
         LocalCliLLM(provider="ollama")  # type: ignore[arg-type]
+
+
+def test_cli_cloud_adapter_rejects_codex_without_filesystem_confinement() -> None:
+    with pytest.raises(ValueError, match="Unsupported CLI cloud provider"):
+        LocalCliLLM(provider="codex")  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_timeout_mata_grupo_de_processos(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A real, cheap subprocess (`sh -c sleep`) must be killed group-wide on timeout."""
+    llm = LocalCliLLM(provider="claude", timeout_seconds=0.2, binary="/bin/sh")
+
+    def fake_command_and_stdin(**kwargs: object) -> tuple[list[str], str | None]:
+        return ["/bin/sh", "-c", "sleep 5"], None
+
+    monkeypatch.setattr(llm, "_command_and_stdin", fake_command_and_stdin)
+
+    real_create_subprocess_exec = asyncio.create_subprocess_exec
+    spawned: dict[str, asyncio.subprocess.Process] = {}
+
+    async def capturing_create_subprocess_exec(
+        *args: str, **kwargs: object
+    ) -> asyncio.subprocess.Process:
+        process = await real_create_subprocess_exec(*args, **kwargs)
+        spawned["process"] = process
+        return process
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", capturing_create_subprocess_exec)
+
+    with pytest.raises(TimeoutError):
+        await llm.complete("p")
+
+    pid = spawned["process"].pid
+    with pytest.raises(ProcessLookupError):
+        os.killpg(os.getpgid(pid), 0)

@@ -10,7 +10,6 @@ from datetime import datetime
 from zeep import Client
 
 from juris.core.observability import get_logger
-from juris.mni.retry import mni_retry
 
 logger = get_logger(__name__)
 
@@ -27,7 +26,6 @@ class FilingReceipt:
     pdf_hash: str | None = None
 
 
-@mni_retry
 def entregar_manifestacao(
     client: Client,
     id_manifestante: str,
@@ -38,6 +36,9 @@ def entregar_manifestacao(
     descricao: str = "Petição protocolada via sistema integrado",
 ) -> FilingReceipt:
     """File a signed petition via MNI entregarManifestacaoProcessual.
+
+    Sem retry automático: a entrega não é idempotente; em timeout, VERIFICAR
+    no tribunal antes de reenviar.
 
     Args:
         client: Configured zeep Client for the target tribunal.

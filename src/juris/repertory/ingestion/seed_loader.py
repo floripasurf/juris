@@ -127,10 +127,13 @@ class SeedLoader(CorpusIngester):
         if embeddings is not None:
             stored = vector_store.upsert(all_chunks, embeddings)
         else:
-            # Use zero vectors as placeholder for FTS-only stores
-            dim = embedder.dimension if embedder else 1024
-            zero_embeddings = [[0.0] * dim for _ in all_chunks]
-            stored = vector_store.upsert(all_chunks, zero_embeddings)
+            # No embedder (or model unavailable): NULL placeholder, not a zero
+            # vector. `LocalFTSStore.upsert` converts an empty list to NULL —
+            # same contract escavação already uses — so `missing_embedding_count()`
+            # correctly sees these chunks as pending instead of a fake zero
+            # vector silently passing as "embedded".
+            placeholder: list[list[float]] = [[] for _ in all_chunks]
+            stored = vector_store.upsert(all_chunks, placeholder)
 
         logger.info(
             "Ingested %d fontes -> %d chunks -> %d stored",

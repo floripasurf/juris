@@ -30,6 +30,7 @@ from juris.web.workbench_service import build_workbench
 if TYPE_CHECKING:
     from juris.mni.tribunais import TribunalConfig
     from juris.persistence.local_db import LocalDB
+    from juris.signing.filing import FilingResult, GroundingEvidence
 
 
 @lru_cache(maxsize=128)
@@ -295,11 +296,20 @@ async def _handle_uncaught(request: Request, exc: Exception) -> JSONResponse:
 
 
 def _operational_http_error(
-    *, code: str, message: str, exc: Exception, internal_detail: str | None = None
+    *,
+    tenant: Tenant,
+    operation: str,
+    code: str,
+    message: str,
+    exc: Exception,
+    internal_detail: str | None = None,
+    numero_cnj: str | None = None,
 ) -> HTTPException:
-    """Build a sanitized 400 while logging the internal operational detail."""
+    """Build a sanitized 400 and persist a tenant-scoped support event when possible."""
     from juris.core.observability import get_logger
     from juris.core.sanitize import safe_error_text
+    from juris.web.auth import tenant_scoped_dir
+    from juris.web.operational_events import append_operational_event
 
     get_logger("juris.web").warning(
         "operational_http_error",
@@ -307,6 +317,24 @@ def _operational_http_error(
         error=safe_error_text(internal_detail or exc),
         exception_type=exc.__class__.__name__,
     )
+    try:
+        append_operational_event(
+            tenant_scoped_dir(tenant, _out_root()),
+            operation=operation,
+            code=code,
+            message=message,
+            status_code=400,
+            exc=exc,
+            internal_detail=internal_detail,
+            numero_cnj=numero_cnj,
+        )
+    except Exception as ledger_exc:  # noqa: BLE001 - the original operational error must win
+        get_logger("juris.web").warning(
+            "operational_event_ledger_failed",
+            code=code,
+            error=safe_error_text(ledger_exc),
+            exception_type=ledger_exc.__class__.__name__,
+        )
     return HTTPException(
         status_code=400,
         detail={"code": code, "message": message},
@@ -428,6 +456,10 @@ class FilingPayload(BaseModel):
     prazo_override: str | None = Field(default=None, max_length=64)
     review_confirmed: bool = False
     consent: bool = False
+    output_dir: str | None = Field(default=None, max_length=_MAX_PATH_TEXT)
+    artifact_name: str | None = Field(default=None, max_length=128)
+    override_grounding: bool = False
+    override_reason: str = Field(default="", max_length=_MAX_SHORT_TEXT)
 
 
 class FilingArtifactPayload(BaseModel):
@@ -1117,6 +1149,31 @@ async def get_pilot_feedback_summary(tenant: Tenant = Depends(current_tenant)) -
     return await asyncio.to_thread(summarize_feedback, tenant_scoped_dir(tenant, _out_root()))
 
 
+@app.get("/api/pilot-observability")
+async def get_pilot_observability(tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
+    """Show the pilot value gate next to tenant-scoped operational support signals."""
+    from juris.web.auth import tenant_scoped_dir
+    from juris.web.operational_events import summarize_operational_events
+    from juris.web.pilot_feedback import evaluate_value_gate
+
+    root = tenant_scoped_dir(tenant, _out_root())
+    value_gate, operational_events = await asyncio.gather(
+        asyncio.to_thread(evaluate_value_gate, root),
+        asyncio.to_thread(summarize_operational_events, root),
+    )
+    return {"value_gate": value_gate, "operational_events": operational_events}
+
+
+@app.get("/api/operational-events")
+async def get_operational_events(tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
+    """List recent, privacy-safe support events for the current tenant only."""
+    from juris.web.auth import tenant_scoped_dir
+    from juris.web.operational_events import list_operational_events
+
+    events = await asyncio.to_thread(list_operational_events, tenant_scoped_dir(tenant, _out_root()))
+    return {"events": events}
+
+
 @app.get("/api/pilot-feedback/comparison")
 async def get_pilot_feedback_comparison(tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
     """Compare first vs latest feedback for cases run more than once."""
@@ -1505,6 +1562,40 @@ async def retry_pending_filing(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+def _resolve_grounding_evidence(tenant: Tenant, payload: FilingPayload) -> GroundingEvidence | None:
+    """Grounding evidence for the artifact the lawyer picked, if any.
+
+    Freeform pasted markdown (no ``output_dir``/``artifact_name``) resolves to
+    ``None`` — "documento externo" — same as an artifact whose manifest lacks a
+    grounding veredict; either way the orchestrator's gate requires an override.
+    """
+    if not payload.output_dir or not payload.artifact_name:
+        return None
+    from juris.web.auth import tenant_scoped_dir
+    from juris.web.filing_console import grounding_evidence_from_manifest
+
+    return grounding_evidence_from_manifest(
+        tenant_scoped_dir(tenant, _out_root()),
+        output_dir=payload.output_dir,
+        artifact_name=payload.artifact_name,
+    )
+
+
+def _grounding_blocked_http_error(result: FilingResult) -> HTTPException | None:
+    """A structured 409 when the orchestrator's grounding gate blocked filing.
+
+    ``None`` for every other outcome (including other error_codes such as
+    ``delivery_uncertain``), which the endpoint returns as a normal 200 body —
+    the lawyer still needs the full preflight/receipt payload for those.
+    """
+    if result.error_code in {"grounding_required", "revisao_humana_obrigatoria"}:
+        return HTTPException(
+            status_code=409,
+            detail={"code": result.error_code, "message": result.error or "Protocolo bloqueado."},
+        )
+    return None
+
+
 @app.post("/api/filing/dry-run")
 async def dry_run_filing(payload: FilingPayload, tenant: Tenant = Depends(current_tenant)) -> dict[str, object]:
     """Render and preflight a filing without signing or contacting the tribunal."""
@@ -1524,6 +1615,9 @@ async def dry_run_filing(payload: FilingPayload, tenant: Tenant = Depends(curren
         senha="" if remote else payload.senha or "",
         dry_run=True,
         prazo_override=payload.prazo_override,
+        grounding=_resolve_grounding_evidence(tenant, payload),
+        grounding_override=payload.override_grounding,
+        grounding_override_reason=payload.override_reason,
     )
     try:
         result = await get_filing_service(tenant.tenant_id, storage_root=_tenant_juris_home(tenant)).file(
@@ -1532,10 +1626,15 @@ async def dry_run_filing(payload: FilingPayload, tenant: Tenant = Depends(curren
         )
     except Exception as exc:  # noqa: BLE001 — operational filing error, not 500
         raise _operational_http_error(
+            tenant=tenant,
+            operation="filing.dry_run",
             code="filing_failed",
             message="Falha operacional no protocolo. Verifique agente, token e tribunal.",
             exc=exc,
+            numero_cnj=payload.numero_cnj,
         ) from exc
+    if (blocked := _grounding_blocked_http_error(result)) is not None:
+        raise blocked
     return serialize_filing_result(result)
 
 
@@ -1563,6 +1662,9 @@ async def submit_filing(payload: FilingPayload, tenant: Tenant = Depends(current
         senha="" if remote else payload.senha or "",
         dry_run=False,
         prazo_override=payload.prazo_override,
+        grounding=_resolve_grounding_evidence(tenant, payload),
+        grounding_override=payload.override_grounding,
+        grounding_override_reason=payload.override_reason,
     )
     try:
         result = await get_filing_service(tenant.tenant_id, storage_root=_tenant_juris_home(tenant)).file(
@@ -1571,10 +1673,15 @@ async def submit_filing(payload: FilingPayload, tenant: Tenant = Depends(current
         )
     except Exception as exc:  # noqa: BLE001 — operational filing error, not 500
         raise _operational_http_error(
+            tenant=tenant,
+            operation="filing.submit",
             code="filing_failed",
             message="Falha operacional no protocolo. Verifique agente, token e tribunal.",
             exc=exc,
+            numero_cnj=payload.numero_cnj,
         ) from exc
+    if (blocked := _grounding_blocked_http_error(result)) is not None:
+        raise blocked
     return serialize_filing_result(result)
 
 
@@ -1655,10 +1762,13 @@ async def create_demo_run(payload: DemoRunPayload, tenant: Tenant = Depends(curr
         result = await execute_demo_run(request)
     except DemoRunError as exc:
         raise _operational_http_error(
+            tenant=tenant,
+            operation="demo.run",
             code=exc.code,
             message=str(exc),
             exc=exc,
             internal_detail=exc.internal_detail,
+            numero_cnj=payload.numero_cnj,
         ) from exc
 
     return {

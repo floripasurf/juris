@@ -1,7 +1,7 @@
 """Subscription CLI-backed cloud LLM adapter.
 
-LocalCliLLM launches an authenticated desktop CLI such as Claude Code or
-Codex CLI, but the model execution is still cloud-side. Inject it only where
+LocalCliLLM launches an authenticated Claude Code CLI, but the model execution
+is still cloud-side. Inject it only where
 the application would normally inject a cloud LLM. It is never a local_llm
 replacement and refuses explicit PII-marked calls.
 """
@@ -10,20 +10,18 @@ from __future__ import annotations
 
 import asyncio
 import json
-import tempfile
+import os
+import signal
 from pathlib import Path
 from typing import Any, Literal
 
 from juris.llm.base import AbstractLLM, LLMResponse
 
-CliCloudProvider = Literal["claude", "codex"]
+CliCloudProvider = Literal["claude"]
 
 _PROVIDER_MODEL_NAMES: dict[CliCloudProvider, str] = {
     "claude": "claude_cli_subscription",
-    "codex": "codex_cli_subscription",
 }
-
-_CODEX_OUTPUT_FLAG = "--output-last-message"
 
 
 class LocalCliLLM(AbstractLLM):
@@ -44,6 +42,7 @@ class LocalCliLLM(AbstractLLM):
         model: str | None = None,
         timeout_seconds: float = 180.0,
         cwd: Path | None = None,
+        binary: str | None = None,
     ) -> None:
         if provider not in _PROVIDER_MODEL_NAMES:
             msg = f"Unsupported CLI cloud provider: {provider}"
@@ -52,6 +51,7 @@ class LocalCliLLM(AbstractLLM):
         self._model = model
         self._timeout_seconds = timeout_seconds
         self._cwd = cwd
+        self._binary = binary
 
     async def complete(
         self,
@@ -67,6 +67,12 @@ class LocalCliLLM(AbstractLLM):
 
         Args mirror :class:`AbstractLLM`. ``contains_pii`` is intentionally
         explicit for callers that can label the route; true values fail closed.
+
+        Raises:
+            ValueError: If ``contains_pii`` is True (this adapter is cloud-only).
+            RuntimeError: If ``schema`` was requested and the CLI output is not
+                valid JSON, or the parsed JSON does not conform to ``schema``
+                (wrong root type, or missing ``required`` keys).
         """
         if contains_pii:
             msg = "LocalCliLLM is cloud-only and cannot handle PII-marked prompts."
@@ -84,14 +90,33 @@ class LocalCliLLM(AbstractLLM):
         if schema and output:
             try:
                 structured = json.loads(output)
-            except json.JSONDecodeError:
-                usage["structured_parse_failed"] = 1
+            except json.JSONDecodeError as exc:
+                msg = f"{self.model_name} violou o schema: saída não é JSON válido."
+                raise RuntimeError(msg) from exc
+            self._validate_structured(schema, structured)
         return LLMResponse(
             content=output,
             model=self.model_name,
             usage=usage,
             structured=structured,
         )
+
+    def _validate_structured(self, schema: dict[str, Any], structured: Any) -> None:
+        """Check the parsed JSON against a minimal subset of JSON Schema.
+
+        Only checks the root type (when ``type: object``) and presence of
+        ``required`` keys — enough to catch a malformed structured response
+        without pulling in a jsonschema dependency.
+        """
+        if schema.get("type") == "object" and not isinstance(structured, dict):
+            msg = f"{self.model_name} violou o schema: raiz da resposta não é um objeto."
+            raise RuntimeError(msg)
+        required = schema.get("required", [])
+        if required and isinstance(structured, dict):
+            missing = [key for key in required if key not in structured]
+            if missing:
+                msg = f"{self.model_name} violou o schema: faltam as chaves obrigatórias {missing}."
+                raise RuntimeError(msg)
 
     @property
     def model_name(self) -> str:
@@ -112,73 +137,56 @@ class LocalCliLLM(AbstractLLM):
         temperature: float,
     ) -> tuple[list[str], str | None]:
         full_prompt = _compose_prompt(prompt=prompt, system=system, schema=schema)
-        if self._provider == "claude":
-            command = [
-                "claude",
-                "--print",
-                "--output-format",
-                "text",
-                "--no-session-persistence",
-                "--tools",
-                "",
-                "--permission-mode",
-                "dontAsk",
-            ]
-            if self._model:
-                command += ["--model", self._model]
-            command.append(full_prompt)
-            return command, None
-
-        with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as out:
-            output_path = out.name
         command = [
-            "codex",
-            "exec",
-            "--sandbox",
-            "read-only",
-            "--skip-git-repo-check",
-            "--ephemeral",
-            _CODEX_OUTPUT_FLAG,
-            output_path,
-            "-",
+            self._binary or "claude",
+            "--print",
+            "--output-format",
+            "text",
+            "--no-session-persistence",
+            "--safe-mode",
+            "--disable-slash-commands",
+            "--strict-mcp-config",
+            "--mcp-config",
+            '{"mcpServers":{}}',
+            "--setting-sources",
+            "",
+            "--tools",
+            "",
+            "--permission-mode",
+            "dontAsk",
         ]
-        # Codex accepts the prompt on stdin; max_tokens/temperature are not
-        # first-class CLI flags here, so the caller-facing values are ignored.
-        _ = (max_tokens, temperature)
-        return command, full_prompt
+        if self._model:
+            command += ["--model", self._model]
+        command.append(full_prompt)
+        _ = (max_tokens, temperature)  # Claude CLI has no direct equivalents.
+        return command, None
 
     async def _run(self, command: list[str], *, stdin: str | None) -> str:
-        output_file = _codex_output_file(command) if self._provider == "codex" else None
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            cwd=str(self._cwd) if self._cwd else None,
+            stdin=asyncio.subprocess.PIPE if stdin is not None else None,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            start_new_session=True,
+        )
         try:
-            process = await asyncio.create_subprocess_exec(
-                *command,
-                cwd=str(self._cwd) if self._cwd else None,
-                stdin=asyncio.subprocess.PIPE if stdin is not None else None,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(stdin.encode("utf-8") if stdin is not None else None),
+                timeout=self._timeout_seconds,
             )
-            try:
-                stdout, stderr = await asyncio.wait_for(
-                    process.communicate(stdin.encode("utf-8") if stdin is not None else None),
-                    timeout=self._timeout_seconds,
-                )
-            except TimeoutError as exc:
-                process.kill()
-                await process.wait()
-                msg = f"{self.model_name} timed out after {self._timeout_seconds:.0f}s"
-                raise TimeoutError(msg) from exc
+        except TimeoutError as exc:
+            _kill_process_group(process)
+            await process.wait()
+            msg = f"{self.model_name} timed out after {self._timeout_seconds:.0f}s"
+            raise TimeoutError(msg) from exc
 
-            if process.returncode != 0:
-                err = stderr.decode("utf-8", errors="replace").strip()
-                msg = f"{self.model_name} failed with exit code {process.returncode}: {err}"
-                raise RuntimeError(msg)
+        if process.returncode != 0:
+            err = stderr.decode("utf-8", errors="replace").strip()
+            msg = f"{self.model_name} failed with exit code {process.returncode}: {err}"
+            raise RuntimeError(msg)
 
-            if output_file is not None and output_file.exists():
-                return output_file.read_text(encoding="utf-8").strip()
-            return stdout.decode("utf-8", errors="replace").strip()
-        finally:
-            if output_file is not None:
-                output_file.unlink(missing_ok=True)
+        return stdout.decode("utf-8", errors="replace").strip()
 
 
 def _compose_prompt(
@@ -200,14 +208,19 @@ def _compose_prompt(
     return "\n\n".join(parts)
 
 
-def _codex_output_file(command: list[str]) -> Path:
+def _kill_process_group(process: asyncio.subprocess.Process) -> None:
+    """Kill the whole process group spawned for ``process``.
+
+    ``process`` was started with ``start_new_session=True``, so its pid is
+    also its process group id; this reaches children the CLI may have
+    forked (e.g. the underlying model runner) instead of leaving orphans
+    behind. Falls back to killing just the process if the group is already
+    gone (e.g. it exited between the timeout and this call).
+    """
     try:
-        flag_index = command.index(_CODEX_OUTPUT_FLAG)
-        output_path = command[flag_index + 1]
-    except (ValueError, IndexError) as exc:
-        msg = f"Codex command missing {_CODEX_OUTPUT_FLAG} output path."
-        raise RuntimeError(msg) from exc
-    return Path(output_path)
+        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+    except ProcessLookupError:
+        process.kill()
 
 
 __all__ = ["CliCloudProvider", "LocalCliLLM"]

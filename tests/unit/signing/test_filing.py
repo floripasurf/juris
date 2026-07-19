@@ -16,9 +16,33 @@ from juris.persistence.filing_receipt import FilingReceiptStore
 from juris.signing.filing import (
     FilingOrchestrator,
     FilingRequest,
+    GroundingEvidence,
     _count_citations,
 )
 from juris.signing.pades import CertStatus, SigningResult
+
+
+def _verified_grounding(
+    draft_markdown: str, *, numero_cnj: str = "0001234-56.2024.8.13.0001", tribunal: str = "tjmg"
+) -> GroundingEvidence:
+    """Grounding evidence that passes the gate for this exact draft/processo.
+
+    These tests exercise behavior downstream of the gate (render, preflight,
+    sign, submit) — not the gate itself, so they need evidence that trivially
+    passes it. ``numero_cnj``/``tribunal`` default to the values every request
+    in this file uses; ``output_mode`` defaults to the protocolable
+    ``"minuta-sugerida"``.
+    """
+    import hashlib
+
+    return GroundingEvidence(
+        status="verified",
+        draft_sha256=hashlib.sha256(draft_markdown.encode("utf-8")).hexdigest(),
+        numero_cnj=numero_cnj,
+        tribunal=tribunal,
+        tipo_peticao="contestacao",
+        output_mode="minuta-sugerida",
+    )
 
 # --- Fixtures ---
 
@@ -106,14 +130,16 @@ def mock_mni_auth() -> MagicMock:
 
 @pytest.fixture()
 def filing_request() -> FilingRequest:
+    draft_markdown = "# Contestação\n\nTexto da contestação conforme art. 335 do CPC."
     return FilingRequest(
         numero_cnj="0001234-56.2024.8.13.0001",
         tribunal="tjmg",
         tipo_documento="contestacao",
-        draft_markdown="# Contestação\n\nTexto da contestação conforme art. 335 do CPC.",
+        draft_markdown=draft_markdown,
         tipo_peticao="contestacao",
         cpf="12345678901",
         senha="senha123",
+        grounding=_verified_grounding(draft_markdown),
     )
 
 
@@ -154,6 +180,7 @@ def test_dry_run_does_not_sign_or_submit(
         cpf=filing_request.cpf,
         senha=filing_request.senha,
         dry_run=True,
+        grounding=filing_request.grounding,
     )
     orch = _make_orchestrator(mock_signer, audit_log, receipt_store, mock_mni_client_factory, mock_mni_auth)
 
@@ -194,6 +221,7 @@ def test_dry_run_emits_dryrun_not_submit(
         cpf=filing_request.cpf,
         senha=filing_request.senha,
         dry_run=True,
+        grounding=filing_request.grounding,
     )
     orch = _make_orchestrator(mock_signer, audit_log, receipt_store, mock_mni_client_factory, mock_mni_auth)
 
@@ -218,14 +246,16 @@ def test_preflight_blocker_aborts_filing(
     mock_mni_auth: MagicMock,
 ) -> None:
     """Filing aborts when preflight finds a blocker."""
+    draft_markdown = "# Test\n\nSome content."
     request = FilingRequest(
         numero_cnj="0001234-56.2024.8.13.0001",
         tribunal="tjmg",
         tipo_documento="INVALID_TYPE",
-        draft_markdown="# Test\n\nSome content.",
+        draft_markdown=draft_markdown,
         tipo_peticao="contestacao",
         cpf="12345678901",
         senha="senha123",
+        grounding=_verified_grounding(draft_markdown),
     )
     orch = _make_orchestrator(mock_signer, audit_log, receipt_store, mock_mni_client_factory, mock_mni_auth)
 
@@ -359,15 +389,17 @@ def test_skip_preflight(
     mock_mni_auth: MagicMock,
 ) -> None:
     """skip_preflight=True skips preflight checks."""
+    draft_markdown = "# Test\n\nContent."
     request = FilingRequest(
         numero_cnj="0001234-56.2024.8.13.0001",
         tribunal="tjmg",
         tipo_documento="contestacao",
-        draft_markdown="# Test\n\nContent.",
+        draft_markdown=draft_markdown,
         tipo_peticao="contestacao",
         cpf="12345678901",
         senha="senha123",
         skip_preflight=True,
+        grounding=_verified_grounding(draft_markdown),
     )
     mock_factory = _make_mni_factory()
     orch = _make_orchestrator(mock_signer, audit_log, receipt_store, mock_factory, mock_mni_auth)
@@ -462,7 +494,7 @@ def test_signing_failure_returns_error(
     assert "exc_info" not in capture.events[0][1]
 
 
-def test_submit_failure_returns_sanitized_error(
+def test_mni_client_failure_returns_delivery_not_started(
     mock_signer: MagicMock,
     audit_log: AuditLog,
     receipt_store: FilingReceiptStore,
@@ -470,7 +502,52 @@ def test_submit_failure_returns_sanitized_error(
     filing_request: FilingRequest,
     monkeypatch,
 ) -> None:
-    """MNI submit failures do not expose local paths or secrets in result/audit."""
+    """WSDL/client failures happen before submit and are safe to retry."""
+    import juris.signing.filing as filing_module
+
+    capture = _CaptureLogger()
+    monkeypatch.setattr(filing_module, "logger", capture)
+    mock_factory = _make_mni_factory()
+    mock_factory.side_effect = RuntimeError("WSDL /var/private/mni token=abc pin=1234")
+    orch = _make_orchestrator(mock_signer, audit_log, receipt_store, mock_factory, mock_mni_auth)
+
+    with patch("juris.signing.filing.render_petition_pdf") as mock_render:
+        mock_render.return_value = MagicMock(
+            pdf_bytes=b"%PDF-1.4 test", page_count=1, pdf_hash="hash"
+        )
+        with patch("juris.mni.operations.peticionamento.entregar_manifestacao") as submit:
+            result = asyncio.run(orch.file(filing_request))
+
+    assert result.success is False
+    assert result.error_code == "delivery_not_started"
+    assert "nenhuma tentativa de protocolo foi iniciada" in (result.error or "")
+    submit.assert_not_called()
+    assert receipt_store.recover_pending() == []
+    entries = audit_log.read_all()
+    events = [e.event_type for e in entries]
+    assert "filing.delivery_not_started" in events
+    assert "filing.delivery_uncertain" not in events
+    dumped = json.dumps({"error": result.error, "audit": [e.details for e in entries]})
+    assert "/var/private/mni" not in dumped
+    assert "token=abc" not in dumped
+    assert "pin=1234" not in dumped
+    logged = json.dumps([event[1] for event in capture.events], ensure_ascii=False)
+    assert "/var/private/mni" not in logged
+    assert "token=abc" not in logged
+    assert "pin=1234" not in logged
+
+
+def test_submit_failure_returns_delivery_uncertain(
+    mock_signer: MagicMock,
+    audit_log: AuditLog,
+    receipt_store: FilingReceiptStore,
+    mock_mni_auth: MagicMock,
+    filing_request: FilingRequest,
+    monkeypatch,
+) -> None:
+    """MNI submit failures are reported as delivery_uncertain (not a plain retryable
+    error) and never expose local paths or secrets in result/audit — the entrega may
+    already have reached the tribunal, so success/failure is genuinely unknown."""
     import juris.signing.filing as filing_module
 
     capture = _CaptureLogger()
@@ -489,16 +566,20 @@ def test_submit_failure_returns_sanitized_error(
             result = asyncio.run(orch.file(filing_request))
 
     assert result.success is False
-    assert "MNI filing failed" in (result.error or "")
+    assert result.error_code == "delivery_uncertain"
+    assert "PODE ter sido protocolada" in (result.error or "")
     entries = audit_log.read_all()
-    submit_errors = [e for e in entries if e.event_type == "filing.submit_error"]
-    assert len(submit_errors) == 1
-    assert submit_errors[0].details == {
-        "error": "MNI filing failed: falha operacional ao protocolar no MNI.",
+    delivery_uncertain_entries = [e for e in entries if e.event_type == "filing.delivery_uncertain"]
+    assert len(delivery_uncertain_entries) == 1
+    assert delivery_uncertain_entries[0].details == {
+        "error": (
+            "Falha na entrega ao tribunal. ATENÇÃO: a petição PODE ter sido protocolada — "
+            "confira o processo no tribunal antes de tentar novamente."
+        ),
         "pending_receipt": True,
     }
     dumped = json.dumps({"error": result.error, "audit": [e.details for e in entries]})
-    assert "falha operacional" in dumped
+    assert "confira o processo no tribunal" in dumped
     assert "/var/private/mni" not in dumped
     assert "token=abc" not in dumped
     assert "pin=1234" not in dumped
@@ -508,6 +589,44 @@ def test_submit_failure_returns_sanitized_error(
     assert "token=abc" not in logged
     assert "pin=1234" not in logged
     assert "exc_info" not in capture.events[0][1]
+
+
+def test_mni_rejection_returns_no_error_code(
+    mock_signer: MagicMock,
+    audit_log: AuditLog,
+    receipt_store: FilingReceiptStore,
+    mock_mni_auth: MagicMock,
+    filing_request: FilingRequest,
+) -> None:
+    """When the tribunal itself REJECTS the petition (receipt.sucesso=False, a
+    definitive response — not an exception), error_code must stay None. Unlike
+    delivery_uncertain, this is a known outcome: the UI must not show the
+    'não reenvie sem verificar' notice for a plain rejection."""
+    rejected_receipt = FilingReceipt(
+        sucesso=False,
+        mensagem="Documento fora do padrão exigido",
+        protocolo=None,
+        data_recebimento=None,
+        numero_processo=filing_request.numero_cnj,
+        pdf_hash="def456",
+    )
+    mock_factory = _make_mni_factory()
+    orch = _make_orchestrator(mock_signer, audit_log, receipt_store, mock_factory, mock_mni_auth)
+
+    with patch("juris.signing.filing.render_petition_pdf") as mock_render:
+        mock_render.return_value = MagicMock(
+            pdf_bytes=b"%PDF-1.4 test", page_count=1, pdf_hash="hash"
+        )
+        with patch(
+            "juris.mni.operations.peticionamento.entregar_manifestacao",
+            return_value=rejected_receipt,
+        ):
+            result = asyncio.run(orch.file(filing_request))
+
+    assert result.success is False
+    assert result.error_code is None
+    assert "MNI rejected" in (result.error or "")
+    assert result.receipt is rejected_receipt
 
 
 def test_audit_integrity_after_full_pipeline(

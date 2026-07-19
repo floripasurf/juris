@@ -29,7 +29,7 @@ Entregue:
 
 ## Sprint 3 — Hardening Multi-Tenant de Produção
 
-**Status:** instrumentação concluída; validação comercial bloqueada pelo gate de casos reais.
+**Status:** instrumentação e ledger de suporte concluídos; validação comercial bloqueada pelo gate de casos reais.
 
 Fatia entregue agora:
 - `/api/agent-health` expõe readiness por tenant: binding configurado,
@@ -50,9 +50,12 @@ Fatia entregue agora:
   consolida status por escritório.
 - O canal reverso falha fechado em multi-worker sem `JURIS_RELAY_BROKER` ou
   `JURIS_RELAY_STICKY=1`.
+- Falhas controladas de demo e protocolo entram em `operational-events.jsonl`,
+  privado e separado por tenant; `/api/operational-events` e
+  `/api/pilot-observability` permitem distinguir falha operacional de qualidade
+  jurídica antes da decisão do piloto.
 
 Próximas entregas:
-- Persistir eventos de erro operacional para suporte do piloto.
 - Substituir sticky routing por broker Redis/NATS se o deploy precisar escalar sem
   afinidade de load balancer.
 

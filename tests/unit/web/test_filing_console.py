@@ -8,13 +8,14 @@ import stat
 from datetime import UTC, datetime
 
 from juris.mni.operations.peticionamento import FilingReceipt
-from juris.signing.filing import ChainOfCustody, FilingResult
+from juris.signing.filing import ChainOfCustody, FilingResult, GroundingEvidence
 from juris.signing.pades import SigningResult
 from juris.web.filing_console import (
     archive_pending,
     default_filing_root,
     filing_artifacts,
     filing_status,
+    grounding_evidence_from_manifest,
     pending_recovery,
     read_filing_artifact,
     retry_pending_submission,
@@ -289,9 +290,30 @@ def test_serialize_filing_result_does_not_expose_pdf_bytes() -> None:
 
     assert payload["receipt"]["protocolo"] == "P1"
     assert payload["chain_of_custody"]["receipt_hash"] == "receipt"
+    assert payload["error_code"] is None
     dumped = json.dumps(payload)
     assert "%PDF sensitive" not in dumped
     assert '"signed_pdf":' not in dumped
+
+
+def test_serialize_filing_result_exposes_delivery_uncertain_error_code() -> None:
+    """The UI must be able to tell 'não foi' from 'pode ter ido' — serialization
+    exposes error_code so it can withhold the immediate-resend option."""
+    result = FilingResult(
+        success=False,
+        receipt=None,
+        signing_result=None,
+        preflight=None,
+        audit_entry_ids=["a1"],
+        error="Falha na entrega ao tribunal. ATENÇÃO: a petição PODE ter sido protocolada — "
+        "confira o processo no tribunal antes de tentar novamente.",
+        error_code="delivery_uncertain",
+    )
+
+    payload = serialize_filing_result(result)
+
+    assert payload["error_code"] == "delivery_uncertain"
+    assert "PODE ter sido protocolada" in (payload["error"] or "")
 
 
 def test_filing_artifacts_lists_primary_drafts(tmp_path) -> None:
@@ -400,6 +422,140 @@ def test_read_filing_artifact_rejects_symlink_escape(tmp_path) -> None:
             raise AssertionError("symlink para fora do root deveria falhar")
     finally:
         outside.unlink(missing_ok=True)
+
+
+def test_grounding_evidence_from_manifest_reads_verified_status(tmp_path) -> None:
+    case_dir = tmp_path / "CASE-1"
+    case_dir.mkdir()
+    draft = "# Minuta"
+    (case_dir / "draft.md").write_text(draft, encoding="utf-8")
+    (case_dir / "run-manifest.json").write_text(
+        json.dumps(
+            {
+                "draft": {"grounding_status": "verified"},
+                "artifacts": [{"name": "draft.md", "sha256": _sha256_text(draft)}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    evidence = grounding_evidence_from_manifest(tmp_path, output_dir="CASE-1", artifact_name="draft.md")
+
+    assert evidence == GroundingEvidence(
+        status="verified", draft_sha256=_sha256_text(draft), revisao_humana_obrigatoria=False
+    )
+
+
+def test_grounding_evidence_from_manifest_propagates_revisao_humana_obrigatoria(tmp_path) -> None:
+    case_dir = tmp_path / "CASE-1"
+    case_dir.mkdir()
+    draft = "# Minuta"
+    (case_dir / "draft.md").write_text(draft, encoding="utf-8")
+    (case_dir / "run-manifest.json").write_text(
+        json.dumps(
+            {
+                "draft": {"grounding_status": "verified", "revisao_humana_obrigatoria": True},
+                "artifacts": [{"name": "draft.md", "sha256": _sha256_text(draft)}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    evidence = grounding_evidence_from_manifest(tmp_path, output_dir="CASE-1", artifact_name="draft.md")
+
+    assert evidence is not None
+    assert evidence.revisao_humana_obrigatoria is True
+
+
+def test_grounding_evidence_from_manifest_defaults_to_unknown_for_old_manifest(tmp_path) -> None:
+    """Manifests written before grounding tracking existed have no 'draft.grounding_status' —
+    those default to status='unknown', which the orchestrator gate treats as unverified."""
+    case_dir = tmp_path / "CASE-1"
+    case_dir.mkdir()
+    draft = "# Minuta antiga"
+    (case_dir / "draft.md").write_text(draft, encoding="utf-8")
+    (case_dir / "run-manifest.json").write_text(
+        json.dumps({"artifacts": [{"name": "draft.md", "sha256": _sha256_text(draft)}]}),
+        encoding="utf-8",
+    )
+
+    evidence = grounding_evidence_from_manifest(tmp_path, output_dir="CASE-1", artifact_name="draft.md")
+
+    assert evidence is not None
+    assert evidence.status == "unknown"
+    assert evidence.revisao_humana_obrigatoria is False
+
+
+def test_grounding_evidence_from_manifest_returns_none_without_manifest(tmp_path) -> None:
+    case_dir = tmp_path / "CASE-1"
+    case_dir.mkdir()
+    (case_dir / "draft.md").write_text("# Minuta", encoding="utf-8")
+
+    assert grounding_evidence_from_manifest(tmp_path, output_dir="CASE-1", artifact_name="draft.md") is None
+
+
+def test_grounding_evidence_from_manifest_is_confined_to_root(tmp_path) -> None:
+    assert grounding_evidence_from_manifest(tmp_path, output_dir="../", artifact_name="draft.md") is None
+
+
+def test_grounding_evidence_from_manifest_binds_processo_and_output_mode(tmp_path) -> None:
+    """Achado 2/3: the loader must carry numero_cnj/tribunal/output_mode from the
+    manifest's request block so the orchestrator's gate can bind evidence to the
+    exact processo it was verified for and refuse a non-protocolable output_mode."""
+    case_dir = tmp_path / "CASE-1"
+    case_dir.mkdir()
+    draft = "# Minuta"
+    (case_dir / "draft.md").write_text(draft, encoding="utf-8")
+    (case_dir / "run-manifest.json").write_text(
+        json.dumps(
+            {
+                "output_mode": "minuta-sugerida",
+                "request": {
+                    "numero_cnj": "0001234-56.2024.8.13.0001",
+                    "tribunal": "tjmg",
+                    "tipo_peticao": "contestacao",
+                },
+                "draft": {"grounding_status": "verified"},
+                "artifacts": [{"name": "draft.md", "sha256": _sha256_text(draft)}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    evidence = grounding_evidence_from_manifest(tmp_path, output_dir="CASE-1", artifact_name="draft.md")
+
+    assert evidence is not None
+    assert evidence.numero_cnj == "0001234-56.2024.8.13.0001"
+    assert evidence.tribunal == "tjmg"
+    assert evidence.tipo_peticao == "contestacao"
+    assert evidence.output_mode == "minuta-sugerida"
+
+
+def test_grounding_evidence_from_manifest_defaults_processo_fields_for_old_manifest(tmp_path) -> None:
+    """A manifest predating this binding has no 'request'/'output_mode' — those
+    fields default to an empty string, which the gate treats as unverified
+    rather than silently trusting a hash match across processos."""
+    case_dir = tmp_path / "CASE-1"
+    case_dir.mkdir()
+    draft = "# Minuta antiga"
+    (case_dir / "draft.md").write_text(draft, encoding="utf-8")
+    (case_dir / "run-manifest.json").write_text(
+        json.dumps(
+            {
+                "draft": {"grounding_status": "verified"},
+                "artifacts": [{"name": "draft.md", "sha256": _sha256_text(draft)}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    evidence = grounding_evidence_from_manifest(tmp_path, output_dir="CASE-1", artifact_name="draft.md")
+
+    assert evidence is not None
+    assert evidence.numero_cnj == ""
+    assert evidence.tribunal == ""
+    assert evidence.tipo_peticao == ""
+    assert evidence.output_mode == ""
 
 
 def test_archive_pending_recovery_json_is_private(tmp_path) -> None:

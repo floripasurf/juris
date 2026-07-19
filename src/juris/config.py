@@ -6,10 +6,15 @@ from enum import StrEnum
 from typing import Literal
 
 import structlog
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 log = structlog.get_logger(__name__)
+
+# Mantido em sincronia com juris.prazo.engine._PARTES_REPRESENTADAS_VALIDAS —
+# validado aqui também para falhar no boot (JURIS_PARTE_REPRESENTADA com typo),
+# não só à noite dentro do overnight quando compute_prazos() é chamado.
+_PARTES_REPRESENTADAS_VALIDAS = frozenset({"", "fazenda", "mp", "defensoria"})
 
 
 # URLs que existem só como conveniência de dev. Em prod elas indicam env var
@@ -85,6 +90,27 @@ class Settings(BaseSettings):
         description="Em prod, falha fechado se alguma URL de backend ainda for o default localhost de dev.",
     )
 
+    # --- Prazo ---
+    parte_representada: str = Field(
+        "",
+        validation_alias="JURIS_PARTE_REPRESENTADA",
+        description=(
+            "Ente representado para prazo em dobro (arts. 180/183/186 CPC): "
+            "'', 'fazenda', 'mp' ou 'defensoria'. Default '' = sem dobra, o "
+            "comportamento correto para o deployment single-tenant. O runtime "
+            "multi-tenant usa tenants.json e permite override no registro do processo."
+        ),
+    )
+
+    @field_validator("parte_representada")
+    @classmethod
+    def _valid_parte_representada(cls, value: str) -> str:
+        if value not in _PARTES_REPRESENTADAS_VALIDAS:
+            valores = sorted(_PARTES_REPRESENTADAS_VALIDAS)
+            msg = f"JURIS_PARTE_REPRESENTADA inválido: {value!r}; valores aceitos: {valores}"
+            raise ValueError(msg)
+        return value
+
     # --- Object Storage ---
     storage_backend: Literal["local", "s3"] = "local"
     storage_local_root: str = "./storage"
@@ -102,6 +128,26 @@ class Settings(BaseSettings):
 
     # --- LLM Local ---
     ollama_url: str = "http://localhost:11434"
+
+    # --- LLM: cadeia por CLI de assinatura (Task 2 canário) ---
+    # Gated: draft_backend fica "ollama" e cli_llm_tenants fica vazia até uma decisão
+    # humana registrada (risco de ToS) ligar isto em produção — ver .env.example.
+    draft_backend: str = Field("ollama", validation_alias="JURIS_DRAFT_BACKEND")  # ollama | cli
+    cli_llm_tenants: str = Field(
+        "", validation_alias="JURIS_CLI_LLM_TENANTS"
+    )  # allowlist CSV; vazia = ninguém
+    cli_llm_model: str = Field("haiku", validation_alias="JURIS_CLI_LLM_MODEL")
+    claude_bin: str = Field("claude", validation_alias="JURIS_CLAUDE_BIN")
+    ollama_model: str = Field("qwen3:8b", validation_alias="JURIS_OLLAMA_MODEL")
+
+    @property
+    def cli_llm_tenant_allowlist(self) -> frozenset[str]:
+        """Parsed CSV allowlist for the CLI-signature draft chain (Task 2 canário).
+
+        Empty string (the default) parses to an empty set — nobody is allowlisted, so
+        the chain stays inert regardless of ``draft_backend``.
+        """
+        return frozenset(t.strip() for t in self.cli_llm_tenants.split(",") if t.strip())
 
     # --- Alerts ---
     alert_smtp_host: str = ""

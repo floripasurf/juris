@@ -4007,6 +4007,14 @@
     const filingArtifactSel = document.querySelector("#fl_artifact");
     const filingLoadArtifactBtn = document.querySelector("#filing-load-artifact");
     let filingArtifacts = [];
+    // The artifact last loaded via "carregar minuta" — its output_dir/artifact_name
+    // ride along so the server can resolve the grounding gate's evidence from the
+    // SAME run-manifest.json the draft came from. Editing the textarea afterward is
+    // safe: the gate recomputes the draft's hash server-side and blocks on mismatch.
+    let filingSelectedArtifact = null;
+    // Set only while the lawyer is retrying with an explicit, audited override
+    // after a 409 grounding block (cleared on every ordinary attempt).
+    let filingGroundingOverride = null;
 
     function filingPayload() {
       const payload = {
@@ -4019,6 +4027,14 @@
         review_confirmed: document.querySelector("#fl_review").checked,
         consent: document.querySelector("#fl_consent").checked,
       };
+      if (filingSelectedArtifact) {
+        payload.output_dir = filingSelectedArtifact.output_dir;
+        payload.artifact_name = filingSelectedArtifact.artifact_name;
+      }
+      if (filingGroundingOverride) {
+        payload.override_grounding = true;
+        payload.override_reason = filingGroundingOverride;
+      }
       if (!AGENT_REMOTE) {
         payload.cpf = document.querySelector("#fl_cpf").value.trim();
         payload.senha = document.querySelector("#fl_senha").value;
@@ -4045,10 +4061,16 @@
       const receipt = data.receipt ? `<div class="queue-item"><strong>Recibo ${escHtml(data.receipt.protocolo || "sem protocolo")}</strong>
           <div class="meta">${escHtml(data.receipt.mensagem || "")}</div>
         </div>` : "";
+      const deliveryUncertain = data.error_code === "delivery_uncertain";
+      const statusLabel = data.success ? "ok" : deliveryUncertain ? "verificar no tribunal" : "falha";
+      const statusChipClass = data.success ? "sev-suggestion" : deliveryUncertain ? "sev-important" : "sev-critical";
+      const errorNotice = data.error
+        ? `<p class="notice error" style="position:static" data-testid="${deliveryUncertain ? "delivery-uncertain-notice" : "filing-error-notice"}">${deliveryUncertain ? "<strong>Não reenvie sem verificar no tribunal:</strong> " : ""}${escHtml(data.error)}</p>`
+        : "";
       filingResultEl.className = "review-card";
       filingResultEl.innerHTML = `<div class="review-head"><h3>${data.success ? "Operação concluída" : "Operação bloqueada"}</h3>
-          <span class="sev-chip ${data.success ? "sev-suggestion" : "sev-critical"}">${data.success ? "ok" : "falha"}</span></div>
-        ${data.error ? `<p class="notice error" style="position:static">${escHtml(data.error)}</p>` : ""}
+          <span class="sev-chip ${statusChipClass}">${statusLabel}</span></div>
+        ${errorNotice}
         <div class="proc-meta">Prazo: ${escHtml(pf.prazo_status || "—")} · checagem ${pf.passed === false ? "bloqueada" : "ok"}</div>
         <ul class="review-issues">${checks}</ul>
         ${hashes}${receipt}`;
@@ -4250,6 +4272,8 @@
         document.querySelector("#fl_cnj").value = selected.numero_cnj || "";
         document.querySelector("#fl_tribunal").value = selected.tribunal || "tjmg";
         document.querySelector("#fl_tipo_peticao").value = selected.tipo_peticao || "manifestacao";
+        filingSelectedArtifact = { output_dir: selected.output_dir, artifact_name: selected.artifact_name };
+        filingGroundingOverride = null;
       } catch (err) {
         filingResultEl.className = "proc-empty";
         filingResultEl.innerHTML = `<p class="notice error" style="position:static">${escHtml(err.message)}</p>`;
@@ -4257,6 +4281,58 @@
         filingLoadArtifactBtn.disabled = false;
         filingLoadArtifactBtn.textContent = oldText;
       }
+    }
+
+    // error_code values the filing gate uses for a blocked (not merely failed)
+    // protocol — these get the override panel instead of a plain error toast.
+    const GROUNDING_BLOCKED_CODES = new Set(["grounding_required", "revisao_humana_obrigatoria"]);
+
+    function renderGroundingBlocked(detail, endpoint, button) {
+      const isExternal = !filingSelectedArtifact;
+      // rascunho-pesquisa.md is a research memo — never protocolable, regardless
+      // of grounding status, so the override panel says so explicitly instead of
+      // implying the block is only about unverified citations.
+      const isRascunhoPesquisa = filingSelectedArtifact?.artifact_name === "rascunho-pesquisa.md";
+      const sourceLabel = isExternal
+        ? "Documento externo (não gerado pela Causia)"
+        : isRascunhoPesquisa
+          ? "Rascunho de pesquisa (não é minuta protocolável)"
+          : "Minuta gerada pela Causia";
+      const rascunhoNotice = isRascunhoPesquisa
+        ? `<p class="notice" style="position:static" data-testid="grounding-rascunho-notice">Rascunho de pesquisa não é minuta protocolável; protocolar exige justificativa e registro em auditoria.</p>`
+        : "";
+      filingResultEl.className = "review-card";
+      filingResultEl.innerHTML = `<div class="review-head"><h3>Protocolo bloqueado</h3>
+          <span class="sev-chip sev-critical" data-testid="grounding-blocked-chip">grounding</span></div>
+        <p class="notice error" style="position:static" data-testid="grounding-blocked-notice">${escHtml(detail.message || "")}</p>
+        <div class="proc-meta">${escHtml(sourceLabel)}</div>
+        ${rascunhoNotice}
+        <div class="list-tools">
+          <button type="button" class="ghost" id="grounding-back-review">Voltar e revisar</button>
+        </div>
+        <details id="grounding-override-details">
+          <summary>Protocolar mesmo assim (registrado em auditoria)</summary>
+          <label for="fl_override_reason">Justificativa (mín. 20 caracteres)</label>
+          <textarea id="fl_override_reason" rows="3"></textarea>
+          <span id="grounding-override-status" class="field-note" hidden></span>
+          <button type="button" class="ghost" id="grounding-override-submit">Protocolar mesmo assim</button>
+        </details>`;
+      document.querySelector("#grounding-back-review").addEventListener("click", () => {
+        filingResultEl.className = "proc-empty";
+        filingResultEl.textContent = "Revise a minuta ou carregue um artefato verificado antes de protocolar.";
+      });
+      document.querySelector("#grounding-override-submit").addEventListener("click", async () => {
+        const reason = document.querySelector("#fl_override_reason").value.trim();
+        const status = document.querySelector("#grounding-override-status");
+        if (reason.length < 20) {
+          status.textContent = "Justificativa deve ter pelo menos 20 caracteres.";
+          status.classList.add("error");
+          status.hidden = false;
+          return;
+        }
+        filingGroundingOverride = reason;
+        await runFiling(endpoint, button);
+      });
     }
 
     async function runFiling(endpoint, button) {
@@ -4272,10 +4348,16 @@
           body: JSON.stringify(filingPayload()),
         });
         const data = await response.json();
+        if (response.status === 409 && data.detail && GROUNDING_BLOCKED_CODES.has(data.detail.code)) {
+          renderGroundingBlocked(data.detail, endpoint, button);
+          return;
+        }
         if (!response.ok) throw new Error(apiErrorMessage(data, "Falha no protocolo"));
+        filingGroundingOverride = null;
         renderFilingResult(data);
         await loadFilingStatus();
       } catch (err) {
+        filingGroundingOverride = null;
         filingResultEl.className = "proc-empty";
         filingResultEl.innerHTML = `<p class="notice error" style="position:static">${escHtml(err.message)}</p>`;
       } finally {

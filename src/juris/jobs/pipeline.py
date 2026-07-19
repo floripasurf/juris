@@ -97,6 +97,7 @@ async def run_pipeline_single(
     tribunal: str,
     db: LocalDB,
     today: date | None = None,
+    parte_representada: str = "",
 ) -> PipelineResult:
     """Run the full pipeline for a single processo.
 
@@ -165,6 +166,7 @@ async def run_pipeline_single(
         tribunal=tribunal,
         analyses=analysis.analyzed,
         today=today,
+        parte_representada=parte_representada,
     )
     result.prazo_report = report
     result.prazos_computed = len(report.prazos)
@@ -215,6 +217,7 @@ async def run_pipeline(
     processos: list[dict[str, str]],
     db: LocalDB | None = None,
     today: date | None = None,
+    parte_representada: str = "",
 ) -> PipelineSummary:
     """Run the full pipeline for multiple processos.
 
@@ -235,6 +238,7 @@ async def run_pipeline(
             tribunal=proc.get("tribunal", "tjmg"),
             db=db,
             today=today,
+            parte_representada=proc.get("parte_representada", parte_representada),
         )
         summary.results.append(result)
 
