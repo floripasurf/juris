@@ -11,6 +11,7 @@ from datetime import UTC, date, datetime
 
 from juris.agents.analyzer import ProcessoAnalysis, analyze_processo
 from juris.alerts.deadline_alerts import AlertBatch, generate_alerts
+from juris.config import get_settings
 from juris.core.observability import get_logger
 from juris.mni.parsers.processo import ProcessoDomain
 from juris.persistence.local_db import LocalDB
@@ -165,6 +166,7 @@ async def run_pipeline_single(
         tribunal=tribunal,
         analyses=analysis.analyzed,
         today=today,
+        parte_representada=get_settings().parte_representada,
     )
     result.prazo_report = report
     result.prazos_computed = len(report.prazos)

@@ -85,6 +85,20 @@ class Settings(BaseSettings):
         description="Em prod, falha fechado se alguma URL de backend ainda for o default localhost de dev.",
     )
 
+    # --- Prazo ---
+    parte_representada: str = Field(
+        "",
+        validation_alias="JURIS_PARTE_REPRESENTADA",
+        description=(
+            "Ente representado para prazo em dobro (arts. 180/183/186 CPC): "
+            "'', 'fazenda', 'mp' ou 'defensoria'. Default '' = sem dobra, o "
+            "comportamento correto para o deployment single-tenant atual. Em "
+            "multi-tenant isso deve virar um registro por tenant/processo em vez "
+            "de config global de deployment — follow-up explícito; "
+            "compute_prazos() já aceita parte_representada por chamada."
+        ),
+    )
+
     # --- Object Storage ---
     storage_backend: Literal["local", "s3"] = "local"
     storage_local_root: str = "./storage"

@@ -59,7 +59,41 @@ _REOPENED_APPEAL_AFTER_ED_RULE = PrazoRule(
     dias_uteis=15,
     tipo_acao=TipoAcao.RECORRER,
     base_legal="Art. 1.026 CPC c/c Art. 1.003 §5º CPC",
+    # Reabertura do prazo recursal comum — não é prazo próprio, então continua
+    # elegível à dobra (admite_dobro=True, o default).
 )
+
+# Prazo em dobro (arts. 180/183/186 CPC): base legal citada na anotação da regra
+# quando a dobra é aplicada.
+_DOBRO_BASE_LEGAL: dict[str, str] = {
+    "fazenda": "art. 183 CPC",
+    "mp": "art. 180 CPC",
+    "defensoria": "art. 186 CPC",
+}
+_PARTES_REPRESENTADAS_VALIDAS = frozenset({"", "fazenda", "mp", "defensoria"})
+
+
+def _validate_parte_representada(parte_representada: str) -> None:
+    if parte_representada not in _PARTES_REPRESENTADAS_VALIDAS:
+        valores = sorted(_PARTES_REPRESENTADAS_VALIDAS)
+        msg = f"parte_representada inválida: {parte_representada!r}; valores aceitos: {valores}"
+        raise ValueError(msg)
+
+
+def _rule_em_dobro(rule: PrazoRule, parte_representada: str) -> PrazoRule:
+    """Anota a regra com o prazo em dobro (arts. 180/183/186 CPC) quando cabível.
+
+    Aplicada por regra, nunca como multiplicador cego: só dobra quando
+    ``parte_representada`` foi setada E ``rule.admite_dobro`` é True. ``compute_prazo``
+    permanece intocado — recebe a regra já dobrada (ou a original, sem dobra).
+    """
+    if not parte_representada or not rule.admite_dobro:
+        return rule
+    return replace(
+        rule,
+        dias_uteis=rule.dias_uteis * 2,
+        base_legal=f"{rule.base_legal} c/c {_DOBRO_BASE_LEGAL[parte_representada]} (em dobro)",
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -250,6 +284,7 @@ def compute_prazos(
     calendar: JudicialCalendar | None = None,
     today: date | None = None,
     justica: str = "civel",
+    parte_representada: str = "",
 ) -> PrazoReport:
     """Compute all deadlines for a processo's analyzed movements.
 
@@ -260,10 +295,20 @@ def compute_prazos(
         calendar: Judicial calendar (defaults to MG).
         today: Override current date (for testing).
         justica: "civel" or "trabalho".
+        parte_representada: Ente representado para fins de prazo em dobro
+            (arts. 180/183/186 CPC): "" (nenhum), "fazenda", "mp" ou
+            "defensoria". Benefício exige intimação pessoal (arts. 180/183/186)
+            e NÃO cobre prazos próprios (§§ 2º/4º) — configuração explícita do
+            operador para o ente representado; nunca inferido dos autos. Art.
+            229 não se aplica a autos eletrônicos (§2º) e não é modelado.
 
     Returns:
         PrazoReport with all computed deadlines.
+
+    Raises:
+        ValueError: If parte_representada is not one of the accepted values.
     """
+    _validate_parte_representada(parte_representada)
     today = today or date.today()
     calendar = calendar or JudicialCalendar(uf=_tribunal_to_uf(tribunal))
 
@@ -318,10 +363,11 @@ def compute_prazos(
                         "embargos de declaração."
                     ),
                 )
+                reopened_rule = _rule_em_dobro(_REOPENED_APPEAL_AFTER_ED_RULE, parte_representada)
                 prazos.append(
                     compute_prazo(
                         reopened,
-                        _REOPENED_APPEAL_AFTER_ED_RULE,
+                        reopened_rule,
                         calendar,
                         today,
                         numero_cnj,
@@ -364,7 +410,8 @@ def compute_prazos(
             continue
 
         for rule in rules:
-            prazo = compute_prazo(analysis, rule, calendar, today, numero_cnj, data_inicio=start_date)
+            rule_efetiva = _rule_em_dobro(rule, parte_representada)
+            prazo = compute_prazo(analysis, rule_efetiva, calendar, today, numero_cnj, data_inicio=start_date)
             prazos.append(prazo)
 
     # Sort by urgency: vencidos first, then by date

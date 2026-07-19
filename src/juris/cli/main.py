@@ -14,6 +14,7 @@ from juris.cli.commands.agent import agent_app
 from juris.cli.commands.doctor import doctor
 from juris.cli.commands.tenant import tenant_app
 from juris.cli.console import console
+from juris.config import get_settings
 
 # Tracked-list helpers are shared with the web layer (juris.jobs.tracking).
 from juris.jobs.tracking import get_tracked as _get_tracked_processos
@@ -1019,6 +1020,7 @@ def prazos(
         numero_cnj=processo.numero_cnj,
         tribunal=tribunal,
         analyses=analysis.analyzed,
+        parte_representada=get_settings().parte_representada,
     )
 
     if not report.prazos:
